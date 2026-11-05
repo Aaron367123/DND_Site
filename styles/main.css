@@ -4229,6 +4229,9 @@ select.tv-in.wide { width:126px; }
   overflow:hidden; text-overflow:ellipsis; }
 .tv-tgt-hp,.tv-tgt-ac { font-size:var(--fs-sm); color:var(--text-muted); font-variant-numeric:tabular-nums; }
 .tv-tgt-ac { display:inline-flex; align-items:center; gap:3px; }
+/* What changes an attack on this target: its conditions, Dodging, Hidden. */
+.tv-tgt-tags { display:block; font-size:var(--fs-xs); color:var(--text-muted); margin-top:2px;
+  white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
 .tv-tgt-ac .ico { width:12px; height:12px; }
 /* display:block matters — as an inline span it ignores its own height and takes
    the child's, so the bar comes out chunky and the track never shows. */

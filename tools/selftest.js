@@ -14765,6 +14765,68 @@ for (const cls of Object.keys(rule)) for (let L = 1; L <= 20; L++) for (const sc
       } catch(e){ ok('round 208 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
       finally { state.party = JSON.parse(keepP); state.combatants = JSON.parse(keepC); state.activeCombatantId = keepA; state.combatRound = keepR; T._armed = null; save(); }
     }
+    // -- Round 209: the Hide action — Stealth against DC 15 or the best passive Perception; unseen both ways; attacking reveals --
+    if (!PLAYER){
+      const keepC = JSON.stringify(state.combatants), keepA = state.activeCombatantId, keepP = JSON.stringify(state.party), keepS = JSON.stringify(state.settings || {});
+      const T = panelDefs.turnview, C = panelDefs.combat, keepD = window.sktD, keepRes = T._resolve;
+      try {
+        for (let k = 0; k < 100 && !(typeof _5eLoaded !== 'undefined' && _5eLoaded); k++) await sleep(100);
+        const find = (n, src) => _5eData.find(r => r.cat === 'monster' && r.name === n && r._source === src);
+        state.settings = Object.assign({}, state.settings, { builderEdition: '2024' });
+        state.combatants = []; save();
+        C.addMonster(find('Goblin', 'MM')); C.addMonster(find('Ogre', 'MM')); await sleep(50);
+        const gob = state.combatants.find(x => /Goblin/.test(x.name)), ogre = state.combatants.find(x => /Ogre/.test(x.name));
+        const p = { id: 'r209p', name: 'Rogue', hp: 20, hpMax: 20, ac: 14, pp: 13, abilities: { dex: 16 }, build: { edition: '2014' }, sheet: { attacks: [], skills: { stealth: 7 } } };
+        state.party.push(p);
+        const pc = { id: 'r209p', name: 'Rogue', isPC: true, hp: 20, hpMax: 20, ac: 14, initiative: 5, conditions: [] };
+        state.combatants.push(pc); save();
+        ok('hide: a goblin hides with its own Stealth (+6)', T._stealthBonus(gob) === 6 && T._stealthBonus(pc) === 7, JSON.stringify([T._stealthBonus(gob), T._stealthBonus(pc)]));
+        state.activeCombatantId = gob.id;
+        window.sktD = () => 8;
+        let made = await T._hide(gob);
+        ok('hide: 8 + 6 = 14 misses DC 15 (2024)', made === false && !gob.hidden && gob.actionUsed, JSON.stringify([made, gob.hidden]));
+        gob.actionUsed = false; window.sktD = () => 9;
+        made = await T._hide(gob);
+        ok('hide: 9 + 6 = 15 hides it', made === true && gob.hidden && gob.hidden.total === 15, JSON.stringify(gob.hidden));
+        ok('hide: the target list shows it hidden', (() => { T._render(); return [...document.querySelectorAll('.tv-tgt-tags')].some(e => /Hidden/.test(e.textContent)) || T._renderTargets(ogre).includes('Hidden'); })());
+        let cm = T._condMods(gob, pc);
+        ok('hide: its attack has advantage', cm.adv.includes('hidden'), JSON.stringify(cm));
+        cm = T._condMods(pc, gob);
+        ok('hide: attacks against it have disadvantage', cm.dis.includes('target hidden'), JSON.stringify(cm));
+        const notes = []; T._resolve = r => notes.push(r.hitNote || '');
+        window.sktD = () => 10;
+        T._rollAttack(0, { attacker: gob, target: pc });
+        ok('hide: attacking gives it away', !gob.hidden && /no longer hidden/.test(notes[0]) && /adv/.test(notes[0]), JSON.stringify([gob.hidden, notes]));
+        // Nimble Escape: with the action gone, hiding is the bonus action.
+        ok('hide: Nimble Escape is Disengage or Hide as a bonus action (2014 trait, 2024 bonus action)', JSON.stringify(T._bonusStd(gob)) === '["Disengage","Hide"]'
+          && (() => { const w = find('Goblin Warrior', 'XMM'); if (!w) return true; C.addMonster(w); const gw = state.combatants[state.combatants.length - 1]; const r = JSON.stringify(T._bonusStd(gw)); C._removeCombatantAt(state.combatants.indexOf(gw)); return r === '["Disengage","Hide"]'; })()
+          && JSON.stringify(T._bonusStd(ogre)) === '[]', JSON.stringify([T._bonusStd(gob), T._bonusStd(ogre)]));
+        ok('hide: a Battle Command that lets an ALLY hide is not the captain hiding', (() => { const keepE = T._entryOf; try { return _5eData.filter(r => r.cat === 'monster' && r.name === 'Drow House Captain').every(m => { T._entryOf = () => m; return !T._bonusStd({ id: 'x' }).length; }); } finally { T._entryOf = keepE; } })());
+        gob.bonusUsed = false; window.sktD = () => 12;
+        await T._hide(gob);
+        ok('hide: after its attack, the goblin hides with its bonus action', gob.actionUsed && gob.bonusUsed && gob.hidden, JSON.stringify([gob.actionUsed, gob.bonusUsed, gob.hidden]));
+        ogre.actionUsed = true; ogre.bonusUsed = false; state.activeCombatantId = ogre.id;
+        T._takeStandardAction('Disengage');
+        ok('hide: an ogre has no such thing (its bonus action is untouched)', !ogre.bonusUsed && ogre.disengaged);
+        // A 2014 character: the DC is the enemies' best passive Perception (goblin 9, ogre 8), and the player's total is typed in.
+        state.activeCombatantId = pc.id;
+        made = await T._hide(pc, 9);
+        ok('hide (2014): a 9 meets the goblin\'s passive Perception 9', made === true && pc.hidden && pc.hidden.dc === 9, JSON.stringify(pc.hidden));
+        pc.hidden = null; pc.actionUsed = false;
+        made = await T._hide(pc, 8);
+        ok('hide (2014): an 8 does not', made === false && !pc.hidden);
+        pc.conditions = ['Poisoned']; pc.actionUsed = false;
+        let seq = [15, 3]; window.sktD = () => seq.shift() || 1;
+        made = await T._hide(pc, 'roll');
+        ok('hide: rolled here, poisoned is disadvantage (15/3 → 3 + 7 = 10)', made === true && pc.hidden && pc.hidden.total === 10, JSON.stringify(pc.hidden));
+        // Undo brings the cover back.
+        T._resolve = keepRes;
+        state.activeCombatantId = pc.id;
+        T._snapshot('r209'); pc.hidden = null; if (typeof sktUndo === 'function') sktUndo(); else T._undoLast(); await sleep(60);
+        ok('hide: undo puts it back', !!pc.hidden, JSON.stringify(pc.hidden));
+      } catch(e){ ok('round 209 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
+      finally { window.sktD = keepD; T._resolve = keepRes; state.settings = JSON.parse(keepS); state.party = JSON.parse(keepP); state.combatants = JSON.parse(keepC); state.activeCombatantId = keepA; save(); }
+    }
     // -- Class features: represented, not just text ------------------------
     {
       try {

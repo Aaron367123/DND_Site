@@ -115,7 +115,8 @@ registerPanel('turnview', {
       + (state.combatants || []).map(c =>
           [c.id, c.name, c.hp, c.hpMax, c.ac, c.initiative, c.isPC ? 1 : 0,
            c.reactionUsed ? 1 : 0, c.actionUsed ? 1 : 0, c.bonusUsed ? 1 : 0,
-           c.dodging ? 1 : 0, c.disengaged ? 1 : 0, c.legendaryUsed || 0,
+           c.dodging ? 1 : 0, c.disengaged ? 1 : 0, c.legendaryUsed || 0, c.hidden ? 1 : 0,
+           c.helping ? c.helping.target : '',
            c.lair ? 1 : 0, c.lairUsed ? c.lairUsed.round + ':' + c.lairUsed.i : '',
            (c.conditions || []).join(',')].join('~')
         ).join('|');
@@ -822,6 +823,10 @@ registerPanel('turnview', {
     // see it anyway: blindsight or truesight that reaches.
     if (this._hasCond(attacker, 'invisible') && !this._seesUnseen(target, attacker)) adv.push('invisible');
     if (this._hasCond(target, 'invisible') && !this._seesUnseen(attacker, target)) dis.push('target invisible');
+    // Hidden (the Hide action): unseen, so it works both ways like Invisible
+    // — and blindsight or truesight that reaches still finds it.
+    if (attacker && attacker.hidden && !this._hasCond(attacker, 'invisible') && !this._seesUnseen(target, attacker)) adv.push('hidden');
+    if (target && target.hidden && !this._hasCond(target, 'invisible') && !this._seesUnseen(attacker, target)) dis.push('target hidden');
     // Pack Tactics: "advantage on an attack roll against a creature if at
     // least one of the wolf's allies is within 5 feet of the creature and the
     // ally isn't incapacitated." Its side is its allies (monsters, or the
@@ -1808,6 +1813,7 @@ registerPanel('turnview', {
           <span class="tv-tgt-hp">${t.hp}/${t.hpMax}</span>
           <span class="tv-tgt-ac">${ICO('i-shield')}${t.ac ?? '–'}</span>
         </span>
+        ${(tags => tags.length ? `<span class="tv-tgt-tags">${tags.map(esc).join(' · ')}</span>` : '')([...(t.conditions || []), t.dodging ? 'Dodging' : '', t.hidden ? 'Hidden' : ''].filter(Boolean))}
         <span class="tv-hpbar"><i style="width:${pct}%;background:${col}"></i></span>
       </button>`;
     }).join('');
@@ -2296,6 +2302,9 @@ registerPanel('turnview', {
       combat: this._order().map(c => ({
         id:c.id, hp:c.hp, dead:c.dead, stable:c.stable, reactionUsed:c.reactionUsed,
         actionUsed:c.actionUsed, bonusUsed:c.bonusUsed, dodging:c.dodging,
+        // (a Help used by the roll being undone, and a hiding creature's
+        // cover blown by it, come back with it)
+        disengaged:c.disengaged, helping:c.helping ? {...c.helping} : null, hidden:c.hidden ? {...c.hidden} : null,
         legendaryUsed:c.legendaryUsed,
         deathSaves: c.deathSaves ? {...c.deathSaves} : c.deathSaves,
         rechargeSpent: (c.rechargeSpent || []).slice(),
@@ -2681,6 +2690,8 @@ registerPanel('turnview', {
     const extra = (pcSheet.rollDice || []).filter(x => (x.on || []).some(k => atkTags.includes(k))).map(x => ({ label: x.label, n: this._d(x.die) }));
     if (extra.length) hitNote = (hitNote ? hitNote + ' · ' : '') + extra.map(x => x.label + ' +' + x.n).join(', ');
     if (exhBonus) hitNote = (hitNote ? hitNote + ' · ' : '') + 'exhaustion ' + exhBonus;
+    // Attacking gives a hidden creature away, hit or miss.
+    if (c.hidden){ c.hidden = null; hitNote = (hitNote ? hitNote + ' · ' : '') + 'no longer hidden'; }
     const total = nat + bonus + exhBonus + extra.reduce((s, x) => s + x.n, 0);
     // "Any attack that hits a paralysed or unconscious creature is a
     // critical hit if the attacker is within 5 feet of it." It has to be a
@@ -2835,12 +2846,14 @@ registerPanel('turnview', {
     // here tracks, so they are recorded and adjudicated — same rule as the
     // reactions with no mechanics.
     const acts = ['Dash', 'Disengage', 'Dodge', 'Help', 'Hide', 'Ready'];
-    const status = [c.dodging ? 'Dodging' : '', c.disengaged ? 'Disengaged' : '', c.helping ? 'Helping against ' + esc(c.helping.name) : ''].filter(Boolean);
+    const status = [c.dodging ? 'Dodging' : '', c.disengaged ? 'Disengaged' : '', c.helping ? 'Helping against ' + esc(c.helping.name) : '',
+      c.hidden ? 'Hidden' + (c.hidden.total != null ? ' (Stealth ' + c.hidden.total + ')' : '') : ''].filter(Boolean);
     return `<div class="tv-econ-bar">
       ${pip('actionUsed', 'Action', 'This turn&rsquo;s action')}
       ${pip('bonusUsed', 'Bonus', 'This turn&rsquo;s bonus action')}
       ${pip('reactionUsed', 'Reaction', 'Refreshes at the start of its own turn')}
       ${status.map(t => `<span class="tv-econ-status">${t}</span>`).join('')}
+      ${c.hidden ? '<button class="tv-econ-more" data-tv="unhide" title="Found, or gave itself away">Reveal</button>' : ''}
       <button class="tv-econ-more ${this._stdOpen ? 'on' : ''}" data-tv="stdopen" aria-expanded="${this._stdOpen}"
         title="Dash, Disengage, Dodge, Help, Hide, Ready">${this._stdOpen ? '▾' : '▸'} Other actions</button>
       ${!this._stdOpen ? '' : acts.map(a => `<button class="btn tv-econ-act ${(a === 'Dodge' && c.dodging) || (a === 'Disengage' && c.disengaged) ? 'primary' : ''}"
@@ -2848,14 +2861,16 @@ registerPanel('turnview', {
           title="${a === 'Dodge' ? 'Attacks against this creature have disadvantage until the start of its next turn — applied automatically'
                   : a === 'Disengage' ? 'Its movement provokes no opportunity attacks for the rest of this turn — applied automatically'
                   : a === 'Help' ? 'Pick the enemy on the right first: the next attack roll an ally makes against it has advantage, until the start of this creature\'s next turn — applied automatically'
+                  : a === 'Hide' ? 'A Stealth check (DC 15; in the 2014 rules, the enemies\' best passive Perception). Hidden, its attacks have advantage and attacks against it disadvantage, until it attacks or is found — applied automatically'
                   : 'Take the ' + a + ' action: spends the action and logs it'}"
           >${a}</button>`).join('')}
     </div>`;
   },
   _takeStandardAction(name){
     const c = this._active(); if (!c) return;
+    if (name === 'Hide') return this._hide(c);
     this._snapshot(`${c.name} · ${name}`);
-    this._spend(c, 'actionUsed');
+    const asBonus = this._spendStd(c, name);
     if (name === 'Dodge'){
       c.dodging = true;
       this._setResult(`<strong>${esc(c.name)}</strong> takes the <strong>Dodge</strong> action —
@@ -2877,8 +2892,102 @@ registerPanel('turnview', {
     } else {
       this._setResult(`<strong>${esc(c.name)}</strong> takes the <strong>${esc(name)}</strong> action.`, true);
     }
-    this._log.unshift(`<strong>${esc(c.name)}</strong> — ${esc(name)}`);
+    this._log.unshift(`<strong>${esc(c.name)}</strong> — ${esc(name)}${asBonus ? ' (bonus action)' : ''}`);
     save(); panelDefs.combat?._render?.(); this._render();
+  },
+
+  // The Hide action: a Stealth check against DC 15 (2024), or the best
+  // passive Perception among the enemies who could spot it (2014). A
+  // monster's is rolled with its own Stealth; a character's is the player's
+  // total, typed in, or rolled here with what their sheet says applies.
+  async _hide(c, typed){
+    const p = c.isPC ? this._partyOf(c) : null;
+    const ed = p ? ((p.build && p.build.edition) || p.rules || '2024') : ((state.settings && state.settings.builderEdition) || '2024');
+    let dc = 15, dcWhy = 'DC 15';
+    if (ed === '2014'){
+      const best = this._order().filter(o => !o.isPC !== !c.isPC && (o.hp || 0) > 0 && !this._incap(o))
+        .map(o => ({ name: o.name, pp: this._passivePerception(o) })).filter(x => x.pp != null)
+        .sort((a, b) => b.pp - a.pp)[0];
+      if (best){ dc = best.pp; dcWhy = best.name + '’s passive Perception ' + best.pp; } else { dc = null; dcWhy = ''; }
+    }
+    const bonus = this._stealthBonus(c);
+    const sg = n => (n < 0 ? '−' : '+') + Math.abs(n);
+    let total = typeof typed === 'number' ? typed : null;
+    if (total == null && c.isPC && typeof showConfirm === 'function' && typed !== 'roll'){
+      const v = await showConfirm(c.name + ' hides. ' + (dcWhy ? 'Stealth against ' + dcWhy + '.' : 'Stealth, against whoever is looking.'),
+        { title: 'Hide', confirmLabel: 'Hide', input: { label: 'Their Stealth total (blank: roll ' + sg(bonus) + ')', min: -10, max: 60 } });
+      if (v === false) return;
+      if (typeof v === 'number') total = v;
+    }
+    this._snapshot(`${c.name} · Hide`);
+    const asBonus = this._spendStd(c, 'Hide');
+    let detail = '';
+    if (total == null){
+      // Poisoned, frightened, exhausted, loud armour: what the rules add to the check.
+      const fx = p && typeof csRollEffects === 'function' ? csRollEffects(p, 'check:stealth')
+        : { adv: [], dis: ['poisoned', 'frightened'].filter(n => this._hasCond(c, n)), bonus: 0 };
+      const mode = fx.adv.length && !fx.dis.length ? 1 : fx.dis.length && !fx.adv.length ? -1 : 0;
+      const a = this._d(20), b = mode ? this._d(20) : null;
+      const nat = b == null ? a : mode > 0 ? Math.max(a, b) : Math.min(a, b);
+      total = nat + bonus + (fx.bonus || 0);
+      detail = 'd20 ' + (b == null ? a : a + '/' + b) + ' ' + sg(bonus) + (fx.bonus ? ' ' + sg(fx.bonus) : '')
+        + (mode ? ' (' + (mode > 0 ? 'advantage: ' + fx.adv.join(', ') : 'disadvantage: ' + fx.dis.join(', ')) + ')' : '');
+    }
+    const made = dc == null || total >= dc;
+    if (made) c.hidden = { total, dc };
+    this._setResult(`<strong>${esc(c.name)}</strong> tries to <strong>Hide</strong> — Stealth <strong>${total}</strong>`
+      + (detail ? ` <span class="dim">(${esc(detail)})</span>` : '')
+      + (dcWhy ? ` vs ${esc(dcWhy)}` : '') + ' — '
+      + (made ? 'hidden: its attacks have advantage and attacks against it disadvantage, until it attacks or is found.' : 'not hidden.'), true);
+    this._log.unshift(`<strong>${esc(c.name)}</strong> — Hide${asBonus ? ' (bonus action)' : ''}: Stealth ${total}${dc != null ? ' vs ' + dc : ''}, ${made ? 'hidden' : 'seen'}`);
+    save(); panelDefs.combat?._render?.(); this._render();
+    return made;
+  },
+  // Nimble Escape ("takes the Disengage or Hide action"), Cunning Action
+  // (Dash, Disengage, Hide): once the action is gone, the bonus action pays.
+  // → true when it was the bonus action.
+  _spendStd(c, name){
+    if (c.actionUsed && !c.bonusUsed && this._bonusStd(c).includes(name)){ this._spend(c, 'bonusUsed'); return true; }
+    this._spend(c, 'actionUsed'); return false;
+  },
+  _bonusStd(c){
+    const STD = ['Dash', 'Disengage', 'Dodge', 'Hide'], out = new Set();
+    if (c.isPC){
+      const fl = (((this._partyOf(c) || {}).sheet) || {}).featureList || [];
+      if (fl.some(f => f.name === 'Cunning Action' && !f.info)) ['Dash', 'Disengage', 'Hide'].forEach(n => out.add(n));
+      return [...out];
+    }
+    const raw = (this._entryOf(c) || {})._raw;
+    const said = t => STD.filter(n => new RegExp('\\b' + n + '\\b').test(t));
+    // a trait: "can take the Disengage or Hide action as a bonus action"
+    this._rawList(raw, ['special_abilities', 'trait']).forEach(t => {
+      const m = /\btake the ([^.]*?) action as a bonus action/i.exec(t.text); if (m) said(m[1]).forEach(n => out.add(n)); });
+    // a bonus action (2024): "The goblin takes the Disengage or Hide action."
+    // ("takes": a Battle Command lets an ALLY "take the Dodge or Hide action")
+    this._bonusActionsFor(c).forEach(t => {
+      const m = /\btakes the ([^.]*?) action\b/i.exec(t.text); if (m) said(m[1]).forEach(n => out.add(n)); });
+    return [...out];
+  },
+  _passivePerception(o){
+    if (o.isPC){
+      const p = this._partyOf(o) || {}, sh = p.sheet || {};
+      const v = p.pp ?? sh.passivePerception ?? (typeof csSkillVal === 'function' && csSkillVal(sh, 'perception') != null ? 10 + (+csSkillVal(sh, 'perception') || 0) : null);
+      return v == null || isNaN(+v) ? null : +v;
+    }
+    const sn = ((this._entryOf(o) || {})._raw || {}).senses;
+    const v = sn && typeof sn === 'object' ? sn.passive_perception : (/passive Perception (\d+)/i.exec(String(sn || '')) || [])[1];
+    return v == null || isNaN(+v) ? null : +v;
+  },
+  _stealthBonus(c){
+    const md = s => Math.floor(((+s || 10) - 10) / 2);
+    if (c.isPC){
+      const p = this._partyOf(c) || {}, sh = p.sheet || {};
+      const v = typeof csSkillVal === 'function' ? csSkillVal(sh, 'stealth') : null;
+      return v != null && !isNaN(+v) ? +v : md((p.abilities || {}).dex);
+    }
+    const raw = (this._entryOf(c) || {})._raw || {};
+    const prof = (raw.proficiencies || []).find(x => x && x.proficiency && x.proficiency.name === 'Skill: Stealth');
+    return prof ? +prof.value || 0 : md(raw.dexterity);
   },
 
   // Monster bonus actions, straight from the stat block. 543 of the 4,454
@@ -3326,6 +3435,7 @@ registerPanel('turnview', {
         if (cur){ cur[el.dataset.k] = !cur[el.dataset.k]; save(); panelDefs.combat?._render?.(); this._render(); }
       }
       else if (act === 'stdact'){ this._takeStandardAction(el.dataset.a); }
+      else if (act === 'unhide'){ const c = this._active(); if (c && c.hidden){ c.hidden = null; this._log.unshift(`<strong>${esc(c.name)}</strong> is no longer hidden`); save(); this._render(); } }
       else if (act === 'bonusact'){ this._useBonusAction(+el.dataset.ai); }
       else if (act === 'undo'){ if (typeof sktUndo === 'function') sktUndo(); else this._undoLast(); }
       else if (act === 'dsroll'){ this._rollDeathSave(); }
