@@ -1244,11 +1244,15 @@ registerPanel('turnview', {
         ? (a.save ? esc(a.dmgText || '—') : `${a.bonus >= 0 ? '+' : ''}${a.bonus} to hit · ${esc(a.dmgText || '—')}`)
         : `${esc(a.toHit || '')}${a.toHit ? ' to hit · ' : ''}${(a.parts || []).map(pt => `${pt.avg} (${esc(pt.dice)}) ${esc(pt.type)}`).join(' + ')}`;
       const spent = (c.rechargeSpent || []).includes(a.name);
-      const rech = a.recharge
+      const left = a.pc ? null : this._usesLeft(c, a);
+      const usedNow = left === 0 && (c.usesRound || {})[a.name] === (state.combatRound || 0) + ':' + (state.activeCombatantId || '');
+      const rech = (a.recharge
         ? `<span class="tv-save rech" title="Recharges on a d6 roll of ${esc(String(a.recharge))} at the start of its turn">↺ ${esc(String(a.recharge))}</span>`
-        : '';
+        : '') + (left != null ? `<span class="tv-save rech" title="Uses that don't come back in this fight">${left}/${a.uses} left</span>` : '');
       let ctl;
-      if (spent){
+      if (left === 0 && !usedNow){
+        ctl = `${rech}<span class="tv-act-note">used up</span>`;
+      } else if (spent){
         ctl = `${rech}<span class="tv-act-note">spent — recharges on its turn</span>`;
       } else if (a.save){
         // A breath weapon has no attack roll, so there is nothing to roll to
@@ -2019,6 +2023,7 @@ registerPanel('turnview', {
         legendaryUsed:c.legendaryUsed,
         deathSaves: c.deathSaves ? {...c.deathSaves} : c.deathSaves,
         rechargeSpent: (c.rechargeSpent || []).slice(),
+        usesSpent: c.usesSpent ? {...c.usesSpent} : undefined, usesRound: c.usesRound ? {...c.usesRound} : undefined,
       })),
       party: (state.party || []).map(p => ({
         // hp was missing here, so undoing damage to a PC put the combatant
@@ -2373,6 +2378,7 @@ registerPanel('turnview', {
       nat = keep;
     }
     if (a.recharge) this._markRechargeSpent(c, a.name);
+    this._markUsed(c, a);
     // A multiattack is one action for the whole sequence, not one per swing.
     if (!o.queued || (this._queue && this._queue.i === 0)) this._spend(c, 'actionUsed');
     const bonus = a.pc ? a.bonus : (parseInt(String(a.toHit || '').replace(/[^\d+-]/g, ''), 10) || 0);
@@ -2547,6 +2553,17 @@ registerPanel('turnview', {
   // up as, and one who forgets doesn't get a free breath weapon. Keyed on the
   // round so a re-render can't roll it twice.
   _rechargeMin(v){ const m = String(v || '').match(/\d+/); return m ? parseInt(m[0], 10) : 6; },
+  // "(3/Day)", "(Recharges after a Short or Long Rest)": counted down, not
+  // rolled back. One use a round: a breath applied to each target in turn
+  // (Failed, Failed…) is still one breath.
+  _usesLeft(c, a){ return a && a.uses ? Math.max(0, a.uses - (+((c.usesSpent || {})[a.name]) || 0)) : null; },
+  _markUsed(c, a){
+    if (!a || !a.uses) return;
+    const at = (state.combatRound || 0) + ':' + (state.activeCombatantId || '');
+    if ((c.usesRound || {})[a.name] === at) return;
+    c.usesRound = Object.assign({}, c.usesRound, { [a.name]: at });
+    c.usesSpent = Object.assign({}, c.usesSpent, { [a.name]: (+((c.usesSpent || {})[a.name]) || 0) + 1 });
+  },
   _markRechargeSpent(c, name){
     c.rechargeSpent = c.rechargeSpent || [];
     if (!c.rechargeSpent.includes(name)) c.rechargeSpent.push(name);
@@ -2639,6 +2656,7 @@ registerPanel('turnview', {
     const a = this._attacksFor(c)[ai]; if (!a || !a.save) return;
     this._snapshot(`${c.name} · ${a.name} → ${t.name}`);
     if (a.recharge) this._markRechargeSpent(c, a.name);
+    this._markUsed(c, a);
     this._spend(c, 'actionUsed');
     let detail = '';
     const parts = (a.parts || []).map(pt => {
@@ -2671,6 +2689,7 @@ registerPanel('turnview', {
       half: !!a.save.half, exclude: c.id, targets: this._armed ? [this._armed] : [],
       onApplied: () => {
         if (a.recharge) this._markRechargeSpent(c, a.name);
+    this._markUsed(c, a);
         this._spend(c, 'actionUsed');
         this._render();
       },

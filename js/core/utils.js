@@ -1283,15 +1283,22 @@ function sktParseMonsterAttack(action){
   // "{@recharge 5}". Pull it off the name either way and hand it back as its
   // own field so the runner can show it as a chip instead of a long title.
   const rawName = String((action && action.name) || '');
-  const rechM = rawName.match(/\(Recharge\s*([^)]+)\)/i) || rawName.match(/\{@recharge\s*([^}]*)\}/i);
+  // Only a d6 recharge: "(Recharges after a Short or Long Rest)" read as
+  // one too, and came back on a 6 every round.
+  const rechM = rawName.match(/\(Recharge\s+(\d[^)]*)\)/i) || rawName.match(/\{@recharge\s*([^}]*)\}/i);
   let recharge = null;
   if (rechM){
     const v = (rechM[1] || '').trim();
     recharge = v ? (/–|-/.test(v) ? v : v + '–6') : '6';
   }
+  // Uses that don't come back in a fight: "(3/Day)", "(1/Day, or 2/Day in
+  // Lair)", "(Recharges after a Short or Long Rest)" — once.
+  const dayM = rawName.match(/\((\d+)\/Day\b[^)]*\)/i);
+  const uses = dayM ? +dayM[1] : /\(Recharges\b[^)]*\)/i.test(rawName) ? 1 : 0;
   const name = rawName
-    .replace(/\s*\(Recharge[^)]*\)/gi, '')
+    .replace(/\s*\(Recharges?\b[^)]*\)/gi, '')
     .replace(/\s*\{@recharge[^}]*\}/gi, '')
+    .replace(/\s*\(\d+\/Day\b[^)]*\)/gi, '')
     .trim();
   const desc = String((action && action.desc) || '');
   if (!desc) return null;
@@ -1325,7 +1332,7 @@ function sktParseMonsterAttack(action){
     const parts = _sktDamageClauses(seg);
     if (parts.length){
       return {
-        name, recharge, toHit: null,
+        name, recharge, uses, toHit: null,
         save: { dc: saveDc, ability: saveAbility,
                 // "half as much damage" (2014), "Half damage." (2024), and
         // "takes only half the damage" (the Bulette, among others). Missing a
@@ -1351,7 +1358,7 @@ function sktParseMonsterAttack(action){
     const parts = _sktDamageClauses(_sktDamageSegment(desc, areaM.index));
     if (parts.length){
       return {
-        name, recharge, toHit: null, save: null,
+        name, recharge, uses, toHit: null, save: null,
         parts: parts.map(p => ({avg:p.avg, dice:p.dice, type:p.type})),
         alt: null, altLabel: '',
       };
@@ -1386,7 +1393,7 @@ function sktParseMonsterAttack(action){
   const toHitM = desc.match(/([+-]\s*\d+)\s+to hit/i)
               || desc.match(/Attack Roll:\s*([+-]\s*\d+)/i);
   return {
-    name, recharge,
+    name, recharge, uses,
     toHit: toHitM ? toHitM[1].replace(/\s+/g, '') : null,
     save: null,
     parts: parts.map(p => ({avg:p.avg, dice:p.dice, type:p.type})),

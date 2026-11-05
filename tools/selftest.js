@@ -13901,6 +13901,40 @@ for (const cls of Object.keys(rule)) for (let L = 1; L <= 20; L++) for (const sc
       } catch(e){ ok('round 188 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
       finally { try { csClose(); } catch(e){} state.party = JSON.parse(party0); save(); }
     }
+    // -- Round 189: a monster's "(1/Day)" or "(Recharges after a Rest)" ability is used up, not rolled back on a 6 --
+    if (!PLAYER){
+      const keepC = JSON.stringify(state.combatants), keepA = state.activeCombatantId, keepR = state.combatRound;
+      try {
+        const P = sktParseMonsterAttack;
+        const rest = P({ name: 'Chaos Cloud (Recharges after a Short or Long Rest)', desc: 'Each creature within 10 feet of it must make a DC 13 Constitution saving throw, taking 10 (3d6) poison damage on a failed save, or half as much damage on a successful one.' });
+        const day = P({ name: 'Hellfire Orb (1/Day)', desc: 'Each creature in a 20-foot-radius sphere must make a DC 18 Dexterity saving throw, taking 35 (10d6) fire damage on a failed save, or half as much damage on a successful one.' });
+        const lair = P({ name: 'Roar (3/Day, or 4/Day in Lair)', desc: 'Each creature in a 20-foot-radius sphere must make a DC 18 Dexterity saving throw, taking 35 (10d6) thunder damage on a failed save, or half as much damage on a successful one.' });
+        const rech = P({ name: 'Fire Breath (Recharge 5–6)', desc: 'Each creature in a 60-foot cone must make a DC 21 Dexterity saving throw, taking 63 (18d6) fire damage on a failed save, or half as much damage on a successful one.' });
+        ok('monster uses: a rest ability is one use with no d6 recharge; 1/Day and 3/Day are counted; Recharge 5–6 is still a d6',
+           rest && rest.name === 'Chaos Cloud' && rest.recharge == null && rest.uses === 1 && day.name === 'Hellfire Orb' && day.uses === 1 && lair.name === 'Roar' && lair.uses === 3 && rech.recharge === '5–6' && !rech.uses,
+           JSON.stringify([rest && [rest.name, rest.recharge, rest.uses], day && [day.name, day.uses], lair && [lair.name, lair.uses], rech && [rech.recharge, rech.uses]]));
+        for (let k = 0; k < 100 && !(typeof _5eLoaded !== 'undefined' && _5eLoaded); k++) await sleep(100);
+        const dk = _5eData.find(r => r.cat === 'monster' && r.name === 'Death Knight' && r._source === 'MM');
+        state.combatants = []; save();
+        panelDefs.combat.addMonster(dk); await sleep(50);
+        const mon = state.combatants[0];
+        state.combatants.push({ id: 'r189t', name: 'Dummy', isPC: false, hp: 200, hpMax: 200, ac: 10, initiative: 1, conditions: [] });
+        state.activeCombatantId = mon.id; state.combatRound = 1; save();
+        openPanel('turnview'); await sleep(300);
+        const T = panelDefs.turnview;
+        const ai = T._attacksFor(mon).findIndex(a => a.name === 'Hellfire Orb');
+        const orb = T._attacksFor(mon)[ai] || {};
+        ok('monster uses: the Death Knight\'s Hellfire Orb is once a day', ai >= 0 && orb.uses === 1 && T._usesLeft(mon, orb) === 1, JSON.stringify(T._attacksFor(mon).map(a => a.name + ':' + (a.uses || ''))));
+        const was = T._resolve; T._resolve = () => {};
+        try { T._armed = 'r189t'; T._rollSave(ai, false); T._rollSave(ai, false); } finally { T._resolve = was; }
+        ok('monster uses: hurled at two targets in one turn, it is one use', T._usesLeft(mon, orb) === 0 && mon.usesSpent['Hellfire Orb'] === 1, JSON.stringify(mon.usesSpent));
+        state.combatRound = 2; T._render(); await sleep(100);
+        const row = [...document.querySelectorAll('.tv-act')].find(r => /Hellfire Orb/.test(r.textContent));
+        ok('monster uses: next round it shows used up, with nothing to roll', !!row && /used up/.test(row.textContent) && !row.querySelector('[data-tv="save"]'), row && row.textContent.replace(/\s+/g, ' ').slice(0, 160));
+        closePanel('turnview');
+      } catch(e){ ok('round 189 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
+      finally { state.combatants = JSON.parse(keepC); state.activeCombatantId = keepA; state.combatRound = keepR; save(); }
+    }
     // -- Class features: represented, not just text ------------------------
     {
       try {
