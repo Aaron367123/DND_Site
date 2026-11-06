@@ -6277,3 +6277,6 @@ body.player-app .pa-hp-type { width:auto; min-height:34px; height:34px; margin-t
 .cs-sp-ver { display:flex; flex-wrap:wrap; align-items:center; gap:8px; margin:6px 0 4px; font-size:var(--fs-sm); flex-basis:100%; width:100%; }
 .cs-tag.cs-tag-ver { font-style:normal; width:auto; padding:0 5px; }
 .cb-tag-2024 { font-style:normal; font-size:var(--fs-2xs); border:1px solid var(--text-muted); border-radius:3px; padding:0 4px; color:var(--text-muted); }
+/* A creature's attacks on the sheet's Extras, to roll. */
+.cs-cr-atks { display:flex; flex-wrap:wrap; gap:6px 14px; margin:6px 0 2px; font-size:var(--fs-sm); }
+.cs-cr-atk { display:inline-flex; align-items:center; gap:6px; }

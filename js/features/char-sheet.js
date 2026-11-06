@@ -1112,6 +1112,31 @@ function csCreaturesStrip(pc){
   return '<div class="cs-creatures"><span class="cs-creatures-l">Creatures</span>' + list.map(x => '<button class="cs-creature" data-cs-tab="extras" title="Open Extras"><b>' + csE(x.name) + '</b> '
     + '<span class="cb-dim">' + (x.hp ?? 0) + '/' + (x.hpMax ?? 0) + ' HP' + (fighting(x) ? ' · in the fight' : '') + '</span></button>').join('') + '</div>';
 }
+// A creature's attacks, from its stat block, to roll from the sheet as D&D
+// Beyond's Extras does: the to-hit (the sheet's Advantage/Disadvantage, not
+// the character's own Lucky or Bless — those are theirs) and the damage,
+// every type, doubled after a critical.
+function csCreatureAttacks(x){
+  const m = csMonster(x && x.name), raw = m && m._raw;
+  if (!raw || typeof panelDefs === 'undefined' || !panelDefs.attacks || typeof panelDefs.attacks._parsed !== 'function') return [];
+  try { return (panelDefs.attacks._parsed(raw).attacks || []).filter(a => (a.toHit && a.toHit !== 'auto') || (a.parts || []).length || a.save); } catch(e){ return []; }
+}
+function csCreatureAttacksHtml(x, i){
+  const list = csCreatureAttacks(x); if (!list.length) return '';
+  return '<div class="cs-cr-atks">' + list.map((a, k) => '<span class="cs-cr-atk"><b>' + csE(a.name) + '</b>'
+    + (a.toHit && a.toHit !== 'auto' ? '<button class="btn small" data-cs-cratk="' + i + ':' + k + '" title="Roll its attack">' + csE(csAtkText(a.toHit)) + '</button>' : '')
+    + (a.save ? '<span class="cs-save">DC ' + csE(a.save.dc) + ' ' + csE(a.save.ability) + '</span>' : '')
+    + ((a.parts || []).length ? '<button class="btn small" data-cs-crdmg="' + i + ':' + k + '" title="Roll its damage">' + csDmgHtml(a.parts.map(p => p.dice + (p.type ? ' ' + p.type : '')).join(' + ')) + '</button>' : '')
+    + '</span>').join('') + '</div>';
+}
+function csCreatureD20(label, mod, ev){
+  const mode = ev && ev.shiftKey ? 'adv' : ev && ev.altKey ? 'dis' : (CS.mode || 'normal');
+  const a = csD(20), b = mode === 'normal' ? null : csD(20);
+  const nat = b == null ? a : mode === 'adv' ? Math.max(a, b) : Math.min(a, b);
+  const r = { kind: 'd20', label, mod, rolls: b == null ? [a] : [a, b], natural: nat, total: nat + mod, mode, crit: nat === 20, fumble: nat === 1, why: '', kindTag: null };
+  csLog(r);
+  return r;
+}
 CS_TAB_RENDER.extras = pc => {
   const ro = CS.readOnly, list = pc.extras || [];
   let h = '<div class="cb-dim">Familiars, mounts, companions and summoned creatures.</div>';
@@ -1122,6 +1147,7 @@ CS_TAB_RENDER.extras = pc => {
       + (ro ? '' : '<button class="btn small" data-cs-exhp="' + i + ':1" aria-label="Heal">+</button>') + '</span>'
       + (m ? '<button class="btn small" data-cs-open="ex:' + i + '">' + (open ? 'Hide' : 'Stat block') + '</button>' : '')
       + (ro ? '' : '<button class="btn small" data-cs-exdel="' + i + '" aria-label="Remove ' + csE(x.name) + '">✕</button>') + '</div>'
+      + csCreatureAttacksHtml(x, i)
       + (open && m && typeof buildDetailCard === 'function' ? '<div class="cs-extra-card">' + buildDetailCard(m, '-cs-' + i) + '</div>' : '') + '</div>';
   }).join('') : '<div class="cb-dim">None yet.</div>';
   if (!ro){
@@ -1209,6 +1235,21 @@ function csOnClick(e){
     return;
   }
   if (d.csRoll) return csRollFor(pc, d.csRoll, e);
+  if (d.csCratk != null || d.csCrdmg != null){
+    const key = String(d.csCratk != null ? d.csCratk : d.csCrdmg), [i, k] = key.split(':').map(Number);
+    const x = (pc.extras || [])[i], a = x ? csCreatureAttacks(x)[k] : null; if (!a) return;
+    if (d.csCratk != null){
+      const r = csCreatureD20(x.name + ' · ' + a.name, parseInt(String(a.toHit).replace(/[^\d+-]/g, ''), 10) || 0, e);
+      CS.lastCrCrit = { key, crit: r.crit };
+    } else {
+      const crit = !!(CS.lastCrCrit && CS.lastCrCrit.key === key && CS.lastCrCrit.crit);
+      const rs = a.parts.map(p => sktDamageRoll(p.dice + (p.type ? ' ' + p.type : ''), crit));
+      csLog({ kind: 'dmg', label: x.name + ' · ' + a.name + ' damage', total: rs.reduce((t, r) => t + r.total, 0),
+        detail: rs.map(r => r.detail + (rs.length > 1 && r.type ? ' ' + r.type : '')).join(' + '), type: [...new Set(rs.map(r => r.type).filter(Boolean))].join(' + '), crit });
+      CS.lastCrCrit = null;
+    }
+    return csRender();
+  }
   if (d.csAtk != null){
     const a = (pc.sheet.attacks || [])[+d.csAtk]; if (!a) return;
     { const ms = typeof sktMasteryOf === 'function' ? sktMasteryOf(pc, a) : ''; CS.rollNote = ms ? ms + ': ' + sktMasteryText(pc, a, ms) : null; }

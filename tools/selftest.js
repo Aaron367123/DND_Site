@@ -15707,6 +15707,52 @@ for (const cls of Object.keys(rule)) for (let L = 1; L <= 20; L++) for (const sc
         T._mapCache = null; state.combatants = JSON.parse(keepC); state.activeCombatantId = keepA; save();
       }
     }
+    // -- Round 223: a character's creatures roll their own attacks from the sheet's Extras --
+    if (!PLAYER){
+      const party0 = JSON.stringify(state.party), keepD = window.sktD;
+      try {
+        for (let k = 0; k < 100 && !(typeof _5eLoaded !== 'undefined' && _5eLoaded); k++) await sleep(100);
+        state.party.push({ id: 'r223z', name: 'Zoey', hp: 30, hpMax: 30, ac: 15, rules: '2024', level: 5, cls: 'rogue',
+          sheet: { featureList: [{ name: 'Lucky', from: 'species' }] },
+          extras: [{ name: 'Wolf', hp: 11, hpMax: 11, ac: 13 }, { name: 'Hell Hound', hp: 45, hpMax: 45, ac: 15 }, { name: 'Not In The Bestiary', hp: 5, hpMax: 5, ac: 10 }] });
+        save();
+        await openCharSheet('r223z'); await sleep(400);
+        document.querySelector('#cs-root [data-cs-tab="extras"]').click(); await sleep(300);
+        const rows = [...document.querySelectorAll('#cs-root .cs-extra')];
+        const wolfRow = rows.find(r => /Wolf/.test(r.querySelector('.cs-extra-h').textContent) && !/Hell/.test(r.textContent.slice(0, 20)));
+        const atk = wolfRow && wolfRow.querySelector('[data-cs-cratk]'), dmg = wolfRow && wolfRow.querySelector('[data-cs-crdmg]');
+        ok('creature rolls: the wolf’s Bite is on its row — to hit and damage', !!atk && /\+4/.test(atk.textContent) && !!dmg && /2d4\+2 piercing/.test(dmg.textContent), wolfRow && wolfRow.querySelector('.cs-cr-atks') && wolfRow.querySelector('.cs-cr-atks').textContent);
+        ok('creature rolls: a creature with no stat block has none', !rows.find(r => /Not In The Bestiary/.test(r.textContent)).querySelector('.cs-cr-atks'));
+        // To hit: 1 + 4 — and Zoey's own Lucky doesn't reroll the wolf's 1.
+        let calls = 0; window.sktD = n => { calls++; return n === 20 ? 1 : 3; };
+        atk.click(); await sleep(60);
+        const r1 = CS.log[0];
+        ok('creature rolls: its attack is d20 + 4, logged under its name', r1 && r1.kind === 'd20' && r1.label === 'Wolf · Bite' && r1.total === 5 && r1.natural === 1, JSON.stringify(r1));
+        ok('creature rolls: the character’s Lucky is hers, not the wolf’s', calls === 1, calls);
+        // Damage: 2d4+2 with 3s = 8.
+        document.querySelector('#cs-root [data-cs-crdmg="0:0"]').click(); await sleep(60);
+        const r2 = CS.log[0];
+        ok('creature rolls: its damage, 2d4+2 piercing = 8', r2 && r2.kind === 'dmg' && r2.total === 8 && r2.type === 'piercing' && !r2.crit, JSON.stringify(r2));
+        // A 20, then damage doubled.
+        window.sktD = n => (n === 20 ? 20 : 3);
+        document.querySelector('#cs-root [data-cs-cratk="0:0"]').click(); await sleep(60);
+        document.querySelector('#cs-root [data-cs-crdmg="0:0"]').click(); await sleep(60);
+        ok('creature rolls: after a 20 the dice double — 4d4+2 = 14', CS.log[0].total === 14 && CS.log[0].crit === true, JSON.stringify(CS.log[0]));
+        document.querySelector('#cs-root [data-cs-crdmg="0:0"]').click(); await sleep(60);
+        ok('creature rolls: …once — the next damage is ordinary again', CS.log[0].total === 8 && !CS.log[0].crit, JSON.stringify(CS.log[0]));
+        // Two damage types: the hell hound's bite, piercing and fire.
+        const hb = document.querySelector('#cs-root [data-cs-crdmg^="1:"]');
+        hb && hb.click(); await sleep(60);
+        ok('creature rolls: a hell hound’s bite rolls both its piercing and its fire', !!hb && /piercing/.test(CS.log[0].type) && /fire/.test(CS.log[0].type) && CS.log[0].total === (3 + 3) + (3 + 3), JSON.stringify(CS.log[0]));
+        // Someone else's sheet, read-only: the creature's rolls still work (as the character's attacks do).
+        CS.readOnly = true; csRender(); await sleep(50);
+        const ro = document.querySelector('#cs-root [data-cs-cratk="0:0"]');
+        ro && ro.click(); await sleep(60);
+        ok('creature rolls: on a read-only sheet they can still be rolled', !!ro && CS.log[0].label === 'Wolf · Bite');
+        csClose();
+      } catch(e){ ok('round 223 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
+      finally { window.sktD = keepD; try { csClose(); } catch(e){} state.party = JSON.parse(party0); save(); }
+    }
     // -- Class features: represented, not just text ------------------------
     {
       try {
