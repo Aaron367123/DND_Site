@@ -16013,6 +16013,88 @@ for (const cls of Object.keys(rule)) for (let L = 1; L <= 20; L++) for (const sc
       } catch(e){ ok('round 229 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
       finally { window.sktD = keepD; T._lastPcHit = null; state.party = JSON.parse(keepP); state.combatants = JSON.parse(keepC); state.activeCombatantId = keepA; save(); }
     }
+    // -- Round 230: a monk's hit offers Stunning Strike and Hand of Harm; the stun lasts until the MONK's next turn --
+    if (!PLAYER){
+      const keepC = JSON.stringify(state.combatants), keepA = state.activeCombatantId, keepP = JSON.stringify(state.party), keepR = state.combatRound;
+      const T = panelDefs.turnview, C = panelDefs.combat, keepD = window.sktD;
+      try {
+        for (let k = 0; k < 100 && !(typeof _5eLoaded !== 'undefined' && _5eLoaded); k++) await sleep(100);
+        const find = (n, src) => _5eData.find(r => r.cat === 'monster' && r.name === n && r._source === src);
+        const monk = (id, rules, pool) => ({ id, name: 'Cream', hp: 40, hpMax: 40, ac: 15, rules, level: 6, abilities: { dex: 17, wis: 13 }, resources: [{ name: pool, current: 6, max: 6 }],
+          sheet: { profBonus: 3, classLevels: [{ cls: 'monk', level: 6 }], featureList: [{ name: 'Stunning Strike' }, { name: 'Hand of Harm' }, { name: "Physician's Touch" }],
+            activations: [{ name: 'Unarmed Strike (Martial Arts)', dice: '1d8+3' }], attacks: [{ name: 'Unarmed Strike', atkBonus: '+6', damage: '1d8+3 bludgeoning' }, { name: 'Quarterstaff', atkBonus: '+6', damage: '1d8+3 bludgeoning', props: ['V'] }, { name: 'Shortbow', atkBonus: '+6', damage: '1d6+3 piercing', props: ['A', '2H'] }] } });
+        state.party.push(monk('r230m', '2024', 'Focus Points'));
+        state.combatants = [{ id: 'r230m', name: 'Cream', isPC: true, hp: 40, hpMax: 40, ac: 15, initiative: 20, conditions: [] }];
+        C.addMonster(find('Ogre', 'MM')); await sleep(20);
+        const get = id => state.combatants.find(c => c.id === id), ogreId = state.combatants[1].id, ogre = () => get(ogreId);
+        Object.assign(ogre(), { hp: 300, hpMax: 300, ac: 5, conditions: [] });
+        state.activeCombatantId = 'r230m'; state.combatRound = 4; save();
+        if (!T._body){ openPanel('turnview'); await sleep(200); }
+        T._onHits = [];
+        const pm = () => state.party.find(p => p.id === 'r230m'), focus = () => pm().resources[0].current;
+        const hit = (name) => { window.sktD = n => (n === 20 ? 15 : 3);
+          T._rollAttack(T._attacksFor(get('r230m')).findIndex(a => a.name === name), { attacker: get('r230m'), target: ogre() }); };
+        const opt = k => T._pcExtraOptions(T._lastPcHit).find(o => o.key === k);
+        hit('Unarmed Strike'); await sleep(20);
+        const stun = opt('stun'), harm = opt('harm');
+        ok('monk: an unarmed hit offers Stunning Strike — DC 12 (8 + 3 + Wis 1)', !!stun && /DC 12 Con/.test(stun.why) && stun.queue[0].dc === 12, JSON.stringify(stun));
+        ok('monk: …and Hand of Harm, the Martial Arts die + Wis: 1d8+1 necrotic', !!harm && harm.dice === '1d8+1' && harm.type === 'necrotic', JSON.stringify(harm));
+        const hp0 = ogre().hp; T._usePcExtra('harm'); await sleep(20);
+        ok('monk: Hand of Harm lands — 3 + 1 = 4 necrotic, a Focus Point spent', hp0 - ogre().hp === 4 && focus() === 5, JSON.stringify([hp0 - ogre().hp, focus()]));
+        const poi = T._onHits.find(x => x.tgtId === ogreId && x.cond === 'Poisoned');
+        ok('monk: Physician’s Touch — poisoned, no save, offered to apply', !!poi && !poi.dc, JSON.stringify(poi));
+        T._usePcExtra('stun'); await sleep(20);
+        ok('monk: Stunning Strike — another Focus Point, and the Con save waits', focus() === 4 && T._onHits.some(x => x.cond === 'Stunned' && x.dc === 12 && x.ability === 'Con'));
+        ok('monk: …each once a turn — neither offered again', !opt('stun') && !opt('harm'));
+        hit('Unarmed Strike'); await sleep(20);
+        ok('monk: …nor on a second hit the same turn (2024)', !!T._lastPcHit && !opt('stun') && !opt('harm'), JSON.stringify(T._pcExtraOptions(T._lastPcHit).map(o => o.key)));
+        const keepOnce = get('r230m').onceTurn; get('r230m').onceTurn = undefined;
+        hit('Quarterstaff'); await sleep(20);
+        ok('monk: a quarterstaff (monk weapon) can stun, but Hand of Harm wants an Unarmed Strike', !!opt('stun') && !opt('harm'), JSON.stringify(T._pcExtraOptions(T._lastPcHit).map(o => o.key)));
+        get('r230m').onceTurn = keepOnce; T._lastPcHit = null; hit('Unarmed Strike'); await sleep(20);
+        T._painted = {}; T._render(); await sleep(20);
+        const rowTxt = document.querySelector('.tv-legendary').textContent.replace(/\s+/g, ' ');
+        ok('monk: the stun row says whose turn it lasts to, and what a success still does', /stunned until the start of Cream’s next turn/.test(rowTxt) && /Speed is halved/.test(rowTxt), rowTxt.slice(0, 400));
+        window.sktD = n => 2;
+        T._onHitAct('roll', T._onHits.findIndex(x => x.cond === 'Stunned')); await sleep(20);
+        T._onHitAct('fail', T._onHits.findIndex(x => x.cond === 'Poisoned')); await sleep(20);
+        const tm = ogre().condTimers || {};
+        ok('monk: a 2 fails — stunned, timed on Cream’s turn', (ogre().conditions || []).includes('Stunned') && tm.Stunned && tm.Stunned.by === 'r230m' && tm.Stunned.kind === 'start-next', JSON.stringify(tm));
+        ok('monk: the tracker says it — until the start of Cream’s next turn', /until the start of Cream’s next turn/.test(C._condTimerText(ogre(), 'Stunned')), C._condTimerText(ogre(), 'Stunned'));
+        // The ogre's own turn doesn't end it; Cream's next turn does.
+        // Through the tracker's own Next turn: the ogre's turn, then Cream's.
+        C._nextTurn(); await sleep(20);
+        ok('monk: through the ogre’s turn, still stunned and poisoned', state.activeCombatantId === ogreId && (ogre().conditions || []).includes('Stunned') && (ogre().conditions || []).includes('Poisoned'), JSON.stringify([state.activeCombatantId, ogre().conditions]));
+        C._nextTurn(); await sleep(20);
+        ok('monk: at the start of Cream’s next turn the stun ends; the poison holds', state.activeCombatantId === 'r230m' && !(ogre().conditions || []).includes('Stunned') && (ogre().conditions || []).includes('Poisoned'), JSON.stringify(ogre().conditions));
+        C._nextTurn(); await sleep(20);
+        ok('monk: …and at the end of that turn the poison ends', !(ogre().conditions || []).includes('Poisoned'), JSON.stringify(ogre().conditions));
+        // A success (2024): not stunned, but slowed and open.
+        state.activeCombatantId = 'r230m'; state.combatRound = 4; get('r230m').onceTurn = undefined; T._onHits = [];
+        hit('Unarmed Strike'); await sleep(20); T._usePcExtra('stun'); await sleep(20);
+        window.sktD = n => 19;
+        T._onHitAct('roll', T._onHits.findIndex(x => x.cond === 'Stunned')); await sleep(20);
+        ok('monk: a success — not stunned, and the result says its Speed is halved', !(ogre().conditions || []).includes('Stunned') && /resists.*Speed is halved/.test(T._result), T._result);
+        // Undo gives the Focus Point back.
+        get('r230m').onceTurn = undefined; hit('Unarmed Strike'); await sleep(20);
+        const f0 = focus(); T._usePcExtra('stun'); await sleep(20);
+        if (typeof sktUndo === 'function'){ sktUndo(); await sleep(40); ok('monk: undo gives the Focus Point back', focus() === f0, focus() + ' vs ' + f0); }
+        // A bow is no monk's strike; with no Focus Points, nothing.
+        get('r230m').onceTurn = undefined; hit('Shortbow'); await sleep(20);
+        ok('monk: a shortbow hit offers neither', !opt('stun') && !opt('harm'));
+        pm().resources[0].current = 0; hit('Unarmed Strike'); await sleep(20);
+        ok('monk: out of Focus Points, neither', !opt('stun') && !opt('harm'));
+        // 2014: ki; the stun runs to the END of the monk's next turn, and isn't once a turn.
+        state.party = state.party.filter(p => p.id !== 'r230m'); state.party.push(monk('r230m', '2014', 'Ki'));
+        get('r230m').onceTurn = undefined; T._onHits = []; Object.assign(ogre(), { conditions: [], condTimers: undefined });
+        hit('Unarmed Strike'); await sleep(20);
+        ok('monk (2014): ki, until the end of its next turn', !!opt('stun') && opt('stun').queue[0].dur.kind === 'end-next' && /ki point/.test(opt('stun').why) && !opt('stun').queue[0].onSave, JSON.stringify(opt('stun')));
+        T._usePcExtra('stun'); await sleep(20);
+        hit('Unarmed Strike'); await sleep(20);
+        ok('monk (2014): …and on the next hit, offered again', !!opt('stun') && pm().resources[0].current === 5);
+      } catch(e){ ok('round 230 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
+      finally { window.sktD = keepD; T._lastPcHit = null; T._onHits = []; state.party = JSON.parse(keepP); state.combatants = JSON.parse(keepC); state.activeCombatantId = keepA; state.combatRound = keepR; save(); }
+    }
     // -- Class features: represented, not just text ------------------------
     {
       try {

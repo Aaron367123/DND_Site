@@ -1628,6 +1628,7 @@ registerPanel('combat',{
     // turn." Same moment as the rest of its economy, so the same place.
     if (c.legendaryMax) c.legendaryUsed = 0;
     this._tickCondTimers(c, 'start');
+    this._tickByTimers(c, 'start');
     if (c.isPC){
       const p = typeof _findPartyMemberForCombatant === 'function' ? state.party[_findPartyMemberForCombatant(c)] : null;
       if (p && p.active && (p.active['Reckless Attack'] || p.active.Shield)){
@@ -1646,6 +1647,7 @@ registerPanel('combat',{
     const c = state.combatants.find(x => x.id === id);
     if (c) c.disengaged = false;
     if (c) this._tickCondTimers(c, 'end');
+    if (c) this._tickByTimers(c, 'end');
   },
 
   // ─── Regeneration ─────────────────────────────────────────────────────────
@@ -2534,8 +2536,9 @@ registerPanel('combat',{
   },
   _condTimerText(c, cond){
     const t = c && c.condTimers && c.condTimers[cond]; if (!t) return '';
-    const d = t.kind === 'end-next' ? 'until the end of its next turn'
-            : t.kind === 'start-next' ? 'until the start of its next turn'
+    const whose = t.by ? (t.byName || 'its source') + '’s' : 'its';
+    const d = t.kind === 'end-next' ? 'until the end of ' + whose + ' next turn'
+            : t.kind === 'start-next' ? 'until the start of ' + whose + ' next turn'
             : t.kind === 'rounds' ? (t.left + ' more round' + (t.left === 1 ? '' : 's') + ' (ends at the end of its turn)')
             : '';
     const sv = t.save ? (d ? '; ' : '') + String(t.save.ab).toUpperCase() + ' save DC ' + t.save.dc + ' at the end of each of its turns' : '';
@@ -2593,6 +2596,7 @@ registerPanel('combat',{
     Object.keys(timers).forEach(cond => {
       const t = { ...timers[cond] };
       if (!(c.conditions || []).includes(cond)){ delete timers[cond]; return; }   // removed by hand
+      if (t.by) return;                     // counted on its source's turn (_tickByTimers)
       if (phase === 'start' && t.kind === 'start-next' && !ownTurnJustSet(t)){ ended.push(cond); delete timers[cond]; return; }
       if (phase !== 'end') return;
       const skip = ownTurnJustSet(t);
@@ -2613,6 +2617,33 @@ registerPanel('combat',{
       if (typeof showToast === 'function') showToast(c.name + ': ' + ended.join(', ') + ' ended');
       if (c.isPC) setTimeout(() => panelDefs.party?._render?.(), 0);
     }
+  },
+
+  // A duration counted on someone else's turn: a monk's Stunning Strike lasts
+  // "until the start of YOUR next turn" — the monk's — and Physician's Touch
+  // poisons "until the end of your next turn". The timer carries `by` (the
+  // source's id); this runs as the source's turn starts or ends.
+  _tickByTimers(src, phase){
+    if (!src) return;
+    (state.combatants || []).forEach(x => {
+      if (!x.condTimers) return;
+      const timers = Object.assign({}, x.condTimers), ended = [];
+      Object.keys(timers).forEach(cond => {
+        const t = timers[cond];
+        if (!t || t.by !== src.id) return;
+        if (!(x.conditions || []).includes(cond)){ delete timers[cond]; return; }
+        // Set during this very turn of the source: its NEXT turn is the one.
+        if (t.setActive === src.id && t.setRound === (state.combatRound || 0)) return;
+        if ((phase === 'start' && t.kind === 'start-next') || (phase === 'end' && t.kind === 'end-next')){ ended.push(cond); delete timers[cond]; }
+      });
+      x.condTimers = Object.keys(timers).length ? timers : undefined;
+      if (ended.length){
+        x.conditions = (x.conditions || []).filter(k => !ended.includes(k));
+        ended.forEach(cond => this._log(x.name + ' — ' + cond + ' ends'));
+        if (typeof showToast === 'function') showToast(x.name + ': ' + ended.join(', ') + ' ended');
+        if (x.isPC) setTimeout(() => panelDefs.party?._render?.(), 0);
+      }
+    });
   },
 
   // ─── End-of-turn saves (Hold Person and friends) ────────────────────────────

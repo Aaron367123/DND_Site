@@ -3085,8 +3085,10 @@ registerPanel('turnview', {
       + (oh.drain ? ' (until a long rest; at 0, it dies)' : '')
       + (oh.escape ? ' (escape DC ' + oh.escape + ')' : '')
       + (oh.also ? ', and ' + oh.also.toLowerCase() + ' while it lasts' : '')
-      + (oh.dur ? (oh.dur.kind === 'rounds' ? ' for ' + oh.dur.left + ' rounds' : oh.dur.kind === 'end-next' ? ' until the end of its next turn' : ' until the start of its next turn') : '')
+      + (oh.dur ? (oh.dur.kind === 'rounds' ? ' for ' + oh.dur.left + ' rounds'
+          : ' until the ' + (oh.dur.kind === 'end-next' ? 'end' : 'start') + ' of ' + (oh.dur.by ? oh.dur.byName + '’s' : 'its') + ' next turn') : '')
       + (oh.repeat ? ' (save again at the end of each of its turns)' : '')
+      + (oh.onSave ? '; on a success, ' + oh.onSave : '')
       + (oh.when ? ' — if ' + oh.when : '');
   },
   _turnKey(){ return String(state.activeCombatantId) + '#' + (state.combatRound || 0); },
@@ -3161,7 +3163,7 @@ registerPanel('turnview', {
       if ((x.dur || x.repeat) && C && typeof C._setCondTimer === 'function' && ti >= 0)
         C._setCondTimer(ti, x.cond, Object.assign({}, x.dur || {}, x.repeat ? { save: { ab: x.ability.toLowerCase(), dc: x.dc } } : {}));
     }
-    const txt = `<strong>${esc(t.name)}</strong> ${fail ? 'is ' + esc(x.cond.toLowerCase()) + (x.also ? ' and ' + esc(x.also.toLowerCase()) : '') : 'resists — not ' + esc(x.cond.toLowerCase())}`
+    const txt = `<strong>${esc(t.name)}</strong> ${fail ? 'is ' + esc(x.cond.toLowerCase()) + (x.also ? ' and ' + esc(x.also.toLowerCase()) : '') : 'resists — not ' + esc(x.cond.toLowerCase()) + (x.onSave ? ', but ' + esc(x.onSave) : '')}`
       + (why ? ` <span class="dim">(${esc(why)})</span>` : '') + ` <span class="dim">· ${esc(x.name)}</span>`;
     this._setResult(txt, true);
     this._log.unshift(txt);
@@ -3200,6 +3202,31 @@ registerPanel('turnview', {
         const n = Math.min(5, 1 + lv) + (/fiend|undead/.test(ty) ? 1 : 0);
         out.push({ key: 'smite', label: 'Divine Smite', dice: n + 'd8', type: 'radiant', slot: lv, ok: true,
           why: 'a ' + ['', '1st', '2nd', '3rd', '4th', '5th'][Math.min(lv, 5)] + '-level slot' + (/fiend|undead/.test(ty) ? ', +1d8 against ' + (ty.includes('fiend') ? 'a fiend' : 'the undead') : '') });
+      }
+    }
+    // A monk's hit: Stunning Strike, and a Warrior of Mercy's Hand of Harm —
+    // each a Focus Point (ki, in 2014), each once a turn (Stunning Strike:
+    // 2024 only). Unarmed or a monk weapon — melee; a sheet's weapon list
+    // doesn't say which are monk weapons, so any melee weapon is the DM's call.
+    const feat = n => (sh.featureList || []).some(f => f.name === n && !f.info);
+    const focus = (p.resources || []).find(r => /^(Focus Points|Ki|Ki Points)$/.test(r.name));
+    const unarmed = /unarmed strike/i.test(h.label || ''), once = k => (c.onceTurn || {})[k] === this._turnKey();
+    if (focus && (+focus.current || 0) >= 1 && weapon && !h.ranged){
+      const wis = Math.floor((((p.abilities || {}).wis) || 10) / 2) - 5, pb = +sh.profBonus || 2;
+      const by = { by: c.id, byName: c.name };
+      if (feat('Stunning Strike') && !(ed !== '2014' && once('Stunning Strike')))
+        out.push({ key: 'stun', label: 'Stunning Strike', dice: '', once: ed !== '2014', ok: true, res: focus.name,
+          why: '1 ' + (focus.name === 'Focus Points' ? 'Focus Point' : 'ki point') + ' — DC ' + (8 + pb + wis) + ' Con save or stunned',
+          queue: [{ cond: 'Stunned', ability: 'Con', dc: 8 + pb + wis, dur: Object.assign({ kind: ed === '2014' ? 'end-next' : 'start-next' }, by),
+                    onSave: ed === '2014' ? '' : 'its Speed is halved and the next attack against it has advantage, until the start of ' + c.name + '’s next turn' }] });
+      if (feat('Hand of Harm') && unarmed && !once('Hand of Harm')){
+        const ma = (sh.activations || []).find(a => /^Unarmed Strike \(Martial Arts\)/.test(a.name));
+        const lvl = ((sh.classLevels || []).find(x => x.cls === 'monk') || {}).level || p.level || 1;
+        const die = ((ma && /^\d*d\d+/.exec(String(ma.dice || ''))) || [])[0]
+          || (ed === '2014' ? ['1d4', '1d6', '1d8', '1d10'] : ['1d6', '1d8', '1d10', '1d12'])[lvl >= 17 ? 3 : lvl >= 11 ? 2 : lvl >= 5 ? 1 : 0];
+        out.push({ key: 'harm', label: 'Hand of Harm', dice: die + (wis ? (wis > 0 ? '+' : '') + wis : ''), type: 'necrotic', once: true, ok: true, res: focus.name,
+          why: '1 ' + (focus.name === 'Focus Points' ? 'Focus Point' : 'ki point') + (feat('Physician’s Touch') || feat("Physician's Touch") ? ' — and Physician’s Touch can poison it' : ''),
+          queue: feat('Physician’s Touch') || feat("Physician's Touch") ? [{ cond: 'Poisoned', dur: Object.assign({ kind: 'end-next' }, by) }] : [] });
       }
     }
     (sh.extraDamage || []).forEach((x, i) => { if (x && x.dice) out.push({ key: 'x' + i, label: x.label, dice: x.dice, type: '', ok: true, why: x.note || '' }); });
@@ -3269,7 +3296,7 @@ registerPanel('turnview', {
     const c = this._order().find(x => x.id === h.atkId), t = this._order().find(x => x.id === h.tgtId), p = this._partyOf(c);
     if (!c || !t || typeof sktDamageRoll !== 'function') return;
     this._snapshot(`${c.name} · ${o.label} → ${t.name}`);
-    const r = o.dice ? sktDamageRoll(o.dice + (o.type && !/[a-z]{3,}/i.test(o.dice) ? ' ' + o.type : ''), h.crit) : { total: 0, detail: 'every die spent on Cunning Strike', type: '' };
+    const r = o.dice ? sktDamageRoll(o.dice + (o.type && !/[a-z]{3,}/i.test(o.dice) ? ' ' + o.type : ''), h.crit) : { total: 0, detail: (o.picked || []).length ? 'every die spent on Cunning Strike' : '', type: '' };
     const type = r.type || o.type || h.type || '';
     const before = t.hp;
     if (r.total) this._applyDamage(t, [{ amt: r.total, type }], h.magical || key === 'smite' || key === 'hm' || key === 'hex', h.crit);
@@ -3277,6 +3304,9 @@ registerPanel('turnview', {
     h.used.push(key);
     if (o.once) c.onceTurn = Object.assign({}, c.onceTurn, { [o.label]: this._turnKey() });
     if (o.slot && p && p.sheet && p.sheet.spellSlots && p.sheet.spellSlots[o.slot]) p.sheet.spellSlots[o.slot].expended = (p.sheet.spellSlots[o.slot].expended || 0) + 1;
+    // A Focus Point (or ki) spent.
+    const pool = o.res && p ? (p.resources || []).find(x => x.name === o.res) : null;
+    if (pool) pool.current = Math.max(0, (+pool.current || 0) - 1);
     // (2024: Divine Smite is a spell cast as a bonus action)
     if (key === 'smite' && this._edOf(c) !== '2014') this._spend(c, 'bonusUsed');
     // Cunning Strike: a save-or-condition goes on the hit's queue (roll it
@@ -3286,9 +3316,18 @@ registerPanel('turnview', {
       if (x.onHit) this._queueOnHit({ onHit: x.onHit, target: t, attacker: c.name, attackerId: c.id, label: 'Cunning Strike (' + x.name + ')' });
       else said.push(x.name + ': ' + x.text);
     });
+    // What it inflicts (Stunning Strike's save, Physician's Touch): the hit's queue.
+    (o.queue || []).forEach(q => this._queueOnHit({ onHit: q, target: t, attacker: c.name, attackerId: c.id, label: o.label }));
     h.cun = [];
+    const spent = pool ? ` · 1 ${pool.name === 'Focus Points' ? 'Focus Point' : 'ki point'} spent (${pool.current} left)` : '';
+    if (!o.dice && !(o.picked || []).length){
+      const txt0 = `<strong>${esc(c.name)}</strong> — ${esc(o.label)} → <strong>${esc(t.name)}</strong><span class="dim">${esc(spent)}</span>`;
+      this._setResult(txt0, true); this._log.unshift(txt0);
+      save(); panelDefs.combat?._render?.(); panelDefs.party?._render?.(); this._render();
+      return;
+    }
     const txt = `<strong>${esc(c.name)}</strong> — ${esc(o.label)}${(o.picked || []).map(x => ' + ' + esc(x.name)).join('')}: <strong>${r.total}${type ? ' ' + esc(type) : ''}</strong> to <strong>${esc(t.name)}</strong>`
-      + ` <span class="dim">[${esc(r.detail)}]${h.crit ? ' (crit)' : ''} · ${before} → ${after}${o.slot ? ' · a ' + ['', '1st', '2nd', '3rd', '4th', '5th', '6th', '7th', '8th', '9th'][o.slot] + '-level slot spent' : ''}</span>`
+      + ` <span class="dim">[${esc(r.detail)}]${h.crit ? ' (crit)' : ''} · ${before} → ${after}${o.slot ? ' · a ' + ['', '1st', '2nd', '3rd', '4th', '5th', '6th', '7th', '8th', '9th'][o.slot] + '-level slot spent' : ''}${esc(spent)}</span>`
       + said.map(x => ` <span class="tv-dmg-note">${esc(x)}</span>`).join('');
     this._setResult(txt, true); this._log.unshift(txt);
     save(); panelDefs.combat?._render?.(); panelDefs.party?._render?.(); this._render();
