@@ -15676,6 +15676,37 @@ for (const cls of Object.keys(rule)) for (let L = 1; L <= 20; L++) for (const sc
         state.party = JSON.parse(keepP); state.combatLog = JSON.parse(keepL); state.combatants = JSON.parse(keepC); state.activeCombatantId = keepA; save();
       }
     }
+    // -- Round 222: the Turn View's map draws an ally (a summoned spirit, a griffon) as the party's, not an enemy --
+    if (!PLAYER){
+      const keepC = JSON.stringify(state.combatants), keepA = state.activeCombatantId;
+      const B = panelDefs.battlemap, T = panelDefs.turnview, C = panelDefs.combat;
+      let tok0 = null;
+      try {
+        for (let k = 0; k < 100 && !(typeof _5eLoaded !== 'undefined' && _5eLoaded); k++) await sleep(100);
+        const find = (n, src) => _5eData.find(r => r.cat === 'monster' && r.name === n && r._source === src);
+        state.combatants = [{ id: 'r222h', name: 'Hero', isPC: true, hp: 30, hpMax: 30, ac: 15, initiative: 20, conditions: [] }]; save();
+        C.addMonster(find('Wolf', 'MM')); C.addMonster(find('Ogre', 'MM')); await sleep(20);
+        const wolf = state.combatants[1], ogre = state.combatants[2];
+        wolf.ally = true; wolf.name = 'Hero’s Wolf'; state.activeCombatantId = 'r222h'; save();
+        openPanel('battlemap'); await sleep(300);
+        tok0 = JSON.stringify(B._tokens || []);
+        const cs = B._csScreen ? B._cellSize : 50;
+        const put = (c, x, y) => ({ id: 'tk' + c.id, label: c.name, cid: c.id, isPC: !!c.isPC, x: cs * (x + 0.5), y: cs * (y + 0.5), size: 1 });
+        B._tokens = [put(state.combatants[0], 3, 3), put(wolf, 4, 3), put(ogre, 8, 3)]; B._saveMap && B._saveMap();
+        if (!T._body){ openPanel('turnview'); await sleep(200); }
+        T._mapCache = null; T._painted = {}; T._render(); await sleep(80);
+        const toks = [...document.querySelectorAll('.tv-tok')];
+        const cls = name => { const n = toks.find(t => (t.title || t.getAttribute('aria-label') || t.textContent || '').includes(name)); return n ? n.className : null; };
+        const all = toks.map(t => (t.title || t.textContent) + ':' + t.className);
+        ok('mini-map: the hero is drawn as the party', /\bpc\b/.test(cls('Hero') || '') , JSON.stringify(all));
+        ok('mini-map: the hero’s wolf as an ally', /\bally\b/.test(cls('Hero’s Wolf') || cls('Wolf') || ''), JSON.stringify(all));
+        ok('mini-map: the ogre as neither', !!cls('Ogre') && !/\b(pc|ally)\b/.test(cls('Ogre')), JSON.stringify(all));
+      } catch(e){ ok('round 222 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
+      finally {
+        if (tok0 != null){ B._tokens = JSON.parse(tok0); B._saveMap && B._saveMap(); }
+        T._mapCache = null; state.combatants = JSON.parse(keepC); state.activeCombatantId = keepA; save();
+      }
+    }
     // -- Class features: represented, not just text ------------------------
     {
       try {

@@ -2101,7 +2101,8 @@ registerPanel('turnview', {
       const n = reuse ? existing[ti] : document.createElement('div');
       if (!n) return;
       const label = String((c && c.name) || t.label || '?').trim();
-      n.className = 'tv-tok ' + ((c ? c.isPC : t.isPC) ? 'pc ' : '')
+      // An ally that isn't a character (a summoned spirit, a griffon, Harshnag) is drawn as one of the party's.
+      n.className = 'tv-tok ' + ((c ? c.isPC : t.isPC) ? 'pc ' : (c && this._sideOf(c) === 'party') ? 'ally ' : '')
         + (c && c.id === state.activeCombatantId ? 'cur ' : '')
         + (c && this._armed === c.id ? 'tgt ' : '')
         + (((c && (c.hp || 0) <= 0) || t.dead) ? 'dead ' : '')

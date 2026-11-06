@@ -4204,6 +4204,7 @@ select.tv-in.wide { width:126px; }
   font-weight:700; cursor:grab; user-select:none; z-index:4; touch-action:none;
   border:2px solid #993333; background:linear-gradient(135deg,#3d2a2a,#6b3939); color:#fff; }
 .tv-tok.pc { border-color:var(--accent); background:linear-gradient(135deg,#4a3d2a,#6b5439); }
+.tv-tok.ally { border-color:var(--success); background:linear-gradient(135deg,#2f4535,#4a7a55); }
 .tv-tok.cur { box-shadow:0 0 0 2px var(--accent); }
 .tv-tok.tgt { box-shadow:0 0 0 2px #fff; }
 .tv-tok.dead { opacity:.4; }
