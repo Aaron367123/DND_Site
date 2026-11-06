@@ -839,6 +839,7 @@ registerPanel('combat',{
                 </select>`;
               })()}
               ${nameClickable?`<button class="btn icon-btn" data-act="open-bestiary" data-idx="${i}" title="Open ${esc(c.baseName)} stat block in bestiary popout">${ICO('i-book-open')}</button>`:''}
+              ${sktSideOf(c) === 'party' ? '<span class="card-ally" title="On the party’s side (right-click to change)">Ally</span>' : ''}
               ${active?'<span class="turn-marker">◀</span>':''}
             </div>`}
         <div class="card-stats">
@@ -1130,7 +1131,15 @@ registerPanel('combat',{
               state.combatants[i] = n; save(); this._render();
             }});
           }
-          items.push({ label:(c.lair ? '☑' : '☐') + ' In its lair — lair action on initiative 20', onClick:()=>{
+          // Harshnag at the party's side, a summoned spirit, a charmed ogre: whose
+          // side it is on decides Pack Tactics, Help, opportunity attacks.
+          items.push({ label:'On the party’s side', checked: sktSideOf(c) === 'party', onClick:()=>{
+            const i = resolve(); if (i < 0) return;
+            const cur = state.combatants[i];
+            state.combatants[i] = {...cur, ally: sktSideOf(cur) !== 'party'};
+            save(); this._render();
+          }});
+          items.push({ label:'In its lair — lair action on initiative 20', checked: !!c.lair, onClick:()=>{
             const i = resolve(); if (i < 0) return;
             const cur = state.combatants[i], on = !cur.lair;
             // "3 (4 in Lair)": the pool follows where the fight is.

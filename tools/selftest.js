@@ -15325,6 +15325,66 @@ for (const cls of Object.keys(rule)) for (let L = 1; L <= 20; L++) for (const sc
         T._mapCache = null; state.party = JSON.parse(keepP); state.combatLog = JSON.parse(keepL); state.combatants = JSON.parse(keepC); state.activeCombatantId = keepA; save();
       }
     }
+    // -- Round 216: whose side a creature is on — a summoned spirit, an NPC beside the party, the DM's switch --
+    if (!PLAYER){
+      const keepC = JSON.stringify(state.combatants), keepA = state.activeCombatantId;
+      const B = panelDefs.battlemap, T = panelDefs.turnview, C = panelDefs.combat;
+      let tok0 = null;
+      try {
+        for (let k = 0; k < 100 && !(typeof _5eLoaded !== 'undefined' && _5eLoaded); k++) await sleep(100);
+        const find = (n, src) => _5eData.find(r => r.cat === 'monster' && r.name === n && r._source === src);
+        state.combatants = []; save();
+        C.addMonster(find('Wolf', 'MM')); C.addMonster(find('Frost Giant', 'MM')); await sleep(30);
+        document.querySelectorAll('.modal-backdrop').forEach(m => m.remove());
+        const wolf = state.combatants[0], giant = state.combatants[1];
+        const hero = { id: 'r216h', name: 'Hero', isPC: true, hp: 40, hpMax: 40, ac: 14, initiative: 1, conditions: [] };
+        state.combatants.push(hero); save();
+        ok('sides: a monster is a foe by default', sktSideOf(giant) === 'foe');
+        ok('sides: a summoned spirit is the party’s', sktSideOf({ isPC: false, summon: { level: 2 } }) === 'party');
+        ok('sides: …unless the DM says otherwise', sktSideOf({ isPC: false, summon: { level: 2 }, ally: false }) === 'foe');
+        // The switch, from the tracker card's menu.
+        openPanel('combat'); await sleep(200); C._render(); await sleep(30);
+        const card = () => document.querySelector('.combatant-card[data-idx="1"]');
+        card().dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true, clientX: 200, clientY: 200 })); await sleep(60);
+        const item = [...document.querySelectorAll('.ctx-menu .ctx-menu-item')].find(e => /On the party’s side/.test(e.textContent || ''));
+        ok('sides: the card menu offers "On the party’s side", unticked', !!item && !item.classList.contains('checked') && !/✓/.test(item.textContent), item && item.textContent);
+        item && item.click(); await sleep(60);
+        const g = () => state.combatants.find(c => c.id === giant.id);
+        ok('sides: ticked, the frost giant is an ally', g().ally === true && sktSideOf(g()) === 'party', JSON.stringify(g().ally));
+        C._render(); await sleep(20);
+        ok('sides: its card says Ally', !!(card() && card().querySelector('.card-ally')));
+        ok('sides: the wolf’s card doesn’t', !document.querySelector('.combatant-card[data-idx="0"] .card-ally'));
+        // On the map: the wolf's Pack Tactics doesn't count the allied giant beside the hero; the hero's does.
+        openPanel('battlemap'); await sleep(300);
+        tok0 = JSON.stringify(B._tokens || []);
+        const cs = B._csScreen ? B._cellSize : 50;
+        const put = (c, x, y) => ({ id: 'tk' + c.id, label: c.name, cid: c.id, isPC: !!c.isPC, x: cs * (x + 0.5), y: cs * (y + 0.5), size: 1 });
+        B._tokens = [put(wolf, 4, 5), put(hero, 5, 5), put(g(), 6, 5)]; B._saveMap && B._saveMap(); T._mapCache = null;
+        ok('sides: no Pack Tactics from the allied giant', !T._condMods(wolf, hero).adv.some(x => /pack tactics/.test(x)), JSON.stringify(T._condMods(wolf, hero).adv));
+        ok('sides: the hero is the allied giant’s ally, beside the wolf', (T._allyBeside(g(), wolf) || {}).id === 'r216h', JSON.stringify((T._allyBeside(g(), wolf) || {}).name));
+        // And back.
+        openPanel('combat'); await sleep(150); C._render(); await sleep(20);
+        card().dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true, clientX: 200, clientY: 200 })); await sleep(60);
+        const item2 = [...document.querySelectorAll('.ctx-menu .ctx-menu-item')].find(e => /On the party’s side/.test(e.textContent || ''));
+        ok('sides: …ticked now, and unticking makes it a foe again', !!item2 && item2.classList.contains('checked') && /^✓ On the party’s side/.test(item2.textContent), item2 && item2.textContent);
+        item2 && item2.click(); await sleep(60);
+        ok('sides: a foe again', sktSideOf(g()) === 'foe');
+        // The lair switch shows its tick too (a ☑ in the label was stripped by the menu).
+        state.combatants.forEach(c => { if (c.id === giant.id) c.lair = true; }); C._render(); await sleep(20);
+        card().dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true, clientX: 200, clientY: 200 })); await sleep(60);
+        const lairIt = [...document.querySelectorAll('.ctx-menu .ctx-menu-item')].find(e => /In its lair/.test(e.textContent || ''));
+        ok('lair: its menu item is ticked while it is in its lair', !!lairIt && lairIt.classList.contains('checked') && /^✓ In its lair/.test(lairIt.textContent), lairIt && lairIt.textContent);
+        document.querySelectorAll('.ctx-menu').forEach(m => m.remove());
+        state.combatants.forEach(c => { if (c.id === giant.id) c.lair = false; });
+        T._mapCache = null;
+        ok('sides: and the wolf has its Pack Tactics', T._condMods(wolf, hero).adv.some(x => /pack tactics/.test(x)), JSON.stringify(T._condMods(wolf, hero).adv));
+      } catch(e){ ok('round 216 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
+      finally {
+        document.querySelectorAll('.ctx-menu, .context-menu').forEach(m => m.remove());
+        if (tok0 != null){ B._tokens = JSON.parse(tok0); B._saveMap && B._saveMap(); }
+        T._mapCache = null; state.combatants = JSON.parse(keepC); state.activeCombatantId = keepA; save();
+      }
+    }
     // -- Class features: represented, not just text ------------------------
     {
       try {

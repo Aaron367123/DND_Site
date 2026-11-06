@@ -6271,3 +6271,4 @@ body.player-app .pa-hp-type { width:auto; min-height:34px; height:34px; margin-t
 .tv-companions { display:flex; flex-wrap:wrap; align-items:center; gap:6px; padding:6px 9px; margin:6px 0; background:var(--panel-2); border:1px solid var(--border); border-radius:var(--r-md); font-size:var(--fs-sm); }
 .tv-companions-l { color:var(--text-muted); margin-right:4px; }
 .tv-comp { display:inline-flex; align-items:center; gap:6px; }
+.card-ally { font-size:var(--fs-xs); color:var(--success); border:1px solid var(--success); border-radius:var(--r-pill); padding:0 6px; line-height:1.5; }
