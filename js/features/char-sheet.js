@@ -787,7 +787,7 @@ function csRollPlain(r){
 }
 function csRollCard(r){
   const cls = r.crit ? ' crit' : r.fumble || r.autoFail ? ' fumble' : '';
-  const die = typeof sktDieHtml === 'function' ? (r.kind === 'dmg' ? sktDieHtml(sktDieSides(r), r.total) : sktDieHtml(20, r.natural != null ? r.natural : (r.rolls || [])[0], cls.trim())) : '';
+  const die = typeof sktDieHtml === 'function' ? (r.kind === 'dmg' ? sktDieHtml(sktDieSides(r), 'd' + sktDieSides(r)) : sktDieHtml(20, r.natural != null ? r.natural : (r.rolls || [])[0], cls.trim())) : '';
   if (r.kind === 'dmg') return '<div class="pa-roll-in' + cls + '">' + die + '<span class="pa-roll-l">' + csE(r.label) + '</span><span class="pa-roll-dmg">' + r.total
     + '<i> ' + csE(r.type || '') + '</i></span><span class="pa-roll-d">' + csE(r.detail || '') + '</span></div>';
   return '<div class="pa-roll-in' + cls + '">' + die + '<span class="pa-roll-l">' + csE(r.label) + '</span><span class="pa-roll-hit">' + (r.autoFail ? 'Fails' : r.total) + '</span>'

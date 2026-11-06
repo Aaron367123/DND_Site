@@ -56,7 +56,9 @@ function sktDiceFx(r){
   let tray = document.getElementById('skt-dice');
   if (!tray){ tray = document.createElement('div'); tray.id = 'skt-dice'; tray.setAttribute('role', 'status'); tray.setAttribute('aria-live', 'polite'); document.body.appendChild(tray); }
   const dmg = r.kind === 'dmg', sides = sktDieSides(r);
-  const face = dmg ? r.total : (r.natural != null ? r.natural : (r.rolls || [])[0]);
+  // A d20 shows the number it landed on; damage dice show only what they
+  // are (d6) — the total has its own box, so the die can't be mistaken for it.
+  const face = dmg ? 'd' + sides : (r.natural != null ? r.natural : (r.rolls || [])[0]);
   const cls = !dmg && r.crit ? 'crit' : !dmg && (r.fumble || r.autoFail) ? 'fumble' : '';
   const sign = n => (n >= 0 ? '+' : '−') + Math.abs(n);
   const detail = dmg ? (r.detail || '')
@@ -65,9 +67,12 @@ function sktDiceFx(r){
   el.className = 'dfx' + (cls ? ' ' + cls : '');
   el.innerHTML = sktDieHtml(sides, face, cls)
     + '<div class="dfx-txt"><span class="dfx-label">' + esc(r.label || 'Roll') + '</span>'
-    + '<span class="dfx-total">' + (r.autoFail ? 'Fails' : esc(String(r.total))) + (dmg && r.type ? ' <i>' + esc(r.type) + '</i>' : '') + '</span>'
     + '<span class="dfx-detail">' + esc(detail) + (cls === 'crit' ? ' · natural 20!' : cls === 'fumble' && r.fumble ? ' · natural 1' : '') + '</span>'
-    + (r.why ? '<span class="dfx-why">' + esc(r.why) + '</span>' : '') + '</div>';
+    + (r.why ? '<span class="dfx-why">' + esc(r.why) + '</span>' : '') + '</div>'
+    // The total, on its own and labelled, the way D&D Beyond shows it.
+    + '<div class="dfx-sum"><small>' + (dmg ? 'Damage' : 'Total') + '</small>'
+    + '<span class="dfx-total">' + (r.autoFail ? 'Fails' : esc(String(r.total))) + '</span>'
+    + (dmg && r.type ? '<i>' + esc(r.type) + '</i>' : '') + '</div>';
   tray.appendChild(el);
   while (tray.children.length > 3) tray.firstElementChild.remove();
   sktDiceAnimate(el);

@@ -34,11 +34,11 @@
  */
 'use strict';
 
-const BUILD = '162e35f13d';
+const BUILD = '27fc0d9095';
 const PRECACHE = [
   'skt-workspace.html',
   'styles/main.css?v=d1e6cde3b2',
-  'styles/theme.css?v=9ec89c25d7',
+  'styles/theme.css?v=d76d549e3a',
   'js/core/errors.js?v=67c70f2e1d',
   'js/core/data.js?v=f4b60a75c8',
   'js/core/theme.js?v=9db78fe46f',
@@ -47,7 +47,7 @@ const PRECACHE = [
   'js/generated/species-portraits.js?v=56581792b0',
   'js/core/campaign.js?v=171a617f55',
   'js/core/utils.js?v=e7c2c0582e',
-  'js/ui/dice-fx.js?v=a3c77a159d',
+  'js/ui/dice-fx.js?v=1acff2694d',
   'js/core/state.js?v=f7606a5b33',
   'js/core/undo.js?v=63ed223198',
   'js/features/roll-requests.js?v=bceb453f6d',
@@ -65,7 +65,7 @@ const PRECACHE = [
   'js/sync/dropbox-sync.js?v=c4897e8ffa',
   'js/panels/notes.js?v=0a03e58dd2',
   'js/panels/handouts.js?v=92072fbc59',
-  'js/panels/game-log.js?v=fba2f13e97',
+  'js/panels/game-log.js?v=26b8913f8d',
   'js/panels/messages.js?v=55685a9350',
   'js/panels/quests.js?v=36e3261d56',
   'js/panels/factions.js?v=39b868d6d9',
@@ -96,7 +96,7 @@ const PRECACHE = [
   'js/ui/command-palette.js?v=8aded06220',
   'js/features/char-rules.js?v=e75134a12a',
   'js/features/char-effects.js?v=6b739e6eda',
-  'js/features/char-sheet.js?v=5ca7c7d5bb',
+  'js/features/char-sheet.js?v=5495c79d10',
   'js/features/char-print.js?v=940c5d7b3f',
   'js/features/char-builder.js?v=ec3a5f6b21',
   'js/features/pdf-import.js?v=cefe36cb0b',

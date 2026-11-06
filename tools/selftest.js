@@ -15860,6 +15860,37 @@ for (const cls of Object.keys(rule)) for (let L = 1; L <= 20; L++) for (const sc
       } catch(e){ ok('round 225 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
       finally { window.sktD = keepD; T._lastPcHit = null; state.party = JSON.parse(keepP); state.combatants = JSON.parse(keepC); state.activeCombatantId = keepA; save(); }
     }
+    // -- Round 226: a roll's total is the thing you read — boxed and big, not the die's number --
+    {
+      const keepMM = window.matchMedia;
+      try {
+        document.getElementById('skt-dice') && document.getElementById('skt-dice').remove();
+        window.matchMedia = q => /reduced-motion/.test(q) ? { matches: true } : keepMM.call(window, q);
+        sktDiceFx({ kind: 'd20', label: 'Stealth', rolls: [15], natural: 15, mod: 7, total: 22, mode: 'normal' });
+        sktDiceFx({ kind: 'dmg', label: 'Shortsword', expr: '1d6+4', detail: '1d6 (3) + 4', total: 7, type: 'piercing' });
+        window.matchMedia = keepMM;
+        const tray = document.getElementById('skt-dice'), [chk, dmg] = [...tray.children];
+        const box = chk.querySelector('.dfx-sum'), die = chk.querySelector('.dfx-die');
+        ok('roll total: the tray boxes the total, labelled — 22, apart from the die', !!box && /^Total\s*22$/.test(box.textContent.trim()) && !die.contains(box) && !chk.querySelector('.dfx-txt .dfx-total'), chk.innerHTML.slice(0, 300));
+        const fsT = parseFloat(getComputedStyle(box.querySelector('.dfx-total')).fontSize), fsN = parseFloat(getComputedStyle(die.querySelector('.dfx-n')).fontSize);
+        ok('roll total: the total stands far bigger than the die’s 15, and to its right', fsT >= 2 * fsN && box.getBoundingClientRect().left > die.getBoundingClientRect().right + 40, fsT + ' vs ' + fsN);
+        ok('roll total: a damage die shows its kind (d6), not the total again', dmg.querySelector('.dfx-n').textContent === 'd6' && /^Damage\s*7\s*piercing$/.test(dmg.querySelector('.dfx-sum').textContent.trim()), dmg.textContent);
+        tray.remove();
+        // The phone's card, from the sheet's roll: the same — the total boxed at the right.
+        const wrap = document.createElement('div'); wrap.style.cssText = 'position:fixed;left:0;top:0;width:380px;z-index:99999';
+        wrap.innerHTML = csRollCard({ kind: 'd20', label: 'Stealth', rolls: [15], natural: 15, mod: 7, total: 22, mode: 'normal' })
+                       + csRollCard({ kind: 'dmg', label: 'Shortsword', expr: '1d6+4', detail: '1d6 (3) + 4', total: 7, type: 'piercing' });
+        document.body.appendChild(wrap);
+        const [pc, pd] = wrap.children, hit = pc.querySelector('.pa-roll-hit'), pdie = pc.querySelector('.dfx-die');
+        const hs = getComputedStyle(hit);
+        ok('roll total: on the phone card, the total sits in its own box at the right, labelled “Total”', getComputedStyle(pc).display === 'grid' && hit.getBoundingClientRect().left > pc.querySelector('.pa-roll-l').getBoundingClientRect().right
+           && /Total/i.test(getComputedStyle(hit, '::before').content) && parseFloat(hs.borderTopWidth) >= 1, [getComputedStyle(pc).display, getComputedStyle(hit, '::before').content].join(' '));
+        ok('roll total: …far bigger than the die’s number', parseFloat(hs.fontSize) >= 2 * parseFloat(getComputedStyle(pdie.querySelector('.dfx-n')).fontSize), hs.fontSize);
+        ok('roll total: the phone’s damage card — a d6 on the die, the 7 boxed as “Damage”', pd.querySelector('.dfx-n').textContent === 'd6' && /Damage/i.test(getComputedStyle(pd.querySelector('.pa-roll-dmg'), '::before').content));
+        wrap.remove();
+      } catch(e){ ok('round 226 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
+      finally { window.matchMedia = keepMM; }
+    }
     // -- Class features: represented, not just text ------------------------
     {
       try {

@@ -108,7 +108,7 @@ function sktQuickRoll(text, opts){
   const fx = r.d20 ? { label, total: r.total, natural: r.natural, rolls: r.rolls, mod: r.mod, mode: 'normal', crit: r.crit, fumble: r.fumble }
                    : { kind: 'dmg', label, total: r.total, expr: r.expr, detail: r.detail };
   if (document.body.classList.contains('player-mode') && typeof paShowRoll === 'function'){
-    const die = typeof sktDieHtml === 'function' ? sktDieHtml(r.d20 ? 20 : sktDieSides(fx), r.d20 ? r.natural : r.total, r.crit ? 'crit' : r.fumble ? 'fumble' : '') : '';
+    const die = typeof sktDieHtml === 'function' ? sktDieHtml(r.d20 ? 20 : sktDieSides(fx), r.d20 ? r.natural : 'd' + sktDieSides(fx), r.crit ? 'crit' : r.fumble ? 'fumble' : '') : '';
     paShowRoll('<div class="pa-roll-in' + (r.crit ? ' crit' : r.fumble ? ' fumble' : '') + '">' + die + '<span class="pa-roll-l">' + esc(label) + '</span>'
       + '<span class="pa-roll-hit">' + r.total + '</span><span class="pa-roll-d">' + esc(r.detail) + '</span></div>');
   } else if (!(typeof sktDiceFx === 'function' && sktDiceFx(fx)) && typeof showToast === 'function') showToast('🎲 ' + label + ': ' + r.total + ' — ' + r.detail);

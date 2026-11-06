@@ -165,15 +165,36 @@ body.player-mode { background-image: var(--grain), var(--mottle); background-siz
 .dfx.crit { border-color: #ffd36a; box-shadow: 0 0 0 1px rgba(255,211,106,.4), 0 10px 30px rgba(0,0,0,.55), 0 0 26px rgba(255,190,60,.35); }
 .dfx.fumble { border-color: #e0574b; }
 @keyframes dfx-in { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: none; } }
-.dfx-txt { display: flex; flex-direction: column; min-width: 0; }
-.dfx-label { font-family: var(--font-display); font-weight: 700; letter-spacing: .05em; font-size: var(--fs-sm); color: var(--text-muted); }
-.dfx-total { font-size: 28px; font-weight: 800; line-height: 1.05; color: var(--text); font-variant-numeric: tabular-nums; }
-.dfx-total i { font-size: var(--fs-sm); font-style: normal; font-weight: 600; color: var(--text-muted); }
+.dfx-txt { display: flex; flex-direction: column; gap: 2px; min-width: 0; flex: 1 1 auto; }
+.dfx-label { font-family: var(--font-display); font-weight: 700; letter-spacing: .05em; font-size: var(--fs-md); color: var(--text); }
+/* The total: its own box at the right, labelled, far bigger than the die's
+   number — the die says what it landed on, the box says what you got. */
+.dfx .dfx-die { width: 44px; height: 44px; }
+.dfx .dfx-n, .pa-roll-in .dfx-n { font-size: 15px; }
+.dfx-sum { flex: 0 0 auto; display: flex; flex-direction: column; align-items: center; justify-content: center; min-width: 72px; padding: 4px 10px 6px;
+  border-radius: 6px; border: 1px solid color-mix(in srgb, var(--accent) 55%, var(--border)); background: color-mix(in srgb, var(--accent) 12%, var(--panel-2)); }
+.dfx-sum small, .pa-roll-in:has(> .dfx-die) :is(.pa-roll-hit, .pa-roll-dmg)::before { font-size: 10px; font-weight: 700; letter-spacing: .09em; text-transform: uppercase; color: var(--text-muted); line-height: 1.2; }
+.dfx-total { font-size: 38px; font-weight: 800; line-height: 1; color: var(--text); font-variant-numeric: lining-nums tabular-nums; }
+.dfx-sum i { font-size: var(--fs-xs); font-style: normal; font-weight: 600; color: var(--text-muted); }
 .dfx.crit .dfx-total { color: #ffd36a; } .dfx.fumble .dfx-total { color: #ff8a7d; }
+.dfx.crit .dfx-sum { border-color: #ffd36a; } .dfx.fumble .dfx-sum { border-color: #e0574b; }
 .dfx-detail, .dfx-why { font-size: var(--fs-xs); color: var(--text-dim); }
-/* On the phone, the die leads the roll card. */
-.pa-roll-in .dfx-die { width: 50px; height: 50px; align-self: center; }
-.pa-roll-in .dfx-n { font-size: 18px; }
+/* On the phone, a card with a die lays out the same way: the die, the name
+   and what was rolled, and the total boxed at the right. */
+.pa-roll-in:has(> .dfx-die) { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: center; column-gap: 12px; row-gap: 2px; }
+.pa-roll-in:has(> .dfx-die) > * { grid-column: 1 / -1; }
+.pa-roll-in:has(> .dfx-die) > .dfx-die { grid-column: 1; grid-row: 1 / span 2; width: 42px; height: 42px; }
+.pa-roll-in:has(> .dfx-die) > .pa-roll-l { grid-column: 2; grid-row: 1; align-self: end; color: var(--text); font-weight: 600; }
+.pa-roll-in:has(> .dfx-die) > .pa-roll-d { grid-column: 2; grid-row: 2; align-self: start; font-size: var(--fs-xs); }
+.pa-roll-in:has(> .dfx-die) > .pa-roll-tag { grid-column: 2; grid-row: 3; justify-self: start; }
+.pa-roll-in:has(> .dfx-die) > :is(.pa-roll-hit, .pa-roll-dmg) { grid-column: 3; grid-row: 1 / span 2; display: flex; flex-direction: column; align-items: center;
+  min-width: 72px; padding: 4px 10px 6px; border-radius: 6px; font-size: 38px; font-weight: 800; line-height: 1;
+  border: 1px solid color-mix(in srgb, var(--accent) 55%, var(--border)); background: color-mix(in srgb, var(--accent) 12%, var(--panel-2)); }
+.pa-roll-in:has(> .dfx-die) > .pa-roll-hit::before { content: 'Total'; }
+.pa-roll-in:has(> .dfx-die) > .pa-roll-dmg::before { content: 'Damage'; }
+.pa-roll-in:has(> .dfx-die) > :is(.pa-roll-hit, .pa-roll-dmg) i { font-size: var(--fs-xs); margin: 2px 0 0; font-weight: 600; line-height: 1.1; }
+.pa-roll-in.crit:has(> .dfx-die) > :is(.pa-roll-hit, .pa-roll-dmg) { border-color: var(--success); }
+.pa-roll-in.fumble:has(> .dfx-die) > :is(.pa-roll-hit, .pa-roll-dmg) { border-color: var(--danger); }
 @media (prefers-reduced-motion: reduce) { .dfx-die, .dfx-die svg, .dfx, .dfx-die::before { animation: none !important; } }
 
 /* ── 6. A combat tracker that feels like a fight ──────────── */
