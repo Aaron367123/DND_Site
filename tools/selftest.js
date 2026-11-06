@@ -15509,6 +15509,75 @@ for (const cls of Object.keys(rule)) for (let L = 1; L <= 20; L++) for (const sc
         state.party = JSON.parse(keepP); state.combatLog = JSON.parse(keepL); state.combatants = JSON.parse(keepC); state.activeCombatantId = keepA; save();
       }
     }
+    // -- Round 219: a spell in both books offers both versions — the Legacy one is the character's to choose --
+    if (!PLAYER){
+      const party0 = JSON.stringify(state.party);
+      try {
+        const R24 = await sktRulesLoad('2024'), R14 = await sktRulesLoad('2014');
+        state.party.push({ id: 'r219w', name: 'Vex', hp: 20, hpMax: 20, ac: 12, rules: '2024', level: 5, cls: 'wizard',
+          sheet: { spells: ['Fireball', 'Shield', 'Sorcerous Burst'], spellSaveDc: 15, spellAtkBonus: '+7', spellSlots: { 3: { total: 2, expended: 0 } } } });
+        save();
+        const open = async () => { await openCharSheet('r219w'); await sleep(400); document.querySelector('#cs-root [data-cs-tab="spells"]').click(); await sleep(300); };
+        await open();
+        for (let k = 0; k < 30 && !(CS && CS.R && CS.R2); k++) await sleep(100);
+        ok('versions: the sheet has both books’ rules', !!(CS.R && CS.R2) && CS.R !== CS.R2);
+        ok('versions: Fireball is in both books; Sorcerous Burst (2024 only) is in one', csSpellInBoth('Fireball') && !csSpellInBoth('Sorcerous Burst'), JSON.stringify([csSpellInBoth('Fireball'), csSpellInBoth('Sorcerous Burst')]));
+        const pc = () => state.party.find(p => p.id === 'r219w');
+        ok('versions: a 2024 character uses the 2024 Fireball by default', csSpellEd(pc(), 'Fireball') === '2024' && csSpell('Fireball') === sktRulesSpell(R24, 'Fireball'));
+        // Open Fireball: the switch, 2024 on.
+        const fb = [...document.querySelectorAll('#cs-root .cs-spell-n')].find(b => /Fireball/.test(b.textContent));
+        fb && fb.click(); await sleep(150);
+        let sw = [...document.querySelectorAll('#cs-root .cs-sp-ver [data-cs-sped]')];
+        ok('versions: opened, Fireball offers 2024 and Legacy (2014)', sw.length === 2 && sw[0].textContent === '2024' && sw[0].classList.contains('on') && sw[1].textContent === 'Legacy (2014)', JSON.stringify(sw.map(b => [b.textContent, b.className])));
+        const sh = [...document.querySelectorAll('#cs-root .cs-spell-n')].find(b => /Sorcerous Burst/.test(b.textContent));
+        sh && sh.click(); await sleep(150);
+        ok('versions: Sorcerous Burst, in one book, has no switch', document.querySelectorAll('#cs-root .cs-sp-ver').length === 1);
+        // Pick Legacy.
+        sw = [...document.querySelectorAll('#cs-root .cs-sp-ver [data-cs-sped]')];
+        sw[1].click(); await sleep(200);
+        ok('versions: chosen — kept on the character', JSON.stringify(pc().spellEd) === '{"Fireball":"2014"}', JSON.stringify(pc().spellEd));
+        ok('versions: and Fireball is now the 2014 text', csSpell('Fireball') === sktRulesSpell(R14, 'Fireball'));
+        const row = [...document.querySelectorAll('#cs-root .cs-spell')].find(r => /Fireball/.test(r.textContent));
+        ok('versions: its row says Legacy', !!row && /Legacy/.test((row.querySelector('.cs-tag-ver') || {}).textContent || ''), row && row.innerHTML.slice(0, 200));
+        ok('versions: and the switch shows Legacy in use, with why', !!row && row.querySelector('[data-cs-sped$="|2014"]').classList.contains('on') && /plays by 2024; this spell is the 2014 version/.test(row.textContent));
+        ok('versions: Shield is untouched', csSpell('Shield') === sktRulesSpell(R24, 'Shield'));
+        // Back to 2024: the record is clean again.
+        row.querySelector('[data-cs-sped$="|2024"]').click(); await sleep(200);
+        ok('versions: switched back — nothing stored', pc().spellEd === undefined && csSpell('Fireball') === sktRulesSpell(R24, 'Fireball'), JSON.stringify(pc().spellEd));
+        csClose();
+        // A 2014 character the other way round: the 2024 version, tagged 2024.
+        state.party.forEach(p => { if (p.id === 'r219w'){ p.rules = '2014'; p.spellEd = { Fireball: '2024' }; } });
+        await open();
+        for (let k = 0; k < 30 && !(CS && CS.R && CS.R2); k++) await sleep(100);
+        ok('versions: a 2014 character can use the 2024 Fireball', csSpell('Fireball') === sktRulesSpell(R24, 'Fireball'));
+        const row2 = [...document.querySelectorAll('#cs-root .cs-spell')].find(r => /Fireball/.test(r.textContent));
+        ok('versions: tagged 2024 on a 2014 sheet', !!row2 && (row2.querySelector('.cs-tag-ver') || {}).textContent === '2024');
+        csClose();
+        // Someone else's sheet, read-only: the version shows, no switch.
+        state.party.forEach(p => { if (p.id === 'r219w'){ p.rules = '2024'; p.spellEd = { Fireball: '2014' }; } });
+        await open(); for (let k = 0; k < 30 && !(CS && CS.R && CS.R2); k++) await sleep(100);
+        CS.readOnly = true; CS.open['sp:Fireball'] = true; csRender(); await sleep(100);
+        ok('versions: read-only — the version in use, nothing to click', !!document.querySelector('#cs-root .cs-sp-ver') && !document.querySelector('#cs-root .cs-sp-ver [data-cs-sped]') && /Legacy \(2014\)/.test(document.querySelector('#cs-root .cs-sp-ver').textContent));
+        csClose();
+        // A built wizard preparing spells: the list shows the switch too.
+        const mkw = Object.assign(sktComputeCharacter(Object.assign(sktBlankBuild('2024'), { name: 'Pell', cls: 'Wizard', level: 5, species: 'Human', background: 'Sage',
+          abilities: { method: 'manual', base: { str: 8, dex: 14, con: 14, int: 16, wis: 12, cha: 10 } } }), R24), { id: 'r219b' });
+        state.party.push(mkw); save();
+        await openCharSheet('r219b'); await sleep(400); document.querySelector('#cs-root [data-cs-tab="spells"]').click(); await sleep(300);
+        for (let k = 0; k < 30 && !(CS && CS.R && CS.R2); k++) await sleep(100);
+        const mg = document.querySelector('#cs-root [data-cs="manage"]'); mg && mg.click(); await sleep(200);
+        const pb = [...document.querySelectorAll('#cs-root .cs-prep .cs-spell-n')].find(b => /^Magic Missile/.test(b.textContent));
+        pb && pb.click(); await sleep(150);
+        const pbNow = [...document.querySelectorAll('#cs-root .cs-prep .cs-spell-n')].find(b => /^Magic Missile/.test(b.textContent));
+        const pv = pbNow && pbNow.closest('.cs-prep').querySelector('.cs-sp-ver');
+        ok('versions: the prepare list offers both versions too', !!pv && pv.querySelectorAll('[data-cs-sped]').length === 2, String(!!pb) + ' ' + String(!!pv));
+        pv && pv.querySelector('[data-cs-sped$="|2014"]').click(); await sleep(200);
+        const pb2 = [...document.querySelectorAll('#cs-root .cs-prep .cs-spell-n')].find(b => /^Magic Missile/.test(b.textContent));
+        ok('versions: …and its row there says Legacy once chosen', !!pb2 && /Legacy/.test((pb2.querySelector('.cs-tag-ver') || {}).textContent || ''), pb2 && pb2.innerHTML.slice(0, 200));
+        csClose();
+      } catch(e){ ok('round 219 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
+      finally { try { csClose(); } catch(e){} state.party = JSON.parse(party0); save(); }
+    }
     // -- Class features: represented, not just text ------------------------
     {
       try {

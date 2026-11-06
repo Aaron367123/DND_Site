@@ -70,6 +70,10 @@ function openCharSheet(id, opts){
   // again. The sheet draws without it.
   const ed = (pc.build && pc.build.edition) || pc.rules || '2024';
   if (typeof sktRulesLoad === 'function') sktRulesLoad(ed).then(R => { if (CS && CS.id === id){ CS.R = R; csRender(); } }).catch(() => {});
+  // The other edition's rules as well: a spell printed in both books offers
+  // both versions ("Legacy" for 2014), as D&D Beyond does.
+  const other = ed === '2014' ? '2024' : '2014';
+  if (typeof sktRulesLoad === 'function') sktRulesLoad(other).then(R => { if (CS && CS.id === id){ CS.R2 = R; csRender(); } }).catch(() => {});
 }
 function csClose(){
   document.getElementById('cs-root')?.remove();
@@ -1606,6 +1610,28 @@ function csSpellText(s){
   const h = s.entriesHigherLevel || s.higher;
   return sktRulesText(s.entries) + (h ? '\n\n' + sktRulesText(h) : '');
 }
+// The edition a character plays by, and the one they use a spell from.
+function csOwnEd(pc){ return (pc && ((pc.build && pc.build.edition) || pc.rules)) || '2024'; }
+function csSpellEd(pc, name){ const m = pc && pc.spellEd; return (m && (m[name] === '2014' || m[name] === '2024')) ? m[name] : csOwnEd(pc); }
+// Whether a spell is printed in both books (both editions' rules loaded).
+function csSpellInBoth(name){
+  return !!(CS && CS.R && CS.R2 && typeof sktRulesSpell === 'function' && sktRulesSpell(CS.R, name) && sktRulesSpell(CS.R2, name));
+}
+const csEdLabel = ed => ed === '2014' ? 'Legacy (2014)' : '2024';
+// On the row: a tag when the character uses the other book's version.
+function csSpellVerTag(pc, n){
+  const ved = csSpellEd(pc, n);
+  return csSpellInBoth(n) && ved !== csOwnEd(pc) ? '<i class="cs-tag cs-tag-ver" title="The ' + ved + ' version of this spell">' + (ved === '2014' ? 'Legacy' : '2024') + '</i>' : '';
+}
+// In the opened spell: both versions, the one in use marked, the other a click away.
+function csSpellVerHtml(pc, n, ro){
+  if (!csSpellInBoth(n)) return '';
+  const ved = csSpellEd(pc, n), oed = csOwnEd(pc);
+  return '<div class="cs-sp-ver"><span class="cb-dim">Version</span><span class="cb-seg">' + ['2024', '2014'].map(e => ro
+      ? (e === ved ? '<button class="on" disabled>' + csEdLabel(e) + '</button>' : '')
+      : '<button class="' + (e === ved ? 'on' : '') + '" data-cs-sped="' + csE(n) + '|' + e + '" aria-pressed="' + (e === ved) + '" title="' + (e === ved ? 'In use' : 'Use the ' + e + ' version') + '">' + csEdLabel(e) + '</button>').join('') + '</span>'
+    + (ved !== oed ? '<span class="cb-dim">This character plays by ' + oed + '; this spell is the ' + ved + ' version.</span>' : '') + '</div>';
+}
 function csSpell(name){
   // The character's own homebrew spells first.
   const pc0 = csPc();
@@ -1617,6 +1643,10 @@ function csSpell(name){
     // csSpellDamage reads {@damage …} from the text.
     entriesDamage: own.damage || '' };
   const R = CS && CS.R;
+  // The other book's version, where the character chose it.
+  if (pc0 && CS.R2 && csSpellEd(pc0, name) !== csOwnEd(pc0) && typeof sktRulesSpell === 'function'){
+    const s2 = sktRulesSpell(CS.R2, name); if (s2) return s2;
+  }
   const s = R && typeof sktRulesSpell === 'function' ? sktRulesSpell(R, name) : null;
   if (s) return s;
   if (typeof _5eData !== 'undefined' && Array.isArray(_5eData)){
@@ -1752,7 +1782,8 @@ function csSpellsHtml(pc){
   Object.keys(by).map(Number).sort((a, b) => a - b).forEach(l => {
     h += '<h4>' + CS_ORD[l] + '</h4>' + by[l].sort((a, b) => a.n.localeCompare(b.n)).map(({ n, s }) => {
       const open = CS.open['sp:' + n];
-      const tags = (s && s.concentration ? '<i class="cs-tag" title="Concentration">C</i>' : '') + (s && s.ritual ? '<i class="cs-tag" title="Ritual">R</i>' : '');
+      const tags = (s && s.concentration ? '<i class="cs-tag" title="Concentration">C</i>' : '') + (s && s.ritual ? '<i class="cs-tag" title="Ritual">R</i>' : '') + csSpellVerTag(pc, n);
+      const ver = csSpellVerHtml(pc, n, ro);
       const avail = l ? lvls.filter(x => x >= l && (slots[x].total - (slots[x].expended || 0)) > 0) : [];
       const at = avail.includes(+(CS.castLvl || {})[n]) ? +CS.castLvl[n] : (avail[0] || l);
       const cast = ro ? '' : ritualOnly.has(n) ? '<button class="btn small" data-cs-cast="' + csE(n) + ':ritual" title="As a ritual: 10 minutes longer, no slot">Ritual</button>'
@@ -1777,7 +1808,7 @@ function csSpellsHtml(pc){
       return '<div class="cs-spell"><button class="cs-spell-n" data-cs-open="sp:' + csE(n) + '"><b>' + csE(n) + '</b>' + tags
         + '<span class="cb-dim">' + csE(csSpellMeta(s)) + '</span>' + (from[n] ? '<span class="cs-from">' + csE(from[n]) + '</span>' : '') + '</button>'
         + '<span class="cs-spell-c">' + info + cast + '</span>'
-        + (open ? '<div class="cs-feat-t">' + (s ? csE(csSpellText(s)).replace(/\n/g, '<br>')
+        + (open ? ver + '<div class="cs-feat-t">' + (s ? csE(csSpellText(s)).replace(/\n/g, '<br>')
           : CS.R ? 'This spell isn’t in the rules data here (a newer book, or homebrew).' : 'Loading the rules…') + '</div>' : '') + '</div>';
     }).join('');
   });
@@ -1869,12 +1900,12 @@ function csManageSpellsHtml(pc){
     const box = (opts, chosen, max, kind) => '<div class="cs-preplist">' + opts.map(n => {
       const on = (chosen || []).includes(n), full = (max != null && (chosen || []).length >= max) || (kind === 'spells' && lim && lim.off >= lim.free && lim.outside(n));
       const s = csSpell(n), ok = 'pp:' + kind + ':' + n, open = CS.open[ok];
-      const tags = (s && s.concentration ? '<i class="cs-tag" title="Concentration">C</i>' : '') + (s && s.ritual ? '<i class="cs-tag" title="Ritual">R</i>' : '');
+      const tags = (s && s.concentration ? '<i class="cs-tag" title="Concentration">C</i>' : '') + (s && s.ritual ? '<i class="cs-tag" title="Ritual">R</i>' : '') + csSpellVerTag(pc, n);
       return '<div class="cs-spell cs-prep' + (on ? ' on' : '') + '">'
         + '<input type="checkbox" data-cs-prep="' + csE(key(kind, n)) + '"' + (on ? ' checked' : '') + (!on && full ? ' disabled' : '') + ' aria-label="' + (kind === 'spellbook' ? 'In the spellbook: ' : 'Prepare ') + csE(n) + '">'
         + '<button class="cs-spell-n" data-cs-open="' + csE(ok) + '" aria-expanded="' + !!open + '"><b>' + csE(n) + '</b>' + tags
         + '<span class="cb-dim">' + csE(csSpellMeta(s)) + '</span></button>'
-        + (open ? '<div class="cs-feat-t">' + (s ? csE(csSpellText(s)).replace(/\n/g, '<br>') : 'This spell isn’t in the rules data here.') + '</div>' : '')
+        + (open ? csSpellVerHtml(pc, n, CS.readOnly) + '<div class="cs-feat-t">' + (s ? csE(csSpellText(s)).replace(/\n/g, '<br>') : 'This spell isn’t in the rules data here.') + '</div>' : '')
         + '</div>';
     }).join('') + '</div>';
     h += '<h4>' + csE(_csTitle(x.cls)) + ' spells</h4>';
@@ -1981,6 +2012,15 @@ function csSpellsClick(e, t, d, pc){
     const name = d.csFreeback;
     csEdit('Gave back the free ' + name, p => { if (p.freeUsed){ delete p.freeUsed[name]; if (!Object.keys(p.freeUsed).length) delete p.freeUsed; } });
     return true;
+  }
+  // Which book's version of a spell this character uses.
+  if (d.csSped && !CS.readOnly){
+    const i = d.csSped.lastIndexOf('|'), name = d.csSped.slice(0, i), ed = d.csSped.slice(i + 1);
+    return csEdit(name + ': ' + csEdLabel(ed) + ' version', p => {
+      const m = Object.assign({}, p.spellEd);
+      if (ed === csOwnEd(p)) delete m[name]; else m[name] = ed;
+      if (Object.keys(m).length) p.spellEd = m; else delete p.spellEd;
+    });
   }
   if (d.csCast){
     const i = d.csCast.lastIndexOf(':'), name = d.csCast.slice(0, i);
