@@ -3232,7 +3232,34 @@ registerPanel('turnview', {
           queue: feat('Physician’s Touch') || feat("Physician's Touch") ? [{ cond: 'Poisoned', dur: Object.assign({ kind: 'end-next' }, by) }] : [] });
       }
     }
-    (sh.extraDamage || []).forEach((x, i) => { if (x && x.dice) out.push({ key: 'x' + i, label: x.label, dice: x.dice, type: '', ok: true, why: x.note || '' }); });
+    // A feature's own extra damage (Dreadful Strike, Divine Strike, Psionic
+    // Strike…): what its note says — a weapon hit, once a turn — and a pool of
+    // the same name (or named in the note) that it spends. Limited uses are
+    // once a turn too: Dreadful Strike and Psionic Strike both say so.
+    (sh.extraDamage || []).forEach((x, i) => {
+      if (!x || !x.dice) return;
+      const note = String(x.note || '');
+      const pool = (p.resources || []).find(r => r.name === x.label) || (p.resources || []).find(r => r.name && note.includes(r.name));
+      if (pool && (+pool.current || 0) < 1) return;
+      if (/weapon/i.test(note) && !weapon) return;
+      const onceT = !!(x.once || pool || /once (?:per|on each of your|each) turn|(?:first|once) [a-z ]*each turn|each turn/i.test(note));
+      if (onceT && once(x.label)) return;
+      out.push({ key: 'x' + i, label: x.label, dice: x.dice, type: '', ok: true, once: onceT, res: pool ? pool.name : undefined,
+        why: note + (pool ? ' (' + pool.current + ' left)' : '') });
+    });
+    // Fury of the Small (a goblin): a creature larger than you, once a turn —
+    // the proficiency bonus (2024) or your level (2014), from its uses.
+    const fury = (p.resources || []).find(r => r.name === 'Fury of the Small');
+    if (fury && (+fury.current || 0) >= 1 && !once('Fury of the Small')){
+      const SZ = ['tiny', 'small', 'medium', 'large', 'huge', 'gargantuan'];
+      const tSize = String(t.isPC ? (((this._partyOf(t) || {}).sheet || {}).size || 'Medium') : ((((this._entryOf(t) || {})._raw) || {}).size || t.size || 'Medium')).toLowerCase();
+      const mine = SZ.indexOf(String(sh.size || 'Small').toLowerCase()), theirs = SZ.indexOf(tSize.split(/\s/)[0]);
+      if (mine >= 0 && theirs > mine){
+        const n = ed === '2014' ? (+p.level || 1) : (+sh.profBonus || 2);
+        out.push({ key: 'fury', label: 'Fury of the Small', dice: String(n), type: h.type, once: true, ok: true, res: fury.name,
+          why: t.name + ' is ' + tSize + ', larger than you (' + fury.current + ' left)' });
+      }
+    }
     return out.filter(o => !h.used.includes(o.key));
   },
   _renderPcExtras(){
@@ -3322,7 +3349,7 @@ registerPanel('turnview', {
     // What it inflicts (Stunning Strike's save, Physician's Touch): the hit's queue.
     (o.queue || []).forEach(q => this._queueOnHit({ onHit: q, target: t, attacker: c.name, attackerId: c.id, label: o.label }));
     h.cun = [];
-    const spent = pool ? ` · 1 ${pool.name === 'Focus Points' ? 'Focus Point' : 'ki point'} spent (${pool.current} left)` : '';
+    const spent = pool ? ` · ${pool.name === 'Focus Points' ? '1 Focus Point' : /^Ki/.test(pool.name) ? '1 ki point' : 'a use of ' + pool.name} spent (${pool.current} left)` : '';
     if (!o.dice && !(o.picked || []).length){
       const txt0 = `<strong>${esc(c.name)}</strong> — ${esc(o.label)} → <strong>${esc(t.name)}</strong><span class="dim">${esc(spent)}</span>`;
       this._setResult(txt0, true); this._log.unshift(txt0);

@@ -16141,6 +16141,65 @@ for (const cls of Object.keys(rule)) for (let L = 1; L <= 20; L++) for (const sc
       } catch(e){ ok('round 231 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
       finally { window.sktD = keepD; try { csClose(); } catch(e){} state.party = JSON.parse(keepP); state.combatants = JSON.parse(keepC); state.activeCombatantId = keepA; save(); }
     }
+    // -- Round 233: a feature's extra damage spends its uses, once a turn, with a weapon; a goblin's Fury of the Small --
+    if (!PLAYER){
+      const keepC = JSON.stringify(state.combatants), keepA = state.activeCombatantId, keepP = JSON.stringify(state.party);
+      const T = panelDefs.turnview, C = panelDefs.combat, keepD = window.sktD;
+      try {
+        for (let k = 0; k < 100 && !(typeof _5eLoaded !== 'undefined' && _5eLoaded); k++) await sleep(100);
+        const find = (n, src) => _5eData.find(r => r.cat === 'monster' && r.name === n && r._source === src);
+        state.party.push({ id: 'r233k', name: 'Kael', hp: 40, hpMax: 40, ac: 15, rules: '2024', level: 6,
+          resources: [{ name: 'Dread Ambusher', current: 2, max: 2 }],
+          sheet: { profBonus: 3, extraDamage: [{ label: 'Dread Ambusher', dice: '2d6 psychic', note: 'When you attack a creature and hit it with a weapon, you can deal an extra 2d6 Psychic damage.' },
+                                             { label: 'Divine Favor', dice: '1d4 radiant', note: 'each weapon hit' }],
+            attacks: [{ name: 'Shortsword', atkBonus: '+7', damage: '1d6+3 piercing', props: ['F', 'L'] }, { name: 'Fire Bolt', spell: true, atkBonus: '+5', damage: '1d10 fire' }] } });
+        state.party.push({ id: 'r233w', name: 'Will', hp: 40, hpMax: 40, ac: 17, rules: '2024', level: 6,
+          resources: [{ name: 'Fury of the Small', current: 3, max: 3 }],
+          sheet: { profBonus: 3, size: 'Small', attacks: [{ name: 'Flail', atkBonus: '+8', damage: '1d8+5 bludgeoning', props: [] }] } });
+        state.combatants = [{ id: 'r233k', name: 'Kael', isPC: true, hp: 40, hpMax: 40, ac: 15, initiative: 20, conditions: [] },
+                            { id: 'r233w', name: 'Will', isPC: true, hp: 40, hpMax: 40, ac: 17, initiative: 19, conditions: [] }];
+        C.addMonster(find('Ogre', 'MM')); C.addMonster(find('Goblin', 'MM')); await sleep(20);
+        const get = id => state.combatants.find(c => c.id === id), ogreId = state.combatants[2].id, gobId = state.combatants[3].id;
+        state.combatants.forEach(c => { if (!c.isPC){ c.hp = 300; c.hpMax = 300; c.ac = 5; } });
+        state.activeCombatantId = 'r233k'; save();
+        const pk = () => state.party.find(p => p.id === 'r233k'), pw = () => state.party.find(p => p.id === 'r233w');
+        const hit = (who, name, tgt) => { window.sktD = n => (n === 20 ? 15 : 3);
+          T._rollAttack(T._attacksFor(get(who)).findIndex(a => a.name === name), { attacker: get(who), target: get(tgt) }); };
+        const keys = () => T._pcExtraOptions(T._lastPcHit).map(o => o.key + ':' + o.label);
+        const opt = l => T._pcExtraOptions(T._lastPcHit).find(o => o.label === l);
+        hit('r233k', 'Shortsword', ogreId);
+        ok('extra damage: Kael’s shortsword hit offers Dread Ambusher, with its uses', !!opt('Dread Ambusher') && opt('Dread Ambusher').once && /2 left/.test(opt('Dread Ambusher').why), JSON.stringify(opt('Dread Ambusher')));
+        const hp0 = get(ogreId).hp; T._usePcExtra(opt('Dread Ambusher').key);
+        ok('extra damage: 2d6 psychic lands — 6 — and a use is spent', hp0 - get(ogreId).hp === 6 && pk().resources[0].current === 1 && /a use of Dread Ambusher spent \(1 left\)/.test(T._result), JSON.stringify([hp0 - get(ogreId).hp, pk().resources[0].current, T._result]));
+        hit('r233k', 'Shortsword', ogreId);
+        ok('extra damage: a second hit the same turn — no Dread Ambusher; Divine Favor (each hit) still', !opt('Dread Ambusher') && !!opt('Divine Favor') && !opt('Divine Favor').once, JSON.stringify(keys()));
+        get('r233k').onceTurn = undefined;
+        hit('r233k', 'Fire Bolt', ogreId);
+        ok('extra damage: a Fire Bolt is no weapon — neither', !opt('Dread Ambusher') && !opt('Divine Favor'), JSON.stringify(keys()));
+        pk().resources[0].current = 0;
+        hit('r233k', 'Shortsword', ogreId);
+        ok('extra damage: no uses left — no Dread Ambusher', !opt('Dread Ambusher'), JSON.stringify(keys()));
+        // Fury of the Small.
+        state.activeCombatantId = 'r233w';
+        hit('r233w', 'Flail', gobId);
+        ok('fury of the small: a Small goblin hitting a Small goblin — none', !opt('Fury of the Small'), JSON.stringify(keys()));
+        hit('r233w', 'Flail', ogreId);
+        const f = opt('Fury of the Small');
+        ok('fury of the small: against a Large ogre — +3 (the proficiency bonus)', !!f && f.dice === '3' && /large/.test(f.why), JSON.stringify(f));
+        const hp1 = get(ogreId).hp; T._usePcExtra('fury');
+        ok('fury of the small: 3 bludgeoning lands, a use spent', hp1 - get(ogreId).hp === 3 && pw().resources[0].current === 2, JSON.stringify([hp1 - get(ogreId).hp, pw().resources[0].current]));
+        hit('r233w', 'Flail', ogreId);
+        ok('fury of the small: once a turn', !opt('Fury of the Small'));
+        get('r233w').onceTurn = undefined; pw().rules = '2014';
+        hit('r233w', 'Flail', ogreId);
+        ok('fury of the small (2014): your level — 6', !!opt('Fury of the Small') && opt('Fury of the Small').dice === '6', JSON.stringify(opt('Fury of the Small')));
+        // The sheet's own text: "only once per turn" is carried.
+        const ctx = { extraDamage: [], level: 6 };
+        sktPassiveFromText('When you hit a creature with a weapon, you can deal an extra 2d6 Psychic damage. You can use this benefit only once per turn.', 'Dreadful Strike', ctx);
+        ok('extra damage: read from a feature’s text, “only once per turn” is kept', ctx.extraDamage.length === 1 && ctx.extraDamage[0].once === true, JSON.stringify(ctx.extraDamage));
+      } catch(e){ ok('round 233 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
+      finally { window.sktD = keepD; T._lastPcHit = null; state.party = JSON.parse(keepP); state.combatants = JSON.parse(keepC); state.activeCombatantId = keepA; save(); }
+    }
     // -- Class features: represented, not just text ------------------------
     {
       try {

@@ -2003,7 +2003,8 @@ function sktPassiveFromText(text, name, ctx){
       // "to 2d8 at 14th level" (2014) or "to 1d6 when you reach Ranger level 11" (2024).
       (t.match(/(\d+d\d+) (?:at|when you reach) (?:\d+(?:st|nd|rd|th) level|[A-Za-z]+ level \d+)/gi) || []).forEach(x => { const q = /(\d+d\d+) \D*?(\d+)/i.exec(x); if (q && L >= +q[2]) dice = q[1]; });
       const when = s.length > 170 ? s.slice(0, 167).replace(/\s\S*$/, '') + '…' : s;
-      ctx.extraDamage.push({ label: name, dice: dice + (m[2] ? ' ' + m[2].toLowerCase() : ''), note: when });
+      ctx.extraDamage.push({ label: name, dice: dice + (m[2] ? ' ' + m[2].toLowerCase() : ''), note: when,
+        once: /only once per turn|once per turn|once on each of your turns/i.test(t) || undefined });
       did = true; break;
     }
   }
