@@ -15385,6 +15385,81 @@ for (const cls of Object.keys(rule)) for (let L = 1; L <= 20; L++) for (const sc
         T._mapCache = null; state.combatants = JSON.parse(keepC); state.activeCombatantId = keepA; save();
       }
     }
+    // -- Round 217: a summoning spell brings its creature into the fight and onto the map, beside its caster --
+    if (!PLAYER){
+      const keepC = JSON.stringify(state.combatants), keepA = state.activeCombatantId, keepP = JSON.stringify(state.party), keepL = JSON.stringify(state.combatLog || []);
+      const C = panelDefs.combat;
+      try {
+        for (let k = 0; k < 100 && !(typeof _5eLoaded !== 'undefined' && _5eLoaded); k++) await sleep(100);
+        const R = await sktRulesLoad('2024');
+        const names = n => sktSummonCreatures(sktRulesSpell(R, n)).map(x => x.name + '|' + x.source).join(',');
+        ok('summon spells: Summon Beast calls a Bestial Spirit', names('Summon Beast') === 'Bestial Spirit|XPHB', names('Summon Beast'));
+        ok('summon spells: Animate Dead a Skeleton or a Zombie', names('Animate Dead') === 'Skeleton|XMM,Zombie|XMM', names('Animate Dead'));
+        ok('summon spells: Fireball calls nothing; Conjure Animals names no creature', names('Fireball') === '' && names('Conjure Animals') === '');
+        ok('summon spells: Finger of Death names a zombie but summons nothing', names('Finger of Death') === '', names('Finger of Death'));
+        ok('summon spells: Danse Macabre and Phantom Steed do summon', /Zombie/.test(names('Danse Macabre')) && /Horse/.test(names('Phantom Steed')), names('Danse Macabre') + ' / ' + names('Phantom Steed'));
+        const find = (n, src) => _5eData.find(r => r.cat === 'monster' && r.name === n && r._source === src);
+        state.party.push({ id: 'r217d', name: 'Wren', hp: 30, hpMax: 30, ac: 13, rules: '2024', concentration: 'Summon Beast',
+          sheet: { spellAtkBonus: '+7', spellSaveDc: 15 } });
+        // A better caster elsewhere in the party: the spirit takes its own caster's numbers, not theirs.
+        state.party.push({ id: 'r217x', name: 'Archmage', hp: 30, hpMax: 30, ac: 12, rules: '2024', sheet: { spellAtkBonus: '+11', spellSaveDc: 19 } });
+        state.combatants = []; save();
+        state.combatants.push({ id: 'r217d', name: 'Wren', isPC: true, hp: 30, hpMax: 30, ac: 13, initiative: 12, conditions: [] });
+        C.addMonster(find('Wolf', 'MM')); await sleep(30);
+        const wolfId = state.combatants[1].id;
+        document.querySelectorAll('.modal-backdrop').forEach(m => m.remove());
+        // 1. The DM's screen: in after the caster, with the casting's numbers, no questions.
+        const sp = C.addSummon({ ownerId: 'r217d', spell: 'Summon Beast', name: 'Bestial Spirit', source: 'XPHB', level: 4, count: 1, conc: true })[0];
+        const ids = () => state.combatants.map(c => c.id);
+        ok('summon: the Bestial Spirit joins right after Wren, at her initiative', !!sp && ids()[1] === sp.id && sp.initiative === 12 && sp.name === 'Wren’s Bestial Spirit', JSON.stringify([ids(), sp && sp.name, sp && sp.initiative]));
+        ok('summon: cast at 4th level with her spell attack +7 and DC 15', sp.summon && sp.summon.level === 4 && sp.summon.atk === 7 && sp.summon.dc === 15 && sp.hp > 0, JSON.stringify([sp.summon, sp.hp, sp.ac]));
+        ok('summon: no casting form to fill in — it was cast from her sheet', !document.querySelector('.modal-backdrop'));
+        ok('summon: on her side', sktSideOf(sp) === 'party');
+        // 2. Two skeletons, after the spirit.
+        const sk = C.addSummon({ ownerId: 'r217d', spell: 'Animate Dead', name: 'Skeleton', source: 'XMM', level: 3, count: 2, conc: false });
+        ok('summon: Animate Dead — two skeletons, after what she already summoned', sk.length === 2 && ids()[2] === sk[0].id && ids()[3] === sk[1].id && ids()[4] === wolfId, JSON.stringify(state.combatants.map(c => c.name)));
+        // 3. Concentration ends: the spirit goes, the skeletons stay.
+        state.party.forEach(p => { if (p.id === 'r217d') p.concentration = null; });
+        C._render(); await sleep(20);
+        ok('summon: her concentration ends — the spirit disappears', !state.combatants.some(c => c.id === sp.id) && state.combatants.filter(c => c.summonedBy).length === 2, JSON.stringify(state.combatants.map(c => c.name)));
+        ok('summon: …and the log says why', (state.combatLog || []).slice(-3).some(l => /Wren’s Bestial Spirit disappears — Wren’s concentration on Summon Beast ended/.test(l.text)));
+        // 4. From a player's phone: left on her character, brought in by the DM's screen.
+        state.party.forEach(p => { if (p.id === 'r217d'){ p.concentration = 'Giant Insect'; p.summonReq = [{ spell: 'Giant Insect', name: 'Giant Insect', source: 'XPHB', level: 4, count: 1, conc: true }]; } });
+        document.body.classList.add('player-mode');
+        const pl = C._takeSummonRequests(); document.body.classList.remove('player-mode');
+        ok('summon: a player’s own screen doesn’t write the fight', pl === false && !state.combatants.some(c => /Giant Insect/.test(c.name)));
+        C._render(); await sleep(20);
+        const gi = state.combatants.find(c => /Giant Insect/.test(c.name));
+        ok('summon: the DM’s screen brings in the Giant Insect a player cast', !!gi && gi.summonedBy && gi.summonedBy.spell === 'Giant Insect' && !(state.party.find(p => p.id === 'r217d').summonReq || []).length, JSON.stringify([gi && gi.name, state.party.find(p => p.id === 'r217d').summonReq]));
+        // 5. On the sheet: casting it during the fight offers the creature, and how many.
+        await openCharSheet('r217d'); await sleep(300);
+        csOfferSummon(state.party.find(p => p.id === 'r217d'), sktRulesSpell(R, 'Animate Dead'), 3); await sleep(80);
+        const sel = document.getElementById('mf-who');
+        ok('summon: the sheet asks which — Skeleton or Zombie', !!sel && [...sel.options].map(o => o.value).join(',') === 'Skeleton,Zombie', sel && [...sel.options].map(o => o.value).join(','));
+        if (sel){ sel.value = 'Zombie'; document.getElementById('mf-n').value = '2'; document.getElementById('modal-confirm').click(); await sleep(80); }
+        ok('summon: …and two zombies join', state.combatants.filter(c => /Wren’s Zombie/.test(c.name)).length === 2, JSON.stringify(state.combatants.map(c => c.name)));
+        csClose();
+        // Out of the fight, a summon spell asks nothing.
+        state.combatants = state.combatants.filter(c => c.id !== 'r217d');
+        await openCharSheet('r217d'); await sleep(300);
+        csOfferSummon(state.party.find(p => p.id === 'r217d'), sktRulesSpell(R, 'Animate Dead'), 3); await sleep(80);
+        ok('summon: not in the fight — no question', !document.getElementById('mf-who'));
+        csClose();
+        // 6. On the map: beside its caster, in an ally's colour.
+        const toks = [{ id: 't1', cid: 'o1', label: 'Owner', x: 525, y: 525, isPC: true, size: 1 }];
+        const list = [{ id: 'o1', name: 'Owner', isPC: true }, { id: 's1', name: 'Owner’s Bestial Spirit', isPC: false, summon: { level: 2 }, summonedBy: { id: 'o1' } }, { id: 'e1', name: 'Ogre', isPC: false }];
+        sktReconcileTokens(toks, list, 20, 20, 50, { x: 125, y: 125 });
+        const st = toks.find(t => t.cid === 's1'), et = toks.find(t => t.cid === 'e1');
+        ok('summon: its token appears beside its caster, not in the middle', !!st && Math.abs(st.x - 525) <= 50 && Math.abs(st.y - 525) <= 50, JSON.stringify(st && [st.x, st.y]));
+        ok('summon: in an ally’s colour; an ogre in an enemy’s', st && st.color === '#4a7a55' && et && et.color === '#993333' && Math.abs(et.x - 125) <= 100, JSON.stringify([st && st.color, et && et.color, et && et.x]));
+      } catch(e){ ok('round 217 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
+      finally {
+        try { csClose(); } catch(e){}
+        document.querySelectorAll('.modal-backdrop').forEach(m => m.remove());
+        document.body.classList.remove('player-mode');
+        state.party = JSON.parse(keepP); state.combatLog = JSON.parse(keepL); state.combatants = JSON.parse(keepC); state.activeCombatantId = keepA; save();
+      }
+    }
     // -- Class features: represented, not just text ------------------------
     {
       try {

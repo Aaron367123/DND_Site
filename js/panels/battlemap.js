@@ -5938,7 +5938,8 @@ function _sktTokenForNewCombatant(c, x, y){
     label: c.name,
     x, y,
     isPC,
-    color: isPC ? '#696969' : '#993333',
+    // An ally (a summoned spirit, a griffon, Harshnag) isn't drawn as an enemy.
+    color: isPC ? '#696969' : (typeof sktSideOf === 'function' && sktSideOf(c) === 'party') ? '#4a7a55' : '#993333',
     size: sktTokenCellsForSize(_sktCombatantSize(c)),
     dead: (c.hp || 0) <= 0,
     icon: c.icon || (mate && mate.icon) || glyph,
@@ -6009,7 +6010,12 @@ function sktReconcileTokens(tokens, combatants, cols, rows, cs, centre, opts){
     }
     if (opts.hold && c.id != null && opts.hold.has(c.id)) return;
     const tok = _sktTokenForNewCombatant(c, 0, 0);
-    const { x, y } = sktFreeCell(tokens, cols, rows, cs, centre.x, centre.y, tok.size);
+    // A summon or a companion appears beside whoever brought it.
+    const ownerId = (c.summonedBy && c.summonedBy.id) || (c.extraOf && c.extraOf.pc) || null;
+    const owner = ownerId != null ? list.find(o => o.id === ownerId) : null;
+    const ot = owner ? sktTokenForCombatant(tokens, owner) : null;
+    const near = ot && ot.x != null ? { x: ot.x, y: ot.y } : centre;
+    const { x, y } = sktFreeCell(tokens, cols, rows, cs, near.x, near.y, tok.size);
     tok.x = x; tok.y = y;
     tokens.push(tok);
     added++;

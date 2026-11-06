@@ -1183,6 +1183,34 @@ function createFloatingWindow(opts) {
 // every monster) get an exact match. `source` is optional so older saved rows,
 // which predate that field, still resolve to something sensible instead of
 // nothing.
+// The creatures a summoning spell calls, read off the spell's own text: Summon
+// Beast's Bestial Spirit, Animate Dead's Skeleton and Zombie, Find Familiar's
+// forms, Giant Insect's. → [{ name, source }] — empty for any other spell, and
+// for one that names none (2014 Conjure Animals: the DM picks the beasts).
+const SKT_SUMMON_SPELL_RE = /^(?:Summon |Conjure |Find Familiar$|Find Steed$|Find Greater Steed$|Giant Insect$|Animate Dead$|Create Undead$|Animate Objects$|Tiny Servant$|Infernal Calling$|Phantom Steed$|Homunculus Servant$|Create Homunculus$|Spirit of Death$|Danse Macabre$)/i;
+function sktSummonCreatures(spell){
+  if (!spell || !SKT_SUMMON_SPELL_RE.test(String(spell.name || ''))) return [];
+  const txt = JSON.stringify([spell.entries || [], spell.entriesHigherLevel || []]);
+  const out = [], seen = new Set();
+  for (const m of txt.matchAll(/\{@creature ([^}|]+)(?:\|([^}|]*))?/gi)){
+    const name = m[1].trim(), k = name.toLowerCase();
+    if (seen.has(k)) continue; seen.add(k);
+    out.push({ name: name.replace(/(^|[\s-])([a-z])/g, (x, a, b) => a + b.toUpperCase()), source: (m[2] || '').trim().toUpperCase() || null });
+  }
+  return out;
+}
+// A bestiary entry by its name (any case), its own book's printing first.
+function sktMonsterByName(name, source){
+  if (typeof _5eData === 'undefined' || !Array.isArray(_5eData) || !name) return null;
+  const n = String(name).toLowerCase();
+  let first = null;
+  for (const d of _5eData){
+    if (d.cat !== 'monster' || String(d.name).toLowerCase() !== n) continue;
+    if (source && d._source === source) return d;
+    if (!first) first = d;
+  }
+  return first;
+}
 function sktFindMonster(slug, source){
   if (typeof _5eData === 'undefined' || !Array.isArray(_5eData) || !slug) return null;
   const s = String(slug);

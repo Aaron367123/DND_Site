@@ -2015,10 +2015,32 @@ function csSpellsClick(e, t, d, pc){
       const t = s && [].concat(s.time || [])[0];
       if (CS.embed && t && how !== 'ritual' && typeof paMarkEcon === 'function' && typeof paActKind === 'function') paMarkEcon(paActKind(t.unit));
     });
+    if (s && typeof csOfferSummon === 'function') csOfferSummon(pc, s, /^\d+$/.test(how) ? +how : null);
     if (typeof showToast === 'function') showToast('Cast ' + name + (/^\d+$/.test(how) && +how > 0 ? ' (' + CS_ORD[+how] + ' slot)' : how === 'ritual' ? ' as a ritual' : how === 'free' ? ' (free use)' : how === 'arcanum' ? ' (Mystic Arcanum)' : how === 'use' && used ? ' (' + sktResLabel(pc, used.resource) + ')' : ''));
     return true;
   }
   return false;
+}
+// A summoning spell cast during a fight offers its creature: which one (Find
+// Familiar's forms, Animate Dead's skeleton or zombie) and how many, then in
+// after the caster. On a player's phone it goes to the DM's screen through
+// their own character (summonReq); the DM's adds it directly.
+function csOfferSummon(pc, s, level){
+  const who = typeof sktSummonCreatures === 'function' ? sktSummonCreatures(s).filter(x => typeof sktMonsterByName !== 'function' || sktMonsterByName(x.name, x.source)) : [];
+  if (!who.length || !(state.combatants || []).some(c => c.id === pc.id) || CS.readOnly || typeof showModal !== 'function') return;
+  const lv = level || s.level || 0;
+  showModal(s.name + ' — into the fight?', [
+    { id: 'who', label: 'Creature', type: 'select', options: who.map(x => x.name), value: who[0].name },
+    { id: 'n', label: 'How many', type: 'number', value: '1' },
+  ], 'Add to the fight').then(r => {
+    if (!r || !r.who) return;
+    const x = who.find(w => w.name === r.who) || who[0];
+    const req = { spell: s.name, name: x.name, source: x.source, level: lv, count: Math.max(1, Math.min(20, parseInt(r.n, 10) || 1)), conc: !!s.concentration };
+    if (document.body.classList.contains('player-mode')){
+      csEdit('Summoned ' + x.name, p => { p.summonReq = (p.summonReq || []).concat([req]); });
+      if (typeof showToast === 'function') showToast(x.name + ' — sent to the DM’s tracker');
+    } else if (panelDefs.combat && typeof panelDefs.combat.addSummon === 'function') panelDefs.combat.addSummon(Object.assign({ ownerId: pc.id }, req));
+  });
 }
 // Actions that cast a spell for a use of a feature instead of a slot: a 2024
 // ranger's Hunter's Mark for Favored Enemy, a druid's Find Familiar for Wild

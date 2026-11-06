@@ -425,6 +425,71 @@ registerPanel('combat',{
     save(); this._render();
     return c;
   },
+  // What a character's spell calls into the fight: right after the caster
+  // (and anything they summoned before), on their side, a spirit's numbers
+  // from the casting — its level, the caster's spell attack and save DC.
+  // o: { ownerId, spell, name, source, level, count, conc } → the added.
+  addSummon(o){
+    const p = (state.party || []).find(x => x.id === o.ownerId), sh = (p && p.sheet) || {};
+    const m = typeof sktMonsterByName === 'function' ? sktMonsterByName(o.name, o.source) : null;
+    if (!m) return [];
+    const atk = parseInt(sh.spellAtkBonus, 10), dc = +sh.spellSaveDc;
+    const given = { level: +o.level || undefined, atk: isNaN(atk) ? undefined : atk, dc: dc || undefined };
+    Object.keys(given).forEach(k => given[k] === undefined && delete given[k]);
+    const n = Math.max(1, Math.min(20, +o.count || 1)), added = [];
+    for (let k = 0; k < n; k++){
+      this.addMonster(m, { summon: given, quiet: true });
+      const c = state.combatants.pop();
+      Object.assign(c, { name: (p ? p.name + '’s ' : '') + c.name, ally: true,
+        summonedBy: { id: o.ownerId, name: p ? p.name : '', spell: o.spell || '', conc: !!o.conc } });
+      // after the caster and whatever they already summoned
+      let at = state.combatants.findIndex(x => x.id === o.ownerId);
+      if (at >= 0){
+        c.initiative = state.combatants[at].initiative;
+        while (state.combatants[at + 1] && state.combatants[at + 1].summonedBy && state.combatants[at + 1].summonedBy.id === o.ownerId) at++;
+        state.combatants.splice(at + 1, 0, c);
+      } else state.combatants.push(c);
+      added.push(c);
+    }
+    if (!state.combatRound) state.combatRound = 1;
+    this._log((p ? p.name : 'A character') + ' casts ' + (o.spell || 'a spell') + ' — ' + added.map(c => c.name).join(', ') + (added.length > 1 ? ' join' : ' joins') + ' the fight');
+    save(); this._render();
+    if (typeof showToast === 'function') showToast(added.map(c => c.name).join(', ') + ' — in the fight, after ' + (p ? p.name : 'the caster'));
+    return added;
+  },
+  // A player's phone can't write the fight; it leaves the summon on their
+  // own character (p.summonReq), and the DM's screen brings it in.
+  _takeSummonRequests(){
+    if (document.body.classList.contains('player-mode') || this._takingSummons) return false;
+    const reqs = (state.party || []).filter(p => p && Array.isArray(p.summonReq) && p.summonReq.length);
+    if (!reqs.length) return false;
+    this._takingSummons = true;
+    try {
+      reqs.forEach(p => { const list = p.summonReq; p.summonReq = [];
+        list.forEach(r => { if (state.combatants.some(c => c.id === p.id)) this.addSummon(Object.assign({}, r, { ownerId: p.id })); }); });
+      save();
+    } finally { this._takingSummons = false; }
+    return true;
+  },
+  // A concentration summon leaves when the caster's concentration on that
+  // spell ends (Summon Beast's spirit "disappears"), and with its caster.
+  _endSummons(){
+    if (document.body.classList.contains('player-mode')) return false;
+    const gone = (state.combatants || []).filter(c => {
+      const s = c && c.summonedBy; if (!s || !s.conc) return false;
+      const p = (state.party || []).find(x => x.id === s.id);
+      return !p || p.concentration !== s.spell || !state.combatants.some(x => x.id === s.id);
+    });
+    if (!gone.length) return false;
+    gone.forEach(c => {
+      const i = state.combatants.indexOf(c); if (i < 0) return;
+      this._removeCombatantAt(i);
+      this._log(c.name + ' disappears — ' + c.summonedBy.name + '’s concentration on ' + c.summonedBy.spell + ' ended');
+    });
+    if (typeof showToast === 'function') showToast(gone.map(c => c.name).join(', ') + ' disappeared (concentration ended)');
+    save();
+    return true;
+  },
   // Its hit points, kept on the sheet while it fights — the sheet's Extras
   // and the tracker say the same number. → true when one changed.
   _syncExtras(){
@@ -471,6 +536,8 @@ registerPanel('combat',{
   _render(){
     this._releaseGrapples();
     this._syncExtras();
+    this._takeSummonRequests();
+    this._endSummons();
     const b=this._body;if(!b)return;
     const inCombat=state.combatants.length>0;
     const compact = !!(state.settings && state.settings.combatCompact);
@@ -3068,7 +3135,7 @@ registerPanel('combat',{
   // Public API used by other panels (Bestiary drag-drop, search results, etc).
   // Appends to the end of the combatant list — manual reordering is the user's
   // job now, so we don't auto-sort by initiative.
-  addMonster(m){
+  addMonster(m, opts){
     // The stat block's own initiative: a 2024 block adds proficiency to it
     // ("Initiative +5" on a Berserker Commander, Dex +2), or rolls it with
     // advantage. Only the Dex modifier was used.
@@ -3146,15 +3213,15 @@ registerPanel('combat',{
     // A summoned spirit's numbers are the casting's: HP and AC by the spell's
     // level, attacks at the caster's spell attack modifier. Added at the
     // lowest level with the party's best caster's numbers, then asked.
-    const sm = this._summonGuess(m && m._raw);
+    const sm = this._summonGuess(m && m._raw, opts && opts.summon);
     if (sm){
       const c = state.combatants[state.combatants.length - 1];
       Object.assign(c, { summon: sm.summon, hp: sm.hp, hpMax: sm.hp, ac: sm.ac });
     }
     if (!state.combatRound) state.combatRound = 1;
     save(); this._render();
-    showToast(`Added ${displayName}`);
-    if (sm) this._askSummon(state.combatants[state.combatants.length - 1].id);
+    if (!(opts && opts.quiet)) showToast(`Added ${displayName}`);
+    if (sm && !(opts && opts.summon)) this._askSummon(state.combatants[state.combatants.length - 1].id);
   },
 
   // Whether a stat block is a summoning spell's (Summon Beast's Bestial
