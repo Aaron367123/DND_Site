@@ -841,11 +841,33 @@ registerPanel('turnview', {
     // party); measured on the map, so with no tokens it adds nothing.
     const C = panelDefs.combat;
     if (attacker && target && !attacker.isPC && C && typeof C._hasTrait === 'function' && C._hasTrait(attacker, /^Pack Tactics\b/i)){
-      const ally = this._order().find(o => o !== attacker && o !== target && !o.isPC === !attacker.isPC && (o.hp || 0) > 0 && !this._incap(o)
-        && (f => f != null && f <= 5)(this._ftBetween(o, target)));
+      const ally = this._allyBeside(attacker, target);
       if (ally) adv.push('pack tactics — ' + ally.name + ' beside the target');
     }
     return { adv, dis, autoCrit };
+  },
+  // One of the attacker's allies within 5 ft of the target who isn't
+  // incapacitated (measured on the map; no tokens, no ally) — or null.
+  _allyBeside(attacker, target){
+    return this._order().find(o => o !== attacker && o !== target && !o.isPC === !attacker.isPC && (o.hp || 0) > 0 && !this._incap(o)
+      && (f => f != null && f <= 5)(this._ftBetween(o, target))) || null;
+  },
+  // A trait's text off the stat block ("Martial Advantage" → its sentence).
+  _traitText(c, re){
+    const C = panelDefs.combat; if (!c || c.isPC || !C || typeof C.statBlockFor !== 'function') return '';
+    const e = C.statBlockFor(c), raw = e && (e._raw || e);
+    const t = raw && [].concat(raw.special_abilities || [], raw.trait || []).find(x => x && re.test(String(x.name || '')));
+    if (!t) return '';
+    const txt = String(t.desc || t.text || (Array.isArray(t.entries) ? t.entries.join(' ') : ''));
+    return typeof sktPlainEntries === 'function' ? sktPlainEntries(txt) : txt;
+  },
+  // In the sun: Sunlight Sensitivity's disadvantage — a stat block's trait,
+  // or a character's (a 2014 drow or kobold).
+  _sunSensitive(c){
+    if (!c) return false;
+    if (c.isPC) return (((this._partyOf(c) || {}).sheet || {}).featureList || []).some(f => /^Sunlight Sensitivity\b/i.test(f.name || ''));
+    const C = panelDefs.combat;
+    return !!(C && typeof C._hasTrait === 'function' && C._hasTrait(c, /^Sunlight Sensitivity\b/i));
   },
   // Whether `who` sees `other` though it is invisible: a monster's
   // blindsight or truesight, as far as it reaches (unknown distance: no).
@@ -1458,6 +1480,8 @@ registerPanel('turnview', {
       ${advBtn(-1, 'Disadv', 'Roll two d20 and keep the lower')}
       ${advBtn(0, 'Straight', 'One d20')}
       ${advBtn(1, 'Adv', 'Roll two d20 and keep the higher')}
+      ${this._sunSensitive(c) ? `<button class="btn tv-sun ${state.combatSunlight ? 'primary' : ''}" data-tv="sun" aria-pressed="${!!state.combatSunlight}"
+          title="Sunlight Sensitivity: in sunlight, its attack rolls (and sight-based Perception) have disadvantage. For the whole scene, until switched off.">In sunlight</button>` : ''}
     </div>`;
     // The manual row sits OUTSIDE the scroller. .tv-actions gives way so the
     // result line stays on screen, which meant that on a creature with three
@@ -2319,7 +2343,7 @@ registerPanel('turnview', {
         // (a Life Drain's lowered maximum, and a condition's timer)
         hpMax:c.hpMax, hpMaxNormal:c.hpMaxNormal, hpMaxNote:c.hpMaxNote,
         condTimers: c.condTimers ? JSON.parse(JSON.stringify(c.condTimers)) : undefined,
-        legendaryUsed:c.legendaryUsed,
+        legendaryUsed:c.legendaryUsed, extraDmgTurn:c.extraDmgTurn,
         deathSaves: c.deathSaves ? {...c.deathSaves} : c.deathSaves,
         rechargeSpent: (c.rechargeSpent || []).slice(),
         usesSpent: c.usesSpent ? {...c.usesSpent} : undefined, usesRound: c.usesRound ? {...c.usesRound} : undefined, slotsUsed: c.slotsUsed ? {...c.slotsUsed} : undefined,
@@ -2667,6 +2691,13 @@ registerPanel('turnview', {
     const helper = this._order().find(o => o !== c && o.helping && o.helping.target === t.id && !o.isPC === !c.isPC);
     if (helper){ advWhy.push('helped by ' + helper.name); helper.helping = null; }
     if (a.ranged && !a.closeOk){ const foe = this._rangedThreat(c); if (foe) disWhy.push('ranged, ' + foe.name + ' within 5 ft'); }
+    // Blood Frenzy (a sahuagin, a quipper): "advantage on melee attack rolls
+    // against any creature that doesn't have all its hit points".
+    const CB = panelDefs.combat;
+    if (!a.pc && !a.ranged && !a.spell && CB && typeof CB._hasTrait === 'function' && CB._hasTrait(c, /^Blood Frenzy\b/i)
+        && (t.hp || 0) < (t.hpMax || 0)) advWhy.push('blood frenzy — ' + t.name + ' is hurt');
+    // Sunlight Sensitivity, while the scene is in sunlight (the switch by Adv).
+    if (state.combatSunlight && this._sunSensitive(c)) disWhy.push('sunlight sensitivity');
     // A character's exhaustion: 2024, −2 a level on the roll; 2014, from the
     // third level, disadvantage. (Its conditions are already counted above.)
     let exhBonus = 0;
@@ -2744,6 +2775,22 @@ registerPanel('turnview', {
         detail += (detail ? ' · ' : '') + pt.type + ' ' + r.detail;
         return { amt: r.total, type: pt.type };
       });
+    }
+    // Martial Advantage (a hobgoblin): an ally beside the target. A monster's
+    // Sneak Attack (a spy, an assassin): advantage, or an ally beside the
+    // target and no disadvantage. Once per turn — anyone's turn.
+    if (hit && !a.pc && !a.spell && !a.save && parts.length && c.extraDmgTurn !== this._turnKey()){
+      const ma = this._traitText(c, /^Martial Advantage\b/i), sa = this._traitText(c, /^Sneak Attack\b/i);
+      const ally = (ma || sa) ? this._allyBeside(c, t) : null;
+      const which = ma && ally ? ['Martial Advantage', ma] : sa && (mode > 0 || (ally && mode >= 0)) ? ['Sneak Attack', sa] : null;
+      const dm = which && /\bextra \d+ \((\d+d\d+)\)/i.exec(which[1]);
+      if (dm){
+        const r = this._roll(crit ? dbl(dm[1]) : dm[1]);
+        parts.push({ amt: r.total, type: parts[0].type });
+        detail += (detail ? ' · ' : '') + which[0].toLowerCase() + ' ' + r.detail;
+        hitNote = (hitNote ? hitNote + ' · ' : '') + which[0].toLowerCase() + ' +' + r.total + (ally && !(which[0] === 'Sneak Attack' && mode > 0) ? ' (' + ally.name + ' beside it)' : '');
+        c.extraDmgTurn = this._turnKey();
+      }
     }
     const dmg = parts.reduce((s, x) => s + x.amt, 0);
     this._resolve({ attackerId: c.id, attacker: c.name, label: o.label || a.name, target: t,
@@ -3634,6 +3681,7 @@ registerPanel('turnview', {
         this._rollAttack(+el.dataset.ai, mode == null ? undefined : { mode });
       }
       else if (act === 'adv'){ this._adv = +el.dataset.v; this._render(); }
+      else if (act === 'sun'){ state.combatSunlight = !state.combatSunlight; save(); this._render(); }
       else if (act === 'econ'){
         const cur = this._active();
         if (cur){ cur[el.dataset.k] = !cur[el.dataset.k]; save(); panelDefs.combat?._render?.(); this._render(); }

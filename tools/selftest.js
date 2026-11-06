@@ -15074,6 +15074,106 @@ for (const cls of Object.keys(rule)) for (let L = 1; L <= 20; L++) for (const sc
       } catch(e){ ok('round 212 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
       finally { window.sktD = keepD; T._onHits = []; state.settings = JSON.parse(keepS); state.party = JSON.parse(keepP); state.combatants = JSON.parse(keepC); state.activeCombatantId = keepA; save(); }
     }
+    // -- Round 213: the stat block's own edge — Blood Frenzy, Sunlight Sensitivity, Martial Advantage, a monster's Sneak Attack --
+    if (!PLAYER){
+      const keepC = JSON.stringify(state.combatants), keepA = state.activeCombatantId, keepSun = state.combatSunlight;
+      const B = panelDefs.battlemap, T = panelDefs.turnview, keepR = T._resolve, keepD = T._d, keepSD = window.sktD;
+      let tok0 = null;
+      try {
+        for (let k = 0; k < 100 && !(typeof _5eLoaded !== 'undefined' && _5eLoaded); k++) await sleep(100);
+        const find = (n, src) => _5eData.find(r => r.cat === 'monster' && r.name === n && r._source === src);
+        openPanel('battlemap'); await sleep(300);
+        tok0 = JSON.stringify(B._tokens || []);
+        state.combatants = []; state.combatSunlight = false; save();
+        ['Sahuagin', 'Kobold', 'Hobgoblin', 'Hobgoblin', 'Spy', 'Wolf'].forEach(n => panelDefs.combat.addMonster(find(n, 'MM')));
+        await sleep(50);
+        const [sah, kob, hob, hob2, spy, wolf] = state.combatants;
+        const hero = { id: 'r213h', name: 'Hero', isPC: true, hp: 300, hpMax: 300, ac: 5, initiative: 30, conditions: [] };
+        state.combatants.push(hero); save();
+        const cs = B._csScreen ? B._cellSize : 50;
+        const put = (c, x, y) => ({ id: 'tk' + c.id, label: c.name, cid: c.id, isPC: !!c.isPC, x: cs * (x + 0.5), y: cs * (y + 0.5), size: 1 });
+        const place = (pos) => { B._tokens = pos.map(([c, x, y]) => put(c, x, y)); B._saveMap && B._saveMap(); T._mapCache = null; };
+        const far = [[sah, 20, 1], [kob, 20, 3], [spy, 20, 7], [wolf, 20, 9]];
+        place([[hero, 5, 5], [hob, 4, 5], [hob2, 15, 15]].concat(far));
+        const seen = []; T._resolve = o => seen.push(o); T._d = () => 10; window.sktD = () => 10;
+        const roll = (c, name) => { seen.length = 0; state.activeCombatantId = c.id; const i = T._attacksFor(c).findIndex(a => a.name === name); T._rollAttack(i, { attacker: c, target: hero }); return seen[0] || {}; };
+        const sum = o => (o.parts || []).reduce((s, p) => s + p.amt, 0);
+        // Blood Frenzy
+        let o = roll(sah, 'Claws');
+        ok('blood frenzy: not against a target at full HP', !/blood frenzy/.test(o.hitNote || ''), o.hitNote);
+        hero.hp = 250;
+        o = roll(sah, 'Claws');
+        ok('blood frenzy: advantage against a hurt one', /adv/.test(o.hitNote || '') && /blood frenzy — Hero is hurt/.test(o.hitNote || ''), o.hitNote);
+        hero.hp = 300;
+        // Sunlight Sensitivity (the kobold has Pack Tactics too: no allies near the hero)
+        place([[hero, 5, 5], [hob, 15, 15], [hob2, 17, 15]].concat(far));
+        o = roll(kob, 'Dagger');
+        ok('sunlight: out of the sun, a kobold rolls straight', !/sunlight/.test(o.hitNote || ''), o.hitNote);
+        state.combatSunlight = true;
+        o = roll(kob, 'Dagger');
+        ok('sunlight: in it, disadvantage', /dis/.test(o.hitNote || '') && /sunlight sensitivity/.test(o.hitNote || ''), o.hitNote);
+        o = roll(wolf, 'Bite');
+        ok('sunlight: a wolf doesn’t mind it', !/sunlight/.test(o.hitNote || ''), o.hitNote);
+        state.combatSunlight = false;
+        if (!T._body){ openPanel('turnview'); await sleep(200); }
+        state.activeCombatantId = kob.id; T._render(); await sleep(20);
+        const sb = document.querySelector('[data-tv="sun"]');
+        ok('sunlight: the kobold’s turn has an In sunlight switch', !!sb);
+        sb && sb.click(); await sleep(20);
+        ok('sunlight: it switches the scene', state.combatSunlight === true);
+        state.combatSunlight = false;
+        state.activeCombatantId = wolf.id; T._render(); await sleep(20);
+        ok('sunlight: not on a wolf’s turn', !document.querySelector('[data-tv="sun"]'));
+        // Martial Advantage: hobgoblin 2's longsword (1d8+1, every die 10 → 11) and, with an ally beside the hero, +2d6 (20), once a turn.
+        place([[hero, 5, 5], [hob, 4, 5], [hob2, 6, 5]].concat(far));
+        hob.extraDmgTurn = null;
+        o = roll(hob, 'Longsword');
+        ok('martial advantage: an ally beside the target — +2d6, once', o.hit && (o.parts || []).length === 2 && /martial advantage \+20 \(Hobgoblin.* beside it\)/.test(o.hitNote || ''), JSON.stringify([o.parts, o.hitNote]));
+        o = roll(hob, 'Longsword');
+        ok('martial advantage: not twice in a turn', o.hit && (o.parts || []).length === 1, JSON.stringify([o.parts, o.hitNote]));
+        hob.extraDmgTurn = null;
+        place([[hero, 5, 5], [hob, 4, 5], [hob2, 15, 15]].concat(far));
+        o = roll(hob, 'Longsword');
+        ok('martial advantage: with no ally beside it, none', (o.parts || []).length === 1 && !/martial/.test(o.hitNote || ''), JSON.stringify(o.parts));
+        place([[hero, 5, 5], [hob, 4, 5], [hob2, 6, 5]].concat(far));
+        hob2.conditions = ['Stunned']; hob.extraDmgTurn = null;
+        o = roll(hob, 'Longsword');
+        ok('martial advantage: nor a stunned one', (o.parts || []).length === 1, JSON.stringify(o.parts));
+        hob2.conditions = []; hob.extraDmgTurn = null;
+        T._d = () => 1; window.sktD = () => 1;
+        o = roll(hob, 'Longsword');
+        ok('martial advantage: a miss spends nothing', !o.hit && (o.parts || []).length <= 1 && hob.extraDmgTurn == null, JSON.stringify([o.hit, hob.extraDmgTurn]));
+        T._d = () => 10; window.sktD = () => 10;
+        // Sneak Attack: the spy's shortsword with an ally beside the hero.
+        place([[hero, 5, 5], [spy, 4, 5], [hob2, 6, 5], [sah, 20, 1], [kob, 20, 3], [wolf, 20, 9], [hob, 20, 11]]);
+        spy.extraDmgTurn = null;
+        o = roll(spy, 'Shortsword');
+        ok('sneak attack (monster): an ally beside the target, +2d6', (o.parts || []).length === 2 && o.parts[1].amt === 20 && /sneak attack \+20/.test(o.hitNote || ''), JSON.stringify([o.parts, o.hitNote]));
+        // …but not with disadvantage
+        spy.extraDmgTurn = null; hero.conditions = ['Invisible'];
+        o = roll(spy, 'Shortsword');
+        ok('sneak attack (monster): not at disadvantage', (o.parts || []).length === 1, JSON.stringify([o.parts, o.hitNote]));
+        hero.conditions = [];
+        // …and with advantage alone, no ally needed
+        place([[hero, 5, 5], [spy, 4, 5], [hob2, 15, 15]].concat([[sah, 20, 1], [kob, 20, 3], [wolf, 20, 9], [hob, 20, 11]]));
+        spy.extraDmgTurn = null; hero.conditions = ['Restrained'];
+        o = roll(spy, 'Shortsword');
+        ok('sneak attack (monster): advantage alone will do', (o.parts || []).length === 2 && /sneak attack \+20$/.test(o.hitNote || ''), JSON.stringify([o.parts, o.hitNote]));
+        hero.conditions = []; spy.extraDmgTurn = null;
+        o = roll(spy, 'Shortsword');
+        ok('sneak attack (monster): neither — none', (o.parts || []).length === 1, JSON.stringify(o.parts));
+        // A crit doubles its dice: 4d6 of 10s.
+        spy.extraDmgTurn = null; hero.conditions = ['Restrained']; T._d = () => 20; window.sktD = () => 20;
+        o = roll(spy, 'Shortsword');
+        ok('sneak attack (monster): a crit doubles its dice', o.crit && o.parts[1] && o.parts[1].amt === 80, JSON.stringify(o.parts));
+        hero.conditions = [];
+      } catch(e){ ok('round 213 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
+      finally {
+        T._resolve = keepR; T._d = keepD; window.sktD = keepSD; state.combatSunlight = keepSun;
+        if (tok0 != null){ B._tokens = JSON.parse(tok0); B._saveMap && B._saveMap(); }
+        T._mapCache = null; state.combatants = JSON.parse(keepC); state.activeCombatantId = keepA; save();
+      }
+    }
     // -- Class features: represented, not just text ------------------------
     {
       try {
