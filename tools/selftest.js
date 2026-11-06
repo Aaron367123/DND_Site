@@ -15778,6 +15778,88 @@ for (const cls of Object.keys(rule)) for (let L = 1; L <= 20; L++) for (const sc
       } catch(e){ ok('round 224 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
       finally { state.combatants = JSON.parse(keepC); state.activeCombatantId = keepA; save(); }
     }
+    // -- Round 225: a character's hit offers what their features add — Sneak Attack, Hunter's Mark, Divine Smite — and applies it --
+    if (!PLAYER){
+      const keepC = JSON.stringify(state.combatants), keepA = state.activeCombatantId, keepP = JSON.stringify(state.party);
+      const T = panelDefs.turnview, C = panelDefs.combat, keepD = window.sktD;
+      try {
+        for (let k = 0; k < 100 && !(typeof _5eLoaded !== 'undefined' && _5eLoaded); k++) await sleep(100);
+        const find = (n, src) => _5eData.find(r => r.cat === 'monster' && r.name === n && r._source === src);
+        state.party.push({ id: 'r225r', name: 'Zoey', hp: 40, hpMax: 40, ac: 15, rules: '2024', resources: [{ name: 'Sneak Attack', die: '3d6', current: 1, max: 1 }],
+          sheet: { attacks: [{ name: 'Shortsword', atkBonus: '+7', damage: '1d6+4 piercing' }, { name: 'Fire Bolt', spell: true, atkBonus: '+5', damage: '1d10 fire' }] } });
+        state.party.push({ id: 'r225p', name: 'Oth', hp: 40, hpMax: 40, ac: 18, rules: '2024', concentration: null,
+          sheet: { spells: ['Divine Smite'], spellSlots: { 1: { total: 2, expended: 0 }, 2: { total: 1, expended: 0 } }, attacks: [{ name: 'Longsword', atkBonus: '+6', damage: '1d8+3 slashing' }] } });
+        state.combatants = [{ id: 'r225r', name: 'Zoey', isPC: true, hp: 40, hpMax: 40, ac: 15, initiative: 20, conditions: [] },
+                            { id: 'r225p', name: 'Oth', isPC: true, hp: 40, hpMax: 40, ac: 18, initiative: 19, conditions: [] }];
+        C.addMonster(find('Ogre', 'MM')); C.addMonster(find('Zombie', 'MM')); await sleep(20);
+        const get = id => state.combatants.find(c => c.id === id);
+        const ogreId = state.combatants[2].id, zomId = state.combatants[3].id;
+        state.combatants.forEach(c => { if (!c.isPC){ c.hp = 300; c.hpMax = 300; c.ac = 10; } });
+        state.activeCombatantId = 'r225r'; save();
+        if (!T._body){ openPanel('turnview'); await sleep(200); }
+        const atk = (id, name) => T._attacksFor(get(id)).findIndex(a => a.name === name);
+        // A shortsword hit with advantage: Sneak Attack is offered, and lands.
+        window.sktD = n => (n === 20 ? 15 : 3);
+        T._rollAttack(atk('r225r', 'Shortsword'), { attacker: get('r225r'), target: get(ogreId), mode: 1 }); await sleep(20);
+        T._painted = {}; T._render(); await sleep(30);
+        const row = document.querySelector('.tv-pcx');
+        ok('extra damage: after Zoey’s hit, the Turn View offers Sneak Attack 3d6', !!row && /Sneak Attack 3d6/.test(row.textContent) && !row.querySelector('[data-k="sa"]').classList.contains('tv-cant'), row && row.textContent.replace(/\s+/g, ' '));
+        const hp0 = get(ogreId).hp;
+        T._usePcExtra('sa'); await sleep(20);
+        ok('extra damage: Sneak Attack rolled and applied to the ogre — 3d6 of 3s, 9', hp0 - get(ogreId).hp === 9, hp0 + ' → ' + get(ogreId).hp);
+        ok('extra damage: …once a turn', get('r225r').onceTurn && get('r225r').onceTurn['Sneak Attack'] === T._turnKey() && !T._pcExtraOptions(T._lastPcHit).some(o => o.key === 'sa'));
+        if (typeof sktUndo === 'function'){ sktUndo(); await sleep(40);
+          ok('extra damage: undo gives the HP back and the Sneak Attack with it', get(ogreId).hp === hp0 && !(get('r225r').onceTurn || {})['Sneak Attack'], JSON.stringify([get(ogreId).hp, hp0, get('r225r').onceTurn])); }
+        get('r225r').onceTurn = undefined;
+        // Straight, no ally beside: offered, but marked as not met.
+        T._rollAttack(atk('r225r', 'Shortsword'), { attacker: get('r225r'), target: get(ogreId), mode: 0 }); await sleep(20);
+        const sa = T._pcExtraOptions(T._lastPcHit).find(o => o.key === 'sa');
+        ok('extra damage: a straight roll with no ally beside — offered, but marked as not met', !!sa && sa.ok === false && /needs advantage/.test(sa.why), JSON.stringify(sa));
+        // A critical doubles it.
+        window.sktD = n => (n === 20 ? 20 : 3);
+        T._rollAttack(atk('r225r', 'Shortsword'), { attacker: get('r225r'), target: get(ogreId), mode: 1 }); await sleep(20);
+        const hp1 = get(ogreId).hp; T._usePcExtra('sa'); await sleep(20);
+        ok('extra damage: on a critical, 6d6 — 18', hp1 - get(ogreId).hp === 18, hp1 + ' → ' + get(ogreId).hp);
+        window.sktD = n => (n === 20 ? 15 : 3);
+        T._rollAttack(atk('r225r', 'Shortsword'), { attacker: get('r225r'), target: get(ogreId), mode: 1 }); await sleep(20);
+        ok('extra damage: a second hit the same turn — no second Sneak Attack', !T._pcExtraOptions(T._lastPcHit).some(o => o.key === 'sa'));
+        // A club (no finesse) offers none; a shortsword marked finesse does.
+        state.party.forEach(p => { if (p.id === 'r225r') p.sheet.attacks.push({ name: 'Club', atkBonus: '+3', damage: '1d4+1 bludgeoning', props: ['L'] }, { name: 'Rapier', atkBonus: '+7', damage: '1d8+4 piercing', props: ['F'] }); });
+        get('r225r').onceTurn = undefined; window.sktD = n => (n === 20 ? 15 : 3);
+        T._rollAttack(atk('r225r', 'Club'), { attacker: get('r225r'), target: get(ogreId), mode: 1 }); await sleep(20);
+        ok('extra damage: a club is no finesse weapon — no Sneak Attack', !T._pcExtraOptions(T._lastPcHit).some(o => o.key === 'sa'));
+        T._rollAttack(atk('r225r', 'Rapier'), { attacker: get('r225r'), target: get(ogreId), mode: 1 }); await sleep(20);
+        ok('extra damage: a rapier (finesse) — Sneak Attack', T._pcExtraOptions(T._lastPcHit).some(o => o.key === 'sa'));
+        // A spell attack offers no Sneak Attack.
+        get('r225r').onceTurn = undefined; window.sktD = n => (n === 20 ? 15 : 3);
+        T._rollAttack(atk('r225r', 'Fire Bolt'), { attacker: get('r225r'), target: get(ogreId), mode: 1 }); await sleep(20);
+        ok('extra damage: Fire Bolt is no weapon — no Sneak Attack', !T._pcExtraOptions(T._lastPcHit).some(o => o.key === 'sa'));
+        // Hunter's Mark, while she concentrates on it (2024: force).
+        state.party.forEach(p => { if (p.id === 'r225r') p.concentration = 'Hunter’s Mark'; });
+        T._rollAttack(atk('r225r', 'Shortsword'), { attacker: get('r225r'), target: get(ogreId), mode: 0 }); await sleep(20);
+        const hm = T._pcExtraOptions(T._lastPcHit).find(o => o.key === 'hm');
+        ok('extra damage: Hunter’s Mark, 1d6 force, while concentrating on it', !!hm && hm.dice === '1d6' && hm.type === 'force', JSON.stringify(hm));
+        // Divine Smite against the undead: 2d8 + 1d8, a slot spent, the bonus action (2024).
+        state.activeCombatantId = 'r225p'; get('r225p').bonusUsed = false;
+        T._rollAttack(atk('r225p', 'Longsword'), { attacker: get('r225p'), target: get(zomId), mode: 0 }); await sleep(20);
+        const sm = T._pcExtraOptions(T._lastPcHit).find(o => o.key === 'smite');
+        ok('extra damage: Divine Smite on a zombie — 3d8 radiant with a 1st-level slot', !!sm && sm.dice === '3d8' && sm.slot === 1 && /undead/.test(sm.why), JSON.stringify(sm));
+        const hz = get(zomId).hp; T._usePcExtra('smite'); await sleep(20);
+        const pp = state.party.find(p => p.id === 'r225p');
+        ok('extra damage: smitten — 9 radiant, a 1st-level slot spent, the bonus action used', hz - get(zomId).hp === 9 && pp.sheet.spellSlots[1].expended === 1 && get('r225p').bonusUsed === true, JSON.stringify([hz - get(zomId).hp, pp.sheet.spellSlots[1], get('r225p').bonusUsed]));
+        // Dismissed, it goes.
+        T._rollAttack(atk('r225p', 'Longsword'), { attacker: get('r225p'), target: get(zomId), mode: 0 }); await sleep(20);
+        T._painted = {}; T._render(); await sleep(20);
+        document.querySelector('.tv-pcx [data-tv="pcxx"]').click(); await sleep(20);
+        ok('extra damage: ✕ puts it away', !document.querySelector('.tv-pcx'));
+        // A monster's hit offers nothing of the kind.
+        state.activeCombatantId = ogreId;
+        T._rollAttack(T._attacksFor(get(ogreId)).findIndex(a => /Greatclub/.test(a.name)), { attacker: get(ogreId), target: get('r225p') }); await sleep(20);
+        T._painted = {}; T._render(); await sleep(20);
+        ok('extra damage: the ogre’s hit adds no row', !document.querySelector('.tv-pcx'));
+      } catch(e){ ok('round 225 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
+      finally { window.sktD = keepD; T._lastPcHit = null; state.party = JSON.parse(keepP); state.combatants = JSON.parse(keepC); state.activeCombatantId = keepA; save(); }
+    }
     // -- Class features: represented, not just text ------------------------
     {
       try {

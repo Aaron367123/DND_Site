@@ -1220,6 +1220,8 @@ registerPanel('turnview', {
           dmgText: a.damage || '',
           // A magic weapon or a spell: past "nonmagical" resistance.
           magical: !!(a.magic || a.spell),
+          // (its properties, where the sheet has them: Sneak Attack wants finesse or range)
+          props: Array.isArray(a.props) ? a.props.slice() : null,
         };
         row.ranged = this._pcRanged(row, a);
         // Crossbow Expert: no disadvantage for being close (2014: any ranged
@@ -1514,7 +1516,7 @@ registerPanel('turnview', {
       ['.tv-init-tools', () => this._renderInitTools()],
       ['.tv-headwrap',   () => this._renderActorHead(c)],
       ['.tv-actbody',    () => this._renderActions(c)],
-      ['.tv-legendary',  () => this._renderLegendary() + this._renderLair() + this._renderOnHits()],
+      ['.tv-legendary',  () => this._renderLegendary() + this._renderLair() + this._renderOnHits() + this._renderPcExtras()],
       // Beside a result, the way to take it back: the app's one history, so
       // it is the same step Ctrl+Z would undo.
       ['.tv-result',     () => !this._result ? '' : this._result
@@ -2355,7 +2357,7 @@ registerPanel('turnview', {
         // (a Life Drain's lowered maximum, and a condition's timer)
         hpMax:c.hpMax, hpMaxNormal:c.hpMaxNormal, hpMaxNote:c.hpMaxNote,
         condTimers: c.condTimers ? JSON.parse(JSON.stringify(c.condTimers)) : undefined,
-        legendaryUsed:c.legendaryUsed, extraDmgTurn:c.extraDmgTurn,
+        legendaryUsed:c.legendaryUsed, extraDmgTurn:c.extraDmgTurn, onceTurn:c.onceTurn ? {...c.onceTurn} : undefined,
         deathSaves: c.deathSaves ? {...c.deathSaves} : c.deathSaves,
         rechargeSpent: (c.rechargeSpent || []).slice(),
         usesSpent: c.usesSpent ? {...c.usesSpent} : undefined, usesRound: c.usesRound ? {...c.usesRound} : undefined, slotsUsed: c.slotsUsed ? {...c.slotsUsed} : undefined,
@@ -2550,6 +2552,9 @@ registerPanel('turnview', {
     const rollTxt = rollRaw ? ` <span style="opacity:.6">[${esc(rollRaw)}]</span>` : '';
     this._log.unshift(`<strong>${esc(o.attacker)}</strong> hit <strong>${esc(t.name)}</strong> for <strong>${dmgText}</strong>${o.crit ? ' (crit)' : ''}${rollTxt}${usedName ? ' — ' + esc(usedName) : ''}${notes ? ' <span style="opacity:.85">· ' + esc(notes) + '</span>' : ''}${appliedTxt}${soakTxt} <span style="opacity:.7">· ${before} → ${after}</span>`);
     if (o.onHit && !o.save) this._queueOnHit(o);
+    // A character's hit: the damage their features add, one click away.
+    if (o.pcAtk) this._lastPcHit = { turn: this._turnKey(), atkId: o.attackerId, tgtId: t.id, crit: !!o.crit, mode: o.mode || 0,
+      ranged: !!o.ranged, spell: !!o.spellAtk, props: o.props || null, type: o.type || '', magical: !!o.magical, label: o.label, used: [] };
     if (o.queued && this._queue){ this._queue.hits++; this._advanceQueue(); return; }
     this._render();
   },
@@ -2808,6 +2813,7 @@ registerPanel('turnview', {
     this._resolve({ attackerId: c.id, attacker: c.name, label: o.label || a.name, target: t,
                     total, crit, hit, dmg, parts, queued: !!o.queued, nat, bonus, hitNote, onHit: a.pc ? null : (a.onHit || null),
                     type: parts.length ? parts[0].type : '', detail,
+                    pcAtk: !!a.pc, mode, ranged: !!a.ranged, spellAtk: !!a.spell, props: a.props || null,
                     magical: a.pc || a.magical ? !!a.magical : panelDefs.attacks && this._entryOf(c) && this._entryOf(c)._raw
                              ? panelDefs.attacks._parsed(this._entryOf(c)._raw).magical : false });
   },
@@ -3159,6 +3165,70 @@ registerPanel('turnview', {
       + (why ? ` <span class="dim">(${esc(why)})</span>` : '') + ` <span class="dim">· ${esc(x.name)}</span>`;
     this._setResult(txt, true);
     this._log.unshift(txt);
+    save(); panelDefs.combat?._render?.(); panelDefs.party?._render?.(); this._render();
+  },
+  // ─── What a character's hit adds ─────────────────────────────────────────
+  // Sneak Attack, Hunter's Mark, Hex, Divine Smite, a Gloom Stalker's
+  // Dreadful Strike: on the sheet they were buttons whose damage went
+  // nowhere. Here, after the character's hit, each is a click that rolls it
+  // (doubled on a critical) and applies it to the creature they hit.
+  _pcExtraOptions(h){
+    const c = this._order().find(x => x.id === h.atkId), t = this._order().find(x => x.id === h.tgtId);
+    const p = c ? this._partyOf(c) : null; if (!p || !t) return [];
+    const sh = p.sheet || {}, out = [], ed = this._edOf(c), weapon = !h.spell;
+    const sa = (p.resources || []).find(r => r.name === 'Sneak Attack' && r.die);
+    // "a finesse or a ranged weapon" (a sheet with no properties recorded: the DM's call)
+    const finesse = !h.props || h.props.includes('F') || h.ranged;
+    if (sa && weapon && finesse && ((c.onceTurn || {})['Sneak Attack'] !== this._turnKey())){
+      const ally = this._allyBeside(c, t), ok = h.mode > 0 || (!!ally && h.mode >= 0);
+      out.push({ key: 'sa', label: 'Sneak Attack', dice: String(sa.die).split(' ')[0], type: h.type, once: true, ok,
+        why: h.mode > 0 ? 'with advantage' : ally && h.mode >= 0 ? ally.name + ' is beside the target' : 'needs advantage, or an ally beside the target (without disadvantage)' });
+    }
+    const conc = String(p.concentration || '');
+    if (weapon && /Hunter.s Mark/i.test(conc)) out.push({ key: 'hm', label: 'Hunter’s Mark', dice: '1d6', type: ed === '2014' ? h.type : 'force', ok: true, why: 'on the marked creature' });
+    if (/^Hex\b/i.test(conc)) out.push({ key: 'hex', label: 'Hex', dice: '1d6', type: 'necrotic', ok: true, why: 'on the cursed creature' });
+    const smite = (sh.activations || []).some(a => /Divine Smite|Paladin.s Smite/.test(a.name)) || (sh.spells || []).includes('Divine Smite');
+    if (smite && weapon && !h.ranged){
+      const slots = sh.spellSlots || {};
+      const lv = Object.keys(slots).map(Number).filter(l => l >= 1 && (slots[l].total - (slots[l].expended || 0)) > 0).sort((a, b) => a - b)[0];
+      if (lv){
+        const ty = String((((this._entryOf(t) || {})._raw || {}).type && ((this._entryOf(t)._raw.type.type) || this._entryOf(t)._raw.type)) || '').toLowerCase();
+        const n = Math.min(5, 1 + lv) + (/fiend|undead/.test(ty) ? 1 : 0);
+        out.push({ key: 'smite', label: 'Divine Smite', dice: n + 'd8', type: 'radiant', slot: lv, ok: true,
+          why: 'a ' + ['', '1st', '2nd', '3rd', '4th', '5th'][Math.min(lv, 5)] + '-level slot' + (/fiend|undead/.test(ty) ? ', +1d8 against ' + (ty.includes('fiend') ? 'a fiend' : 'the undead') : '') });
+      }
+    }
+    (sh.extraDamage || []).forEach((x, i) => { if (x && x.dice) out.push({ key: 'x' + i, label: x.label, dice: x.dice, type: '', ok: true, why: x.note || '' }); });
+    return out.filter(o => !h.used.includes(o.key));
+  },
+  _renderPcExtras(){
+    const h = this._lastPcHit;
+    if (!h || h.turn !== this._turnKey()) return '';
+    const opts = this._pcExtraOptions(h); if (!opts.length) return '';
+    const c = this._order().find(x => x.id === h.atkId), t = this._order().find(x => x.id === h.tgtId);
+    return `<div class="tv-onhit tv-pcx"><span class="tv-onhit-l"><b>${esc(c.name)}</b> hit <b>${esc(t.name)}</b>${h.crit ? ' <span class="crit">(critical — the dice double)</span>' : ''} — add:</span>`
+      + opts.map(o => `<button class="btn ${o.ok ? '' : 'tv-cant'}" data-tv="pcx" data-k="${esc(o.key)}" title="${esc(o.label + ': ' + o.dice + (o.type ? ' ' + o.type : '') + (o.why ? ' — ' + o.why : ''))}">${esc(o.label)} ${esc(o.dice)}</button>`).join('')
+      + `<button class="tv-manual-x" data-tv="pcxx" title="Nothing more" aria-label="Dismiss">✕</button></div>`;
+  },
+  _usePcExtra(key){
+    const h = this._lastPcHit; if (!h || h.turn !== this._turnKey()) return;
+    const o = this._pcExtraOptions(h).find(x => x.key === key); if (!o) return;
+    const c = this._order().find(x => x.id === h.atkId), t = this._order().find(x => x.id === h.tgtId), p = this._partyOf(c);
+    if (!c || !t || typeof sktDamageRoll !== 'function') return;
+    this._snapshot(`${c.name} · ${o.label} → ${t.name}`);
+    const r = sktDamageRoll(o.dice + (o.type && !/[a-z]{3,}/i.test(o.dice) ? ' ' + o.type : ''), h.crit);
+    const type = r.type || o.type || h.type || '';
+    const before = t.hp;
+    this._applyDamage(t, [{ amt: r.total, type }], h.magical || key === 'smite' || key === 'hm' || key === 'hex', h.crit);
+    const after = (this._order().find(x => x.id === t.id) || t).hp;
+    h.used.push(key);
+    if (o.once) c.onceTurn = Object.assign({}, c.onceTurn, { [o.label]: this._turnKey() });
+    if (o.slot && p && p.sheet && p.sheet.spellSlots && p.sheet.spellSlots[o.slot]) p.sheet.spellSlots[o.slot].expended = (p.sheet.spellSlots[o.slot].expended || 0) + 1;
+    // (2024: Divine Smite is a spell cast as a bonus action)
+    if (key === 'smite' && this._edOf(c) !== '2014') this._spend(c, 'bonusUsed');
+    const txt = `<strong>${esc(c.name)}</strong> — ${esc(o.label)}: <strong>${r.total}${type ? ' ' + esc(type) : ''}</strong> to <strong>${esc(t.name)}</strong>`
+      + ` <span class="dim">[${esc(r.detail)}]${h.crit ? ' (crit)' : ''} · ${before} → ${after}${o.slot ? ' · a ' + ['', '1st', '2nd', '3rd', '4th', '5th', '6th', '7th', '8th', '9th'][o.slot] + '-level slot spent' : ''}</span>`;
+    this._setResult(txt, true); this._log.unshift(txt);
     save(); panelDefs.combat?._render?.(); panelDefs.party?._render?.(); this._render();
   },
   // The edition a creature plays by: a character's build, otherwise the
@@ -3714,6 +3784,8 @@ registerPanel('turnview', {
       }
       else if (act === 'stdact'){ this._takeStandardAction(el.dataset.a); }
       else if (act === 'ohroll' || act === 'ohfail' || act === 'ohx'){ this._onHitAct(act.slice(2), +el.dataset.i); }
+      else if (act === 'pcx'){ this._usePcExtra(el.dataset.k); }
+      else if (act === 'pcxx'){ this._lastPcHit = null; this._render(); }
       else if (act === 'unhide'){ const c = this._active(); if (c && c.hidden){ c.hidden = null; this._log.unshift(`<strong>${esc(c.name)}</strong> is no longer hidden`); save(); this._render(); } }
       else if (act === 'bonusact'){ this._useBonusAction(+el.dataset.ai); }
       else if (act === 'undo'){ if (typeof sktUndo === 'function') sktUndo(); else this._undoLast(); }
