@@ -15990,6 +15990,29 @@ for (const cls of Object.keys(rule)) for (let L = 1; L <= 20; L++) for (const sc
       } catch(e){ ok('round 228 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
       finally { window.sktD = keepD; T._lastPcHit = null; T._onHits = []; state.party = JSON.parse(keepP); state.combatants = JSON.parse(keepC); state.activeCombatantId = keepA; save(); }
     }
+    // -- Round 229: no Sneak Attack on an Unarmed Strike, even with no properties recorded --
+    if (!PLAYER){
+      const keepC = JSON.stringify(state.combatants), keepA = state.activeCombatantId, keepP = JSON.stringify(state.party);
+      const T = panelDefs.turnview, C = panelDefs.combat, keepD = window.sktD;
+      try {
+        for (let k = 0; k < 100 && !(typeof _5eLoaded !== 'undefined' && _5eLoaded); k++) await sleep(100);
+        const find = (n, src) => _5eData.find(r => r.cat === 'monster' && r.name === n && r._source === src);
+        state.party.push({ id: 'r229r', name: 'Zoey', hp: 40, hpMax: 40, ac: 15, rules: '2024', resources: [{ name: 'Sneak Attack', die: '3d6', current: 1, max: 1 }],
+          sheet: { attacks: [{ name: 'Unarmed Strike', atkBonus: '+5', damage: '1 bludgeoning' }, { name: 'Psychic Blades', atkBonus: '+7', damage: '1d6+4 psychic', props: ['F', 'T'] }, { name: 'Dagger', atkBonus: '+7', damage: '1d4+4 piercing' }] } });
+        state.combatants = [{ id: 'r229r', name: 'Zoey', isPC: true, hp: 40, hpMax: 40, ac: 15, initiative: 20, conditions: [] }];
+        C.addMonster(find('Ogre', 'MM')); await sleep(20);
+        const get = id => state.combatants.find(c => c.id === id), ogreId = state.combatants[1].id;
+        get(ogreId).hp = 300; get(ogreId).hpMax = 300; get(ogreId).ac = 5;
+        state.activeCombatantId = 'r229r'; save();
+        const has = name => { get('r229r').onceTurn = undefined; window.sktD = n => (n === 20 ? 15 : 3);
+          T._rollAttack(T._attacksFor(get('r229r')).findIndex(a => a.name === name), { attacker: get('r229r'), target: get(ogreId), mode: 1 });
+          return T._lastPcHit && T._pcExtraOptions(T._lastPcHit).some(o => o.key === 'sa'); };
+        ok('unarmed: an Unarmed Strike with advantage offers no Sneak Attack', has('Unarmed Strike') === false);
+        ok('unarmed: …Psychic Blades (finesse) do', has('Psychic Blades') === true);
+        ok('unarmed: …and a weapon with no properties recorded is still the DM’s call — offered', has('Dagger') === true);
+      } catch(e){ ok('round 229 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
+      finally { window.sktD = keepD; T._lastPcHit = null; state.party = JSON.parse(keepP); state.combatants = JSON.parse(keepC); state.activeCombatantId = keepA; save(); }
+    }
     // -- Class features: represented, not just text ------------------------
     {
       try {

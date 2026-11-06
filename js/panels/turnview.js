@@ -3177,8 +3177,9 @@ registerPanel('turnview', {
     const p = c ? this._partyOf(c) : null; if (!p || !t) return [];
     const sh = p.sheet || {}, out = [], ed = this._edOf(c), weapon = !h.spell;
     const sa = (p.resources || []).find(r => r.name === 'Sneak Attack' && r.die);
-    // "a finesse or a ranged weapon" (a sheet with no properties recorded: the DM's call)
-    const finesse = !h.props || h.props.includes('F') || h.ranged;
+    // "a finesse or a ranged weapon" (a sheet with no properties recorded: the
+    // DM's call) — never an Unarmed Strike, which is no weapon at all.
+    const finesse = (!h.props || h.props.includes('F') || h.ranged) && !/unarmed strike/i.test(h.label || '');
     if (sa && weapon && finesse && ((c.onceTurn || {})['Sneak Attack'] !== this._turnKey())){
       const ally = this._allyBeside(c, t), ok = h.mode > 0 || (!!ally && h.mode >= 0);
       const full = parseInt(sa.die, 10) || 0, cun = this._cunningFor(p, t, full), picked = (h.cun || []).map(n => cun.find(x => x.name === n)).filter(Boolean);
