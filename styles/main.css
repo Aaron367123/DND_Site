@@ -4235,6 +4235,12 @@ select.tv-in.wide { width:126px; }
 .tv-onhit { display:flex; align-items:center; gap:6px; flex-wrap:wrap; padding:6px 9px; margin-top:6px;
   background:var(--panel-2); border:1px solid var(--border); border-radius:var(--r-md); font-size:var(--fs-sm); }
 .tv-onhit-l { flex:1; min-width:180px; }
+.tv-pcx .btn.tv-cant { opacity:.55; }
+/* Cunning Strike: the effects to trade Sneak Attack dice for, on a line of their own. */
+.tv-cun { flex-basis:100%; display:flex; flex-wrap:wrap; align-items:center; gap:4px; }
+.tv-cun-l { font-size:var(--fs-xs); color:var(--text-muted); margin-right:2px; }
+.tv-cun-x.on { border-color:var(--accent); background:color-mix(in srgb, var(--accent) 22%, var(--panel)); font-weight:700; }
+.tv-cun-x[disabled] { opacity:.4; cursor:not-allowed; }
 /* What changes an attack on this target: its conditions, Dodging, Hidden. */
 .tv-tgt-tags { display:block; font-size:var(--fs-xs); color:var(--text-muted); margin-top:2px;
   white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }

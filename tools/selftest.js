@@ -15927,6 +15927,69 @@ for (const cls of Object.keys(rule)) for (let L = 1; L <= 20; L++) for (const sc
       } catch(e){ ok('round 227 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
       finally { window.sktD = keepD; try { csClose(); } catch(e){} state.party = JSON.parse(party0); save(); }
     }
+    // -- Round 228: Cunning Strike in the Turn View — trade Sneak Attack dice for Trip, Poison, Withdraw; the save and the condition follow --
+    if (!PLAYER){
+      const keepC = JSON.stringify(state.combatants), keepA = state.activeCombatantId, keepP = JSON.stringify(state.party);
+      const T = panelDefs.turnview, C = panelDefs.combat, keepD = window.sktD;
+      try {
+        for (let k = 0; k < 100 && !(typeof _5eLoaded !== 'undefined' && _5eLoaded); k++) await sleep(100);
+        const find = (n, src) => _5eData.find(r => r.cat === 'monster' && r.name === n && r._source === src);
+        state.party.push({ id: 'r228r', name: 'Zoey', hp: 40, hpMax: 40, ac: 15, rules: '2024', abilities: { dex: 18 }, resources: [{ name: 'Sneak Attack', die: '3d6', current: 1, max: 1 }],
+          sheet: { profBonus: 3, featureList: [{ name: 'Cunning Strike' }], attacks: [{ name: 'Shortsword', atkBonus: '+7', damage: '1d6+4 piercing' }] } });
+        state.combatants = [{ id: 'r228r', name: 'Zoey', isPC: true, hp: 40, hpMax: 40, ac: 15, initiative: 20, conditions: [] }];
+        C.addMonster(find('Ogre', 'MM')); C.addMonster(find('Frost Giant', 'MM')); await sleep(20);
+        const get = id => state.combatants.find(c => c.id === id);
+        const ogreId = state.combatants[1].id, giantId = state.combatants[2].id;
+        state.combatants.forEach(c => { if (!c.isPC){ c.hp = 300; c.hpMax = 300; c.ac = 10; c.conditions = []; } });
+        state.activeCombatantId = 'r228r'; save();
+        if (!T._body){ openPanel('turnview'); await sleep(200); }
+        T._onHits = [];
+        const zoey = () => get('r228r'), hit = tgt => { zoey().onceTurn = undefined; window.sktD = n => (n === 20 ? 15 : 3);
+          T._rollAttack(T._attacksFor(zoey()).findIndex(a => a.name === 'Shortsword'), { attacker: zoey(), target: get(tgt), mode: 1 }); };
+        const sa = () => T._pcExtraOptions(T._lastPcHit).find(o => o.key === 'sa');
+        hit(ogreId); await sleep(20); T._painted = {}; T._render(); await sleep(30);
+        const chips = [...document.querySelectorAll('.tv-pcx .tv-cun-x')].map(b => b.dataset.k);
+        ok('cunning strike: after Zoey’s hit, beside Sneak Attack — Poison, Trip, Withdraw', chips.join(',') === 'Poison,Trip,Withdraw', chips.join(','));
+        document.querySelector('.tv-pcx [data-tv="pcxcun"][data-k="Trip"]').click(); await sleep(20);
+        const btn = document.querySelector('.tv-pcx [data-tv="pcx"][data-k="sa"]');
+        ok('cunning strike: picking Trip takes a die — “Sneak Attack 2d6 + Trip”', !!btn && /Sneak Attack 2d6 \+ Trip/.test(btn.textContent) && document.querySelector('.tv-pcx [data-k="Trip"]').classList.contains('on'), btn && btn.textContent);
+        const hp0 = get(ogreId).hp; T._usePcExtra('sa'); await sleep(20);
+        ok('cunning strike: 2d6 lands — 6, not 9', hp0 - get(ogreId).hp === 6, hp0 + ' → ' + get(ogreId).hp);
+        const oh = (T._onHits || []).find(x => x.tgtId === ogreId);
+        ok('cunning strike: the ogre’s save waits on the hit’s queue — DC 15 (8 + Dex 4 + 3) Dex or prone', !!oh && oh.dc === 15 && oh.ability === 'Dex' && oh.cond === 'Prone' && /Cunning Strike \(Trip\)/.test(oh.name), JSON.stringify(oh));
+        T._painted = {}; T._render(); await sleep(20);
+        ok('cunning strike: …drawn with Roll save and Failed', /Cunning Strike \(Trip\)/.test(document.querySelector('.tv-legendary').textContent) && !!document.querySelector('[data-tv="ohroll"]'));
+        window.sktD = n => 2;
+        T._onHitAct('roll', T._onHits.indexOf(oh)); await sleep(20);
+        ok('cunning strike: it rolls a 2 and fails — the ogre is prone', (get(ogreId).conditions || []).includes('Prone'), JSON.stringify(get(ogreId).conditions));
+        // A frost giant is Huge: no tripping it.
+        hit(giantId); await sleep(20);
+        const trip = sa().cun.find(x => x.name === 'Trip');
+        ok('cunning strike: a Huge frost giant can’t be tripped — offered, but not allowed, and why', !!trip && trip.ok === false && /Huge/.test(trip.why), JSON.stringify(trip));
+        T._toggleCunning('Trip');
+        ok('cunning strike: …a click on it picks nothing', !(T._lastPcHit.cun || []).length);
+        // Poison: failed at the table — poisoned for a minute, a Con save at the end of each turn.
+        T._toggleCunning('Poison'); T._usePcExtra('sa'); await sleep(20);
+        const poi = T._onHits.find(x => x.tgtId === giantId && x.cond === 'Poisoned');
+        T._onHitAct('fail', T._onHits.indexOf(poi)); await sleep(20);
+        const tm = (get(giantId).condTimers || {}).Poisoned;
+        ok('cunning strike: Poison failed — poisoned 10 rounds, saving again (Con 15) each turn', (get(giantId).conditions || []).includes('Poisoned') && !!tm && tm.kind === 'rounds' && tm.left === 10 && tm.save && tm.save.ab === 'con' && tm.save.dc === 15, JSON.stringify(tm));
+        // One effect at a time; a second pick replaces the first.
+        hit(ogreId); await sleep(20);
+        T._toggleCunning('Trip'); T._toggleCunning('Withdraw');
+        ok('cunning strike: one effect a hit — Withdraw replaces Trip', JSON.stringify(T._lastPcHit.cun) === '["Withdraw"]', JSON.stringify(T._lastPcHit.cun));
+        T._usePcExtra('sa'); await sleep(20);
+        ok('cunning strike: Withdraw is said in the result — half her Speed, no opportunity attacks', /Withdraw:.*half your Speed/.test(T._result) && !T._onHits.some(x => /Withdraw/.test(x.name)), T._result);
+        // Improved Cunning Strike: two at once.
+        state.party.find(p => p.id === 'r228r').sheet.featureList.push({ name: 'Improved Cunning Strike' });
+        hit(ogreId); await sleep(20);
+        T._toggleCunning('Trip'); T._toggleCunning('Withdraw');
+        ok('cunning strike: with Improved Cunning Strike, two — Trip and Withdraw, 1d6 left', JSON.stringify(T._lastPcHit.cun) === '["Trip","Withdraw"]' && sa().dice === '1d6', JSON.stringify([T._lastPcHit.cun, sa().dice]));
+        T._toggleCunning('Trip');
+        ok('cunning strike: …a second click drops one', JSON.stringify(T._lastPcHit.cun) === '["Withdraw"]');
+      } catch(e){ ok('round 228 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
+      finally { window.sktD = keepD; T._lastPcHit = null; T._onHits = []; state.party = JSON.parse(keepP); state.combatants = JSON.parse(keepC); state.activeCombatantId = keepA; save(); }
+    }
     // -- Class features: represented, not just text ------------------------
     {
       try {

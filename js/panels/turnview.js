@@ -3181,7 +3181,10 @@ registerPanel('turnview', {
     const finesse = !h.props || h.props.includes('F') || h.ranged;
     if (sa && weapon && finesse && ((c.onceTurn || {})['Sneak Attack'] !== this._turnKey())){
       const ally = this._allyBeside(c, t), ok = h.mode > 0 || (!!ally && h.mode >= 0);
-      out.push({ key: 'sa', label: 'Sneak Attack', dice: String(sa.die).split(' ')[0], type: h.type, once: true, ok,
+      const full = parseInt(sa.die, 10) || 0, cun = this._cunningFor(p, t, full), picked = (h.cun || []).map(n => cun.find(x => x.name === n)).filter(Boolean);
+      const left = Math.max(0, full - picked.reduce((n, x) => n + x.cost, 0));
+      out.push({ key: 'sa', label: 'Sneak Attack', dice: left ? left + 'd6' : '', type: h.type, once: true, ok, cun, picked, full,
+        two: ((sh.featureList || []).some(f => f.name === 'Improved Cunning Strike' && !f.info)),
         why: h.mode > 0 ? 'with advantage' : ally && h.mode >= 0 ? ally.name + ' is beside the target' : 'needs advantage, or an ally beside the target (without disadvantage)' });
     }
     const conc = String(p.concentration || '');
@@ -3207,8 +3210,57 @@ registerPanel('turnview', {
     const opts = this._pcExtraOptions(h); if (!opts.length) return '';
     const c = this._order().find(x => x.id === h.atkId), t = this._order().find(x => x.id === h.tgtId);
     return `<div class="tv-onhit tv-pcx"><span class="tv-onhit-l"><b>${esc(c.name)}</b> hit <b>${esc(t.name)}</b>${h.crit ? ' <span class="crit">(critical — the dice double)</span>' : ''} — add:</span>`
-      + opts.map(o => `<button class="btn ${o.ok ? '' : 'tv-cant'}" data-tv="pcx" data-k="${esc(o.key)}" title="${esc(o.label + ': ' + o.dice + (o.type ? ' ' + o.type : '') + (o.why ? ' — ' + o.why : ''))}">${esc(o.label)} ${esc(o.dice)}</button>`).join('')
-      + `<button class="tv-manual-x" data-tv="pcxx" title="Nothing more" aria-label="Dismiss">✕</button></div>`;
+      + opts.map(o => `<button class="btn ${o.ok ? '' : 'tv-cant'}" data-tv="pcx" data-k="${esc(o.key)}" title="${esc(o.label + ': ' + (o.dice || 'no dice') + (o.type && o.dice ? ' ' + o.type : '') + (o.why ? ' — ' + o.why : ''))}">${esc(o.label)} ${esc(o.dice)}${(o.picked || []).map(x => ' + ' + esc(x.name)).join('')}</button>`).join('')
+      + `<button class="tv-manual-x" data-tv="pcxx" title="Nothing more" aria-label="Dismiss">✕</button>`
+      + opts.filter(o => (o.cun || []).length).map(o => this._cunningChips(o)).join('') + '</div>';
+  },
+  // ─── Cunning Strike (2024 rogue) ─────────────────────────────────────────
+  // The effects the sheet lists (csCunningStrikes), each with what it does to
+  // the target here: the save, the condition, how long. Trip needs a Large or
+  // smaller target — a frost giant can't be tripped.
+  _cunningFor(p, t, full){
+    if (typeof csCunningStrikes !== 'function') return [];
+    const list = csCunningStrikes(p); if (!list.length) return [];
+    const dc = typeof csCunningDc === 'function' ? csCunningDc(p) : 10;
+    const size = String((((this._entryOf(t) || {})._raw) || {}).size || t.size || 'Medium');
+    const min10 = { kind: 'rounds', left: 10 };
+    const fx = {
+      'Poison':    { cond: 'Poisoned',    ability: 'Con', dur: min10, repeat: true },
+      'Trip':      { cond: 'Prone',       ability: 'Dex' },
+      'Terrify':   { cond: 'Frightened',  ability: 'Wis', dur: min10 },
+      'Daze':      { cond: 'Dazed',       ability: 'Con', dur: { kind: 'end-next' } },
+      'Knock Out': { cond: 'Unconscious', ability: 'Con', dur: min10, repeat: true },
+      'Obscure':   { cond: 'Blinded',     ability: 'Dex', dur: { kind: 'end-next' } },
+    };
+    return list.map(x => {
+      const big = x.name === 'Trip' && /huge|gargantuan/i.test(size);
+      return Object.assign({}, x, { onHit: fx[x.name] ? Object.assign({ dc }, fx[x.name]) : null,
+        ok: x.cost <= full && !big, why: big ? t.name + ' is ' + size + ' — too big to trip' : x.cost > full ? 'costs ' + x.cost + 'd6' : '' });
+    });
+  },
+  _cunningChips(o){
+    const on = new Set((o.picked || []).map(x => x.name));
+    return '<span class="tv-cun"><span class="tv-cun-l">Cunning Strike' + (o.two ? ' (up to two)' : '') + ':</span>'
+      + o.cun.map(x => `<button class="btn small tv-cun-x${on.has(x.name) ? ' on' : ''}${x.ok ? '' : ' tv-cant'}" data-tv="pcxcun" data-k="${esc(x.name)}" aria-pressed="${on.has(x.name)}"`
+        + ` title="${esc(x.name + ' (−' + x.cost + 'd6): ' + x.text + (x.why ? ' — ' + x.why : ''))}"${x.ok || on.has(x.name) ? '' : ' disabled'}>${esc(x.name)} −${x.cost}d6</button>`).join('')
+      + '</span>';
+  },
+  // Pick or drop an effect: one (two with Improved Cunning Strike), and never
+  // more dice than the Sneak Attack has.
+  _toggleCunning(name){
+    const h = this._lastPcHit; if (!h) return;
+    const o = this._pcExtraOptions(h).find(x => x.key === 'sa'); if (!o) return;
+    const cur = (h.cun || []).slice(), i = cur.indexOf(name);
+    if (i >= 0) cur.splice(i, 1);
+    else {
+      const x = o.cun.find(y => y.name === name); if (!x || !x.ok) return;
+      if (cur.length >= (o.two ? 2 : 1)) cur.shift();
+      cur.push(name);
+      const full = o.full;
+      while (cur.reduce((n, k) => n + ((o.cun.find(y => y.name === k) || {}).cost || 0), 0) > full && cur.length > 1) cur.shift();
+      if (cur.reduce((n, k) => n + ((o.cun.find(y => y.name === k) || {}).cost || 0), 0) > full) return;
+    }
+    h.cun = cur; this._render();
   },
   _usePcExtra(key){
     const h = this._lastPcHit; if (!h || h.turn !== this._turnKey()) return;
@@ -3216,18 +3268,27 @@ registerPanel('turnview', {
     const c = this._order().find(x => x.id === h.atkId), t = this._order().find(x => x.id === h.tgtId), p = this._partyOf(c);
     if (!c || !t || typeof sktDamageRoll !== 'function') return;
     this._snapshot(`${c.name} · ${o.label} → ${t.name}`);
-    const r = sktDamageRoll(o.dice + (o.type && !/[a-z]{3,}/i.test(o.dice) ? ' ' + o.type : ''), h.crit);
+    const r = o.dice ? sktDamageRoll(o.dice + (o.type && !/[a-z]{3,}/i.test(o.dice) ? ' ' + o.type : ''), h.crit) : { total: 0, detail: 'every die spent on Cunning Strike', type: '' };
     const type = r.type || o.type || h.type || '';
     const before = t.hp;
-    this._applyDamage(t, [{ amt: r.total, type }], h.magical || key === 'smite' || key === 'hm' || key === 'hex', h.crit);
+    if (r.total) this._applyDamage(t, [{ amt: r.total, type }], h.magical || key === 'smite' || key === 'hm' || key === 'hex', h.crit);
     const after = (this._order().find(x => x.id === t.id) || t).hp;
     h.used.push(key);
     if (o.once) c.onceTurn = Object.assign({}, c.onceTurn, { [o.label]: this._turnKey() });
     if (o.slot && p && p.sheet && p.sheet.spellSlots && p.sheet.spellSlots[o.slot]) p.sheet.spellSlots[o.slot].expended = (p.sheet.spellSlots[o.slot].expended || 0) + 1;
     // (2024: Divine Smite is a spell cast as a bonus action)
     if (key === 'smite' && this._edOf(c) !== '2014') this._spend(c, 'bonusUsed');
-    const txt = `<strong>${esc(c.name)}</strong> — ${esc(o.label)}: <strong>${r.total}${type ? ' ' + esc(type) : ''}</strong> to <strong>${esc(t.name)}</strong>`
-      + ` <span class="dim">[${esc(r.detail)}]${h.crit ? ' (crit)' : ''} · ${before} → ${after}${o.slot ? ' · a ' + ['', '1st', '2nd', '3rd', '4th', '5th', '6th', '7th', '8th', '9th'][o.slot] + '-level slot spent' : ''}</span>`;
+    // Cunning Strike: a save-or-condition goes on the hit's queue (roll it
+    // here, or take the table's roll); Withdraw and the like are said.
+    const said = [];
+    (o.picked || []).forEach(x => {
+      if (x.onHit) this._queueOnHit({ onHit: x.onHit, target: t, attacker: c.name, attackerId: c.id, label: 'Cunning Strike (' + x.name + ')' });
+      else said.push(x.name + ': ' + x.text);
+    });
+    h.cun = [];
+    const txt = `<strong>${esc(c.name)}</strong> — ${esc(o.label)}${(o.picked || []).map(x => ' + ' + esc(x.name)).join('')}: <strong>${r.total}${type ? ' ' + esc(type) : ''}</strong> to <strong>${esc(t.name)}</strong>`
+      + ` <span class="dim">[${esc(r.detail)}]${h.crit ? ' (crit)' : ''} · ${before} → ${after}${o.slot ? ' · a ' + ['', '1st', '2nd', '3rd', '4th', '5th', '6th', '7th', '8th', '9th'][o.slot] + '-level slot spent' : ''}</span>`
+      + said.map(x => ` <span class="tv-dmg-note">${esc(x)}</span>`).join('');
     this._setResult(txt, true); this._log.unshift(txt);
     save(); panelDefs.combat?._render?.(); panelDefs.party?._render?.(); this._render();
   },
@@ -3785,6 +3846,7 @@ registerPanel('turnview', {
       else if (act === 'stdact'){ this._takeStandardAction(el.dataset.a); }
       else if (act === 'ohroll' || act === 'ohfail' || act === 'ohx'){ this._onHitAct(act.slice(2), +el.dataset.i); }
       else if (act === 'pcx'){ this._usePcExtra(el.dataset.k); }
+      else if (act === 'pcxcun'){ this._toggleCunning(el.dataset.k); }
       else if (act === 'pcxx'){ this._lastPcHit = null; this._render(); }
       else if (act === 'unhide'){ const c = this._active(); if (c && c.hidden){ c.hidden = null; this._log.unshift(`<strong>${esc(c.name)}</strong> is no longer hidden`); save(); this._render(); } }
       else if (act === 'bonusact'){ this._useBonusAction(+el.dataset.ai); }
