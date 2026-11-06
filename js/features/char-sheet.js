@@ -753,7 +753,21 @@ function sktDamageRoll(expr, crit, opts){
     } else if (k){ const v = (+k) * (sg2 === '-' ? -1 : 1); total += v; parts.push(String(v)); }
     return m;
   });
+  // Flat bonuses the attack itself doesn't carry, each named: Rage.
+  (opts.add || []).forEach(x => { if (x && +x.n){ total += +x.n; parts.push(x.n + ' ' + x.label); } });
   return { total: Math.max(0, total), detail: parts.join(' + '), type, crit: !!crit };
+}
+// A raging barbarian's Rage Damage on this attack: +2, +3 from 9th level,
+// +4 from 16th — on an attack using Strength (2014: a melee weapon attack;
+// 2024: a weapon or an Unarmed Strike). 0 when it doesn't apply.
+function sktRageBonus(pc, a){
+  if (!pc || !pc.rage || !a || a.spell || !a.str) return 0;
+  const ed = (pc.build && pc.build.edition) || pc.rules || '2024';
+  if (ed === '2014' && (a.props || []).includes('A')) return 0;
+  const cl = ((pc.sheet || {}).classLevels || []).find(x => x && x.cls === 'barbarian');
+  const lv = cl ? +cl.level || 0 : (/barbarian/i.test(String(pc.cls || '')) ? +pc.level || 1 : 0);
+  if (!lv) return 0;
+  return lv >= 16 ? 4 : lv >= 9 ? 3 : 2;
 }
 function csRollDamage(label, expr, crit, opts){
   const r = Object.assign({ kind: 'dmg', label }, sktDamageRoll(expr, crit, opts));
@@ -1578,6 +1592,7 @@ function csDamageOpts(pc, a, twoHands){
   return {
     extraDice: melee ? (sh.critExtraDice || 0) : 0,
     gwf: sh.greatWeaponFighting && melee && (props.includes('2H') || twoHands) ? ed : null,
+    add: sktRageBonus(pc, a) ? [{ n: sktRageBonus(pc, a), label: 'rage' }] : [],
   };
 }
 function csAmmoFor(a){

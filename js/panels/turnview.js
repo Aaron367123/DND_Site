@@ -2785,6 +2785,9 @@ registerPanel('turnview', {
       const r = this._roll(crit ? dbl(dice) : dice);
       parts = [{ amt: r.total, type: (m && m[2] ? m[2] : '').trim().replace(/^damage\s*/i, '') }];
       detail = r.detail;
+      // Raging: the Rage Damage, on an attack using Strength.
+      const rb = typeof sktRageBonus === 'function' ? sktRageBonus(this._partyOf(c), a) : 0;
+      if (rb){ parts[0].amt += rb; detail += ' + ' + rb + ' rage'; }
     } else {
       // Damage that comes only with advantage is left off a roll without it.
       parts = (a.parts || []).filter(pt => !pt.ifAdv || mode > 0).map(pt => {

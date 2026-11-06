@@ -16095,6 +16095,52 @@ for (const cls of Object.keys(rule)) for (let L = 1; L <= 20; L++) for (const sc
       } catch(e){ ok('round 230 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
       finally { window.sktD = keepD; T._lastPcHit = null; T._onHits = []; state.party = JSON.parse(keepP); state.combatants = JSON.parse(keepC); state.activeCombatantId = keepA; state.combatRound = keepR; save(); }
     }
+    // -- Round 231: a raging barbarian's Strength attacks add the Rage Damage — on the sheet and in the Turn View --
+    if (!PLAYER){
+      const keepC = JSON.stringify(state.combatants), keepA = state.activeCombatantId, keepP = JSON.stringify(state.party);
+      const T = panelDefs.turnview, C = panelDefs.combat, keepD = window.sktD;
+      try {
+        for (let k = 0; k < 100 && !(typeof _5eLoaded !== 'undefined' && _5eLoaded); k++) await sleep(100);
+        const find = (n, src) => _5eData.find(r => r.cat === 'monster' && r.name === n && r._source === src);
+        const atks = [{ name: 'Greataxe', atkBonus: '+6', damage: '1d12+3 slashing', props: ['H', '2H'], str: true },
+                      { name: 'Shortbow', atkBonus: '+4', damage: '1d6+1 piercing', props: ['A', '2H'], str: false },
+                      { name: 'Javelin', atkBonus: '+6', damage: '1d6+3 piercing', props: ['T'], str: true }];
+        const barb = (lvl, rules) => ({ id: 'r231b', name: 'Ulf', cls: 'barbarian', level: lvl, rules, hp: 60, hpMax: 60, ac: 14, rage: true,
+          sheet: { classLevels: [{ cls: 'barbarian', level: lvl }], attacks: JSON.parse(JSON.stringify(atks)) } });
+        ok('rage damage: +2 at 6th, +3 at 9th, +4 at 16th — only while raging, only with Strength',
+          sktRageBonus(barb(6, '2024'), atks[0]) === 2 && sktRageBonus(barb(9, '2024'), atks[0]) === 3 && sktRageBonus(barb(16, '2024'), atks[0]) === 4
+          && sktRageBonus(Object.assign(barb(6, '2024'), { rage: false }), atks[0]) === 0 && sktRageBonus(barb(6, '2024'), atks[1]) === 0
+          && sktRageBonus(barb(6, '2024'), Object.assign({}, atks[0], { spell: true })) === 0);
+        ok('rage damage: a fighter who is somehow “raging” gets none', sktRageBonus({ rage: true, cls: 'fighter', level: 6, sheet: { classLevels: [{ cls: 'fighter', level: 6 }] } }, atks[0]) === 0);
+        // The sheet's damage button.
+        state.party.push(barb(6, '2024')); save();
+        window.sktD = n => 3;
+        await openCharSheet('r231b'); await sleep(400);
+        document.querySelector('#cs-root [data-cs-dmg="0"]').click(); await sleep(60);
+        ok('rage damage: the sheet’s Greataxe damage — 3 + 3 + 2 rage = 8, and it says so', CS.log[0].total === 8 && /2 rage/.test(CS.log[0].detail), JSON.stringify(CS.log[0]));
+        document.querySelector('#cs-root [data-cs-dmg="1"]').click(); await sleep(60);
+        ok('rage damage: …the shortbow (Dexterity) adds none — 4', CS.log[0].total === 4 && !/rage/.test(CS.log[0].detail), JSON.stringify(CS.log[0]));
+        csClose();
+        // The Turn View's hit.
+        state.combatants = [{ id: 'r231b', name: 'Ulf', isPC: true, hp: 60, hpMax: 60, ac: 14, initiative: 20, conditions: [] }];
+        C.addMonster(find('Ogre', 'MM')); await sleep(20);
+        const og = state.combatants[1]; Object.assign(og, { hp: 300, hpMax: 300, ac: 5 });
+        state.activeCombatantId = 'r231b'; save();
+        const get = id => state.combatants.find(c => c.id === id);
+        const swing = (name, d20) => { window.sktD = n => (n === 20 ? d20 : 3); const hp0 = get(og.id).hp;
+          T._rollAttack(T._attacksFor(get('r231b')).findIndex(a => a.name === name), { attacker: get('r231b'), target: get(og.id) });
+          const h = hp0 - get(og.id).hp; get(og.id).hp = 300; return h; };
+        ok('rage damage: in the Turn View, a raging Greataxe hit — 8', swing('Greataxe', 15) === 8 && /rage/.test(T._log[0] || ''), T._log[0]);
+        ok('rage damage: …a critical doubles the dice, not the rage — 3+3 + 3 + 2 = 11', swing('Greataxe', 20) === 11);
+        ok('rage damage: …a javelin thrown with Strength (2024) adds it — 8', swing('Javelin', 15) === 8);
+        ok('rage damage: …the shortbow doesn’t — 4', swing('Shortbow', 15) === 4);
+        state.party.find(p => p.id === 'r231b').rage = false;
+        ok('rage damage: …and calm, the Greataxe is 6', swing('Greataxe', 15) === 6);
+        // 2014: a melee weapon attack only — no Rage on a bow even with Strength.
+        ok('rage damage (2014): a Strength ranged attack (ammunition) adds none', sktRageBonus(barb(6, '2014'), { name: 'Longbow', str: true, props: ['A'] }) === 0 && sktRageBonus(barb(6, '2014'), atks[0]) === 2);
+      } catch(e){ ok('round 231 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
+      finally { window.sktD = keepD; try { csClose(); } catch(e){} state.party = JSON.parse(keepP); state.combatants = JSON.parse(keepC); state.activeCombatantId = keepA; save(); }
+    }
     // -- Class features: represented, not just text ------------------------
     {
       try {
@@ -18859,6 +18905,27 @@ for (const cls of Object.keys(rule)) for (let L = 1; L <= 20; L++) for (const sc
       finally {
         window.showToast = toast0; try { cbClose(); } catch(e){}
         state.party = JSON.parse(party0); try { localStorage.removeItem('skt-lvl-told-r148'); } catch(e){}
+        if (state.party[0]) paSetPc(state.party[0].id); paTab = tab0; paRender(); await sleep(200);
+      }
+    }
+    // -- Round 232: the phone's attack card adds a raging barbarian's Rage Damage --
+    if (PLAYER){
+      const party0 = JSON.stringify(state.party), tab0 = paTab, keepD = window.sktD;
+      try {
+        state.party.push({ id: 'r232b', name: 'R232 Ulf', cls: 'barbarian', level: 6, rules: '2024', hp: 60, hpMax: 60, ac: 14, rage: true,
+          sheet: { classLevels: [{ cls: 'barbarian', level: 6 }], attacks: [{ name: 'Greataxe', atkBonus: '+6', damage: '1d12+3 slashing', props: ['H', '2H'], str: true }] } });
+        paSetPc('r232b'); paTab = 'you'; paRender(); await sleep(300);
+        window.sktD = n => (n === 20 ? 12 : 3);
+        paRollAttack(0); await sleep(60);
+        const dmg = document.querySelector('#pa-roll .pa-roll-dmg');
+        ok('phone: a raging Greataxe hit’s damage — 3 + 3 + 2 rage = 8', !!dmg && parseInt(dmg.textContent, 10) === 8, dmg ? dmg.textContent : 'no card');
+        state.party.find(p => p.id === 'r232b').rage = false;
+        paRollAttack(0); await sleep(60);
+        const dmg2 = document.querySelector('#pa-roll .pa-roll-dmg');
+        ok('phone: …and calm, 6', !!dmg2 && parseInt(dmg2.textContent, 10) === 6, dmg2 ? dmg2.textContent : 'no card');
+      } catch(e){ ok('round 232 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
+      finally {
+        window.sktD = keepD; state.party = JSON.parse(party0);
         if (state.party[0]) paSetPc(state.party[0].id); paTab = tab0; paRender(); await sleep(200);
       }
     }

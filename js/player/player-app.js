@@ -2114,7 +2114,8 @@ function paRollAttack(i){
   // Damage off the sheet, every term of it ("2d6+1d4+3 slashing").
   let dmg = '', type = '';
   if (a.damage && /\d*d\d+/.test(a.damage) && typeof sktDamageRoll === 'function'){
-    const r = sktDamageRoll(a.damage, nat === 20);
+    // (the sheet's own options: Rage, Great Weapon Fighting, extra crit dice)
+    const r = sktDamageRoll(a.damage, nat === 20, typeof csDamageOpts === 'function' ? csDamageOpts(pc, a, false) : {});
     dmg = String(r.total); type = r.type;
   }
   if (typeof sktKeepRoll === 'function') sktKeepRoll(pc, total + ' to hit' + (dmg ? ', ' + dmg + ' ' + type : '') + (nat === 20 ? ' (crit)' : nat === 1 ? ' (nat 1)' : ''), { label: a.name, total });
