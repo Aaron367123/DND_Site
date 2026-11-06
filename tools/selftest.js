@@ -15174,6 +15174,53 @@ for (const cls of Object.keys(rule)) for (let L = 1; L <= 20; L++) for (const sc
         T._mapCache = null; state.combatants = JSON.parse(keepC); state.activeCombatantId = keepA; save();
       }
     }
+    // -- Round 214: Cunning Strike says what each effect does, and Improved Cunning Strike picks two --
+    if (!PLAYER){
+      const party0 = JSON.stringify(state.party);
+      try {
+        const R = await sktRulesLoad('2024');
+        const mk = (id, lvl) => Object.assign(sktComputeCharacter(Object.assign(sktBlankBuild('2024'), { name: id, cls: 'Rogue', level: lvl, species: 'Human', background: 'Guide',
+          abilities: { method: 'manual', base: { str: 10, dex: 16, con: 14, int: 10, wis: 12, cha: 10 } } }), R), { id });
+        state.party = [mk('r214', 5), mk('r214b', 11), mk('r214c', 14)]; save();
+        const open = async id => { await openCharSheet(id); await sleep(500); document.querySelector('#cs-root [data-cs-tab="actions"]').click(); await sleep(400); };
+        await open('r214');
+        const list = () => [...document.querySelectorAll('#cs-root .cs-cun-list li')].map(li => li.textContent.replace(/\s+/g, ' ').trim());
+        let L = list();
+        ok('cunning strike: each effect says what it does, on the sheet', L.length === 3 && /^Poison \(−1d6\) — DC 14 Constitution save or Poisoned for 1 minute/.test(L[0]) && /^Trip \(−1d6\) — a Large or smaller target: DC 14 Dexterity save or knocked Prone/.test(L[1]) && /^Withdraw \(−1d6\) — right after the attack, move up to half your Speed/.test(L[2]), JSON.stringify(L));
+        ok('cunning strike: the options say it too, on hover', /Constitution save/.test(((document.querySelector('#cs-root [data-cs-cunning] option[value="Poison"]') || {}).title) || ''));
+        ok('cunning strike: one choice before 11th level', !document.querySelector('#cs-root [data-cs-cunning2]'));
+        csClose();
+        await open('r214b');
+        const btn = () => document.querySelector('#cs-root [data-cs-sneak]');
+        ok('improved cunning strike: a second choice at 11th level, and the text says up to two', !!document.querySelector('#cs-root [data-cs-cunning2]') && /up to two on one hit/.test(document.querySelector('#cs-root').textContent), String(!!document.querySelector('#cs-root [data-cs-cunning2]')));
+        document.querySelector('#cs-root [data-cs-cunning]').value = 'Trip';
+        document.querySelector('#cs-root [data-cs-cunning2]').value = 'Poison';
+        btn().click(); await sleep(200);
+        const two = CS.log[0] || {};
+        ok('improved cunning strike: Trip and Poison take 2d6 off 6d6, both named', btn().dataset.csSneak === '6d6' && /^Sneak Attack — Trip \+ Poison/.test(two.label) && /^4d6 /.test(two.detail), JSON.stringify([btn().dataset.csSneak, two.label, two.detail]));
+        document.querySelector('#cs-root [data-cs-cunning]').value = 'Trip';
+        document.querySelector('#cs-root [data-cs-cunning2]').value = 'Trip';
+        btn().click(); await sleep(200);
+        ok('improved cunning strike: the same one twice counts once', /^Sneak Attack — Trip(?! \+)/.test(CS.log[0].label) && /^5d6 /.test(CS.log[0].detail), JSON.stringify([CS.log[0].label, CS.log[0].detail]));
+        csClose();
+        await open('r214c');
+        L = list();
+        ok('devious strikes: Daze, Knock Out and Obscure listed at 14th', L.some(x => /^Knock Out \(−6d6\) — DC \d+ Constitution save or Unconscious/.test(x)) && L.some(x => /^Obscure \(−3d6\)/.test(x)), JSON.stringify(L));
+        const n0 = CS.log.length;
+        document.querySelector('#cs-root [data-cs-cunning]').value = 'Knock Out';
+        document.querySelector('#cs-root [data-cs-cunning2]').value = 'Obscure';
+        const toasts = [], keepT = window.showToast; window.showToast = (m) => { toasts.push(String(m)); };
+        try { btn().click(); await sleep(200); } finally { window.showToast = keepT; }
+        ok('improved cunning strike: two that cost more than the dice roll nothing, and it says why', CS.log.length === n0 && btn().dataset.csSneak === '7d6' && toasts.some(t => /cost 9d6 — more than your 7d6/.test(t)), JSON.stringify([CS.log.length, n0, btn().dataset.csSneak, toasts]));
+        csClose();
+        // Subclass effects, and Envenom Weapons' poison.
+        const fake = { abilities: { dex: 16 }, sheet: { profBonus: 4, featureList: ['Cunning Strike', 'Strike Fear', 'Supreme Sneak', 'Envenom Weapons'].map(name => ({ name })) } };
+        const cs = csCunningStrikes(fake);
+        ok('cunning strike: Strike Fear adds Terrify, Supreme Sneak adds Stealth Attack', cs.some(c => c.name === 'Terrify' && /DC 15 Wisdom save or Frightened/.test(c.text)) && cs.some(c => c.name === 'Stealth Attack'), JSON.stringify(cs.map(c => c.name)));
+        ok('cunning strike: Envenom Weapons adds its 2d6 poison to Poison', /2d6 poison damage, ignoring resistance/.test(cs[0].text), cs[0].text);
+      } catch(e){ ok('round 214 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
+      finally { try { csClose(); } catch(e){} state.party = JSON.parse(party0); save(); }
+    }
     // -- Class features: represented, not just text ------------------------
     {
       try {

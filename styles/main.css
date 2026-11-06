@@ -5400,6 +5400,10 @@ button.cs-ab:hover, button.cs-box:hover, .cs-row:hover { border-color:var(--acce
 .cs-act-h { display:flex; align-items:center; gap:8px; }
 .cs-act-h b { flex:1; }
 .cs-act-d { font-size:var(--fs-sm); color:var(--text-muted); margin-top:3px; }
+.cs-cun-list { list-style:none; margin:4px 0 0; padding:0; font-size:var(--fs-sm); color:var(--text-muted); }
+.cs-cun-list li { margin:2px 0; }
+.cs-cun-list li b { color:var(--text); font-weight:600; }
+.cs-cun-list li.off { opacity:.55; }
 .cs-res { display:flex; flex-wrap:wrap; align-items:center; gap:8px; padding:4px 0; }
 .cs-res b { min-width:140px; }
 .cs-pips { display:inline-flex; flex-wrap:wrap; gap:4px; }

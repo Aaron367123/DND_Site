@@ -890,6 +890,9 @@ function csCunningStrikes(pc){
     { name: 'Trip', cost: 1, text: 'a Large or smaller target: DC ' + dc + ' Dexterity save or knocked Prone.' },
     { name: 'Withdraw', cost: 1, text: 'right after the attack, move up to half your Speed without provoking Opportunity Attacks.' },
   ];
+  if (has('Envenom Weapons')) out[0].text += ' On a failed save it also takes 2d6 poison damage, ignoring resistance.';
+  if (has('Strike Fear')) out.push({ name: 'Terrify', cost: 1, text: 'DC ' + dc + ' Wisdom save or Frightened for 1 minute.' });
+  if (has('Supreme Sneak')) out.push({ name: 'Stealth Attack', cost: 1, text: 'if you’re invisible from Hide, this attack doesn’t end it, as long as you end the turn behind three-quarters or total cover.' });
   if (has('Devious Strikes')) out.push(
     { name: 'Daze', cost: 2, text: 'DC ' + dc + ' Constitution save or on its next turn it can do only one of: move, take an action, or take a Bonus Action.' },
     { name: 'Knock Out', cost: 6, text: 'DC ' + dc + ' Constitution save or Unconscious for 1 minute or until it takes damage (it repeats the save at the end of each of its turns).' },
@@ -909,11 +912,14 @@ function csExtraDamageHtml(pc){
   const sa = (pc.resources || []).find(r => r.name === 'Sneak Attack' && r.die);
   const cun = sa ? csCunningStrikes(pc) : [];
   const saN = sa ? parseInt(sa.die, 10) || 0 : 0;
+  const two = cun.length && ((sh.featureList || []).some(f => f.name === 'Improved Cunning Strike' && !f.info));
+  const cunSel = (attr, none) => '<select class="cb-sel" ' + attr + ' aria-label="Cunning Strike"><option value="">' + none + '</option>'
+      + cun.filter(c => c.cost <= saN).map(c => '<option value="' + csE(c.name) + '" title="' + csE(c.text) + '">' + csE(c.name) + ' (−' + c.cost + 'd6)</option>').join('') + '</select>';
   if (sa) rows.push('<div class="cs-act"><div class="cs-act-h"><b>Sneak Attack</b><span class="cb-dim">once a turn, with advantage or an ally beside the target</span>'
-    + (cun.length ? '<select class="cb-sel" data-cs-cunning aria-label="Cunning Strike"><option value="">No effect</option>'
-      + cun.filter(c => c.cost <= saN).map(c => '<option value="' + csE(c.name) + '">' + csE(c.name) + ' (−' + c.cost + 'd6)</option>').join('') + '</select>' : '')
+    + (cun.length ? cunSel('data-cs-cunning', 'No effect') + (two ? cunSel('data-cs-cunning2', 'No second effect') : '') : '')
     + '<button class="btn small" data-cs-sneak="' + csE(sa.die) + '">' + csE(sa.die) + '</button></div>'
-    + (cun.length ? '<div class="cs-act-d">Cunning Strike: give up Sneak Attack dice for an effect; save DC ' + csCunningDc(pc) + '.</div>' : '') + '</div>');
+    + (cun.length ? '<div class="cs-act-d">Cunning Strike: give up Sneak Attack dice for an effect' + (two ? ', up to two on one hit' : '') + '; save DC ' + csCunningDc(pc) + '.</div>'
+      + '<ul class="cs-cun-list">' + cun.map(c => '<li class="' + (c.cost > saN ? 'off' : '') + '"><b>' + csE(c.name) + '</b> <span class="cb-dim">(−' + c.cost + 'd6)</span> — ' + csE(c.text) + '</li>').join('') + '</ul>' : '') + '</div>');
   const smite = (sh.activations || []).some(a => /Divine Smite|Paladin.s Smite/.test(a.name)) || (sh.spells || []).includes('Divine Smite');
   if (smite){
     const slots = sh.spellSlots || {};
@@ -1210,13 +1216,16 @@ function csOnClick(e){
   // Sneak Attack, less the dice a Cunning Strike costs; the effect goes on the roll.
   if (d.csSneak){
     const m = /^(\d+)(d\d+.*)$/.exec(d.csSneak); if (!m) return;
-    const pick = (document.querySelector('#cs-root [data-cs-cunning]') || {}).value || '';
-    const cs = csCunningStrikes(pc).find(c => c.name === pick && c.cost <= +m[1]);
-    const n = +m[1] - (cs ? cs.cost : 0);
+    const val = a => (document.querySelector('#cs-root [' + a + ']') || {}).value || '';
+    const all = csCunningStrikes(pc);
+    const picks = [...new Set([val('data-cs-cunning'), val('data-cs-cunning2')].filter(Boolean))].map(p => all.find(c => c.name === p)).filter(Boolean);
+    const cost = picks.reduce((t, c) => t + c.cost, 0);
+    if (cost > +m[1]){ if (typeof showToast === 'function') showToast('Those two cost ' + cost + 'd6 — more than your ' + m[1] + 'd6 of Sneak Attack'); return; }
+    const n = +m[1] - cost;
     const crit = !!(CS.lastAtkCrit && CS.lastAtkCrit.crit);
-    const label = 'Sneak Attack' + (cs ? ' — ' + cs.name : '') + (crit ? ' (crit)' : '');
+    const label = 'Sneak Attack' + (picks.length ? ' — ' + picks.map(c => c.name).join(' + ') : '') + (crit ? ' (crit)' : '');
     if (n > 0) csRollDamage(label, n + m[2], crit);
-    if (cs && typeof showToast === 'function') showToast('Cunning Strike — ' + cs.name + ': ' + cs.text);
+    if (picks.length && typeof showToast === 'function') showToast('Cunning Strike — ' + picks.map(c => c.name + ': ' + c.text).join(' · '));
     return csRender();
   }
   if (d.cs === 'smite' && !CS.readOnly){
