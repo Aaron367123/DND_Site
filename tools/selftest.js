@@ -15585,6 +15585,7 @@ for (const cls of Object.keys(rule)) for (let L = 1; L <= 20; L++) for (const sc
         const R14 = await sktRulesLoad('2014'), R24 = await sktRulesLoad('2024');
         const sb = sktRulesSpell(R14, 'Sorcerous Burst');
         ok('2024 spells: with both rules loaded, Sorcerous Burst is in the 2014 rules, marked', !!sb && sb.from2024 === true && sb.level === 0);
+        ok('2024 spells: a 2014 spell renamed in 2024 isn’t copied as a second spell (Befuddlement is Feeblemind, Summon Dragon is Summon Draconic Spirit)', !sktRulesSpell(R14, 'Befuddlement') && !sktRulesSpell(R14, 'Summon Dragon') && (sktRulesSpell(R14, 'Feeblemind').renamedTo || []).includes('Befuddlement'));
         ok('2024 spells: once — a second call adds nothing', sktCrossEditionSpells() === false && R14.spells.filter(s => s.name === 'Sorcerous Burst').length === 1);
         ok('2024 spells: Fireball stays the 2014 one, once; Feeblemind (superseded) isn’t doubled', !sktRulesSpell(R14, 'Fireball').from2024 && R14.spells.filter(s => s.name === 'Fireball').length === 1 && R14.spells.filter(s => s.name === 'Feeblemind').length === 1);
         { const keepW = R14._with2024; R14._with2024 = {}; sktRulesSpell(R14, 'Sorcerous Burst').stale = true;

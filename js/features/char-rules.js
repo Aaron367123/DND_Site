@@ -205,6 +205,9 @@ function sktCrossEditionSpells(){
   if (!A || !B || A._with2024 === B) return false;
   for (let i = A.spells.length - 1; i >= 0; i--) if (A.spells[i].from2024) A.spells.splice(i, 1);
   const have = new Set(A.spells.map(s => s.name.toLowerCase()));
+  // A 2014 spell renamed in 2024 (Feeblemind → Befuddlement, Summon Draconic
+  // Spirit → Summon Dragon) is the same spell: not offered twice.
+  B.spells.forEach(s => (s.renamedTo || []).forEach(n => have.add(n.toLowerCase())));
   B.spells.forEach(s => { if (s.core && !s.homebrew && !s.superseded && !have.has(s.name.toLowerCase())) A.spells.push(Object.assign({}, s, { from2024: true })); });
   A._with2024 = B;
   return true;
@@ -520,7 +523,9 @@ async function _sktRulesBuild(edition, read){
                     ritual: !!(s.meta && s.meta.ritual),
                     damageInflict: s.damageInflict || null, savingThrow: s.savingThrow || null,
                     spellAttack: s.spellAttack || null, scalingLevelDice: s.scalingLevelDice || null,
-                    entries: s.entries || [] });
+                    entries: s.entries || [],
+                    // the name a later book reprints it under (Feeblemind → Befuddlement)
+                    renamedTo: (s.reprintedAs || []).map(r => String(typeof r === 'string' ? r : (r && r.uid) || '').split('|')[0]).filter(n => n && n.toLowerCase() !== s.name.toLowerCase()) });
   });
 
   // Languages: the handbook's, then the other books' of this era (the Sword
