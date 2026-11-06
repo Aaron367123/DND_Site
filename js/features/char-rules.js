@@ -196,12 +196,25 @@ function sktSpeciesImages(read){
   return job;
 }
 
+// The 2024 handbook's new spells (Sorcerous Burst, Starry Wisp…), for a 2014
+// character who wants them, as D&D Beyond lets a legacy character take them:
+// copied into the 2014 rules once both are loaded, marked `from2024`, and
+// offered only with that build's "2024 spells" switch (build.with2024).
+function sktCrossEditionSpells(){
+  const A = _sktRulesReady['2014'], B = _sktRulesReady['2024'];
+  if (!A || !B || A._with2024 === B) return false;
+  for (let i = A.spells.length - 1; i >= 0; i--) if (A.spells[i].from2024) A.spells.splice(i, 1);
+  const have = new Set(A.spells.map(s => s.name.toLowerCase()));
+  B.spells.forEach(s => { if (s.core && !s.homebrew && !s.superseded && !have.has(s.name.toLowerCase())) A.spells.push(Object.assign({}, s, { from2024: true })); });
+  A._with2024 = B;
+  return true;
+}
 async function sktRulesLoad(edition, read){
   edition = edition === '2014' ? '2014' : '2024';
   if (_sktRulesCache[edition] && !read) return _sktRulesCache[edition];
   read = read || sktRulesReader();
   const job = _sktRulesBuild(edition, read);
-  if (read === undefined || !_sktRulesCache[edition]){ _sktRulesCache[edition] = job; job.then(R => { _sktRulesReady[edition] = R; if (typeof sktHomebrewIntoRules === 'function') sktHomebrewIntoRules(R); }, () => {}); }
+  if (read === undefined || !_sktRulesCache[edition]){ _sktRulesCache[edition] = job; job.then(R => { _sktRulesReady[edition] = R; if (typeof sktHomebrewIntoRules === 'function') sktHomebrewIntoRules(R); sktCrossEditionSpells(); }, () => {}); }
   return job;
 }
 
@@ -1024,6 +1037,7 @@ function sktIsLegacy(build, x){
 }
 function sktBookOk(build, x){
   if (!x) return true;
+  if (x.from2024) return !!(build && build.with2024);
   if (build && build.edition === '2014'){
     if (x.core !== false) return true;
     if (!build.allBooks) return false;
@@ -1662,6 +1676,7 @@ function sktExpandedSpells(sub, build){
 // Whether a spell is on a class's list for this character: the handbook's
 // lists, or every book's with "other books" on.
 function sktSpellOnList(s, listName, build){
+  if (s.from2024 && !(build && build.with2024)) return false;
   if (sktExtraSources(build)) return sktBookOk(build, s) && s.classesAll.includes(listName);
   // Only the 2024 core, but a legacy spell switched on: its own lists.
   if (!s.core && sktBookOk(build, s)) return s.classesAll.includes(listName);
@@ -3309,7 +3324,7 @@ function sktMagicalSecrets(build, R){
   const view = sktClassView(build, R, p);
   const sc = _sktSpellcastingOne(view, R, sktBuildAbilities(build, R));
   const max = (sc && sc.maxSpellLevel) || 0;
-  const options = R.spells.filter(s => s.level <= max && (sktExtraSources(build) || !s.core ? sktBookOk(build, s) && s.classesAll.length : s.core && s.classes.length)).map(s => s.name).sort();
+  const options = R.spells.filter(s => s.level <= max && (!s.from2024 || !!build.with2024) && (sktExtraSources(build) || !s.core ? sktBookOk(build, s) && s.classesAll.length : s.core && s.classes.length)).map(s => s.name).sort();
   return { count: n, options, picked: (build.secrets || []).filter(x => options.includes(x)).slice(0, n) };
 }
 

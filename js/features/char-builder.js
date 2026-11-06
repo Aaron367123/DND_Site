@@ -407,6 +407,12 @@ function cbApplyHpUp(b){
   if (!CB.hpUp) return;
   b.hp = Object.assign({}, b.hp, { manual: CB.hpUp.base + cbHpUpGain(CB.hpUp.how, CB.hpUp.roll) });
 }
+// The 2024 rules beside the 2014 ones, for the new spells.
+async function cbLoad2024(){
+  try { await sktRulesLoad('2024'); } catch(e){ return; }
+  if (typeof sktCrossEditionSpells === 'function') sktCrossEditionSpells();
+  if (CB) cbRender();
+}
 async function cbLoad(edition){
   CB.loading = true; cbRender();
   try { CB.R = await sktRulesLoad(edition); }
@@ -416,6 +422,7 @@ async function cbLoad(edition){
   if (CB.R) cbLevelUpHp();
   CB.loading = false;
   cbRender();
+  if (CB.R && CB.build.edition === '2014' && CB.build.with2024) cbLoad2024();
 }
 
 // Whether anything chosen comes from beyond the handbook — a build made
@@ -467,6 +474,12 @@ function cbSourcesHtml(){
   const S = sktSources(CB.build);
   return '<div class="cb-sources">' + SKT_SOURCE_CATS.map(([k, l, d]) => '<label class="cb-src' + (S[k] ? ' on' : '') + '"><input type="checkbox" data-cb-srccat="' + k + '"'
     + (S[k] ? ' checked' : '') + (k === 'core' ? ' disabled' : '') + '><span><b>' + cbEsc(l) + '</b><i>' + cbEsc(d) + '</i></span></label>').join('') + '</div>';
+}
+// A 2014 character taking the 2024 handbook's new spells (D&D Beyond allows it).
+function cbWith2024Toggle(){
+  if (CB.build.edition !== '2014') return '';
+  return '<label class="cb-inline" title="Sorcerous Burst, Starry Wisp, Divine Smite and the rest of the spells first printed in the 2024 Player’s Handbook, alongside the 2014 ones"><input type="checkbox" data-cb-with2024'
+    + (CB.build.with2024 ? ' checked' : '') + '> Spells new in the 2024 handbook</label>';
 }
 function cbBooksToggle(){
   // The 2024 rules use the Sources switches (Basics → Campaign settings) instead.
@@ -749,7 +762,7 @@ CB_RENDER.basics = () => {
         + '<div class="cb-dim">The 2024 rules can still use 2014 options with Legacy content on' + (CB.convertFrom ? '; the sheet is read again' : ' — the name and level are kept, other choices are cleared') + '.</div>'
       : '<div class="cb-dim">The 2024 rules, as D&D Beyond plays them.</div>')
     + '</div>'
-    + (b.edition === '2014' ? '<div class="cb-f">Books' + cbBooksToggle() + cbBookListHtml() : '<div class="cb-f">Sources' + cbSourcesHtml() + cbBookListHtml())
+    + (b.edition === '2014' ? '<div class="cb-f">Books' + cbBooksToggle() + cbWith2024Toggle() + cbBookListHtml() : '<div class="cb-f">Sources' + cbSourcesHtml() + cbBookListHtml())
     +   '<div class="cb-dim">' + (b.edition === '2014' ? 'Species, backgrounds, feats, spells and subclasses from the other 2014-era books — Xanathar’s, Tasha’s, Monsters of the Multiverse, the setting books. ' : 'As on D&D Beyond, all are on for a new character; switch off what your table doesn’t use. ') + 'Rules the sheet can’t apply show as text.</div></div>'
     + '<label class="cb-f">Levelling<select class="cb-sel" data-cb-advance><option value="milestone"' + (b.advancement !== 'xp' ? ' selected' : '') + '>Milestone — the DM says when</option>'
     +   '<option value="xp"' + (b.advancement === 'xp' ? ' selected' : '') + '>Experience points</option></select></label>'
@@ -2096,7 +2109,7 @@ function cbSpellChecks(options, chosen, max, attr, valueOf, block){
   return '<div class="cb-checks">' + shown.map(n => {
     const v = valueOf(n), on = vals.includes(v), why = !on && block ? block(n) : null, dis = !on && (full || !!why);
     return '<label class="cb-check' + (on ? ' on' : '') + (dis ? ' dim' : '') + '"' + (why ? ' title="' + cbEsc(why) + '"' : '') + '><input type="checkbox" data-' + attr + '="' + cbEsc(v) + '"' + (on ? ' checked' : '') + (dis ? ' disabled' : '') + '>'
-      + '<span>' + cbEsc(n) + '</span><button class="cb-spi" data-cb-spinfo="' + cbEsc(n) + '" data-cb-spin="' + cbEsc(attr) + '" title="What it does" aria-label="About ' + cbEsc(n) + '">i</button></label>'
+      + '<span>' + cbEsc(n) + ((CB.R && (sktRulesSpell(CB.R, n) || {}).from2024) ? ' <i class="cb-tag-2024" title="First printed in the 2024 Player’s Handbook">2024</i>' : '') + '</span><button class="cb-spi" data-cb-spinfo="' + cbEsc(n) + '" data-cb-spin="' + cbEsc(attr) + '" title="What it does" aria-label="About ' + cbEsc(n) + '">i</button></label>'
       + (CB.spInfo === n && CB.spInfoIn === attr ? cbSpellInfoHtml(n) : '');
   }).join('') + '</div>';
 }
@@ -2109,7 +2122,7 @@ CB_RENDER.spells = () => {
   const want = sc.prepared || sc.known;
   const maxLv = sc.classes ? sc.classes[0].sc.maxSpellLevel : sc.maxSpellLevel;
   const always = sktBuildAlwaysPrepared(b, R);
-  let html = '<h3>Spells</h3>' + cbSpellFilterHtml() + '<div class="cb-note">' + cbAbLabel(sc.ability) + ' · save DC ' + sc.dc + ' · attack ' + sktSigned(sc.attack)
+  let html = '<h3>Spells</h3>' + cbWith2024Toggle() + cbSpellFilterHtml() + '<div class="cb-note">' + cbAbLabel(sc.ability) + ' · save DC ' + sc.dc + ' · attack ' + sktSigned(sc.attack)
     + ' · slots ' + (Object.keys(sc.slots).map(l => sc.slots[l] + '×' + l + (l === '1' ? 'st' : l === '2' ? 'nd' : l === '3' ? 'rd' : 'th')).join(', ') || '—') + '</div>';
   if (sc.cantrips){
     html += '<h4>Cantrips</h4>' + cbCounter((b.cantrips || []).length, sc.cantrips, 'chosen') + cbChosenLine(b.cantrips)
@@ -2592,6 +2605,7 @@ function cbOnChange(e){
   const v = t.value;
   const list = (key, max) => cbSet(b => { b[key] = b[key] || []; cbToggle(b[key], Object.values(d)[0], max); });
   if ('cbAllbooks' in d) return cbSet(b => { b.allBooks = t.checked; });
+  if ('cbWith2024' in d){ cbSet(b => { if (t.checked) b.with2024 = true; else delete b.with2024; }); if (t.checked) cbLoad2024(); return; }
   if ('cbLegacy' in d) return cbSet(b => { b.legacy = t.checked; });
   if (d.cbSrccat && d.cbSrccat !== 'core') return cbSet(b => { b.sources = Object.assign(sktSources(b), { [d.cbSrccat]: t.checked }); delete b.allBooks; delete b.legacy; });
   if ('cbHpmanual' in d) return cbSet(b => { b.hp = Object.assign({}, b.hp, { manual: Math.max(1, parseInt(v, 10) || 1) }); });
@@ -2876,7 +2890,7 @@ function cbRefreshSteps(){
 
 async function cbSwitchEdition(ed){
   const keep = { name: CB.build.name, level: CB.build.level, icon: CB.build.icon,
-                 allBooks: !!CB.build.allBooks, items: (CB.build.items || []).slice() };
+                 allBooks: !!CB.build.allBooks, items: (CB.build.items || []).slice(), ...(CB.build.with2024 ? { with2024: true } : {}) };
   if (ed === '2024') keep.sources = Object.assign({}, SKT_ALL_SOURCES);
   CB.build = Object.assign(sktBlankBuild(ed), keep);
   if (state.settings){ state.settings.builderEdition = ed; save(); }

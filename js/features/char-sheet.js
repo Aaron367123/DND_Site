@@ -1615,11 +1615,16 @@ function csOwnEd(pc){ return (pc && ((pc.build && pc.build.edition) || pc.rules)
 function csSpellEd(pc, name){ const m = pc && pc.spellEd; return (m && (m[name] === '2014' || m[name] === '2024')) ? m[name] : csOwnEd(pc); }
 // Whether a spell is printed in both books (both editions' rules loaded).
 function csSpellInBoth(name){
-  return !!(CS && CS.R && CS.R2 && typeof sktRulesSpell === 'function' && sktRulesSpell(CS.R, name) && sktRulesSpell(CS.R2, name));
+  if (!(CS && CS.R && CS.R2 && typeof sktRulesSpell === 'function')) return false;
+  const a = sktRulesSpell(CS.R, name), b = sktRulesSpell(CS.R2, name);
+  // (a 2024 spell copied into the 2014 rules is one spell, not two)
+  return !!(a && b && !a.from2024 && !b.from2024);
 }
 const csEdLabel = ed => ed === '2014' ? 'Legacy (2014)' : '2024';
 // On the row: a tag when the character uses the other book's version.
 function csSpellVerTag(pc, n){
+  const own = CS && CS.R && typeof sktRulesSpell === 'function' ? sktRulesSpell(CS.R, n) : null;
+  if (own && own.from2024) return '<i class="cs-tag cs-tag-ver" title="From the 2024 Player’s Handbook">2024</i>';
   const ved = csSpellEd(pc, n);
   return csSpellInBoth(n) && ved !== csOwnEd(pc) ? '<i class="cs-tag cs-tag-ver" title="The ' + ved + ' version of this spell">' + (ved === '2014' ? 'Legacy' : '2024') + '</i>' : '';
 }

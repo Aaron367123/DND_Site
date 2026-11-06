@@ -15578,6 +15578,56 @@ for (const cls of Object.keys(rule)) for (let L = 1; L <= 20; L++) for (const sc
       } catch(e){ ok('round 219 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
       finally { try { csClose(); } catch(e){} state.party = JSON.parse(party0); save(); }
     }
+    // -- Round 220: a 2014 character can take the 2024 handbook's new spells, behind a switch --
+    if (!PLAYER){
+      const party0 = JSON.stringify(state.party);
+      try {
+        const R14 = await sktRulesLoad('2014'), R24 = await sktRulesLoad('2024');
+        const sb = sktRulesSpell(R14, 'Sorcerous Burst');
+        ok('2024 spells: with both rules loaded, Sorcerous Burst is in the 2014 rules, marked', !!sb && sb.from2024 === true && sb.level === 0);
+        ok('2024 spells: once — a second call adds nothing', sktCrossEditionSpells() === false && R14.spells.filter(s => s.name === 'Sorcerous Burst').length === 1);
+        ok('2024 spells: Fireball stays the 2014 one, once; Feeblemind (superseded) isn’t doubled', !sktRulesSpell(R14, 'Fireball').from2024 && R14.spells.filter(s => s.name === 'Fireball').length === 1 && R14.spells.filter(s => s.name === 'Feeblemind').length === 1);
+        { const keepW = R14._with2024; R14._with2024 = {}; sktRulesSpell(R14, 'Sorcerous Burst').stale = true;
+          const again = sktCrossEditionSpells();
+          ok('2024 spells: newer 2024 rules replace the copies rather than doubling them', again === true && R14.spells.filter(s => s.name === 'Sorcerous Burst').length === 1 && !sktRulesSpell(R14, 'Sorcerous Burst').stale, R14.spells.filter(s => s.name === 'Sorcerous Burst').length);
+          R14._with2024 = keepW || R24; }
+        const b = Object.assign(sktBlankBuild('2014'), { cls: 'Sorcerer', level: 5, edition: '2014' });
+        const c0 = sktSpellOptions(R14, b, 0).map(s => s.name);
+        ok('2024 spells: off, a 2014 sorcerer isn’t offered Sorcerous Burst', !c0.includes('Sorcerous Burst') && c0.includes('Fire Bolt'), c0.length);
+        b.with2024 = true;
+        const c1 = sktSpellOptions(R14, b, 0).map(s => s.name);
+        ok('2024 spells: on, it is — beside the 2014 cantrips', c1.includes('Sorcerous Burst') && c1.includes('Fire Bolt') && c1.length > c0.length, c1.length + ' vs ' + c0.length);
+        ok('2024 spells: …but not another class’s (a 2014 wizard isn’t given Divine Smite)', !sktSpellOptions(R14, Object.assign({}, b, { cls: 'Wizard' }), 1).some(s => s.name === 'Divine Smite'));
+        ok('2024 spells: Magical Secrets-style lists respect the switch too', !sktBookOk(Object.assign({}, b, { with2024: false }), sb) && sktBookOk(b, sb));
+        // The builder: the switch on the Spells step of a 2014 build.
+        state.party.push(Object.assign(sktComputeCharacter(Object.assign(sktBlankBuild('2014'), { name: 'Ash', cls: 'Sorcerer', level: 5, species: 'Human', background: 'Sage', edition: '2014',
+          abilities: { method: 'manual', base: { str: 8, dex: 14, con: 14, int: 10, wis: 12, cha: 16 } } }), R14), { id: 'r220s' }));
+        save();
+        await openCharBuilder({ idx: state.party.findIndex(p => p.id === 'r220s') }); await sleep(300);
+        for (let k = 0; k < 30 && !(CB && CB.R); k++) await sleep(100);
+        CB.step = 'spells'; cbRender(); await sleep(100);
+        const sw = document.querySelector('#cb-root [data-cb-with2024]');
+        ok('2024 spells: the 2014 builder’s Spells step has the switch, off', !!sw && !sw.checked);
+        sw.checked = true; sw.dispatchEvent(new Event('change', { bubbles: true })); await sleep(300);
+        ok('2024 spells: ticked — kept on the build, and Sorcerous Burst is on offer', CB.build.with2024 === true && /Sorcerous Burst/.test((document.querySelector('#cb-root') || {}).textContent || ''), String(CB.build.with2024));
+        { const lab = [...document.querySelectorAll('#cb-root .cb-check')].find(l => /Sorcerous Burst/.test(l.textContent)), fb = [...document.querySelectorAll('#cb-root .cb-check')].find(l => /^Fire Bolt/.test(l.textContent.trim()));
+          ok('2024 spells: tagged 2024 in the builder’s list; Fire Bolt isn’t', !!lab && !!lab.querySelector('.cb-tag-2024') && !!fb && !fb.querySelector('.cb-tag-2024')); }
+        try { cbClose(); } catch(e){}
+        document.getElementById('cb-root')?.remove();
+        // The sheet: a 2014 character with it, tagged 2024, no version switch.
+        state.party.push({ id: 'r220t', name: 'Ash', hp: 20, hpMax: 20, ac: 12, rules: '2014', level: 5, cls: 'sorcerer',
+          sheet: { spells: ['Sorcerous Burst', 'Fireball'], spellSaveDc: 14, spellAtkBonus: '+6', spellSlots: { 3: { total: 2, expended: 0 } } } });
+        save();
+        await openCharSheet('r220t'); await sleep(400); document.querySelector('#cs-root [data-cs-tab="spells"]').click(); await sleep(300);
+        for (let k = 0; k < 30 && !(CS && CS.R && CS.R2); k++) await sleep(100);
+        csRender(); await sleep(50);
+        const row = [...document.querySelectorAll('#cs-root .cs-spell')].find(r => /Sorcerous Burst/.test(r.textContent));
+        ok('2024 spells: on a 2014 sheet it reads, tagged 2024', !!row && (row.querySelector('.cs-tag-ver') || {}).textContent === '2024' && csSpell('Sorcerous Burst') && csSpell('Sorcerous Burst').level === 0, row && row.innerHTML.slice(0, 160));
+        ok('2024 spells: one spell, not two — no version switch', !csSpellInBoth('Sorcerous Burst') && csSpellInBoth('Fireball'));
+        csClose();
+      } catch(e){ ok('round 220 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
+      finally { try { csClose(); } catch(e){} document.getElementById('cb-root')?.remove(); state.party = JSON.parse(party0); save(); }
+    }
     // -- Class features: represented, not just text ------------------------
     {
       try {
