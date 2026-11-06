@@ -1536,15 +1536,21 @@ function sktOnHitCondition(desc){
   const sentences = s.slice(at + 4).split(/(?<=\.)\s+/);
   const cap = w => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase();
   const AB = { strength: 'STR', dexterity: 'DEX', constitution: 'CON', intelligence: 'INT', wisdom: 'WIS', charisma: 'CHA' };
-  const saveRe = new RegExp('\\bDC (\\d+) (Strength|Dexterity|Constitution|Intelligence|Wisdom|Charisma) saving throw or (?:be |become |fall |is )?(?:knocked )?(' + SKT_HIT_CONDS + ')\\b', 'i');
+  const saveRe = new RegExp('\\bDC (\\d+) (Strength|Dexterity|Constitution|Intelligence|Wisdom|Charisma) saving throw or (?:be |become |fall |is |have the |have )?(?:knocked )?(' + SKT_HIT_CONDS + ')\\b', 'i');
+  // A wight's Life Drain: "DC 13 Constitution saving throw or its hit point
+  // maximum is reduced by an amount equal to the damage taken"; a vampire's
+  // bite, with no save: "the target's hit point maximum is reduced by an
+  // amount equal to the necrotic damage taken".
+  const drainRe = /\b(?:DC (\d+) (Strength|Dexterity|Constitution|Intelligence|Wisdom|Charisma) saving throw,? or (?:have )?|(?:the target['’]s|its) )(?:its )?hit point maximum (?:is )?reduced by an amount equal to the (?:(acid|bludgeoning|cold|fire|force|lightning|necrotic|piercing|poison|psychic|radiant|slashing|thunder) )?damage (?:taken|dealt)/i;
   const flatRe = new RegExp('\\b(?:the target|it|the creature) (?:is|has the) (?:also )?(?:knocked )?(' + SKT_HIT_CONDS + ')\\b(?: condition)?(?:[^.(]*?\\(escape DC (\\d+)\\))?', 'i');
   const alsoRe = new RegExp('\\buntil (?:this|the) grapple ends, the (?:target|creature) (?:is|has the) (' + SKT_HIT_CONDS + ')\\b', 'i');
   for (let k = 0; k < sentences.length; k++){
     const sen = sentences[k];
     const ifM = /^(?:If|While|Unless)\s+([^,]*),\s*/i.exec(sen);
     const body = ifM ? sen.slice(ifM[0].length) : sen;
-    let out = null, m = saveRe.exec(body);
-    if (m) out = { cond: cap(m[3]), dc: +m[1], ability: AB[m[2].toLowerCase()] };
+    let out = null, m = drainRe.exec(body);
+    if (m){ out = { cond: null, drain: { type: (m[3] || '').toLowerCase() } }; if (m[1]){ out.dc = +m[1]; out.ability = AB[m[2].toLowerCase()]; } }
+    else if ((m = saveRe.exec(body))) out = { cond: cap(m[3]), dc: +m[1], ability: AB[m[2].toLowerCase()] };
     else if ((m = flatRe.exec(body))){ out = { cond: cap(m[1]) }; if (m[2]) out.escape = +m[2]; }
     if (!out) continue;
     const when = ifM ? ifM[1].trim() : '';

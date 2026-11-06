@@ -14894,7 +14894,7 @@ for (const cls of Object.keys(rule)) for (let L = 1; L <= 20; L++) for (const sc
         ok('grappled (2014): no such rule', !T._condMods(pc, wolf).dis.some(x => /grappled by/.test(x)));
         // A ghoul's paralysis goes onto the tracker's timer, with its repeat save.
         { const g = find('Ghoul', 'MM'); C.addMonster(g); const ghoul = state.combatants[state.combatants.length - 1];
-          state.combatants.forEach(x => { if (x.id === 'r210p') { x.hp = 40; x.conditions = []; } });
+          state.combatants.forEach(x => { if (x.id === 'r210p') { x.hp = 40; x.conditions = (x.conditions || []).filter(n => n === 'Grappled' || n === 'Restrained'); } });
           state.activeCombatantId = ghoul.id; window.sktD = () => 15;
           const cl = T._attacksFor(ghoul).findIndex(a => a.name === 'Claws');
           T._rollAttack(cl, { attacker: ghoul, target: pc });
@@ -15000,6 +15000,79 @@ for (const cls of Object.keys(rule)) for (let L = 1; L <= 20; L++) for (const sc
         ok('escape (2014): 15 beats it', made === true && !T._hasCond(get('r211p'), 'grappled'));
       } catch(e){ ok('round 211 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
       finally { window.sktD = keepD; T._onHits = []; T._stdOpen = keepO; document.body.classList.remove('player-mode'); state.settings = JSON.parse(keepS); state.party = JSON.parse(keepP); state.combatants = JSON.parse(keepC); state.activeCombatantId = keepA; save(); }
+    }
+    // -- Round 212: a wight's Life Drain lowers the maximum; 2024 "or have the Prone condition" --
+    if (!PLAYER){
+      const keepC = JSON.stringify(state.combatants), keepA = state.activeCombatantId, keepP = JSON.stringify(state.party), keepS = JSON.stringify(state.settings || {});
+      const T = panelDefs.turnview, C = panelDefs.combat, keepD = window.sktD;
+      try {
+        for (let k = 0; k < 100 && !(typeof _5eLoaded !== 'undefined' && _5eLoaded); k++) await sleep(100);
+        const find = (n, src) => _5eData.find(r => r.cat === 'monster' && r.name === n && r._source === src);
+        const oh = d => sktOnHitCondition(d);
+        const wd = oh('Melee Weapon Attack: +4 to hit, reach 5 ft., one creature. Hit: 5 (1d6 + 2) necrotic damage. The target must succeed on a DC 13 Constitution saving throw or its hit point maximum is reduced by an amount equal to the damage taken. This reduction lasts until the target finishes a long rest. The target dies if this effect reduces its hit point maximum to 0.');
+        ok('drain: a wight’s Life Drain is a DC 13 CON save against the damage taken', wd && wd.drain && wd.drain.type === '' && wd.dc === 13 && wd.ability === 'CON' && !wd.cond, JSON.stringify(wd));
+        const vb = oh('Melee Weapon Attack: +9 to hit, reach 5 ft., one willing creature. Hit: 7 (1d6 + 4) piercing damage plus 10 (3d6) necrotic damage. The target’s hit point maximum is reduced by an amount equal to the necrotic damage taken, and the vampire regains hit points equal to that amount.');
+        ok('drain: a vampire’s bite, no save, the necrotic part', vb && vb.drain && vb.drain.type === 'necrotic' && !vb.dc, JSON.stringify(vb));
+        const hv = oh('Melee Weapon Attack: +8 to hit. Hit: 16 (2d10 + 5) bludgeoning damage. If the target is a creature, it must succeed on a DC 15 Constitution saving throw or have its hit point maximum reduced by an amount equal to the damage taken.');
+        ok('drain: "or have its hit point maximum reduced"', hv && hv.drain && hv.dc === 15, JSON.stringify(hv));
+        ok('drain: dying at 0 is not a drain', oh('Hit: 5 (1d6 + 2) necrotic damage. The target dies if its hit point maximum is reduced to 0.') === null);
+        const pr = oh('Ranged Attack Roll: +8, range 60/240 ft. Hit: 21 (3d10 + 5) Bludgeoning damage, and the target must succeed on a DC 16 Strength saving throw or have the Prone condition.');
+        ok('on hit (2024): "or have the Prone condition"', pr && pr.cond === 'Prone' && pr.dc === 16 && pr.ability === 'STR', JSON.stringify(pr));
+        const ps = oh('Melee Attack Roll: +6. Hit: 8 (1d10 + 3) Piercing damage plus 7 (2d6) Poison damage. If the target is a creature, it must succeed on a DC 13 Constitution saving throw or have the Poisoned condition for 1 minute.');
+        ok('on hit (2024): "or have the Poisoned condition for 1 minute"', ps && ps.cond === 'Poisoned' && ps.dur && ps.dur.left === 10, JSON.stringify(ps));
+        // In the Turn View: a wight drains a character.
+        state.settings = Object.assign({}, state.settings, { builderEdition: '2014' });
+        state.party.push({ id: 'r212p', name: 'Drained', hp: 40, hpMax: 40, ac: 12, rules: '2014', abilities: { con: 10 } });
+        state.combatants = []; save();
+        C.addMonster(find('Wight', 'MM')); C.addMonster(find('Vampire', 'MM')); await sleep(50);
+        const wid = state.combatants[0].id, vid = state.combatants[1].id;
+        state.combatants.push({ id: 'r212p', name: 'Drained', isPC: true, hp: 40, hpMax: 40, ac: 12, initiative: 1, conditions: [] });
+        const get = id => state.combatants.find(x => x.id === id);
+        const party = () => state.party.find(x => x.id === 'r212p');
+        if (!T._body && typeof openPanel === 'function'){ openPanel('turnview'); await sleep(200); }
+        state.activeCombatantId = wid; T._onHits = [];
+        const ld = T._attacksFor(get(wid)).findIndex(a => a.name === 'Life Drain');
+        ok('drain: (the wight’s Life Drain parses)', ld >= 0 && T._attacksFor(get(wid))[ld].onHit && T._attacksFor(get(wid))[ld].onHit.drain, ld);
+        window.sktD = () => 4;
+        T._rollAttack(ld, { attacker: get(wid), target: get('r212p') }); await sleep(20);
+        const q = (T._onHits || [])[0];
+        // 1d6+2 with every die a 4: 6 — unless the d20 of 4 missed AC 12; Life Drain is +4, so 8 misses. Roll again with 15 on the d20.
+        if (!q){ T._onHits = []; let n = 0; window.sktD = s => (s === 20 ? 15 : 4); get('r212p').hp = 40; T._rollAttack(ld, { attacker: get(wid), target: get('r212p') }); }
+        const x = (T._onHits || [])[0];
+        ok('drain: the hit leaves a line with the damage it took', x && x.drain && x.amt === 6, JSON.stringify(T._onHits));
+        T._render(); await sleep(20);
+        const line = (document.querySelector('.tv-onhit') || {}).textContent || '';
+        ok('drain: the line says the save and what it costs', /DC 13 CON save or max HP −6/.test(line), line.replace(/\s+/g, ' '));
+        window.sktD = () => 3;
+        T._onHitAct('roll', 0); await sleep(20);
+        ok('drain: a failed save — the character’s max HP is 34, kept on the party record', party().hpMax === 34 && party().hpMaxNormal === 40 && get('r212p').hpMax === 34, JSON.stringify([party().hpMax, party().hpMaxNormal, get('r212p').hpMax]));
+        if (typeof sktUndo === 'function'){ sktUndo(); await sleep(40);
+          ok('drain: undo gives the maximum back', party().hpMax === 40 && get('r212p').hpMax === 40 && party().hpMaxNormal == null, JSON.stringify([party().hpMax, get('r212p').hpMax, party().hpMaxNormal])); }
+        // A made save costs nothing.
+        T._onHits = []; get('r212p').hp = 40; window.sktD = s => (s === 20 ? 15 : 4);
+        T._rollAttack(ld, { attacker: get(wid), target: get('r212p') });
+        window.sktD = () => 18; T._onHitAct('roll', 0);
+        ok('drain: a made save — max HP unchanged', party().hpMax === 40 && get('r212p').hpMax === 40);
+        // A vampire's bite drains only the necrotic part, with no save; the line says Apply.
+        state.activeCombatantId = vid; T._onHits = []; get('r212p').hp = 40;
+        const bi = T._attacksFor(get(vid)).findIndex(a => /^Bite/.test(a.name));
+        window.sktD = s => (s === 20 ? 15 : 2);
+        T._rollAttack(bi, { attacker: get(vid), target: get('r212p') });
+        const y = (T._onHits || [])[0];
+        ok('drain: a vampire’s bite — only the necrotic damage (3d6 of 2s: 6)', bi >= 0 && y && y.drain && y.amt === 6 && !y.dc, JSON.stringify([bi, T._onHits]));
+        T._render(); await sleep(20);
+        ok('drain: no save to roll — an Apply button', !document.querySelector('.tv-onhit [data-tv="ohroll"]') && /Apply max HP −6/.test((document.querySelector('.tv-onhit') || {}).textContent || ''));
+        T._onHitAct('fail', 0);
+        ok('drain: applied', party().hpMax === 34, party().hpMax);
+        // A monster's own maximum.
+        state.activeCombatantId = wid; T._onHits = [];
+        window.sktD = s => (s === 20 ? 15 : 4);
+        const vmax = get(vid).hpMax;
+        T._rollAttack(ld, { attacker: get(wid), target: get(vid) });
+        T._onHitAct('fail', 0);
+        ok('drain: a monster’s maximum comes down too', get(vid).hpMax < vmax && get(vid).hpMaxNormal === vmax, JSON.stringify([vmax, get(vid).hpMax, get(vid).hpMaxNormal, T._onHits]));
+      } catch(e){ ok('round 212 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
+      finally { window.sktD = keepD; T._onHits = []; state.settings = JSON.parse(keepS); state.party = JSON.parse(keepP); state.combatants = JSON.parse(keepC); state.activeCombatantId = keepA; save(); }
     }
     // -- Class features: represented, not just text ------------------------
     {

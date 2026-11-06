@@ -1406,7 +1406,7 @@ registerPanel('turnview', {
           + (a.rider ? `<span class="tv-save" title="On a hit: ${esc((a.rider.parts || []).map(pt => pt.dice + ' ' + pt.type).join(' + '))}">then DC ${a.rider.dc} ${esc(String(a.rider.ability).slice(0,3).toUpperCase())}</span>
           <button class="btn" data-tv="rider" data-ai="${i}" data-half="0" title="On a hit, the target failed the save: ${esc((a.rider.parts || []).map(pt => pt.dice + ' ' + pt.type).join(' + '))}">Failed</button>
           ${a.rider.half ? `<button class="btn" data-tv="rider" data-ai="${i}" data-half="1" title="On a hit, the target made the save: half">Saved ½</button>` : ''}` : '')
-          + (!a.pc && a.onHit ? `<span class="tv-save" title="On a hit: ${esc(this._onHitText(a.onHit))}">then ${esc(a.onHit.dc ? 'DC ' + a.onHit.dc + ' ' + a.onHit.ability + ' or ' : '')}${esc(a.onHit.cond.toLowerCase())}</span>` : '');
+          + (!a.pc && a.onHit ? `<span class="tv-save" title="On a hit: ${esc(this._onHitText(a.onHit))}">then ${esc(a.onHit.dc ? 'DC ' + a.onHit.dc + ' ' + a.onHit.ability + ' or ' : '')}${esc(this._ohWhat(a.onHit))}</span>` : '');
       } else {
         ctl = `<span class="tv-act-note">no damage parsed</span>`;
       }
@@ -2316,6 +2316,9 @@ registerPanel('turnview', {
         // cover blown by it, come back with it)
         disengaged:c.disengaged, helping:c.helping ? {...c.helping} : null, hidden:c.hidden ? {...c.hidden} : null,
         conditions:(c.conditions || []).slice(), grappledBy:c.grappledBy ? {...c.grappledBy} : null,
+        // (a Life Drain's lowered maximum, and a condition's timer)
+        hpMax:c.hpMax, hpMaxNormal:c.hpMaxNormal, hpMaxNote:c.hpMaxNote,
+        condTimers: c.condTimers ? JSON.parse(JSON.stringify(c.condTimers)) : undefined,
         legendaryUsed:c.legendaryUsed,
         deathSaves: c.deathSaves ? {...c.deathSaves} : c.deathSaves,
         rechargeSpent: (c.rechargeSpent || []).slice(),
@@ -2326,7 +2329,7 @@ registerPanel('turnview', {
         // back and left the party card on the damaged number — the same two
         // records disagreeing that reconcilePcHp() exists to stop, arriving
         // through the undo door instead.
-        id:p.id, tempHp:p.tempHp, hp:p.hp, hpMax:p.hpMax,
+        id:p.id, tempHp:p.tempHp, hp:p.hp, hpMax:p.hpMax, hpMaxNormal:p.hpMaxNormal, hpMaxNote:p.hpMaxNote,
         // Damage to a wild-shaped druid drains the BEAST pool, and dropping
         // the beast to 0 clears the form outright — neither was undoable.
         wildshape: p.wildshape ? {...p.wildshape} : p.wildshape,
@@ -2349,6 +2352,8 @@ registerPanel('turnview', {
       if (!p) return;
       p.tempHp = s.tempHp;
       p.hp = s.hp; p.hpMax = s.hpMax;
+      if (typeof s.hpMaxNormal === 'number'){ p.hpMaxNormal = s.hpMaxNormal; p.hpMaxNote = s.hpMaxNote; }
+      else { delete p.hpMaxNormal; delete p.hpMaxNote; }
       p.wildshape = s.wildshape ? {...s.wildshape} : s.wildshape;
       p.resources = s.resources.map(r => ({...r}));
       if (s.sheet && p.sheet) p.sheet.spellSlots = s.sheet;
@@ -2531,6 +2536,7 @@ registerPanel('turnview', {
     try {
       this._lastDmgNotes = [];
       this._lastDmgTaken = 0;
+      this._lastDmgByType = {};
       parts.forEach(p => {
         const i = this._order().indexOf(target);   // re-find: the list can shift
         if (i < 0 || !p.amt) return;
@@ -2540,6 +2546,8 @@ registerPanel('turnview', {
         // Only the notes that explain a CHANGED number. A plain
         // "(slashing)" says nothing the line does not already say.
         this._lastDmgTaken += (C._lastDamageTaken || 0);
+        const ty = String(p.type || '').toLowerCase();
+        this._lastDmgByType[ty] = (this._lastDmgByType[ty] || 0) + (C._lastDamageTaken || 0);
         const n = String(C._lastDamageNote || '');
         if (/resist|immune|vulnerable|½|×2|rage/i.test(n)){
           // Drop the leading damage type when there is only one part: the
@@ -2989,8 +2997,14 @@ registerPanel('turnview', {
   // until it is answered — roll the save (with the target's conditions,
   // through combat.rollSave), take a save rolled at the table, or apply a
   // condition that needs none — or until the turn moves on.
+  // What it does, in a word or three: "prone", "max HP −7".
+  _ohWhat(oh){
+    if (oh.drain) return 'max HP ' + (oh.amt != null ? '−' + oh.amt : 'down by the ' + (oh.drain.type ? oh.drain.type + ' ' : '') + 'damage');
+    return String(oh.cond || '').toLowerCase();
+  },
   _onHitText(oh){
-    return (oh.dc ? 'DC ' + oh.dc + ' ' + oh.ability + ' save or ' : '') + oh.cond.toLowerCase()
+    return (oh.dc ? 'DC ' + oh.dc + ' ' + oh.ability + ' save or ' : '') + this._ohWhat(oh)
+      + (oh.drain ? ' (until a long rest; at 0, it dies)' : '')
       + (oh.escape ? ' (escape DC ' + oh.escape + ')' : '')
       + (oh.also ? ', and ' + oh.also.toLowerCase() + ' while it lasts' : '')
       + (oh.dur ? (oh.dur.kind === 'rounds' ? ' for ' + oh.dur.left + ' rounds' : oh.dur.kind === 'end-next' ? ' until the end of its next turn' : ' until the start of its next turn') : '')
@@ -3002,6 +3016,14 @@ registerPanel('turnview', {
     const oh = o.onHit, t = this._order().find(x => x.id === o.target.id);
     if (!oh || !t || (t.hp || 0) <= 0) return;
     const name = o.attacker + '’s ' + o.label;
+    if (oh.drain){
+      const by = this._lastDmgByType || {};
+      const amt = oh.drain.type ? (by[oh.drain.type] || 0) : (this._lastDmgTaken || 0);
+      if (amt <= 0) return;
+      (this._onHits = (this._onHits || []).filter(x => x.turn === this._turnKey())).push(Object.assign({
+        turn: this._turnKey(), srcId: o.attackerId, srcName: o.attacker, tgtId: t.id, tgtName: t.name, name }, oh, { amt }));
+      return;
+    }
     if (this._hasCond(t, oh.cond.toLowerCase()) && (!oh.also || this._hasCond(t, oh.also.toLowerCase()))) return;
     // Immune to it: said, not offered.
     if (!t.isPC){
@@ -3018,8 +3040,8 @@ registerPanel('turnview', {
       const i = this._onHits.indexOf(x);
       return `<div class="tv-onhit"><span class="tv-onhit-l"><b>${esc(x.name)}</b> hit <b>${esc(x.tgtName)}</b>: ${esc(this._onHitText(x))}</span>
         ${x.dc ? `<button class="btn" data-tv="ohroll" data-i="${i}" title="Roll ${esc(x.tgtName)}&rsquo;s ${esc(x.ability)} save here, with their conditions">Roll save</button>
-                  <button class="btn" data-tv="ohfail" data-i="${i}" title="Rolled at the table and failed: ${esc(x.cond)}">Failed</button>`
-               : `<button class="btn" data-tv="ohfail" data-i="${i}" title="${esc(x.tgtName)} is ${esc(x.cond.toLowerCase())}${x.when ? ' (if ' + esc(x.when) + ')' : ''}">Apply ${esc(x.cond.toLowerCase())}</button>`}
+                  <button class="btn" data-tv="ohfail" data-i="${i}" title="Rolled at the table and failed: ${esc(x.drain ? this._ohWhat(x) : x.cond)}">Failed</button>`
+               : `<button class="btn" data-tv="ohfail" data-i="${i}" title="${esc(x.tgtName)}: ${esc(this._ohWhat(x))}${x.when ? ' (if ' + esc(x.when) + ')' : ''}">Apply ${esc(this._ohWhat(x))}</button>`}
         <button class="tv-manual-x" data-tv="ohx" data-i="${i}" title="It doesn&rsquo;t apply" aria-label="Dismiss">✕</button></div>`;
     }).join('');
   },
@@ -3036,7 +3058,19 @@ registerPanel('turnview', {
       fail = !sv.passed;
       why = x.ability + ' save ' + (sv.auto ? sv.detail : sv.total + ' vs DC ' + x.dc + ' (' + sv.detail + ')');
     } else if (!x.dc) why = '';
-    this._snapshot(`${x.name} → ${t.name}: ${x.cond}`);
+    this._snapshot(`${x.name} → ${t.name}: ${x.drain ? this._ohWhat(x) : x.cond}`);
+    if (x.drain){
+      // The tracker's own max-HP reduction: kept until a long rest, and the
+      // party record's when it is a character.
+      const C = panelDefs.combat, ti = state.combatants.indexOf(t);
+      if (fail && C && typeof C._reduceMaxHpAt === 'function' && ti >= 0) C._reduceMaxHpAt(ti, x.amt, x.name);
+      const now = state.combatants.find(c => c.id === x.tgtId) || t;
+      const txt = `<strong>${esc(t.name)}</strong> ${fail ? '— max HP −' + x.amt + ' (now ' + now.hpMax + ')' : 'resists — max HP unchanged'}`
+        + (why ? ` <span class="dim">(${esc(why)})</span>` : '') + ` <span class="dim">· ${esc(x.name)}</span>`;
+      this._setResult(txt, true); this._log.unshift(txt);
+      save(); panelDefs.combat?._render?.(); panelDefs.party?._render?.(); this._render();
+      return;
+    }
     if (fail){
       const add = [x.cond].concat(x.also ? [x.also] : []);
       t.conditions = [...new Set([...(t.conditions || []), ...add])];
