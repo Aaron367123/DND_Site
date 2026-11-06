@@ -15753,6 +15753,31 @@ for (const cls of Object.keys(rule)) for (let L = 1; L <= 20; L++) for (const sc
       } catch(e){ ok('round 223 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
       finally { window.sktD = keepD; try { csClose(); } catch(e){} state.party = JSON.parse(party0); save(); }
     }
+    // -- Round 224: the target list puts the likeliest first — enemies, then allies, the fallen last --
+    if (!PLAYER){
+      const keepC = JSON.stringify(state.combatants), keepA = state.activeCombatantId;
+      const T = panelDefs.turnview, C = panelDefs.combat;
+      try {
+        for (let k = 0; k < 100 && !(typeof _5eLoaded !== 'undefined' && _5eLoaded); k++) await sleep(100);
+        const find = (n, src) => _5eData.find(r => r.cat === 'monster' && r.name === n && r._source === src);
+        const pc = (id, n, hp, ini) => ({ id, name: n, isPC: true, hp, hpMax: 40, ac: 15, initiative: ini, conditions: [] });
+        state.combatants = [pc('r224a', 'Ash', 40, 20), pc('r224b', 'Bram', 40, 18), pc('r224c', 'Cora', 0, 16)];
+        C.addMonster(find('Ogre', 'MM')); C.addMonster(find('Goblin', 'MM')); C.addMonster(find('Wolf', 'MM')); await sleep(20);
+        const [ogre, gob, wolf] = state.combatants.slice(3);
+        ogre.initiative = 19; gob.initiative = 17; gob.hp = 0; wolf.initiative = 2; wolf.ally = true; save();
+        const names = c => T._targetOrder(c).map(t => t.name);
+        ok('targets: on Ash’s turn, the living enemy first, then allies (the downed Cora among them), the fallen goblin last',
+           JSON.stringify(names(state.combatants[0])) === JSON.stringify(['Ogre', 'Bram', 'Cora', 'Wolf', 'Goblin']), JSON.stringify(names(state.combatants[0])));
+        ok('targets: on the ogre’s turn, its living enemies (the party and the wolf with them), its downed ally the goblin, the fallen Cora last', JSON.stringify(names(ogre)) === JSON.stringify(['Ash', 'Bram', 'Wolf', 'Goblin', 'Cora']), JSON.stringify(names(ogre)));
+        state.activeCombatantId = 'r224a'; save();
+        if (!T._body){ openPanel('turnview'); await sleep(200); }
+        T._painted = {}; T._render(); await sleep(50);
+        const btns = [...document.querySelectorAll('.tv-targets .tv-tgt')];
+        ok('targets: drawn in that order', btns.map(b => b.querySelector('.tv-tgt-name').textContent.replace(/R$/, '').trim()).join(',') === 'Ogre,Bram,Cora,Wolf,Goblin', btns.map(b => b.textContent.replace(/\s+/g, ' ').trim().slice(0, 12)).join(' | '));
+        ok('targets: the fallen dimmed (the goblin, and Cora at 0), the living not', btns.filter(b => b.classList.contains('down')).length === 2 && !btns[0].classList.contains('down'));
+      } catch(e){ ok('round 224 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
+      finally { state.combatants = JSON.parse(keepC); state.activeCombatantId = keepA; save(); }
+    }
     // -- Class features: represented, not just text ------------------------
     {
       try {

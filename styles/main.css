@@ -4225,6 +4225,7 @@ select.tv-in.wide { width:126px; }
   transition:border-color .12s,background .12s; }
 .tv-tgt:hover { background:var(--panel-3); }
 .tv-tgt.armed { border-color:var(--accent); background:rgba(212,165,116,.12); }
+.tv-tgt.down { opacity:.55; }
 .tv-tgt-row { display:flex; align-items:center; gap:8px; }
 .tv-tgt-name { flex:1; min-width:0; font-size:var(--fs-md); white-space:nowrap;
   overflow:hidden; text-overflow:ellipsis; }

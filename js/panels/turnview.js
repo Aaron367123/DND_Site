@@ -1819,8 +1819,19 @@ registerPanel('turnview', {
     return p1 + p2;
   },
 
+  // Who the active creature can target, the likeliest first: its living
+  // enemies, then its allies, then the fallen enemies and the dead (dimmed) — each group in
+  // initiative order. With a party of seven, the enemy was below them all.
+  _targetOrder(c){
+    const side = c ? this._sideOf(c) : null;
+    // (a downed ally stays with the allies: that is who a healer is looking for)
+    const rank = t => { const foe = side && this._sideOf(t) !== side, down = (t.hp || 0) <= 0;
+      return t.dead || (foe && down) ? 2 : foe ? 0 : 1; };
+    return this._order().filter(t => t.id !== (c && c.id)).map((t, i) => ({ t, i, r: rank(t) }))
+      .sort((a, b) => a.r - b.r || a.i - b.i).map(x => x.t);
+  },
   _renderTargets(c){
-    const rows = this._order().filter(t => t.id !== (c && c.id)).map(t => {
+    const rows = this._targetOrder(c).map(t => {
       const pct = t.hpMax ? Math.max(0, (t.hp / t.hpMax) * 100) : 0;
       const col = pct <= 0 ? '#5a3a3a' : pct < 35 ? 'var(--danger)' : pct < 75 ? 'var(--warning)' : 'var(--success)';
       // A creature holding an unspent reaction that could ANSWER an attack is
@@ -1840,7 +1851,7 @@ registerPanel('turnview', {
                    ? esc(t.name) + ' has used their reaction — click to give it back'
                    : 'Spend ' + esc(t.name) + '&rsquo;s reaction'}">R</span>`
         : '';
-      return `<button class="tv-tgt ${this._armed === t.id ? 'armed' : ''}" data-tv="arm" data-id="${esc(t.id)}"
+      return `<button class="tv-tgt ${this._armed === t.id ? 'armed' : ''} ${(t.hp || 0) <= 0 || t.dead ? 'down' : ''}" data-tv="arm" data-id="${esc(t.id)}"
                       aria-pressed="${this._armed === t.id}">
         <span class="tv-tgt-row">
           <span class="tv-tgt-name">${esc(t.name)}${r}</span>
