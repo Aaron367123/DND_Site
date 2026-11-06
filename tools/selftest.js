@@ -15629,6 +15629,53 @@ for (const cls of Object.keys(rule)) for (let L = 1; L <= 20; L++) for (const sc
       } catch(e){ ok('round 220 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
       finally { try { csClose(); } catch(e){} document.getElementById('cb-root')?.remove(); state.party = JSON.parse(party0); save(); }
     }
+    // -- Round 221: incapacitated ends concentration (and the summon with it); a 2014 summon is the 2014 creature --
+    if (!PLAYER){
+      const keepC = JSON.stringify(state.combatants), keepA = state.activeCombatantId, keepP = JSON.stringify(state.party), keepL = JSON.stringify(state.combatLog || []);
+      const C = panelDefs.combat;
+      try {
+        for (let k = 0; k < 100 && !(typeof _5eLoaded !== 'undefined' && _5eLoaded); k++) await sleep(100);
+        const find = (n, src) => _5eData.find(r => r.cat === 'monster' && r.name === n && r._source === src);
+        state.party.push({ id: 'r221c', name: 'Ilse', hp: 30, hpMax: 30, ac: 16, rules: '2024', concentration: 'Summon Beast', sheet: { spellAtkBonus: '+6', spellSaveDc: 14 } });
+        state.combatants = [{ id: 'r221c', name: 'Ilse', isPC: true, hp: 30, hpMax: 30, ac: 16, initiative: 10, conditions: [] }]; save();
+        C.addMonster(find('Mage', 'MM')); await sleep(20);
+        document.querySelectorAll('.modal-backdrop').forEach(m => m.remove());
+        const mage = state.combatants[1]; mage.concentration = 'Fly';
+        const sp = C.addSummon({ ownerId: 'r221c', spell: 'Summon Beast', name: 'Bestial Spirit', source: 'XPHB', level: 2, count: 1, conc: true })[0];
+        const party = () => state.party.find(p => p.id === 'r221c');
+        const get = id => state.combatants.find(c => c.id === id);
+        // Prone: nothing ends.
+        C._toggleCondAtIdx(0, 'Prone');
+        ok('concentration: prone, she keeps it', party().concentration === 'Summon Beast' && !!get(sp.id));
+        C._toggleCondAtIdx(0, 'Prone');
+        // Stunned: it ends, and the spirit goes.
+        C._toggleCondAtIdx(0, 'Stunned');
+        ok('concentration: stunned, Summon Beast ends', party().concentration === null, JSON.stringify(party().concentration));
+        ok('concentration: …and the spirit disappears with it', !get(sp.id), JSON.stringify(state.combatants.map(c => c.name)));
+        ok('concentration: the log says so', (state.combatLog || []).slice(-4).some(l => /Ilse is stunned — Summon Beast ends/.test(l.text)), JSON.stringify((state.combatLog || []).slice(-3)));
+        // A monster's own concentration too.
+        const mi = state.combatants.findIndex(c => c.id === mage.id);
+        C._toggleCondAtIdx(mi, 'Paralyzed');
+        ok('concentration: a paralysed mage loses Fly', !get(mage.id).concentration, JSON.stringify(get(mage.id).concentration));
+        // Not on a player's screen.
+        state.party.forEach(p => { if (p.id === 'r221c') p.concentration = 'Bless'; });
+        document.body.classList.add('player-mode');
+        const pl = C._endConcOnIncap(); document.body.classList.remove('player-mode');
+        ok('concentration: a player’s screen leaves it to the DM’s', pl === false && party().concentration === 'Bless');
+        // A 2014 caster's Animate Dead: the 2014 Skeleton; a 2024 caster's: the 2024 one.
+        state.party.forEach(p => { if (p.id === 'r221c'){ p.rules = '2014'; p.concentration = null; } });
+        state.combatants = [state.combatants[0]]; state.combatants[0].conditions = [];
+        const s14 = C.addSummon({ ownerId: 'r221c', spell: 'Animate Dead', name: 'Skeleton', source: null, level: 3, count: 1 })[0];
+        state.party.forEach(p => { if (p.id === 'r221c') p.rules = '2024'; });
+        const s24 = C.addSummon({ ownerId: 'r221c', spell: 'Animate Dead', name: 'Skeleton', source: null, level: 3, count: 1 })[0];
+        const era = c => SKT_2024_ERA.has(c._source) ? '2024' : '2014';
+        ok('summon: a 2014 caster’s skeleton is the 2014 one, a 2024 caster’s the 2024 one', s14 && s24 && era(s14) === '2014' && era(s24) === '2024', JSON.stringify([s14 && s14._source, s24 && s24._source]));
+      } catch(e){ ok('round 221 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
+      finally {
+        document.body.classList.remove('player-mode');
+        state.party = JSON.parse(keepP); state.combatLog = JSON.parse(keepL); state.combatants = JSON.parse(keepC); state.activeCombatantId = keepA; save();
+      }
+    }
     // -- Class features: represented, not just text ------------------------
     {
       try {

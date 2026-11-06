@@ -431,7 +431,8 @@ registerPanel('combat',{
   // o: { ownerId, spell, name, source, level, count, conc } → the added.
   addSummon(o){
     const p = (state.party || []).find(x => x.id === o.ownerId), sh = (p && p.sheet) || {};
-    const m = typeof sktMonsterByName === 'function' ? sktMonsterByName(o.name, o.source) : null;
+    const ed = p ? ((p.build && p.build.edition) || p.rules || '2024') : '2024';
+    const m = typeof sktMonsterByName === 'function' ? sktMonsterByName(o.name, o.source, ed) : null;
     if (!m) return [];
     const atk = parseInt(sh.spellAtkBonus, 10), dc = +sh.spellSaveDc;
     const given = { level: +o.level || undefined, atk: isNaN(atk) ? undefined : atk, dc: dc || undefined };
@@ -470,6 +471,29 @@ registerPanel('combat',{
       save();
     } finally { this._takingSummons = false; }
     return true;
+  },
+  // Incapacitated is the end of concentration ("if you are incapacitated or
+  // die"): stunned, paralysed, petrified, unconscious all are. Dropping to 0
+  // was handled with the damage; a condition put on by hand or by a hit
+  // wasn't, and Hold Person kept going on a stunned cleric.
+  _endConcOnIncap(){
+    if (document.body.classList.contains('player-mode')) return false;
+    const INC = ['incapacitated', 'paralyzed', 'petrified', 'stunned', 'unconscious'];
+    let changed = false;
+    (state.combatants || []).forEach(c => {
+      if (!c || !(c.conditions || []).some(x => INC.includes(String(x).toLowerCase()))) return;
+      const p = c.isPC ? (state.party || []).find(x => x.id === c.id) : null;
+      const conc = c.isPC ? (p && p.concentration) : c.concentration;
+      if (!conc) return;
+      if (p) p.concentration = null; else c.concentration = null;
+      const why = (c.conditions || []).find(x => INC.includes(String(x).toLowerCase()));
+      this._log(c.name + ' is ' + String(why).toLowerCase() + ' — ' + conc + ' ends');
+      if (typeof showToast === 'function') showToast(conc + ' ends — ' + c.name + ' is ' + String(why).toLowerCase());
+      if (c.isPC) setTimeout(() => panelDefs.party?._render?.(), 0);
+      changed = true;
+    });
+    if (changed) save();
+    return changed;
   },
   // A concentration summon leaves when the caster's concentration on that
   // spell ends (Summon Beast's spirit "disappears"), and with its caster.
@@ -537,6 +561,7 @@ registerPanel('combat',{
     this._releaseGrapples();
     this._syncExtras();
     this._takeSummonRequests();
+    this._endConcOnIncap();
     this._endSummons();
     const b=this._body;if(!b)return;
     const inCombat=state.combatants.length>0;

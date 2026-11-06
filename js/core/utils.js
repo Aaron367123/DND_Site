@@ -1250,16 +1250,20 @@ function sktConjureCreatures(conj, edition){
   }).sort((a, b) => b.cr - a.cr || a.name.localeCompare(b.name));
 }
 // A bestiary entry by its name (any case), its own book's printing first.
-function sktMonsterByName(name, source){
+// With no book named, the edition's own printing (a 2014 Skeleton for a 2014
+// caster's Animate Dead, the 2024 one for a 2024 caster's).
+function sktMonsterByName(name, source, edition){
   if (typeof _5eData === 'undefined' || !Array.isArray(_5eData) || !name) return null;
   const n = String(name).toLowerCase();
-  let first = null;
+  const era = d => typeof SKT_2024_ERA !== 'undefined' && SKT_2024_ERA.has(d._source) ? '2024' : '2014';
+  let first = null, mine = null;
   for (const d of _5eData){
     if (d.cat !== 'monster' || String(d.name).toLowerCase() !== n) continue;
     if (source && d._source === source) return d;
     if (!first) first = d;
+    if (!mine && edition && era(d) === edition) mine = d;
   }
-  return first;
+  return mine || first;
 }
 function sktFindMonster(slug, source){
   if (typeof _5eData === 'undefined' || !Array.isArray(_5eData) || !slug) return null;
