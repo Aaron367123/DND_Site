@@ -948,6 +948,7 @@ registerPanel('turnview', {
   // ─── Render ───────────────────────────────────────────────────────────────
   _render(){
     const b = this._body; if (!b) return;
+    panelDefs.combat?._releaseGrapples?.();
     this._sig = this._combatSig();
     // Re-read the map once per render rather than once per distance test:
     // _gatherReactions asks for the distance between every pair of creatures.
@@ -2856,9 +2857,10 @@ registerPanel('turnview', {
     // movement budget, a visibility model or a chosen target that nothing
     // here tracks, so they are recorded and adjudicated — same rule as the
     // reactions with no mechanics.
-    const acts = ['Dash', 'Disengage', 'Dodge', 'Help', 'Hide', 'Ready'];
+    const acts = ['Dash', 'Disengage', 'Dodge', 'Help', 'Hide', 'Ready'].concat(this._hasCond(c, 'grappled') ? ['Escape'] : []);
     const status = [c.dodging ? 'Dodging' : '', c.disengaged ? 'Disengaged' : '', c.helping ? 'Helping against ' + esc(c.helping.name) : '',
-      c.hidden ? 'Hidden' + (c.hidden.total != null ? ' (Stealth ' + c.hidden.total + ')' : '') : ''].filter(Boolean);
+      c.hidden ? 'Hidden' + (c.hidden.total != null ? ' (Stealth ' + c.hidden.total + ')' : '') : '',
+      this._hasCond(c, 'grappled') && c.grappledBy ? 'Grappled by ' + esc(c.grappledBy.name) + (c.grappledBy.escape ? ' (escape DC ' + c.grappledBy.escape + ')' : '') : ''].filter(Boolean);
     return `<div class="tv-econ-bar">
       ${pip('actionUsed', 'Action', 'This turn&rsquo;s action')}
       ${pip('bonusUsed', 'Bonus', 'This turn&rsquo;s bonus action')}
@@ -2873,6 +2875,7 @@ registerPanel('turnview', {
                   : a === 'Disengage' ? 'Its movement provokes no opportunity attacks for the rest of this turn — applied automatically'
                   : a === 'Help' ? 'Pick the enemy on the right first: the next attack roll an ally makes against it has advantage, until the start of this creature\'s next turn — applied automatically'
                   : a === 'Hide' ? 'A Stealth check (DC 15; in the 2014 rules, the enemies\' best passive Perception). Hidden, its attacks have advantage and attacks against it disadvantage, until it attacks or is found — applied automatically'
+                  : a === 'Escape' ? 'An Athletics or Acrobatics check against the grapple’s escape DC (in the 2014 rules, with none written, a contest with the grappler’s Athletics). Made, the grapple ends — applied automatically'
                   : 'Take the ' + a + ' action: spends the action and logs it'}"
           >${a}</button>`).join('')}
     </div>`;
@@ -2880,6 +2883,7 @@ registerPanel('turnview', {
   _takeStandardAction(name){
     const c = this._active(); if (!c) return;
     if (name === 'Hide') return this._hide(c);
+    if (name === 'Escape') return this._escape(c);
     this._snapshot(`${c.name} · ${name}`);
     const asBonus = this._spendStd(c, name);
     if (name === 'Dodge'){
@@ -3038,7 +3042,7 @@ registerPanel('turnview', {
       t.conditions = [...new Set([...(t.conditions || []), ...add])];
       // Who holds it: a grapple ends with them, and (2024) the grappled
       // creature's attacks on anyone else are at disadvantage.
-      if (add.includes('Grappled')) t.grappledBy = { id: x.srcId, name: x.srcName, escape: x.escape || null };
+      if (add.includes('Grappled')) t.grappledBy = { id: x.srcId, name: x.srcName, escape: x.escape || null, also: x.also || null };
       // Its duration and its repeat save, on the tracker's own condition
       // timer: the save comes up at the end of each of the target's turns.
       const C = panelDefs.combat, ti = state.combatants.indexOf(t);
@@ -3067,16 +3071,93 @@ registerPanel('turnview', {
     const v = sn && typeof sn === 'object' ? sn.passive_perception : (/passive Perception (\d+)/i.exec(String(sn || '')) || [])[1];
     return v == null || isNaN(+v) ? null : +v;
   },
-  _stealthBonus(c){
+  _stealthBonus(c){ return this._skillBonus(c, 'stealth', 'dex'); },
+  // A creature's bonus with a skill: the sheet's, or the stat block's
+  // proficiency, otherwise the ability's modifier.
+  _skillBonus(c, skill, ab){
     const md = s => Math.floor(((+s || 10) - 10) / 2);
+    const AB = { str: 'strength', dex: 'dexterity', con: 'constitution', int: 'intelligence', wis: 'wisdom', cha: 'charisma' };
     if (c.isPC){
       const p = this._partyOf(c) || {}, sh = p.sheet || {};
-      const v = typeof csSkillVal === 'function' ? csSkillVal(sh, 'stealth') : null;
-      return v != null && !isNaN(+v) ? +v : md((p.abilities || {}).dex);
+      const v = typeof csSkillVal === 'function' ? csSkillVal(sh, skill) : null;
+      return v != null && !isNaN(+v) ? +v : md((p.abilities || {})[ab]);
     }
     const raw = (this._entryOf(c) || {})._raw || {};
-    const prof = (raw.proficiencies || []).find(x => x && x.proficiency && x.proficiency.name === 'Skill: Stealth');
-    return prof ? +prof.value || 0 : md(raw.dexterity);
+    const want = 'skill: ' + skill;
+    const prof = (raw.proficiencies || []).find(x => x && x.proficiency && String(x.proficiency.name).toLowerCase() === want);
+    return prof ? +prof.value || 0 : md(raw[AB[ab]]);
+  },
+  // One ability check, rolled here with what applies to it: a character's
+  // sheet effects (poisoned, exhaustion, Rage…), a monster's poisoned or
+  // frightened. → { total, detail }
+  _rollCheck(c, skill, bonus){
+    const p = c.isPC ? this._partyOf(c) : null;
+    const sg = n => (n < 0 ? '−' : '+') + Math.abs(n);
+    const fx = p && typeof csRollEffects === 'function' ? csRollEffects(p, 'check:' + skill)
+      : { adv: [], dis: ['poisoned', 'frightened'].filter(n => this._hasCond(c, n)), bonus: 0 };
+    const mode = fx.adv.length && !fx.dis.length ? 1 : fx.dis.length && !fx.adv.length ? -1 : 0;
+    const a = this._d(20), b = mode ? this._d(20) : null;
+    const nat = b == null ? a : mode > 0 ? Math.max(a, b) : Math.min(a, b);
+    return { total: nat + bonus + (fx.bonus || 0),
+      detail: 'd20 ' + (b == null ? a : a + '/' + b) + ' ' + sg(bonus) + (fx.bonus ? ' ' + sg(fx.bonus) : '')
+        + (mode ? ' (' + (mode > 0 ? 'advantage: ' + fx.adv.join(', ') : 'disadvantage: ' + fx.dis.join(', ')) + ')' : '') };
+  },
+
+  // Escaping a grapple: the action, and an Athletics or Acrobatics check
+  // (whichever is better) against the grapple's escape DC. A 2014 grapple
+  // with no DC written is a contest with the grappler's Athletics, which the
+  // grappler wins on a tie. Made, it ends the grapple and whatever came with
+  // it (a constrictor's restrained). A character's total is the player's,
+  // typed in, or rolled here.
+  async _escape(c, typed){
+    if (!this._hasCond(c, 'grappled')) return false;
+    const gb = c.grappledBy || null;
+    const g = gb ? this._order().find(o => o.id === gb.id) : null;
+    const ath = this._skillBonus(c, 'athletics', 'str'), acr = this._skillBonus(c, 'acrobatics', 'dex');
+    const skill = acr > ath ? 'acrobatics' : 'athletics', bonus = Math.max(ath, acr);
+    const sk = skill === 'acrobatics' ? 'Acrobatics' : 'Athletics';
+    const sg = n => (n < 0 ? '−' : '+') + Math.abs(n);
+    let dc = gb && gb.escape ? +gb.escape : null, dcWhy = dc ? 'escape DC ' + dc : '', contest = false;
+    if (dc == null && g && this._edOf(c) === '2014'){
+      const r = this._rollCheck(g, 'athletics', this._skillBonus(g, 'athletics', 'str'));
+      dc = r.total + 1; contest = true;
+      dcWhy = g.name + '’s Athletics ' + r.total + ' (' + r.detail + ')';
+    }
+    if (dc == null && typeof showConfirm === 'function'){
+      const v = await showConfirm('The grapple’s escape DC?', { title: 'Escape', confirmLabel: 'Next',
+        input: { label: 'Escape DC (blank: roll the check and judge it yourself)', min: 1, max: 40 } });
+      if (v === false) return false;
+      if (typeof v === 'number'){ dc = v; dcWhy = 'escape DC ' + v; }
+    }
+    let total = typeof typed === 'number' ? typed : null, detail = '';
+    if (total == null && c.isPC && typeof showConfirm === 'function' && typed !== 'roll'){
+      const v = await showConfirm(c.name + ' tries to escape' + (g ? ' ' + g.name + '’s grapple' : ' the grapple') + '. Athletics or Acrobatics'
+        + (dcWhy ? ' against ' + dcWhy : '') + '.',
+        { title: 'Escape', confirmLabel: 'Escape', input: { label: 'Their check total (blank: roll ' + sk + ' ' + sg(bonus) + ')', min: -10, max: 60 } });
+      if (v === false) return false;
+      if (typeof v === 'number') total = v;
+    }
+    this._snapshot(`${c.name} · Escape`);
+    this._spend(c, 'actionUsed');
+    if (total == null){ const r = this._rollCheck(c, skill, bonus); total = r.total; detail = sk + ' ' + r.detail; }
+    const made = dc != null && total >= dc;
+    if (made){
+      const drop = ['grappled'].concat(gb && gb.also ? [String(gb.also).toLowerCase()] : []);
+      const i = state.combatants.indexOf(c);
+      const timers = Object.assign({}, c.condTimers);
+      (c.conditions || []).forEach(x => { if (drop.includes(String(x).toLowerCase())) delete timers[x]; });
+      c.conditions = (c.conditions || []).filter(x => !drop.includes(String(x).toLowerCase()));
+      c.condTimers = Object.keys(timers).length ? timers : undefined;
+      c.grappledBy = null;
+    }
+    const sum = `Escape: ${total}${dc != null ? ' vs ' + (contest ? dc - 1 : dc) : ''}`;
+    this._setResult(`<strong>${esc(c.name)}</strong> tries to <strong>escape</strong>${g ? ' ' + esc(g.name) + '&rsquo;s grapple' : ''} — `
+      + `<strong>${total}</strong>${detail ? ` <span class="dim">(${esc(detail)})</span>` : ''}`
+      + (dcWhy ? ` vs ${esc(dcWhy)}` : '') + ' — '
+      + (dc == null ? 'the DM judges it.' : made ? 'free' + (gb && gb.also ? ', and no longer ' + esc(String(gb.also).toLowerCase()) : '') + '.' : 'still held.'), true);
+    this._log.unshift(`<strong>${esc(c.name)}</strong> — ${esc(sum)}, ${dc == null ? 'judged by the DM' : made ? 'escapes' : 'still grappled'}`);
+    save(); panelDefs.combat?._render?.(); if (c.isPC) panelDefs.party?._render?.(); this._render();
+    return made;
   },
 
   // Monster bonus actions, straight from the stat block. 543 of the 4,454

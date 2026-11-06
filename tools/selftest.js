@@ -14914,6 +14914,93 @@ for (const cls of Object.keys(rule)) for (let L = 1; L <= 20; L++) for (const sc
       } catch(e){ ok('round 210 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
       finally { window.sktD = keepD; T._onHits = []; state.settings = JSON.parse(keepS); state.party = JSON.parse(keepP); state.combatants = JSON.parse(keepC); state.activeCombatantId = keepA; save(); }
     }
+    // -- Round 211: getting out of a grapple — the Escape action, and a grapple that ends with its grappler --
+    if (!PLAYER){
+      const keepC = JSON.stringify(state.combatants), keepA = state.activeCombatantId, keepP = JSON.stringify(state.party), keepS = JSON.stringify(state.settings || {}), keepO = T_stdOpen();
+      function T_stdOpen(){ return panelDefs.turnview._stdOpen; }
+      const T = panelDefs.turnview, C = panelDefs.combat, keepD = window.sktD;
+      try {
+        for (let k = 0; k < 100 && !(typeof _5eLoaded !== 'undefined' && _5eLoaded); k++) await sleep(100);
+        const find = (n, src) => _5eData.find(r => r.cat === 'monster' && r.name === n && r._source === src);
+        state.settings = Object.assign({}, state.settings, { builderEdition: '2024' });
+        state.party.push({ id: 'r211p', name: 'Held', hp: 40, hpMax: 40, ac: 12, rules: '2024', sheet: { skills: { athletics: 3, acrobatics: 1 } }, abilities: { str: 16, dex: 12 } });
+        state.combatants = []; save();
+        C.addMonster(find('Giant Constrictor Snake', 'MM')); C.addMonster(find('Wolf', 'MM')); C.addMonster(find('Ogre', 'MM')); await sleep(50);
+        const sid = state.combatants[0].id, wid = state.combatants[1].id, oid = state.combatants[2].id;
+        state.combatants.push({ id: 'r211p', name: 'Held', isPC: true, hp: 40, hpMax: 40, ac: 12, initiative: 1, conditions: [] });
+        const get = id => state.combatants.find(x => x.id === id);
+        const heal = () => state.combatants.forEach(x => { if (x.id === 'r211p') x.hp = 40; });
+        if (!T._body && typeof openPanel === 'function'){ openPanel('turnview'); await sleep(200); }
+        const constrict = (tid) => {
+          state.activeCombatantId = sid; T._onHits = []; heal(); if (tid !== 'r211p'){ get(tid).hp = 200; get(tid).hpMax = 200; get(tid).tempHp = 0; }
+          const snake = get(sid); snake.actionUsed = false;
+          const ci = T._attacksFor(snake).findIndex(a => a.name === 'Constrict');
+          window.sktD = () => 15; T._rollAttack(ci, { attacker: snake, target: get(tid) });
+          const qi = T._onHits.findIndex(x => x.cond === 'Grappled'); if (qi >= 0) T._onHitAct('fail', qi);
+          return qi;
+        };
+        // 1. What holds them, and the way out.
+        ok('escape: (the constrictor grapples)', constrict('r211p') >= 0 && T._hasCond(get('r211p'), 'grappled') && T._hasCond(get('r211p'), 'restrained'), JSON.stringify(get('r211p').conditions));
+        ok('escape: the grip says what came with it', get('r211p').grappledBy && get('r211p').grappledBy.also === 'Restrained', JSON.stringify(get('r211p').grappledBy));
+        state.activeCombatantId = 'r211p'; T._stdOpen = true; T._render(); await sleep(20);
+        const bar = (document.querySelector('.tv-econ-bar') || {}).textContent || '';
+        ok('escape: the bar says who holds them, and the escape DC', /Grappled by Giant Constrictor Snake \(escape DC 16\)/.test(bar), bar.replace(/\s+/g, ' ').slice(0, 300));
+        ok('escape: an Escape button while grappled', !!document.querySelector('[data-tv="stdact"][data-a="Escape"]'));
+        // 2. A character's typed total: 15 falls short of 16, 16 makes it.
+        get('r211p').actionUsed = false;
+        let made = await T._escape(get('r211p'), 15);
+        ok('escape: 15 against DC 16 — still held, the action spent', made === false && T._hasCond(get('r211p'), 'grappled') && get('r211p').actionUsed === true, JSON.stringify([made, get('r211p').conditions, get('r211p').actionUsed]));
+        get('r211p').actionUsed = false;
+        made = await T._escape(get('r211p'), 16);
+        ok('escape: 16 — free, and no longer restrained', made === true && !T._hasCond(get('r211p'), 'grappled') && !T._hasCond(get('r211p'), 'restrained') && !get('r211p').grappledBy, JSON.stringify([made, get('r211p').conditions, get('r211p').grappledBy]));
+        T._render(); await sleep(20);
+        ok('escape: no Escape button once free', !document.querySelector('[data-tv="stdact"][data-a="Escape"]'));
+        if (typeof sktUndo === 'function'){ sktUndo(); await sleep(40);
+          ok('escape: undo puts the grapple back', T._hasCond(get('r211p'), 'grappled') && T._hasCond(get('r211p'), 'restrained') && get('r211p').grappledBy && get('r211p').grappledBy.id === sid, JSON.stringify([get('r211p').conditions, get('r211p').grappledBy])); }
+        // 3. A monster rolls its better check: the wolf's Acrobatics (+2), not its Strength (+1).
+        ok('escape: (the wolf is grappled)', constrict(wid) >= 0 && T._hasCond(get(wid), 'grappled'));
+        state.activeCombatantId = wid; get(wid).actionUsed = false; window.sktD = () => 14;
+        made = await T._escape(get(wid));
+        ok('escape: a wolf rolls Acrobatics +2: 14 + 2 = 16, out', made === true && !T._hasCond(get(wid), 'grappled') && /Acrobatics d20 14 \+2/.test(T._log[0] + ' ' + T._result), JSON.stringify([made, T._log[0]]));
+        constrict(wid); state.activeCombatantId = wid; get(wid).actionUsed = false; window.sktD = () => 13;
+        made = await T._escape(get(wid));
+        ok('escape: 13 + 2 = 15, held', made === false && T._hasCond(get(wid), 'grappled'));
+        // 4. The grapple ends with the grappler.
+        get(wid).conditions = []; get(wid).grappledBy = null;
+        constrict('r211p'); get(sid).hp = 0; C._render();
+        ok('a grapple ends when the grappler drops', !T._hasCond(get('r211p'), 'grappled') && !T._hasCond(get('r211p'), 'restrained') && !get('r211p').grappledBy, JSON.stringify([get('r211p').conditions, get('r211p').grappledBy]));
+        ok('… and the tracker’s log says so', (state.combatLog || []).slice(-3).some(l => /Held is no longer grappled — Giant Constrictor Snake is down \(and no longer restrained\)/.test(l.text)), JSON.stringify((state.combatLog || []).slice(-2)));
+        get(sid).hp = 60; constrict('r211p'); get(sid).conditions = ['Stunned']; C._render();
+        ok('… or is stunned', !T._hasCond(get('r211p'), 'grappled') && !T._hasCond(get('r211p'), 'restrained'), JSON.stringify(get('r211p').conditions));
+        get(sid).conditions = ['Prone']; constrict('r211p'); C._render();
+        ok('… but not when it is only prone', T._hasCond(get('r211p'), 'grappled') && T._hasCond(get('r211p'), 'restrained'), JSON.stringify(get('r211p').conditions));
+        T._render();
+        ok('… (and the Turn View lets go too)', T._hasCond(get('r211p'), 'grappled'));
+        get(sid).hp = 0; T._render();
+        ok('… the Turn View lets go when it drops', !T._hasCond(get('r211p'), 'grappled'), JSON.stringify(get('r211p').conditions));
+        get(sid).hp = 60; get(sid).conditions = []; constrict('r211p');
+        document.body.classList.add('player-mode'); get(sid).hp = 0;
+        const pl = C._releaseGrapples(); document.body.classList.remove('player-mode');
+        ok('… not on a player’s screen (the DM’s to change)', pl === false && T._hasCond(get('r211p'), 'grappled'));
+        get(sid).hp = 60; C._render();
+        // Taking Grappled off by hand ends the restrained it brought.
+        C._toggleCondAtIdx(state.combatants.findIndex(x => x.id === 'r211p'), 'Grappled');
+        ok('grappled taken off by hand: restrained goes with it', !T._hasCond(get('r211p'), 'restrained') && !get('r211p').grappledBy, JSON.stringify([get('r211p').conditions, get('r211p').grappledBy]));
+        constrict('r211p');
+        C._removeCombatantAt(state.combatants.findIndex(x => x.id === sid)); C._render();
+        ok('… and when the grappler leaves the fight', !T._hasCond(get('r211p'), 'grappled') && !T._hasCond(get('r211p'), 'restrained'), JSON.stringify(get('r211p').conditions));
+        // 5. 2014, no DC written: a contest with the grappler's Athletics, the grappler winning ties.
+        state.party.forEach(x => { if (x.id === 'r211p') x.rules = '2014'; });
+        const h = get('r211p'); h.conditions = ['Grappled']; h.grappledBy = { id: oid, name: 'Ogre', escape: null };
+        state.activeCombatantId = 'r211p'; h.actionUsed = false; window.sktD = () => 10;
+        made = await T._escape(get('r211p'), 14);
+        ok('escape (2014): 14 against the ogre’s Athletics 14 — a tie, still held', made === false && T._hasCond(get('r211p'), 'grappled') && /Ogre’s Athletics 14/.test(T._result || ''), T._result);
+        get('r211p').actionUsed = false;
+        made = await T._escape(get('r211p'), 15);
+        ok('escape (2014): 15 beats it', made === true && !T._hasCond(get('r211p'), 'grappled'));
+      } catch(e){ ok('round 211 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
+      finally { window.sktD = keepD; T._onHits = []; T._stdOpen = keepO; document.body.classList.remove('player-mode'); state.settings = JSON.parse(keepS); state.party = JSON.parse(keepP); state.combatants = JSON.parse(keepC); state.activeCombatantId = keepA; save(); }
+    }
     // -- Class features: represented, not just text ------------------------
     {
       try {

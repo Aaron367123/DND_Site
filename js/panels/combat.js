@@ -406,7 +406,37 @@ registerPanel('combat',{
     </div>`;
   },
 
+  // A grapple ends when the grappler can't hold it: gone from the fight, at
+  // 0 HP, or incapacitated (paralysed, stunned, unconscious…). And taking
+  // Grappled off by hand ends what came with it — the restrained "until this
+  // grapple ends". → true when something changed.
+  _releaseGrapples(){
+    if (document.body.classList.contains('player-mode')) return false;   // the DM's to change
+    const INC = ['incapacitated', 'paralyzed', 'petrified', 'stunned', 'unconscious'];
+    const lc = a => (a || []).map(x => String(x).toLowerCase());
+    let changed = false;
+    (state.combatants || []).forEach((c, i) => {
+      const gb = c && c.grappledBy; if (!gb) return;
+      const conds = c.conditions || [], held = lc(conds).includes('grappled');
+      const g = state.combatants.find(o => o.id === gb.id);
+      const why = !held ? '' : !g ? gb.name + ' is gone' : (g.hp || 0) <= 0 ? gb.name + ' is down'
+        : lc(g.conditions).some(x => INC.includes(x)) ? gb.name + ' can’t hold on' : null;
+      if (why === null) return;
+      const drop = ['grappled'].concat(gb.also ? [String(gb.also).toLowerCase()] : []);
+      const timers = Object.assign({}, c.condTimers);
+      conds.forEach(x => { if (drop.includes(String(x).toLowerCase())) delete timers[x]; });
+      state.combatants[i] = { ...c, grappledBy: null, conditions: conds.filter(x => !drop.includes(String(x).toLowerCase())),
+        condTimers: Object.keys(timers).length ? timers : undefined };
+      changed = true;
+      this._log(c.name + (held ? ' is no longer grappled — ' + why : ' — the grapple is over') + (gb.also ? ' (and no longer ' + String(gb.also).toLowerCase() + ')' : ''));
+      if (c.isPC) setTimeout(() => panelDefs.party?._render?.(), 0);
+    });
+    if (changed) save();
+    return changed;
+  },
+
   _render(){
+    this._releaseGrapples();
     const b=this._body;if(!b)return;
     const inCombat=state.combatants.length>0;
     const compact = !!(state.settings && state.settings.combatCompact);
