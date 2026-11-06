@@ -16200,6 +16200,73 @@ for (const cls of Object.keys(rule)) for (let L = 1; L <= 20; L++) for (const sc
       } catch(e){ ok('round 233 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
       finally { window.sktD = keepD; T._lastPcHit = null; state.party = JSON.parse(keepP); state.combatants = JSON.parse(keepC); state.activeCombatantId = keepA; save(); }
     }
+    // -- Round 234: a character's miss offers the dice that might turn it — Bardic Inspiration, a Luck Point, Heroic Inspiration --
+    if (!PLAYER){
+      const keepC = JSON.stringify(state.combatants), keepA = state.activeCombatantId, keepP = JSON.stringify(state.party);
+      const T = panelDefs.turnview, C = panelDefs.combat, keepD = window.sktD;
+      try {
+        for (let k = 0; k < 100 && !(typeof _5eLoaded !== 'undefined' && _5eLoaded); k++) await sleep(100);
+        const find = (n, src) => _5eData.find(r => r.cat === 'monster' && r.name === n && r._source === src);
+        state.party.push({ id: 'r234z', name: 'Zoey', hp: 40, hpMax: 40, ac: 15, rules: '2024', level: 6, bardicInspiration: 'd8', bardicFrom: 'Zindle', inspiration: true,
+          resources: [{ name: 'Luck Points', current: 3, max: 3 }, { name: 'Sneak Attack', die: '3d6', current: 1, max: 1 }],
+          sheet: { attacks: [{ name: 'Shortsword', atkBonus: '+7', damage: '1d6+4 piercing', props: ['F', 'L'] }] } });
+        state.combatants = [{ id: 'r234z', name: 'Zoey', isPC: true, hp: 40, hpMax: 40, ac: 15, initiative: 20, conditions: [] }];
+        C.addMonster(find('Ogre', 'MM')); await sleep(20);
+        const get = id => state.combatants.find(c => c.id === id), ogreId = state.combatants[1].id, og = () => get(ogreId);
+        Object.assign(og(), { hp: 300, hpMax: 300, ac: 20 });
+        state.activeCombatantId = 'r234z'; save();
+        if (!T._body){ openPanel('turnview'); await sleep(200); }
+        const pz = () => state.party.find(p => p.id === 'r234z');
+        const swing = d20 => { window.sktD = n => (n === 20 ? d20 : 3);
+          T._rollAttack(T._attacksFor(get('r234z')).findIndex(a => a.name === 'Shortsword'), { attacker: get('r234z'), target: og(), mode: 0 }); };
+        const keys = () => T._lastPcMiss ? T._pcMissOptions(T._lastPcMiss).map(x => x.key + (x.ok ? '' : '!')) : [];
+        // 11 + 7 = 18 vs AC 20: a d8 needs 2.
+        swing(11);
+        ok('miss rescue: Zoey’s 18 vs AC 20 — Bardic Inspiration d8, a Luck Point, Heroic Inspiration', JSON.stringify(keys()) === '["bi","luck","hero"]', JSON.stringify(keys()));
+        T._painted = {}; T._render(); await sleep(20);
+        const row = document.querySelector('.tv-pcmiss');
+        ok('miss rescue: drawn — “missed Ogre — 18 vs AC 20. Still:”', !!row && /missed Ogre — 18 vs AC 20/.test(row.textContent) && row.querySelectorAll('[data-tv="pcmiss"]').length === 3, row && row.textContent);
+        // The d8 rolls a 3: 21 — a hit; damage lands, the die is spent, Sneak Attack is offered.
+        window.sktD = n => 3;
+        const hp0 = og().hp;
+        row.querySelector('[data-k="bi"]').click(); await sleep(30);
+        ok('miss rescue: Bardic Inspiration +3 — 21 hits; the shortsword’s 7 lands', hp0 - og().hp === 7 && /Bardic Inspiration \+3: 18 → 21/.test(T._result), JSON.stringify([hp0 - og().hp, T._result]));
+        ok('miss rescue: …the die is spent, and the hit offers Sneak Attack', pz().bardicInspiration === false && !pz().bardicFrom && !!T._lastPcHit && T._pcExtraOptions(T._lastPcHit).some(o => o.key === 'sa') && !T._lastPcMiss);
+        if (typeof sktUndo === 'function'){ sktUndo(); await sleep(40);
+          ok('miss rescue: undo gives back the HP and the d8', og().hp === hp0 && pz().bardicInspiration === 'd8' && pz().bardicFrom === 'Zindle', JSON.stringify([og().hp, hp0, pz().bardicInspiration])); }
+        // A Luck Point that still misses: 11 vs a new 5 — keeps 11; still 18.
+        get('r234z').onceTurn = undefined; swing(11);
+        window.sktD = n => 5;
+        T._rescueMiss('luck'); await sleep(20);
+        ok('miss rescue: a Luck Point rolls a 5, keeps the 11 — still a miss at 18, a point spent', /Still a miss/.test(T._result) && /keeps 11/.test(T._result) && T._lastPcMiss.o.total === 18 && pz().resources[0].current === 2 && og().hp === hp0, JSON.stringify([T._result, pz().resources[0].current]));
+        ok('miss rescue: …the others still on offer, the Luck Point used for this roll', JSON.stringify(keys()) === '["bi","hero"]', JSON.stringify(keys()));
+        // Heroic Inspiration rerolls: a 20 — a critical: the dice double.
+        window.sktD = n => (n === 20 ? 20 : 3);
+        T._rescueMiss('hero'); await sleep(20);
+        ok('miss rescue: Heroic Inspiration rerolls a 20 — a critical, 3+3 + 4 = 10, and spent', hp0 - og().hp === 10 && pz().inspiration === false && /Critical hit/.test(T._result), JSON.stringify([hp0 - og().hp, T._result]));
+        og().hp = 300;
+        // A natural 1: the d8 can't help; out of reach: neither can it.
+        og().ac = 9; swing(1);
+        ok('miss rescue: a natural 1 (8 vs AC 9, a d8 would reach) — Bardic Inspiration shown, not allowed', keys().includes('bi!') && /natural 1/.test(T._pcMissOptions(T._lastPcMiss).find(x => x.key === 'bi').why), JSON.stringify(keys()));
+        og().ac = 30; swing(11);
+        const bi = T._pcMissOptions(T._lastPcMiss).find(x => x.key === 'bi');
+        ok('miss rescue: 18 vs AC 30 — more than a d8 can roll', !!bi && bi.ok === false && /needs 12/.test(bi.why), JSON.stringify(bi));
+        T._rescueMiss('bi');
+        ok('miss rescue: …and a click spends nothing', pz().bardicInspiration === 'd8');
+        // A hit offers no rescue; a monster's miss offers none.
+        og().ac = 5; swing(11);
+        ok('miss rescue: a hit — no row', !T._lastPcMiss);
+        state.activeCombatantId = ogreId; og().ac = 20;
+        window.sktD = n => (n === 20 ? 2 : 3);
+        T._rollAttack(T._attacksFor(og()).findIndex(a => /Greatclub/.test(a.name)), { attacker: og(), target: get('r234z') }); await sleep(20);
+        ok('miss rescue: the ogre’s miss — none', !T._lastPcMiss);
+        // 2014: no Heroic Inspiration reroll (it's advantage, chosen before).
+        state.activeCombatantId = 'r234z'; pz().rules = '2014'; pz().inspiration = true; og().ac = 20;
+        swing(11);
+        ok('miss rescue (2014): Inspiration isn’t a reroll — not offered', !keys().some(k => /^hero/.test(k)), JSON.stringify(keys()));
+      } catch(e){ ok('round 234 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
+      finally { window.sktD = keepD; T._lastPcHit = null; T._lastPcMiss = null; state.party = JSON.parse(keepP); state.combatants = JSON.parse(keepC); state.activeCombatantId = keepA; save(); }
+    }
     // -- Class features: represented, not just text ------------------------
     {
       try {

@@ -1516,7 +1516,7 @@ registerPanel('turnview', {
       ['.tv-init-tools', () => this._renderInitTools()],
       ['.tv-headwrap',   () => this._renderActorHead(c)],
       ['.tv-actbody',    () => this._renderActions(c)],
-      ['.tv-legendary',  () => this._renderLegendary() + this._renderLair() + this._renderOnHits() + this._renderPcExtras()],
+      ['.tv-legendary',  () => this._renderLegendary() + this._renderLair() + this._renderOnHits() + this._renderPcExtras() + this._renderPcMiss()],
       // Beside a result, the way to take it back: the app's one history, so
       // it is the same step Ctrl+Z would undo.
       ['.tv-result',     () => !this._result ? '' : this._result
@@ -2373,6 +2373,8 @@ registerPanel('turnview', {
         wildshape: p.wildshape ? {...p.wildshape} : p.wildshape,
         resources: (p.resources || []).map(r => ({...r})),
         sheet: p.sheet && p.sheet.spellSlots ? JSON.parse(JSON.stringify(p.sheet.spellSlots)) : null,
+        // the dice a character holds: Bardic Inspiration, Heroic Inspiration
+        bardicInspiration: p.bardicInspiration, bardicFrom: p.bardicFrom, inspiration: p.inspiration,
       })),
     };
   },
@@ -2395,6 +2397,7 @@ registerPanel('turnview', {
       p.wildshape = s.wildshape ? {...s.wildshape} : s.wildshape;
       p.resources = s.resources.map(r => ({...r}));
       if (s.sheet && p.sheet) p.sheet.spellSlots = s.sheet;
+      if ('bardicInspiration' in s){ p.bardicInspiration = s.bardicInspiration; p.bardicFrom = s.bardicFrom; p.inspiration = s.inspiration; }
     });
     state.combatRound = u.round;
     state.activeCombatantId = u.active;
@@ -2497,7 +2500,10 @@ registerPanel('turnview', {
     const vs = o.total == null ? ''
       : ` <strong>${o.total}</strong> <span class="dim">vs AC ${t.ac}${o.hitNote ? ' · ' + esc(o.hitNote) : ''}</span>`;
     this._pending = null;
+    this._lastPcMiss = null;
     if (!o.hit){
+      // A character's miss: a held die might still turn it (_pcMissOptions).
+      if (o.pcAtk && o.nat != null) this._lastPcMiss = { turn: this._turnKey(), used: [], o: Object.assign({}, o, { parts: (o.parts || []).map(x => ({ ...x })) }) };
       this._setResult(`<span class="miss">Miss</span> — ${esc(o.label)} vs ${esc(t.name)}:${vs}${tag}`, true);
       this._log.unshift(`<strong>${esc(o.attacker)}</strong> missed <strong>${esc(t.name)}</strong> with ${esc(o.label)}${usedName ? ' — ' + esc(usedName) : ''}`);
       save();
@@ -3272,6 +3278,76 @@ registerPanel('turnview', {
       + `<button class="tv-manual-x" data-tv="pcxx" title="Nothing more" aria-label="Dismiss">✕</button>`
       + opts.filter(o => (o.cun || []).length).map(o => this._cunningChips(o)).join('') + '</div>';
   },
+  // ─── A character's miss, and the dice that might still turn it ───────────
+  // Zindle's Bardic Inspiration on Zoey, a Luck Point, Heroic Inspiration:
+  // each spent after the d20 shows a miss. Turned into a hit, the swing goes
+  // through _commit like any hit — damage, extras, what it inflicts.
+  _pcMissOptions(m){
+    const o = m.o, c = this._order().find(x => x.id === o.attackerId), t = this._order().find(x => x.id === o.target.id);
+    const p = c ? this._partyOf(c) : null; if (!p || !t) return [];
+    const ac = (t.ac || 0) + (o.acBonus || 0), need = ac - o.total, ed = this._edOf(c), out = [];
+    if (p.bardicInspiration){
+      const die = typeof p.bardicInspiration === 'string' ? p.bardicInspiration.replace(/^1?d/, 'd') : 'd6';
+      const top = +die.slice(1) || 6;
+      out.push({ key: 'bi', label: 'Bardic Inspiration', dice: die, ok: o.nat !== 1 && need <= top,
+        why: o.nat === 1 ? 'a natural 1 misses whatever is added' : need > top ? 'it needs ' + need + ' — more than a ' + die + ' can roll' : 'needs ' + need + ' or more on the ' + die + (p.bardicFrom ? ' (from ' + p.bardicFrom + ')' : '') });
+    }
+    const luck = (p.resources || []).find(r => r.name === 'Luck Points');
+    if (luck && (+luck.current || 0) >= 1)
+      out.push({ key: 'luck', label: 'Luck Point', dice: 'd20', ok: true, why: 'roll another d20 and keep the higher (' + luck.current + ' left)' });
+    if (p.inspiration && ed !== '2014')
+      out.push({ key: 'hero', label: 'Heroic Inspiration', dice: 'd20', ok: true, why: 'reroll the d20 — the new roll stands' });
+    return out.filter(x => !m.used.includes(x.key));
+  },
+  _renderPcMiss(){
+    const m = this._lastPcMiss;
+    if (!m || m.turn !== this._turnKey()) return '';
+    const opts = this._pcMissOptions(m); if (!opts.length) return '';
+    const o = m.o, t = this._order().find(x => x.id === o.target.id);
+    const ac = ((t && t.ac) || 0) + (o.acBonus || 0);
+    return `<div class="tv-onhit tv-pcmiss"><span class="tv-onhit-l"><b>${esc(o.attacker)}</b> missed <b>${esc(t ? t.name : '')}</b> — ${o.total} vs AC ${ac}${o.nat === 1 ? ' (a natural 1)' : ''}. Still:</span>`
+      + opts.map(x => `<button class="btn ${x.ok ? '' : 'tv-cant'}" data-tv="pcmiss" data-k="${x.key}" title="${esc(x.label + ': ' + x.why)}"${x.ok ? '' : ' disabled'}>${esc(x.label)} ${esc(x.dice)}</button>`).join('')
+      + `<button class="tv-manual-x" data-tv="pcmissx" title="It misses" aria-label="Dismiss">✕</button></div>`;
+  },
+  _rescueMiss(key){
+    const m = this._lastPcMiss; if (!m || m.turn !== this._turnKey()) return;
+    const x = this._pcMissOptions(m).find(y => y.key === key); if (!x || !x.ok) return;
+    const o = m.o, c = this._order().find(y => y.id === o.attackerId), t = this._order().find(y => y.id === o.target.id), p = this._partyOf(c);
+    if (!c || !t || !p) return;
+    this._snapshot(`${c.name} · ${x.label}`);
+    const ac = (t.ac || 0) + (o.acBonus || 0), was = o.total;
+    let desc;
+    if (key === 'bi'){
+      const n = this._d(+x.dice.slice(1) || 6);
+      o.total += n; desc = `Bardic Inspiration +${n}`;
+      p.bardicInspiration = false; p.bardicFrom = null;
+    } else {
+      const n2 = this._d(20), keep = key === 'luck' ? Math.max(o.nat, n2) : n2;
+      desc = `${x.label}: ${o.nat} → ${key === 'luck' ? o.nat + ' / ' + n2 + ', keeps ' + keep : n2}`;
+      o.total = keep + (o.bonus || 0) + (o.total - o.nat - (o.bonus || 0));
+      o.nat = keep; o.crit = keep === 20;
+      if (key === 'luck'){ const r = (p.resources || []).find(y => y.name === 'Luck Points'); if (r) r.current = Math.max(0, (+r.current || 0) - 1); }
+      else p.inspiration = false;
+    }
+    m.used.push(key);
+    const hit = o.crit || (o.nat !== 1 && o.total >= ac);
+    if (!hit){
+      const txt = `<span class="miss">Still a miss</span> — ${esc(o.label)} vs ${esc(t.name)}: <strong>${o.total}</strong> <span class="dim">vs AC ${ac} · ${esc(desc)}</span>`;
+      this._setResult(txt, true); this._log.unshift(`<strong>${esc(c.name)}</strong> — ${esc(desc)}; still misses ${esc(t.name)} (${o.total} vs AC ${ac})`);
+      save(); panelDefs.party?._render?.(); this._render();
+      return;
+    }
+    // A critical from the new d20: the weapon's dice once more.
+    if (o.crit){
+      const a = (this._attacksFor(c) || []).find(y => y.name === o.label);
+      const dm = a && /(\d*d\d+)/.exec(String(a.dmgText || ''));
+      if (dm && o.parts && o.parts[0]){ const r = this._roll(dm[1]); o.parts[0].amt += r.total; o.detail = (o.detail ? o.detail + ' + ' : '') + 'crit ' + r.detail; }
+    }
+    o.dmg = (o.parts || []).reduce((n, y) => n + (y.amt || 0), 0);
+    o.hit = true; o.queued = false; o.kind = 'hit';
+    this._commit(o, `${desc}: ${was} → ${o.total}`);
+    panelDefs.party?._render?.();
+  },
   // ─── Cunning Strike (2024 rogue) ─────────────────────────────────────────
   // The effects the sheet lists (csCunningStrikes), each with what it does to
   // the target here: the save, the condition, how long. Trip needs a Large or
@@ -3917,6 +3993,8 @@ registerPanel('turnview', {
       else if (act === 'ohroll' || act === 'ohfail' || act === 'ohx'){ this._onHitAct(act.slice(2), +el.dataset.i); }
       else if (act === 'pcx'){ this._usePcExtra(el.dataset.k); }
       else if (act === 'pcxcun'){ this._toggleCunning(el.dataset.k); }
+      else if (act === 'pcmiss'){ this._rescueMiss(el.dataset.k); }
+      else if (act === 'pcmissx'){ this._lastPcMiss = null; this._render(); }
       else if (act === 'pcxx'){ this._lastPcHit = null; this._render(); }
       else if (act === 'unhide'){ const c = this._active(); if (c && c.hidden){ c.hidden = null; this._log.unshift(`<strong>${esc(c.name)}</strong> is no longer hidden`); save(); this._render(); } }
       else if (act === 'bonusact'){ this._useBonusAction(+el.dataset.ai); }
