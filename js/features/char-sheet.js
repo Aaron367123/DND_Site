@@ -2027,20 +2027,40 @@ function csSpellsClick(e, t, d, pc){
 // their own character (summonReq); the DM's adds it directly.
 function csOfferSummon(pc, s, level){
   const who = typeof sktSummonCreatures === 'function' ? sktSummonCreatures(s).filter(x => typeof sktMonsterByName !== 'function' || sktMonsterByName(x.name, x.source)) : [];
-  if (!who.length || !(state.combatants || []).some(c => c.id === pc.id) || CS.readOnly || typeof showModal !== 'function') return;
+  if (!(state.combatants || []).some(c => c.id === pc.id) || CS.readOnly || typeof showModal !== 'function') return;
   const lv = level || s.level || 0;
+  // A 2014 Conjure spell: any creature of its kind and challenge rating, as many as that allows.
+  if (!who.length){
+    const conj = typeof sktConjureOptions === 'function' ? sktConjureOptions(s, lv) : null;
+    const list = conj ? sktConjureCreatures(conj, pc.rules || (pc.build && pc.build.edition) || '2014') : [];
+    if (!list.length) return;
+    const pick = list.find(x => /^wolf$/i.test(x.name)) || list[0];
+    showModal(s.name + ' — into the fight?', [
+      { id: 'who', label: 'Creature (challenge rating ' + conj.options.map(o => o.n + ' × ' + (o.cr < 1 ? '1/' + Math.round(1 / o.cr) : o.cr)).join(', ') + ')', type: 'select',
+        options: list.map(x => ({ value: x.name, label: x.name + ' — CR ' + x.crText + ' (' + x.n + ')' })), value: pick.name },
+      { id: 'n', label: 'How many (blank: as many as the spell gives)', type: 'number', value: '' },
+    ], 'Add to the fight').then(r => {
+      if (!r || !r.who) return;
+      const x = list.find(w => w.name === r.who); if (!x) return;
+      const n = Math.max(1, Math.min(x.n, parseInt(r.n, 10) || x.n));
+      csSendSummon(pc, { spell: s.name, name: x.name, source: x.source, level: lv, count: n, conc: !!s.concentration });
+    });
+    return;
+  }
   showModal(s.name + ' — into the fight?', [
     { id: 'who', label: 'Creature', type: 'select', options: who.map(x => x.name), value: who[0].name },
     { id: 'n', label: 'How many', type: 'number', value: '1' },
   ], 'Add to the fight').then(r => {
     if (!r || !r.who) return;
     const x = who.find(w => w.name === r.who) || who[0];
-    const req = { spell: s.name, name: x.name, source: x.source, level: lv, count: Math.max(1, Math.min(20, parseInt(r.n, 10) || 1)), conc: !!s.concentration };
-    if (document.body.classList.contains('player-mode')){
-      csEdit('Summoned ' + x.name, p => { p.summonReq = (p.summonReq || []).concat([req]); });
-      if (typeof showToast === 'function') showToast(x.name + ' — sent to the DM’s tracker');
-    } else if (panelDefs.combat && typeof panelDefs.combat.addSummon === 'function') panelDefs.combat.addSummon(Object.assign({ ownerId: pc.id }, req));
+    csSendSummon(pc, { spell: s.name, name: x.name, source: x.source, level: lv, count: Math.max(1, Math.min(20, parseInt(r.n, 10) || 1)), conc: !!s.concentration });
   });
+}
+function csSendSummon(pc, req){
+  if (document.body.classList.contains('player-mode')){
+    csEdit('Summoned ' + req.name, p => { p.summonReq = (p.summonReq || []).concat([req]); });
+    if (typeof showToast === 'function') showToast(req.name + ' — sent to the DM’s tracker');
+  } else if (panelDefs.combat && typeof panelDefs.combat.addSummon === 'function') panelDefs.combat.addSummon(Object.assign({ ownerId: pc.id }, req));
 }
 // Actions that cast a spell for a use of a feature instead of a slot: a 2024
 // ranger's Hunter's Mark for Favored Enemy, a druid's Find Familiar for Wild

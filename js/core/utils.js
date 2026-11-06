@@ -1190,7 +1190,7 @@ function createFloatingWindow(opts) {
 const SKT_SUMMON_SPELL_RE = /^(?:Summon |Conjure |Find Familiar$|Find Steed$|Find Greater Steed$|Giant Insect$|Animate Dead$|Create Undead$|Animate Objects$|Tiny Servant$|Infernal Calling$|Phantom Steed$|Homunculus Servant$|Create Homunculus$|Spirit of Death$|Danse Macabre$)/i;
 function sktSummonCreatures(spell){
   if (!spell || !SKT_SUMMON_SPELL_RE.test(String(spell.name || ''))) return [];
-  const txt = JSON.stringify([spell.entries || [], spell.entriesHigherLevel || []]);
+  const txt = JSON.stringify([spell.entries || [], spell.entriesHigherLevel || spell.higher || []]);
   const out = [], seen = new Set();
   for (const m of txt.matchAll(/\{@creature ([^}|]+)(?:\|([^}|]*))?/gi)){
     const name = m[1].trim(), k = name.toLowerCase();
@@ -1198,6 +1198,56 @@ function sktSummonCreatures(spell){
     out.push({ name: name.replace(/(^|[\s-])([a-z])/g, (x, a, b) => a + b.toUpperCase()), source: (m[2] || '').trim().toUpperCase() || null });
   }
   return out;
+}
+// A 2014 Conjure spell names no creature, only a kind and a challenge rating:
+// "One beast of challenge rating 2 or lower", "Two … 1", "Four … 1/2", "Eight
+// … 1/4" — twice as many with a 5th-level slot — or "a celestial of challenge
+// rating 4 or lower", 1 higher for each slot level above. At a slot level
+// → { types: ['beast'], options: [{ n, cr }] } or null.
+function sktConjureOptions(spell, level){
+  if (!spell || !/^Conjure /i.test(String(spell.name || ''))) return null;
+  const plain = s => JSON.stringify(s || []).replace(/\{@\w+ ([^}|]*)[^}]*\}/g, '$1');
+  const txt = plain(spell.entries), hi = plain(spell.higher || spell.entriesHigherLevel);
+  const KIND = { beast: 'beast', fey: 'fey', elemental: 'elemental', celestial: 'celestial' };
+  const NUM = { one: 1, two: 2, four: 4, eight: 8, a: 1, an: 1 };
+  const crN = s => s.includes('/') ? +s.split('/')[0] / +s.split('/')[1] : +s;
+  const opts = [], types = [];
+  for (const m of txt.matchAll(/\b(One|Two|Four|Eight|a|an) (beast|fey|elemental|celestial)s?(?: creatures?)? of challenge rating (\d+(?:\/\d+)?) or lower/gi)){
+    const o = { n: NUM[m[1].toLowerCase()], cr: crN(m[3]) }, t = KIND[m[2].toLowerCase()];
+    if (!opts.some(x => x.n === o.n && x.cr === o.cr)) opts.push(o);
+    if (!types.includes(t)) types.push(t);
+  }
+  if (!opts.length) return null;
+  const lv = +level || +spell.level || 0;
+  let mult = 1, up = 0;
+  for (const m of hi.matchAll(/\b(twice|three times|four times) as many with an? (\d)/gi))
+    if (lv >= +m[2]) mult = Math.max(mult, { twice: 2, 'three times': 3, 'four times': 4 }[m[1].toLowerCase()]);
+  const inc = /challenge rating increases by 1 for each slot level above (\d)/i.exec(hi);
+  if (inc && lv > +inc[1]) up = lv - +inc[1];
+  const at9 = /9th-level spell slot, you summon an? \w+ of challenge rating (\d+)/i.exec(hi);
+  return { types, options: opts.map(o => ({ n: o.n * mult, cr: (at9 && lv >= 9 && opts.length === 1) ? +at9[1] : o.cr + up })) };
+}
+// The creatures a Conjure spell can call, from the bestiary: its kinds, up to
+// its challenge rating, one printing each (the edition's own first), with how
+// many come — the most the options allow at its CR. → [{ name, source, cr, n }]
+function sktConjureCreatures(conj, edition){
+  if (!conj || typeof _5eData === 'undefined' || !Array.isArray(_5eData)) return [];
+  const max = Math.max(...conj.options.map(o => o.cr));
+  const crN = v => { const s = String(v == null ? '' : v).split(' ')[0]; return s.includes('/') ? +s.split('/')[0] / +s.split('/')[1] : parseFloat(s); };
+  const new24 = d => typeof SKT_2024_ERA !== 'undefined' && SKT_2024_ERA.has(d._source);
+  const by = new Map();
+  _5eData.forEach(d => {
+    if (d.cat !== 'monster' || !d._raw) return;
+    const ty = String((d._raw.type && d._raw.type.type) || d._raw.type || '').toLowerCase();
+    const cr = crN(d._raw.challenge_rating);
+    if (!conj.types.includes(ty) || isNaN(cr) || cr > max) return;
+    const k = String(d.name).toLowerCase(), had = by.get(k);
+    if (!had || (new24(had) !== (edition === '2024') && new24(d) === (edition === '2024'))) by.set(k, d);
+  });
+  return [...by.values()].map(d => {
+    const cr = crN(d._raw.challenge_rating);
+    return { name: d.name, source: d._source, cr, crText: String(d._raw.challenge_rating), n: Math.max(...conj.options.filter(o => cr <= o.cr).map(o => o.n)) };
+  }).sort((a, b) => b.cr - a.cr || a.name.localeCompare(b.name));
 }
 // A bestiary entry by its name (any case), its own book's printing first.
 function sktMonsterByName(name, source){

@@ -436,7 +436,7 @@ registerPanel('combat',{
     const atk = parseInt(sh.spellAtkBonus, 10), dc = +sh.spellSaveDc;
     const given = { level: +o.level || undefined, atk: isNaN(atk) ? undefined : atk, dc: dc || undefined };
     Object.keys(given).forEach(k => given[k] === undefined && delete given[k]);
-    const n = Math.max(1, Math.min(20, +o.count || 1)), added = [];
+    const n = Math.max(1, Math.min(40, +o.count || 1)), added = [];
     for (let k = 0; k < n; k++){
       this.addMonster(m, { summon: given, quiet: true });
       const c = state.combatants.pop();

@@ -15460,6 +15460,55 @@ for (const cls of Object.keys(rule)) for (let L = 1; L <= 20; L++) for (const sc
         state.party = JSON.parse(keepP); state.combatLog = JSON.parse(keepL); state.combatants = JSON.parse(keepC); state.activeCombatantId = keepA; save();
       }
     }
+    // -- Round 218: a 2014 Conjure spell — any creature of its kind and challenge rating, as many as that gives --
+    if (!PLAYER){
+      const keepC = JSON.stringify(state.combatants), keepA = state.activeCombatantId, keepP = JSON.stringify(state.party), keepL = JSON.stringify(state.combatLog || []);
+      const C = panelDefs.combat;
+      try {
+        for (let k = 0; k < 100 && !(typeof _5eLoaded !== 'undefined' && _5eLoaded); k++) await sleep(100);
+        const R = await sktRulesLoad('2014'), R24 = await sktRulesLoad('2024');
+        const opt = (n, lv, r) => JSON.stringify(sktConjureOptions(sktRulesSpell(r || R, n), lv));
+        ok('conjure: Conjure Animals — 1 × CR 2, 2 × CR 1, 4 × CR 1/2, 8 × CR 1/4', opt('Conjure Animals', 3) === '{"types":["beast"],"options":[{"n":1,"cr":2},{"n":2,"cr":1},{"n":4,"cr":0.5},{"n":8,"cr":0.25}]}', opt('Conjure Animals', 3));
+        ok('conjure: twice as many with a 5th-level slot, four times with a 9th', JSON.parse(opt('Conjure Animals', 5)).options[3].n === 16 && JSON.parse(opt('Conjure Animals', 9)).options[0].n === 4, opt('Conjure Animals', 9));
+        ok('conjure: Conjure Fey — a fey or a beast, CR 6, one higher for each level above 6th', opt('Conjure Fey', 6) === '{"types":["fey","beast"],"options":[{"n":1,"cr":6}]}' && JSON.parse(opt('Conjure Fey', 8)).options[0].cr === 8, opt('Conjure Fey', 8));
+        ok('conjure: Conjure Celestial — CR 4, CR 5 with a 9th-level slot', JSON.parse(opt('Conjure Celestial', 7)).options[0].cr === 4 && JSON.parse(opt('Conjure Celestial', 9)).options[0].cr === 5, opt('Conjure Celestial', 9));
+        ok('conjure: Conjure Woodland Beings is fey, Conjure Minor Elementals elementals', JSON.parse(opt('Conjure Woodland Beings', 4)).types.join() === 'fey' && JSON.parse(opt('Conjure Minor Elementals', 4)).types.join() === 'elemental');
+        ok('conjure: the 2024 spells conjure no creatures', opt('Conjure Animals', 3, R24) === 'null');
+        const list = sktConjureCreatures(sktConjureOptions(sktRulesSpell(R, 'Conjure Animals'), 3), '2014');
+        const wolf = list.find(x => x.name === 'Wolf'), dw = list.find(x => x.name === 'Dire Wolf');
+        ok('conjure: beasts up to CR 2 — a wolf comes eight, a dire wolf two', wolf && wolf.n === 8 && dw && dw.n === 2 && list.every(x => x.cr <= 2), JSON.stringify([wolf, dw, list.length]));
+        ok('conjure: no beast above CR 2, nothing but beasts', !list.some(x => x.name === 'Giant Shark' || x.name === 'Goblin'));
+        // From the sheet, mid-fight: pick a wolf, eight come, after the caster.
+        state.party.push({ id: 'r218d', name: 'Moss', hp: 30, hpMax: 30, ac: 13, rules: '2014', concentration: 'Conjure Animals', sheet: { spellAtkBonus: '+6', spellSaveDc: 14 } });
+        state.combatants = [{ id: 'r218d', name: 'Moss', isPC: true, hp: 30, hpMax: 30, ac: 13, initiative: 9, conditions: [] }]; save();
+        await openCharSheet('r218d'); await sleep(300);
+        csOfferSummon(state.party.find(p => p.id === 'r218d'), sktRulesSpell(R, 'Conjure Animals'), 3); await sleep(80);
+        const sel = document.getElementById('mf-who');
+        ok('conjure: the sheet offers the beasts, with what each gives', !!sel && [...sel.options].some(o => o.value === 'Wolf' && /CR 1\/4 \(8\)/.test(o.textContent)), sel && sel.options.length);
+        if (sel){ sel.value = 'Wolf'; document.getElementById('modal-confirm').click(); await sleep(100); }
+        const wolves = state.combatants.filter(c => c.summonedBy && /Wolf/.test(c.name));
+        ok('conjure: eight wolves join after Moss, on her side', wolves.length === 8 && state.combatants[1] === wolves[0] && wolves.every(w => sktSideOf(w) === 'party' && w.summonedBy.conc), JSON.stringify(state.combatants.map(c => c.name)));
+        csClose();
+        // Fewer if asked; never more than the spell gives.
+        state.combatants = [state.combatants[0]]; save();
+        await openCharSheet('r218d'); await sleep(300);
+        csOfferSummon(state.party.find(p => p.id === 'r218d'), sktRulesSpell(R, 'Conjure Animals'), 3); await sleep(80);
+        if (document.getElementById('mf-who')){ document.getElementById('mf-who').value = 'Dire Wolf'; document.getElementById('mf-n').value = '5'; document.getElementById('modal-confirm').click(); await sleep(100); }
+        ok('conjure: a dire wolf is CR 1 — two at most, whatever is typed', state.combatants.filter(c => /Dire Wolf/.test(c.name)).length === 2, JSON.stringify(state.combatants.map(c => c.name)));
+        csClose();
+        // 32 CR 1/4 beasts with a 9th-level slot all come.
+        state.combatants = [state.combatants[0]]; save();
+        const big = C.addSummon({ ownerId: 'r218d', spell: 'Conjure Animals', name: 'Wolf', source: 'MM', level: 9, count: 32, conc: true });
+        ok('conjure: a 9th-level slot’s thirty-two wolves, not twenty', big.length === 32, big.length);
+        // A spell with a named creature still names it (Summon Beast is unchanged).
+        ok('summon: the At Higher Levels text is read too', Array.isArray(sktSummonCreatures({ name: 'Summon Test', higher: [{ entries: ['you summon a {@creature Wolf|MM}'] }] })) && sktSummonCreatures({ name: 'Summon Test', higher: [{ entries: ['you summon a {@creature Wolf|MM}'] }] }).length === 1);
+      } catch(e){ ok('round 218 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
+      finally {
+        try { csClose(); } catch(e){}
+        document.querySelectorAll('.modal-backdrop').forEach(m => m.remove());
+        state.party = JSON.parse(keepP); state.combatLog = JSON.parse(keepL); state.combatants = JSON.parse(keepC); state.activeCombatantId = keepA; save();
+      }
+    }
     // -- Class features: represented, not just text ------------------------
     {
       try {
