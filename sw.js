@@ -34,10 +34,10 @@
  */
 'use strict';
 
-const BUILD = '4c0168b99c';
+const BUILD = 'd379cbeb40';
 const PRECACHE = [
   'skt-workspace.html',
-  'styles/main.css?v=2bfeab6d2d',
+  'styles/main.css?v=bde766cdae',
   'styles/theme.css?v=9ec89c25d7',
   'js/core/errors.js?v=67c70f2e1d',
   'js/core/data.js?v=f4b60a75c8',
@@ -46,19 +46,19 @@ const PRECACHE = [
   'js/generated/token-index.js?v=2840810fc7',
   'js/generated/species-portraits.js?v=56581792b0',
   'js/core/campaign.js?v=171a617f55',
-  'js/core/utils.js?v=a679b5d3ae',
+  'js/core/utils.js?v=077c747882',
   'js/ui/dice-fx.js?v=a3c77a159d',
   'js/core/state.js?v=f7606a5b33',
   'js/core/undo.js?v=63ed223198',
   'js/features/roll-requests.js?v=bceb453f6d',
   'js/features/monster-picker.js?v=7030540ec7',
   'js/core/window-manager.js?v=e2aed9109b',
-  'js/panels/combat.js?v=78dc21a9e6',
+  'js/panels/combat.js?v=ed51a40324',
   'js/panels/attacks.js?v=99097afcf2',
   'js/generated/reactions.js?v=0e74ab8786',
   'js/generated/rules.js?v=8efb8beae9',
-  'js/panels/turnview.js?v=b033df358c',
-  'js/panels/party.js?v=7bd003bcd7',
+  'js/panels/turnview.js?v=ddd34843d4',
+  'js/panels/party.js?v=7329ac6590',
   'js/panels/shop.js?v=8f95de4cf4',
   'js/sync/notes-sync.js?v=7ee89969f6',
   'js/sync/dropbox-config.js?v=ccf8533d50',
@@ -96,7 +96,7 @@ const PRECACHE = [
   'js/ui/command-palette.js?v=8aded06220',
   'js/features/char-rules.js?v=d8245ee217',
   'js/features/char-effects.js?v=6b739e6eda',
-  'js/features/char-sheet.js?v=59b4bc41a4',
+  'js/features/char-sheet.js?v=7395a15d6d',
   'js/features/char-print.js?v=940c5d7b3f',
   'js/features/char-builder.js?v=a0b563aa9d',
   'js/features/pdf-import.js?v=cefe36cb0b',

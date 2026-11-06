@@ -406,6 +406,39 @@ registerPanel('combat',{
     </div>`;
   },
 
+  // A character's creature from their Extras, into the fight right after
+  // them, on their side, with the hit points the sheet has. → the combatant.
+  addExtra(pcId, i){
+    const p = (state.party || []).find(x => x.id === pcId), x = p && (p.extras || [])[i];
+    if (!x || state.combatants.some(c => c.extraOf && c.extraOf.pc === pcId && c.extraOf.name === x.name)) return null;
+    const m = typeof csMonster === 'function' ? csMonster(x.name) : null;
+    if (m) this.addMonster(m);
+    else state.combatants.push({ id: uid(), name: x.name, baseName: x.name, isPC: false, hp: 0, hpMax: 0, ac: 10, initiative: 0, conditions: [] });
+    const c = state.combatants.pop();
+    Object.assign(c, { name: p.name + '’s ' + x.name, hp: x.hp ?? c.hp, hpMax: x.hpMax ?? c.hpMax, ac: x.ac ?? c.ac,
+      ally: true, extraOf: { pc: pcId, name: x.name } });
+    const at = state.combatants.findIndex(o => o.id === pcId);
+    if (at >= 0){ c.initiative = state.combatants[at].initiative; state.combatants.splice(at + 1, 0, c); }
+    else state.combatants.push(c);
+    if (!state.combatRound) state.combatRound = 1;
+    this._log(c.name + ' joins the fight');
+    save(); this._render();
+    return c;
+  },
+  // Its hit points, kept on the sheet while it fights — the sheet's Extras
+  // and the tracker say the same number. → true when one changed.
+  _syncExtras(){
+    if (document.body.classList.contains('player-mode')) return false;
+    let changed = false;
+    (state.combatants || []).forEach(c => {
+      const o = c && c.extraOf; if (!o) return;
+      const p = (state.party || []).find(x => x.id === o.pc), x = p && (p.extras || []).find(e => e.name === o.name);
+      const hp = Math.max(0, c.hp || 0);
+      if (x && x.hp !== hp){ x.hp = hp; changed = true; }
+    });
+    if (changed) save();
+    return changed;
+  },
   // A grapple ends when the grappler can't hold it: gone from the fight, at
   // 0 HP, or incapacitated (paralysed, stunned, unconscious…). And taking
   // Grappled off by hand ends what came with it — the restrained "until this
@@ -437,6 +470,7 @@ registerPanel('combat',{
 
   _render(){
     this._releaseGrapples();
+    this._syncExtras();
     const b=this._body;if(!b)return;
     const inCombat=state.combatants.length>0;
     const compact = !!(state.settings && state.settings.combatCompact);
@@ -873,7 +907,7 @@ registerPanel('combat',{
           // off the board, and an undo that brought the combatants back but
           // left the board empty would be worse than no undo at all.
           sktUndoable('Combat ended', () => {
-            state.combatants.forEach(c => this._returnConditions(c));
+            state.combatants.forEach(c => this._returnConditions(c)); this._syncExtras();
             state.combatants = [];
             state.combatRound = 0;
             state.activeCombatantId = null;
@@ -1635,6 +1669,7 @@ registerPanel('combat',{
     const c = state.combatants[i];
     if (!c) return;
     this._returnConditions(c);
+    this._syncExtras();
     const wasActive = state.activeCombatantId === c.id;
     state.combatants.splice(i, 1);
     if (!wasActive) return;

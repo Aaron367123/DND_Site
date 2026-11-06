@@ -263,6 +263,11 @@ registerPanel('party',{
     return { pct, color, surplus:false, lostPct };
   },
 
+  _extrasRow(c, i){
+    const list = c.extras || []; if (!list.length) return '';
+    return '<div class="char-extras">' + list.map(x => '<button class="char-extra" data-act="open-extras" data-idx="' + i + '" title="' + esc(x.name) + ' — open Extras on the sheet">'
+      + esc(x.name) + ' <span>' + (x.hp ?? 0) + '/' + (x.hpMax ?? 0) + '</span></button>').join('') + '</div>';
+  },
   _card(c,i){
     const icon=sktPcIcon(c);
     const hp=this._hpBarStyle(c);
@@ -463,6 +468,8 @@ registerPanel('party',{
       // stats row. Shows beast HP / AC / speed / attacks. Damage from the
       // heal/damage strip routes to beast HP first while this is rendered.
       + this._wildshapeOverlay(c, i)
+      // Their creatures (the sheet's Extras), so a griffon isn't forgotten.
+      + this._extrasRow(c, i)
       // Concentration / Exhaustion / Conditions removed from the party card
       // to keep it focused on HP / stats / resources / inspiration. Those
       // statuses still exist and still work — they're managed from the
@@ -3238,6 +3245,9 @@ registerPanel('party',{
       }
       else if(act==='open-log'){
         openPanel('gamelog');
+      }
+      else if(act==='open-extras'){
+        const c = state.party[+el.dataset.idx]; if (c && typeof openCharSheet === 'function') openCharSheet(c.id, { tab: 'extras' });
       }
       else if(act==='open-sheet'){
         const c = state.party[+el.dataset.idx]; if (c && typeof openCharSheet === 'function') openCharSheet(c.id);

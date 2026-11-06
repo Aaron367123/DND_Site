@@ -15221,6 +15221,110 @@ for (const cls of Object.keys(rule)) for (let L = 1; L <= 20; L++) for (const sc
       } catch(e){ ok('round 214 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
       finally { try { csClose(); } catch(e){} state.party = JSON.parse(party0); save(); }
     }
+    // -- Round 215: a character's creatures — on the sheet, the party card, their turn; into the fight on their side --
+    if (!PLAYER){
+      const keepC = JSON.stringify(state.combatants), keepA = state.activeCombatantId, keepP = JSON.stringify(state.party), keepL = JSON.stringify(state.combatLog || []);
+      const B = panelDefs.battlemap, T = panelDefs.turnview, C = panelDefs.combat;
+      let tok0 = null;
+      try {
+        for (let k = 0; k < 100 && !(typeof _5eLoaded !== 'undefined' && _5eLoaded); k++) await sleep(100);
+        const find = (n, src) => _5eData.find(r => r.cat === 'monster' && r.name === n && r._source === src);
+        state.party.push({ id: 'r215z', name: 'Zoey', hp: 30, hpMax: 30, ac: 15, rules: '2024', init: 3,
+          extras: [{ name: 'Young Winter Wolf', hp: 26, hpMax: 26, ac: 13 }, { name: 'Griffon', hp: 50, hpMax: 59, ac: 12 }] });
+        save();
+        // 1. On the sheet, above the tabs.
+        await openCharSheet('r215z'); await sleep(400);
+        const chips = [...document.querySelectorAll('#cs-root .cs-creatures .cs-creature')].map(b => b.textContent.replace(/\s+/g, ' ').trim());
+        ok('creatures: the sheet shows them above the tabs, with their hit points', chips.length === 2 && chips[0] === 'Young Winter Wolf 26/26 HP' && chips[1] === 'Griffon 50/59 HP', JSON.stringify(chips));
+        document.querySelector('#cs-root .cs-creature').click(); await sleep(300);
+        ok('creatures: a tap opens Extras', CS.tab === 'extras', CS.tab);
+        csClose();
+        state.party.forEach(p => { if (p.id === 'r215z') p.extras = []; });
+        await openCharSheet('r215z'); await sleep(300);
+        ok('creatures: none, no strip', !document.querySelector('#cs-root .cs-creatures'));
+        csClose();
+        state.party = JSON.parse(keepP); state.party.push({ id: 'r215z', name: 'Zoey', hp: 30, hpMax: 30, ac: 15, rules: '2024', init: 3,
+          extras: [{ name: 'Young Winter Wolf', hp: 26, hpMax: 26, ac: 13 }, { name: 'Griffon', hp: 50, hpMax: 59, ac: 12 }] });
+        save();
+        // 2. On the party card.
+        openPanel('party'); await sleep(300); panelDefs.party._render(); await sleep(50);
+        const pi = state.party.findIndex(p => p.id === 'r215z');
+        const card = document.querySelector('.char-card[data-cidx="' + pi + '"]');
+        const pc = card ? [...card.querySelectorAll('.char-extras .char-extra')].map(b => b.textContent.replace(/\s+/g, ' ').trim()) : [];
+        ok('creatures: the party card names them too', pc.length === 2 && pc[1] === 'Griffon 50/59', JSON.stringify(pc));
+        card && card.querySelector('.char-extra').click(); await sleep(400);
+        ok('creatures: …and opens the sheet on Extras', typeof CS !== 'undefined' && CS && CS.id === 'r215z' && CS.tab === 'extras', CS && CS.tab);
+        try { csClose(); } catch(e){}
+        // 3. On their turn, one click into the fight.
+        state.combatants = []; save();
+        C.addMonster(find('Wolf', 'MM')); await sleep(30);
+        const wolf = state.combatants[0];
+        state.combatants.unshift({ id: 'r215z', name: 'Zoey', isPC: true, hp: 30, hpMax: 30, ac: 15, initiative: 17, conditions: [] });
+        state.activeCombatantId = 'r215z'; save();
+        if (!T._body){ openPanel('turnview'); await sleep(200); }
+        T._render(); await sleep(30);
+        let row = (document.querySelector('.tv-companions') || {}).textContent || '';
+        ok('creatures: her turn reminds you of both', /Zoey’s creatures/.test(row) && /Young Winter Wolf 26\/26 HP/.test(row) && /Griffon 50\/59 HP/.test(row), row.replace(/\s+/g, ' '));
+        document.querySelectorAll('.tv-companions [data-tv="addextra"]')[1].click(); await sleep(50);
+        const gi = state.combatants.findIndex(c => c.extraOf && c.extraOf.name === 'Griffon');
+        const g = state.combatants[gi];
+        ok('creatures: the griffon joins right after her, at her initiative, with the sheet’s HP', gi === 1 && g.name === 'Zoey’s Griffon' && g.hp === 50 && g.ac === 12 && g.initiative === 17 && g.ally === true, JSON.stringify([gi, g && g.name, g && g.hp, g && g.initiative]));
+        ok('creatures: …from the bestiary (its attacks are there)', T._attacksFor(g).some(a => /Beak|Claws/.test(a.name)), JSON.stringify(T._attacksFor(g).map(a => a.name)));
+        T._render(); await sleep(30);
+        row = (document.querySelector('.tv-companions') || {}).textContent || '';
+        ok('creatures: the reminder now lists only the wolf', /Young Winter Wolf/.test(row) && !/Griffon/.test(row), row.replace(/\s+/g, ' '));
+        ok('creatures: adding it twice does nothing', C.addExtra('r215z', 1) === null && state.combatants.filter(c => c.extraOf).length === 1);
+        ok('creatures: on the party’s side', sktSideOf(g) === 'party' && sktSideOf(wolf) === 'foe');
+        // 4. Its hit points stay on the sheet.
+        C._applyHpDelta(gi, -10, 'slashing'); C._render();
+        const ex = () => (state.party.find(p => p.id === 'r215z').extras || [])[1];
+        ok('creatures: hurt in the fight, hurt on the sheet', ex().hp === 40, ex().hp);
+        await openCharSheet('r215z'); await sleep(300);
+        ok('creatures: the sheet says it’s in the fight', /Griffon 40\/59 HP · in the fight/.test((document.querySelector('#cs-root .cs-creatures') || {}).textContent || ''));
+        csClose();
+        document.body.classList.add('player-mode');
+        state.combatants[gi].hp = 40; const pl = C._syncExtras(); document.body.classList.remove('player-mode');
+        ok('creatures: a player’s screen leaves the record alone', pl === false && ex().hp === 40);
+        state.combatants[gi].hp = 40;
+        // 5. On her side: the wolf's Pack Tactics doesn't count the griffon beside Zoey.
+        openPanel('battlemap'); await sleep(300);
+        tok0 = JSON.stringify(B._tokens || []);
+        const cs = B._csScreen ? B._cellSize : 50;
+        const put = (c, x, y) => ({ id: 'tk' + c.id, label: c.name, cid: c.id, isPC: !!c.isPC, x: cs * (x + 0.5), y: cs * (y + 0.5), size: 1 });
+        const zz = state.combatants.find(c => c.id === 'r215z'), gg = state.combatants.find(c => c.extraOf);
+        B._tokens = [put(wolf, 4, 5), put(zz, 5, 5), put(gg, 6, 5)]; B._saveMap && B._saveMap(); T._mapCache = null;
+        ok('creatures: the wolf gets no Pack Tactics from Zoey’s griffon', !T._condMods(wolf, zz).adv.some(x => /pack tactics/.test(x)), JSON.stringify(T._condMods(wolf, zz).adv));
+        B._tokens = [put(wolf, 12, 5), put(zz, 5, 5), put(gg, 6, 5)]; B._saveMap && B._saveMap(); T._mapCache = null;
+        ok('creatures: her griffon beside her is no threat to her bow', T._rangedThreat(zz) === null, JSON.stringify(T._rangedThreat(zz) && T._rangedThreat(zz).name));
+        // The griffon's Help counts for her; its Hide is against the wolf's eyes.
+        const keepR = T._resolve, seen = []; T._resolve = o => seen.push(o);
+        try {
+          gg.helping = { target: wolf.id, name: wolf.name };
+          state.party.forEach(p => { if (p.id === 'r215z') p.sheet = { attacks: [{ name: 'Shortbow', atkBonus: '+7', damage: '1d6+4 piercing' }] }; });
+          const bi = T._attacksFor(zz).findIndex(a => /Shortbow/.test(a.name));
+          T._rollAttack(bi, { attacker: zz, target: wolf });
+          ok('creatures: the griffon’s Help gives Zoey advantage', bi >= 0 && seen.length === 1 && /helped by Zoey’s Griffon/.test(seen[0].hitNote || ''), JSON.stringify([bi, seen.map(o => o.hitNote)]));
+        } finally { T._resolve = keepR; }
+        const keepS = JSON.stringify(state.settings || {});
+        state.settings = Object.assign({}, state.settings, { builderEdition: '2014' });
+        try {
+          state.party.forEach(p => { if (p.id === 'r215z') p.pp = 9; });
+          await T._hide(state.combatants.find(c => c.extraOf), 20);
+          const hg = state.combatants.find(c => c.extraOf);
+          ok('creatures: its Hide (2014) is against the wolf’s passive Perception, not Zoey’s', hg.hidden && hg.hidden.dc === 13, JSON.stringify(hg.hidden));
+        } finally { state.settings = JSON.parse(keepS); }
+        // 6. Leaving the fight keeps the number.
+        state.combatants[state.combatants.findIndex(c => c.extraOf)].hp = 33;
+        C._removeCombatantAt(state.combatants.findIndex(c => c.extraOf));
+        ok('creatures: taken out of the fight, its HP stays on the sheet', ex().hp === 33 && !state.combatants.some(c => c.extraOf), ex().hp);
+      } catch(e){ ok('round 215 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
+      finally {
+        try { csClose(); } catch(e){}
+        document.body.classList.remove('player-mode');
+        if (tok0 != null){ B._tokens = JSON.parse(tok0); B._saveMap && B._saveMap(); }
+        T._mapCache = null; state.party = JSON.parse(keepP); state.combatLog = JSON.parse(keepL); state.combatants = JSON.parse(keepC); state.activeCombatantId = keepA; save();
+      }
+    }
     // -- Class features: represented, not just text ------------------------
     {
       try {

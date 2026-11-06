@@ -2325,7 +2325,8 @@ function sktIsFoeRecord(p){ return !!(p && p.foe); }
 // whichever its record says.
 function sktSideOf(c){
   if (!c) return 'foe';
-  if (!c.isPC) return 'foe';
+  // A character's own creature (a griffon from their Extras) is on their side.
+  if (!c.isPC) return c.ally ? 'party' : 'foe';
   return sktIsFoeRecord(sktPartyRecord(c)) ? 'foe' : 'party';
 }
 // The characters that belong to the players. Everything player-facing reads

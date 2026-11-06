@@ -104,7 +104,7 @@ function csRender(){
     + '<div class="cs-main" data-cs-scroll="main">' + (CS.customize && !CS.readOnly ? csCustomizeHtml(pc) : '')
     + (CS.textOut ? '<div class="cs-textout"><div class="cs-textout-h"><b>Copy this text</b><span class="cb-dim">The browser didn’t allow copying it for you.</span><button class="btn small" data-cs="closetext">Done</button></div>'
       + '<textarea data-cs-textout rows="12" readonly>' + csE(CS.textOut) + '</textarea></div>' : '')
-    + (CS.embed && !CS.readOnly && typeof paEconHtml === 'function' ? paEconHtml() : '') + csTop(pc)
+    + (CS.embed && !CS.readOnly && typeof paEconHtml === 'function' ? paEconHtml() : '') + csTop(pc) + csCreaturesStrip(pc)
     + '<nav class="cs-tabs">' + CS_TABS.map(t => '<button class="cs-tab' + (t.phone ? ' cs-phone' : '') + (CS.tab === t.id ? ' on' : '') + '" data-cs-tab="' + t.id + '">' + t.label + '</button>').join('') + '</nav>'
     + '<div class="cs-pane">' + (CS_TAB_RENDER[CS.tab] || (() => ''))(pc) + '</div></div></div>';
   csFitPane(root);   // before the scroll comes back, or a short tab cuts it short
@@ -1099,6 +1099,14 @@ function csCompanionStats(pc, m){
   const ac = raw.ac_special ? csCompanionFormula(pc, raw.ac_special) : (((raw.armor_class || [])[0] || {}).value || parseInt(m && m.ac, 10) || null);
   const hp = raw.hp_special ? csCompanionFormula(pc, raw.hp_special) : (raw.hit_points || parseInt(m && m.hp, 10) || 0);
   return { ac, hp: Math.max(1, hp || 1) };
+}
+// The creatures a character has, where they can't be forgotten: above the
+// tabs, each with its hit points; a tap opens Extras.
+function csCreaturesStrip(pc){
+  const list = pc.extras || []; if (!list.length) return '';
+  const fighting = x => (state.combatants || []).some(c => c.extraOf && c.extraOf.pc === pc.id && c.extraOf.name === x.name);
+  return '<div class="cs-creatures"><span class="cs-creatures-l">Creatures</span>' + list.map(x => '<button class="cs-creature" data-cs-tab="extras" title="Open Extras"><b>' + csE(x.name) + '</b> '
+    + '<span class="cb-dim">' + (x.hp ?? 0) + '/' + (x.hpMax ?? 0) + ' HP' + (fighting(x) ? ' · in the fight' : '') + '</span></button>').join('') + '</div>';
 }
 CS_TAB_RENDER.extras = pc => {
   const ro = CS.readOnly, list = pc.extras || [];

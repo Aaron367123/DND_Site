@@ -849,7 +849,7 @@ registerPanel('turnview', {
   // One of the attacker's allies within 5 ft of the target who isn't
   // incapacitated (measured on the map; no tokens, no ally) — or null.
   _allyBeside(attacker, target){
-    return this._order().find(o => o !== attacker && o !== target && !o.isPC === !attacker.isPC && (o.hp || 0) > 0 && !this._incap(o)
+    return this._order().find(o => o !== attacker && o !== target && this._sideOf(o) === this._sideOf(attacker) && (o.hp || 0) > 0 && !this._incap(o)
       && (f => f != null && f <= 5)(this._ftBetween(o, target))) || null;
   },
   // A trait's text off the stat block ("Martial Advantage" → its sentence).
@@ -890,7 +890,7 @@ registerPanel('turnview', {
   // incapacitated): disadvantage. The nearest such enemy, or null.
   _rangedThreat(attacker){
     if (!attacker) return null;
-    return this._order().find(o => o !== attacker && !o.isPC !== !attacker.isPC && (o.hp || 0) > 0 && !this._incap(o)
+    return this._order().find(o => o !== attacker && this._sideOf(o) !== this._sideOf(attacker) && (o.hp || 0) > 0 && !this._incap(o)
       && !this._hasCond(o, 'blinded') && (f => f != null && f <= 5)(this._ftBetween(o, attacker))) || null;
   },
   // A character's attack that is ranged: a weapon with ammunition, or a
@@ -1392,7 +1392,7 @@ registerPanel('turnview', {
     // the pips were only drawn for a creature with attacks to roll.
     // (Unless a legendary action off this turn is waiting for its targets.)
     if (!list.length && !this._queue){
-      return `<div class="tv-actions-wrap"><div class="tv-actions">${this._renderEconomy(c)}${this._renderClassRow(c)}${manual}</div></div>`;
+      return `<div class="tv-actions-wrap"><div class="tv-actions">${this._renderEconomy(c)}${this._renderCompanions(c)}${this._renderClassRow(c)}${manual}</div></div>`;
     }
     const manualSlot = this._manualOpen ? manual
       : `<button class="tv-manual-open" data-tv="manualopen">✎ Rolled it yourself?</button>`;
@@ -1489,7 +1489,7 @@ registerPanel('turnview', {
     // and that row is the fallback for every attack the parser didn't get,
     // so it is the last thing that should disappear when the list gets long.
     return `<div class="tv-actions-wrap">
-      <div class="tv-actions">${this._renderEconomy(c)}${this._renderClassRow(c)}${head}${this._renderBonusActions(c)}${advBar}${rows}</div>
+      <div class="tv-actions">${this._renderEconomy(c)}${this._renderCompanions(c)}${this._renderClassRow(c)}${head}${this._renderBonusActions(c)}${advBar}${rows}</div>
       ${manualSlot}
     </div>`;
   },
@@ -2688,7 +2688,7 @@ registerPanel('turnview', {
     if (t.dodging && !this._incap(t) && !this._hasCond(t, 'grappled') && !this._hasCond(t, 'restrained') && !this._hasCond(t, 'blinded')
         && !(this._hasCond(c, 'invisible') && !this._seesUnseen(t, c))) disWhy.push('target dodging');
     // An ally's Help against this target: used by this roll.
-    const helper = this._order().find(o => o !== c && o.helping && o.helping.target === t.id && !o.isPC === !c.isPC);
+    const helper = this._order().find(o => o !== c && o.helping && o.helping.target === t.id && this._sideOf(o) === this._sideOf(c));
     if (helper){ advWhy.push('helped by ' + helper.name); helper.helping = null; }
     if (a.ranged && !a.closeOk){ const foe = this._rangedThreat(c); if (foe) disWhy.push('ranged, ' + foe.name + ' within 5 ft'); }
     // Blood Frenzy (a sahuagin, a quipper): "advantage on melee attack rolls
@@ -2935,6 +2935,19 @@ registerPanel('turnview', {
           >${a}</button>`).join('')}
     </div>`;
   },
+  // A character's creatures (their sheet's Extras: a griffon, a young winter
+  // wolf), on their turn — the ones not yet in the fight, one click from it.
+  _renderCompanions(c){
+    const p = c && c.isPC ? this._partyOf(c) : null;
+    const list = (p && p.extras) || []; if (!list.length) return '';
+    const inFight = x => this._order().some(o => o.extraOf && o.extraOf.pc === p.id && o.extraOf.name === x.name);
+    const out = list.map((x, i) => ({ x, i })).filter(({ x }) => !inFight(x));
+    if (!out.length) return '';
+    return `<div class="tv-companions"><span class="tv-companions-l">${esc(p.name)}&rsquo;s creatures</span>`
+      + out.map(({ x, i }) => `<span class="tv-comp"><b>${esc(x.name)}</b> <span class="dim">${x.hp ?? 0}/${x.hpMax ?? 0} HP</span>
+        <button class="btn small" data-tv="addextra" data-i="${i}" title="Add ${esc(x.name)} to the fight, right after ${esc(p.name)} — its hit points stay in step with the sheet">Add to the fight</button></span>`).join('')
+      + '</div>';
+  },
   _takeStandardAction(name){
     const c = this._active(); if (!c) return;
     if (name === 'Hide') return this._hide(c);
@@ -2975,7 +2988,7 @@ registerPanel('turnview', {
     const ed = p ? ((p.build && p.build.edition) || p.rules || '2024') : ((state.settings && state.settings.builderEdition) || '2024');
     let dc = 15, dcWhy = 'DC 15';
     if (ed === '2014'){
-      const best = this._order().filter(o => !o.isPC !== !c.isPC && (o.hp || 0) > 0 && !this._incap(o))
+      const best = this._order().filter(o => this._sideOf(o) !== this._sideOf(c) && (o.hp || 0) > 0 && !this._incap(o))
         .map(o => ({ name: o.name, pp: this._passivePerception(o) })).filter(x => x.pp != null)
         .sort((a, b) => b.pp - a.pp)[0];
       if (best){ dc = best.pp; dcWhy = best.name + '’s passive Perception ' + best.pp; } else { dc = null; dcWhy = ''; }
@@ -3681,6 +3694,7 @@ registerPanel('turnview', {
         this._rollAttack(+el.dataset.ai, mode == null ? undefined : { mode });
       }
       else if (act === 'adv'){ this._adv = +el.dataset.v; this._render(); }
+      else if (act === 'addextra'){ const c = this._active(); if (c && panelDefs.combat && typeof panelDefs.combat.addExtra === 'function') panelDefs.combat.addExtra(c.id, +el.dataset.i); this._render(); }
       else if (act === 'sun'){ state.combatSunlight = !state.combatSunlight; save(); this._render(); }
       else if (act === 'econ'){
         const cur = this._active();
