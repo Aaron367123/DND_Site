@@ -6281,3 +6281,10 @@ body.player-app .pa-hp-type { width:auto; min-height:34px; height:34px; margin-t
 /* A creature's attacks on the sheet's Extras, to roll. */
 .cs-cr-atks { display:flex; flex-wrap:wrap; gap:6px 14px; margin:6px 0 2px; font-size:var(--fs-sm); }
 .cs-cr-atk { display:inline-flex; align-items:center; gap:6px; }
+/* A creature's checks and saves: six abilities, a row of each; proficient saves marked. */
+.cs-cr-checks { display:grid; grid-template-columns:auto repeat(6, minmax(0, 1fr)); gap:3px 4px; align-items:center; margin:6px 0 2px; max-width:420px; }
+.cs-cr-checks .btn.small { padding:2px 0; min-width:0; justify-content:center; font-variant-numeric:tabular-nums; }
+.cs-cr-abh { text-align:center; font-size:var(--fs-2xs); font-weight:700; letter-spacing:.06em; color:var(--text-muted); }
+.cs-cr-rowl { font-size:var(--fs-xs); color:var(--text-muted); padding-right:4px; }
+.cs-cr-checks .btn.cs-cr-prof { border-color:var(--accent); font-weight:700; }
+.cs-cr-skills { display:flex; flex-wrap:wrap; gap:4px; margin:4px 0 2px; }

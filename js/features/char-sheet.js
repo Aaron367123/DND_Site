@@ -1129,6 +1129,30 @@ function csCreatureAttacksHtml(x, i){
     + ((a.parts || []).length ? '<button class="btn small" data-cs-crdmg="' + i + ':' + k + '" title="Roll its damage">' + csDmgHtml(a.parts.map(p => p.dice + (p.type ? ' ' + p.type : '')).join(' + ')) + '</button>' : '')
     + '</span>').join('') + '</div>';
 }
+// A creature's checks and saves, from its stat block: each ability's
+// modifier, the saves it's proficient in (otherwise the bare modifier), and
+// its skills — so "the griffon makes a Dex save" is one click, not a hunt
+// through the stat block and a roll by hand.
+const CS_CR_AB = [['str', 'strength', 'STR'], ['dex', 'dexterity', 'DEX'], ['con', 'constitution', 'CON'], ['int', 'intelligence', 'INT'], ['wis', 'wisdom', 'WIS'], ['cha', 'charisma', 'CHA']];
+function csCreatureChecks(x){
+  const m = csMonster(x && x.name), raw = m && m._raw; if (!raw) return null;
+  const profs = raw.proficiencies || [], md = s => Math.floor(((+s || 10) - 10) / 2);
+  const ab = CS_CR_AB.map(([k, full, up]) => {
+    const p = profs.find(q => q && q.proficiency && q.proficiency.name === 'Saving Throw: ' + up);
+    return { k, up, check: md(raw[full]), save: p ? +p.value || 0 : md(raw[full]), prof: !!p };
+  });
+  const skills = profs.filter(q => q && q.proficiency && /^Skill: /.test(q.proficiency.name)).map(q => ({ name: q.proficiency.name.slice(7), mod: +q.value || 0 }));
+  return { ab, skills };
+}
+function csCreatureChecksHtml(x, i){
+  const c = csCreatureChecks(x); if (!c) return '';
+  const b = (attr, v, t, cls) => '<button class="btn small' + (cls ? ' ' + cls : '') + '" ' + attr + ' title="' + csE(t) + '">' + csSigned(v) + '</button>';
+  return '<div class="cs-cr-checks"><span></span>' + c.ab.map(a => '<span class="cs-cr-abh">' + a.up + '</span>').join('')
+    + '<span class="cs-cr-rowl">Check</span>' + c.ab.map(a => b('data-cs-crchk="' + i + ':' + a.k + '"', a.check, 'Roll its ' + a.up + ' check')).join('')
+    + '<span class="cs-cr-rowl">Save</span>' + c.ab.map(a => b('data-cs-crsav="' + i + ':' + a.k + '"', a.save, 'Roll its ' + a.up + ' save' + (a.prof ? ' (proficient)' : ''), a.prof ? 'cs-cr-prof' : '')).join('')
+    + '</div>'
+    + (c.skills.length ? '<div class="cs-cr-skills">' + c.skills.map(s => '<button class="btn small" data-cs-crsk="' + i + ':' + csE(s.name) + '" title="Roll its ' + csE(s.name) + '">' + csE(s.name) + ' ' + csSigned(s.mod) + '</button>').join('') + '</div>' : '');
+}
 function csCreatureD20(label, mod, ev){
   const mode = ev && ev.shiftKey ? 'adv' : ev && ev.altKey ? 'dis' : (CS.mode || 'normal');
   const a = csD(20), b = mode === 'normal' ? null : csD(20);
@@ -1147,7 +1171,7 @@ CS_TAB_RENDER.extras = pc => {
       + (ro ? '' : '<button class="btn small" data-cs-exhp="' + i + ':1" aria-label="Heal">+</button>') + '</span>'
       + (m ? '<button class="btn small" data-cs-open="ex:' + i + '">' + (open ? 'Hide' : 'Stat block') + '</button>' : '')
       + (ro ? '' : '<button class="btn small" data-cs-exdel="' + i + '" aria-label="Remove ' + csE(x.name) + '">✕</button>') + '</div>'
-      + csCreatureAttacksHtml(x, i)
+      + csCreatureAttacksHtml(x, i) + csCreatureChecksHtml(x, i)
       + (open && m && typeof buildDetailCard === 'function' ? '<div class="cs-extra-card">' + buildDetailCard(m, '-cs-' + i) + '</div>' : '') + '</div>';
   }).join('') : '<div class="cb-dim">None yet.</div>';
   if (!ro){
@@ -1235,6 +1259,13 @@ function csOnClick(e){
     return;
   }
   if (d.csRoll) return csRollFor(pc, d.csRoll, e);
+  if (d.csCrchk != null || d.csCrsav != null || d.csCrsk != null){
+    const key = String(d.csCrchk ?? d.csCrsav ?? d.csCrsk), at = key.indexOf(':'), x = (pc.extras || [])[+key.slice(0, at)], what = key.slice(at + 1);
+    const c = x && csCreatureChecks(x); if (!c) return;
+    if (d.csCrsk != null){ const s = c.skills.find(q => q.name === what); if (!s) return; csCreatureD20(x.name + ' · ' + s.name, s.mod, e); }
+    else { const a = c.ab.find(q => q.k === what); if (!a) return; csCreatureD20(x.name + ' · ' + a.up + (d.csCrsav != null ? ' save' : ' check'), d.csCrsav != null ? a.save : a.check, e); }
+    return csRender();
+  }
   if (d.csCratk != null || d.csCrdmg != null){
     const key = String(d.csCratk != null ? d.csCratk : d.csCrdmg), [i, k] = key.split(':').map(Number);
     const x = (pc.extras || [])[i], a = x ? csCreatureAttacks(x)[k] : null; if (!a) return;

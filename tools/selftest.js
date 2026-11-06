@@ -15891,6 +15891,42 @@ for (const cls of Object.keys(rule)) for (let L = 1; L <= 20; L++) for (const sc
       } catch(e){ ok('round 226 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
       finally { window.matchMedia = keepMM; }
     }
+    // -- Round 227: a character's creatures roll their checks, saves and skills from the sheet's Extras --
+    if (!PLAYER){
+      const party0 = JSON.stringify(state.party), keepD = window.sktD;
+      try {
+        for (let k = 0; k < 100 && !(typeof _5eLoaded !== 'undefined' && _5eLoaded); k++) await sleep(100);
+        state.party.push({ id: 'r227z', name: 'Zoey', hp: 30, hpMax: 30, ac: 15, rules: '2024', level: 5, cls: 'rogue', sheet: {},
+          extras: [{ name: 'Griffon', hp: 59, hpMax: 59, ac: 12 }, { name: 'Young White Dragon', hp: 133, hpMax: 133, ac: 17 }, { name: 'Not In The Bestiary', hp: 5, hpMax: 5, ac: 10 }] });
+        save();
+        await openCharSheet('r227z'); await sleep(400);
+        document.querySelector('#cs-root [data-cs-tab="extras"]').click(); await sleep(300);
+        const rows = [...document.querySelectorAll('#cs-root .cs-extra')];
+        const gr = rows[0], dr = rows[1];
+        const txt = el => el ? el.textContent.replace(/\s+/g, ' ').trim() : '';
+        ok('creature checks: the griffon’s six checks, from its scores — +4 +2 +3 −4 +1 −1', [...gr.querySelectorAll('[data-cs-crchk]')].map(b => b.textContent).join(' ') === '+4 +2 +3 -4 +1 -1', txt(gr.querySelector('.cs-cr-checks')));
+        ok('creature checks: …and its skill, Perception +5', /Perception \+5/.test(txt(gr.querySelector('.cs-cr-skills'))));
+        const dsave = dr.querySelector('[data-cs-crsav="1:dex"]'), dchk = dr.querySelector('[data-cs-crchk="1:dex"]');
+        const pr = (raw => (raw.proficiencies || []).find(p => p.proficiency.name === 'Saving Throw: DEX'))(csMonster('Young White Dragon')._raw);
+        ok('creature checks: a proficient save is its own number, marked — the dragon’s Dex save beside its bare Dex', !!pr && dsave.textContent === csSigned(+pr.value) && dsave.classList.contains('cs-cr-prof') && dchk.textContent !== dsave.textContent && !dr.querySelector('[data-cs-crsav="1:str"]').classList.contains('cs-cr-prof'), dsave.textContent + ' / ' + dchk.textContent);
+        ok('creature checks: none for a creature with no stat block', !rows[2].querySelector('.cs-cr-checks'));
+        window.sktD = n => (n === 20 ? 11 : 3);
+        gr.querySelector('[data-cs-crchk="0:str"]').click(); await sleep(60);
+        ok('creature checks: a click rolls it — the griffon’s STR check, 11 + 4', CS.log[0].label === 'Griffon · STR check' && CS.log[0].total === 15 && CS.log[0].kind === 'd20', JSON.stringify(CS.log[0]));
+        document.querySelector('#cs-root [data-cs-crsav="1:dex"]').click(); await sleep(60);
+        ok('creature checks: the dragon’s Dex save, 11 + its proficient bonus', CS.log[0].label === 'Young White Dragon · DEX save' && CS.log[0].total === 11 + (+pr.value), JSON.stringify(CS.log[0]));
+        document.querySelector('#cs-root [data-cs-crchk="1:dex"]').click(); await sleep(60);
+        ok('creature checks: …and its Dex check is the bare modifier, not the save', CS.log[0].label === 'Young White Dragon · DEX check' && CS.log[0].total === 11 + (+dchk.textContent), JSON.stringify(CS.log[0]));
+        document.querySelector('#cs-root [data-cs-crsk="0:Perception"]').click(); await sleep(60);
+        ok('creature checks: the griffon’s Perception, 11 + 5', CS.log[0].label === 'Griffon · Perception' && CS.log[0].total === 16, JSON.stringify(CS.log[0]));
+        CS.readOnly = true; csRender(); await sleep(50);
+        const ro = document.querySelector('#cs-root [data-cs-crsav="0:wis"]');
+        ro && ro.click(); await sleep(60);
+        ok('creature checks: on a read-only sheet they can still be rolled', !!ro && CS.log[0].label === 'Griffon · WIS save' && CS.log[0].total === 12, JSON.stringify(CS.log[0]));
+        csClose();
+      } catch(e){ ok('round 227 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
+      finally { window.sktD = keepD; try { csClose(); } catch(e){} state.party = JSON.parse(party0); save(); }
+    }
     // -- Class features: represented, not just text ------------------------
     {
       try {
