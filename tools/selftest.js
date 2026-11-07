@@ -16370,6 +16370,70 @@ for (const cls of Object.keys(rule)) for (let L = 1; L <= 20; L++) for (const sc
       finally { window.sktD = keepD; T._onHits = []; document.getElementById('area-save-back')?.remove(); C._condSaves = []; C._renderCondSaves?.();
         state.party = JSON.parse(keepP); state.combatants = JSON.parse(keepC); state.activeCombatantId = keepA; save(); }
     }
+    // -- Round 236: undo takes back what the undone roll left on the screen — a hit's Sneak Attack, a bite's save, a miss's rescue --
+    if (!PLAYER){
+      const keepC = JSON.stringify(state.combatants), keepA = state.activeCombatantId, keepP = JSON.stringify(state.party);
+      const T = panelDefs.turnview, C = panelDefs.combat, keepD = window.sktD;
+      try {
+        for (let k = 0; k < 100 && !(typeof _5eLoaded !== 'undefined' && _5eLoaded); k++) await sleep(100);
+        const find = (n, src) => _5eData.find(r => r.cat === 'monster' && r.name === n && r._source === src);
+        state.party.push({ id: 'r236z', name: 'Zoey', hp: 40, hpMax: 40, ac: 12, rules: '2024', level: 6, bardicInspiration: 'd8', bardicFrom: 'Zindle',
+          resources: [{ name: 'Sneak Attack', die: '3d6', current: 1, max: 1 }],
+          sheet: { saves: { str: 0 }, attacks: [{ name: 'Shortsword', atkBonus: '+7', damage: '1d6+4 piercing', props: ['F', 'L'] }] } });
+        state.combatants = [{ id: 'r236z', name: 'Zoey', isPC: true, hp: 40, hpMax: 40, ac: 12, initiative: 20, conditions: [] }];
+        C.addMonster(find('Wolf', 'MM')); await sleep(20);
+        const get = id => state.combatants.find(c => c.id === id), wolfId = state.combatants[1].id, wf = () => get(wolfId), z = () => get('r236z');
+        Object.assign(wf(), { hp: 300, hpMax: 300, ac: 5 });
+        state.activeCombatantId = 'r236z'; save();
+        if (!T._body){ openPanel('turnview'); await sleep(200); }
+        T._onHits = []; T._lastPcHit = null; T._lastPcMiss = null;
+        const swing = d20 => { window.sktD = n => (n === 20 ? d20 : 3);
+          T._rollAttack(T._attacksFor(z()).findIndex(a => a.name === 'Shortsword'), { attacker: z(), target: wf(), mode: 1 }); };
+        // A hit, then undone: no Sneak Attack left to add to it.
+        swing(15);
+        ok('undo: Zoey’s hit offers Sneak Attack', !!T._lastPcHit && T._pcExtraOptions(T._lastPcHit).some(o => o.key === 'sa'));
+        sktUndo(); await sleep(30);
+        T._painted = {}; T._render(); await sleep(20);
+        ok('undo: …the hit undone — the wolf’s HP back, and no Sneak Attack on offer', wf().hp === 300 && !T._lastPcHit && !document.querySelector('.tv-pcx'), JSON.stringify([wf().hp, T._lastPcHit]));
+        // Redo brings the offer back with the hit.
+        if (typeof sktRedo === 'function'){ sktRedo(); await sleep(30);
+          ok('undo: redo — the hit and its Sneak Attack offer return', wf().hp < 300 && !!T._lastPcHit && T._pcExtraOptions(T._lastPcHit).some(o => o.key === 'sa'), JSON.stringify([wf().hp, T._lastPcHit])); }
+        // Sneak Attack used, then undone: offered again.
+        const hpA = wf().hp;
+        T._usePcExtra('sa'); await sleep(20);
+        ok('undo: Sneak Attack lands', wf().hp < hpA && !T._pcExtraOptions(T._lastPcHit).some(o => o.key === 'sa'));
+        sktUndo(); await sleep(30);
+        ok('undo: …undone — its damage back, and Sneak Attack on offer again', wf().hp === hpA && !!T._lastPcHit && T._pcExtraOptions(T._lastPcHit).some(o => o.key === 'sa'), JSON.stringify([wf().hp, hpA]));
+        // A miss rescued by the bard's die, then undone: the miss and its offer are back.
+        T._lastPcHit = null; z().onceTurn = undefined;
+        Object.assign(wf(), { hp: 300, ac: 25 });
+        swing(12);   // 12 + 7 = 19 vs 25 — a d8 needs 6
+        window.sktD = n => 8;
+        T._rescueMiss('bi'); await sleep(20);
+        ok('undo: Bardic Inspiration turns the miss (27 vs 25)', !T._lastPcMiss && !!T._lastPcHit && wf().hp < 300 && state.party.find(p => p.id === 'r236z').bardicInspiration === false);
+        sktUndo(); await sleep(30);
+        ok('undo: …undone — the miss is back with Bardic Inspiration to offer; the hit’s offers gone',
+          !!T._lastPcMiss && T._pcMissOptions(T._lastPcMiss).some(x => x.key === 'bi' && x.ok) && T._lastPcMiss.o.total === 19 && !T._lastPcHit && wf().hp === 300,
+          JSON.stringify([T._lastPcMiss && T._lastPcMiss.o.total, T._lastPcHit, wf().hp]));
+        T._lastPcMiss = null;
+        // The wolf's bite: its save line goes with the undone hit.
+        state.activeCombatantId = wolfId; z().ac = 5;
+        const bite = T._attacksFor(wf()).findIndex(a => a.name === 'Bite');
+        window.sktD = n => (n === 20 ? 15 : 2);
+        T._rollAttack(bite, { attacker: wf(), target: z() }); await sleep(20);
+        ok('undo: the wolf’s bite leaves its save line', T._onHits.length === 1 && z().hp < 40);
+        sktUndo(); await sleep(30);
+        ok('undo: …the bite undone — Zoey’s HP back, and no save line', z().hp === 40 && T._onHits.length === 0, JSON.stringify([z().hp, T._onHits.length]));
+        // Applied, then undone: not prone, and the line is back to answer.
+        T._rollAttack(bite, { attacker: wf(), target: z() }); await sleep(20);
+        T._onHitAct('fail', 0); await sleep(20);
+        ok('undo: Failed — Zoey is prone, the line answered', (z().conditions || []).includes('Prone') && !T._onHits.length);
+        sktUndo(); await sleep(30);
+        ok('undo: …undone — not prone, and the line is back', !(z().conditions || []).includes('Prone') && T._onHits.length === 1 && z().hp < 40, JSON.stringify([z().conditions, T._onHits.length]));
+      } catch(e){ ok('round 236 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
+      finally { window.sktD = keepD; T._onHits = []; T._lastPcHit = null; T._lastPcMiss = null;
+        state.party = JSON.parse(keepP); state.combatants = JSON.parse(keepC); state.activeCombatantId = keepA; save(); }
+    }
     // -- Class features: represented, not just text ------------------------
     {
       try {

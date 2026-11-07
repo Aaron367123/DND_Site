@@ -2343,9 +2343,21 @@ registerPanel('turnview', {
         { quiet: true });
     } else this._undo = snap;
   },
+  // What a roll left on the screen to answer: a hit's save line, a
+  // character's after-hit offers, a miss's rescue. Copied so a snapshot is
+  // never changed by what happens after it.
+  _copyPrompts(src){
+    const m = src.miss;
+    return {
+      onHits: JSON.parse(JSON.stringify(src.onHits || [])),
+      hit: src.hit ? JSON.parse(JSON.stringify(src.hit)) : null,
+      miss: m ? Object.assign({}, m, { used: (m.used || []).slice(), o: Object.assign({}, m.o, { parts: (m.o.parts || []).map(x => ({ ...x })) }) }) : null,
+    };
+  },
   _capture(label){
     return {
       label,
+      prompts: this._copyPrompts({ onHits: this._onHits, hit: this._lastPcHit, miss: this._lastPcMiss }),
       round: state.combatRound, active: state.activeCombatantId,
       combat: this._order().map(c => ({
         id:c.id, hp:c.hp, dead:c.dead, stable:c.stable, reactionUsed:c.reactionUsed,
@@ -2401,6 +2413,13 @@ registerPanel('turnview', {
     });
     state.combatRound = u.round;
     state.activeCombatantId = u.active;
+    // The prompts as they stood: an undone hit takes its Sneak Attack offer
+    // and its save line with it; an undone rescue brings the miss back.
+    if (u.prompts){
+      const pr = this._copyPrompts(u.prompts);
+      this._onHits = pr.onHits; this._lastPcHit = pr.hit; this._lastPcMiss = pr.miss;
+      if (pr.miss && pr.miss.o && pr.miss.o.target) pr.miss.o.target = this._order().find(x => x.id === pr.miss.o.target.id) || pr.miss.o.target;
+    }
     this._log.unshift(`<span style="opacity:.7">${verb || 'undid'} — ${esc(u.label)}</span>`);
     this._setResult(`<span class="dim">${verb === 'redid' ? 'Redone' : 'Undone'}: ${esc(u.label)}.</span>`);
     this._undo = null;
@@ -3147,11 +3166,13 @@ registerPanel('turnview', {
     this._onHits.splice(i, 1);
     const t = this._order().find(c => c.id === x.tgtId);
     if (kind === 'x' || !t){ this._render(); return; }
-    let fail = true, why = 'failed at the table';
+    let fail = true, why = 'failed at the table', snapped = false;
     const C = panelDefs.combat;
+    // Undo puts the line back to answer: the snapshot is taken with it in.
+    const snap = label => { this._onHits.splice(i, 0, x); this._snapshot(label); this._onHits.splice(i, 1); snapped = true; };
     if (kind === 'res'){
       if (!x.rolled || !C){ this._onHits.splice(i, 0, x); this._render(); return; }
-      this._snapshot(`${t.name} · ${key}`);
+      snap(`${t.name} · ${key}`);
       const line = C._rollRescue(t, x.rolled, x.ability, x.dc, key);
       if (!line){ this._onHits.splice(i, 0, x); this._render(); return; }
       C._spendRescues(t, x.rolled);
@@ -3178,7 +3199,7 @@ registerPanel('turnview', {
       }
     } else if (x.rolled) why = x.ability + ' save ' + x.rolled.total + ' vs DC ' + x.dc + ' (' + x.rolled.detail + ')';
     else if (!x.dc) why = '';
-    this._snapshot(`${x.name} → ${t.name}: ${x.drain ? this._ohWhat(x) : x.cond}`);
+    if (!snapped) snap(`${x.name} → ${t.name}: ${x.drain ? this._ohWhat(x) : x.cond}`);
     if (x.drain){
       // The tracker's own max-HP reduction: kept until a long rest, and the
       // party record's when it is a character.
