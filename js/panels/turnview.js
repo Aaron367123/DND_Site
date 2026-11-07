@@ -3127,6 +3127,14 @@ registerPanel('turnview', {
     if (!list.length) return '';
     return list.map(x => {
       const i = this._onHits.indexOf(x);
+      // A character rolled and failed, with a die left that might turn it.
+      if (x.rolled){
+        const t = this._order().find(c => c.id === x.tgtId), C = panelDefs.combat;
+        return `<div class="tv-onhit tv-ohres"><span class="tv-onhit-l"><b>${esc(x.tgtName)}</b> failed the ${esc(x.ability)} save — ${x.rolled.total} vs DC ${x.dc} (${esc(x.name)}: ${esc(this._ohWhat(x))}). Still:</span>`
+          + (C && t ? C._rescueButtons(t, x.rolled, x.ability, x.dc, 'data-tv="ohres" data-i="' + i + '"') : '')
+          + `<button class="btn" data-tv="ohfail" data-i="${i}" title="It fails: ${esc(x.drain ? this._ohWhat(x) : x.cond)}">Failed</button>
+        <button class="tv-manual-x" data-tv="ohx" data-i="${i}" title="It doesn&rsquo;t apply" aria-label="Dismiss">✕</button></div>`;
+      }
       return `<div class="tv-onhit"><span class="tv-onhit-l"><b>${esc(x.name)}</b> hit <b>${esc(x.tgtName)}</b>: ${esc(this._onHitText(x))}</span>
         ${x.dc ? `<button class="btn" data-tv="ohroll" data-i="${i}" title="Roll ${esc(x.tgtName)}&rsquo;s ${esc(x.ability)} save here, with their conditions">Roll save</button>
                   <button class="btn" data-tv="ohfail" data-i="${i}" title="Rolled at the table and failed: ${esc(x.drain ? this._ohWhat(x) : x.cond)}">Failed</button>`
@@ -3134,19 +3142,42 @@ registerPanel('turnview', {
         <button class="tv-manual-x" data-tv="ohx" data-i="${i}" title="It doesn&rsquo;t apply" aria-label="Dismiss">✕</button></div>`;
     }).join('');
   },
-  _onHitAct(kind, i){
+  _onHitAct(kind, i, key){
     const x = (this._onHits || [])[i]; if (!x) return;
     this._onHits.splice(i, 1);
     const t = this._order().find(c => c.id === x.tgtId);
     if (kind === 'x' || !t){ this._render(); return; }
     let fail = true, why = 'failed at the table';
-    if (kind === 'roll'){
-      const C = panelDefs.combat;
+    const C = panelDefs.combat;
+    if (kind === 'res'){
+      if (!x.rolled || !C){ this._onHits.splice(i, 0, x); this._render(); return; }
+      this._snapshot(`${t.name} · ${key}`);
+      const line = C._rollRescue(t, x.rolled, x.ability, x.dc, key);
+      if (!line){ this._onHits.splice(i, 0, x); this._render(); return; }
+      C._spendRescues(t, x.rolled);
+      panelDefs.party?._render?.();
+      if (!x.rolled.passed){
+        this._onHits.splice(i, 0, x);
+        const txt = `<strong>${esc(t.name)}</strong> — ${esc(line)} <span class="dim">· ${esc(x.name)}</span>`;
+        this._setResult(txt, true); this._log.unshift(txt);
+        save(); this._render(); return;
+      }
+      fail = false; why = x.ability + ' save ' + x.rolled.detail.split(' · ').pop() + ' vs DC ' + x.dc;
+    } else if (kind === 'roll'){
       const sv = C && typeof C.rollSave === 'function' ? C.rollSave(t, x.ability, x.dc, {}) : null;
       if (!sv){ this._render(); return; }
       fail = !sv.passed;
       why = x.ability + ' save ' + (sv.auto ? sv.detail : sv.total + ' vs DC ' + x.dc + ' (' + sv.detail + ')');
-    } else if (!x.dc) why = '';
+      // A character's failure that a die might still turn: asked first.
+      const row = { total: sv.auto ? null : sv.total, nat: sv.nat, passed: sv.passed, detail: sv.detail, used: [] };
+      if (fail && t.isPC && typeof C._saveRescues === 'function' && C._saveRescues(t, row, x.ability, x.dc).length){
+        x.rolled = row; this._onHits.splice(i, 0, x);
+        const txt = `<strong>${esc(t.name)}</strong> fails the ${esc(x.ability)} save — ${sv.total} vs DC ${x.dc} <span class="dim">(${esc(sv.detail)}) · ${esc(x.name)}</span>`;
+        this._setResult(txt, true); this._log.unshift(txt);
+        this._render(); return;
+      }
+    } else if (x.rolled) why = x.ability + ' save ' + x.rolled.total + ' vs DC ' + x.dc + ' (' + x.rolled.detail + ')';
+    else if (!x.dc) why = '';
     this._snapshot(`${x.name} → ${t.name}: ${x.drain ? this._ohWhat(x) : x.cond}`);
     if (x.drain){
       // The tracker's own max-HP reduction: kept until a long rest, and the
@@ -3990,7 +4021,7 @@ registerPanel('turnview', {
         if (cur){ cur[el.dataset.k] = !cur[el.dataset.k]; save(); panelDefs.combat?._render?.(); this._render(); }
       }
       else if (act === 'stdact'){ this._takeStandardAction(el.dataset.a); }
-      else if (act === 'ohroll' || act === 'ohfail' || act === 'ohx'){ this._onHitAct(act.slice(2), +el.dataset.i); }
+      else if (act === 'ohroll' || act === 'ohfail' || act === 'ohx' || act === 'ohres'){ this._onHitAct(act.slice(2), +el.dataset.i, el.dataset.r); }
       else if (act === 'pcx'){ this._usePcExtra(el.dataset.k); }
       else if (act === 'pcxcun'){ this._toggleCunning(el.dataset.k); }
       else if (act === 'pcmiss'){ this._rescueMiss(el.dataset.k); }

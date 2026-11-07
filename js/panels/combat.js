@@ -2474,6 +2474,96 @@ registerPanel('combat',{
     return { total, nat, passed: total >= dc, auto: '',
       detail: 'd20 ' + (b == null ? a : a + '/' + b) + (bonus ? (bonus > 0 ? ' + ' : ' − ') + Math.abs(bonus) : '') + (extra ? ' ' + extra : '') + (why ? ' (' + why + ')' : '') };
   },
+  // ─── A character's failed save, and what might still turn it ───────────────
+  // The dice a character holds for exactly this: a bard's die added to the
+  // save, a Luck Point's second d20, Heroic Inspiration's reroll (2024), a
+  // fighter's Indomitable reroll (2024: plus the fighter level), and a
+  // feature that adds its die when "you fail a Constitution saving throw"
+  // (Aberrant Dragonmark, a Reaction). `row`: { total, nat?, passed, used:[] }.
+  _saveRescues(c, row, ab, dc){
+    const p = c && c.isPC ? state.party.find(x => x.id === c.id) : null;
+    if (!p || !row || row.passed || typeof row.total !== 'number') return [];
+    ab = String(ab || '').slice(0, 3).toLowerCase();
+    const ed = (p.build && p.build.edition) || p.rules || '2024', need = dc - row.total, out = [];
+    const used = row.used || [];
+    if (p.bardicInspiration){
+      const die = typeof p.bardicInspiration === 'string' ? p.bardicInspiration.replace(/^1?d/, 'd') : 'd6';
+      const top = +die.slice(1) || 6;
+      out.push({ key: 'bi', label: 'Bardic Inspiration', dice: die, ok: need <= top,
+        why: need > top ? 'it needs ' + need + ' — more than a ' + die + ' can roll' : 'needs ' + need + ' or more on the ' + die + (p.bardicFrom ? ' (from ' + p.bardicFrom + ')' : '') });
+    }
+    const res = n => (p.resources || []).find(r => r.name === n);
+    const luck = res('Luck Points');
+    if (luck && (+luck.current || 0) >= 1)
+      out.push({ key: 'luck', label: 'Luck Point', dice: 'd20', ok: true, why: 'roll another d20 and keep the higher (' + luck.current + ' left)' });
+    if (p.inspiration && ed !== '2014')
+      out.push({ key: 'hero', label: 'Heroic Inspiration', dice: 'd20', ok: true, why: 'reroll the d20 — the new roll stands' });
+    const ind = res('Indomitable');
+    if (ind && (+ind.current || 0) >= 1){
+      const cl = ((p.sheet || {}).classLevels || []).find(x => x && x.cls === 'fighter');
+      const lv = cl ? +cl.level || 0 : (+p.level || 1);
+      out.push({ key: 'indom', label: 'Indomitable', dice: 'd20' + (ed !== '2014' ? '+' + lv : ''), ok: true, plus: ed !== '2014' ? lv : 0,
+        why: 'reroll the save' + (ed !== '2014' ? ' with +' + lv : '') + ' — the new roll stands (' + ind.current + ' left)' });
+    }
+    const AB = { strength: 'str', dexterity: 'dex', constitution: 'con', intelligence: 'int', wisdom: 'wis', charisma: 'cha' };
+    ((p.sheet || {}).activations || []).forEach(a => {
+      const m = /when you fail an? (?:(strength|dexterity|constitution|intelligence|wisdom|charisma) )?saving throw/i.exec(a.desc || '');
+      if (!m || !a.dice || !/\badd\b/i.test(a.desc) || (m[1] && AB[m[1].toLowerCase()] !== ab)) return;
+      const pool = a.resource ? res(a.resource) : null;
+      if (a.resource && !(pool && (+pool.current || 0) >= (+a.amount || 1))) return;
+      const react = /reaction/i.test(a.action || '');
+      const top = (/(\d*)d(\d+)/.exec(a.dice) || []).slice(1).reduce((n, x, i) => i ? n * (+x || 0) : (+x || 1), 0);
+      const ok = need <= top && !(react && c.reactionUsed);
+      out.push({ key: 'act:' + a.name, label: a.name, dice: a.dice, ok, act: a, react,
+        why: react && c.reactionUsed ? 'its Reaction is used' : need > top ? 'it needs ' + need + ' — more than ' + a.dice + ' can roll' : 'add ' + a.dice + (react ? ', as a Reaction' : '') + (pool ? ' (' + pool.current + ' left)' : '') });
+    });
+    return out.filter(x => !used.includes(x.key));
+  },
+  // Roll one of them onto the row: its total, d20 and result change; what it
+  // costs is listed in row.spend for _spendRescues (the area-save dialog
+  // spends only on Apply). Returns the line saying what happened.
+  _rollRescue(c, row, ab, dc, key){
+    const x = this._saveRescues(c, row, ab, dc).find(y => y.key === key); if (!x || !x.ok) return '';
+    const was = row.total, mod = typeof row.nat === 'number' ? row.total - row.nat : this.saveBonus(c, String(ab).slice(0, 3).toLowerCase());
+    let desc;
+    if (key === 'bi' || x.act){
+      const r = sktRollDice(key === 'bi' ? '1' + x.dice : x.dice);
+      row.total += r.total; desc = x.label + ' +' + r.total;
+    } else {
+      const n2 = sktD(20), keep = key === 'luck' ? Math.max(typeof row.nat === 'number' ? row.nat : was - mod, n2) : n2;
+      row.total = key === 'luck' ? Math.max(was, n2 + mod) : n2 + mod + (x.plus || 0);
+      row.nat = keep;
+      desc = x.label + ': ' + (key === 'luck' ? 'another d20 ' + n2 + (row.total === was ? ', keeps ' + was : '') : 'reroll ' + n2 + (x.plus ? ' + ' + x.plus : ''));
+    }
+    row.passed = row.total >= dc;
+    (row.used = row.used || []).push(key);
+    (row.spend = row.spend || []).push(key);
+    row.detail = (row.detail ? row.detail + ' · ' : '') + desc + ' (' + was + ' → ' + row.total + ')';
+    return desc + ': ' + was + ' → ' + row.total + ' vs DC ' + dc + ' — ' + (row.passed ? 'saved' : 'still failed');
+  },
+  _spendRescues(c, row){
+    const p = c && c.isPC ? state.party.find(x => x.id === c.id) : null;
+    if (!p || !row || !row.spend) return;
+    const res = n => (p.resources || []).find(r => r.name === n);
+    const dec = (r, n) => { if (r) r.current = Math.max(0, (+r.current || 0) - (n || 1)); };
+    row.spend.forEach(key => {
+      if (key === 'bi'){ p.bardicInspiration = false; p.bardicFrom = null; }
+      else if (key === 'luck') dec(res('Luck Points'));
+      else if (key === 'hero') p.inspiration = false;
+      else if (key === 'indom') dec(res('Indomitable'));
+      else if (key.startsWith('act:')){
+        const a = ((p.sheet || {}).activations || []).find(y => 'act:' + y.name === key);
+        if (a && a.resource) dec(res(a.resource), +a.amount || 1);
+        if (a && /reaction/i.test(a.action || '')){ const live = state.combatants.find(y => y.id === c.id); if (live) live.reactionUsed = true; }
+      }
+    });
+    row.spend = [];
+  },
+  _rescueButtons(c, row, ab, dc, attr){
+    return this._saveRescues(c, row, ab, dc).map(x =>
+      `<button class="btn small${x.ok ? '' : ' tv-cant'}" ${attr} data-r="${esc(x.key)}" title="${esc(x.label + ': ' + x.why)}"${x.ok ? '' : ' disabled'}>${esc(x.label)} ${esc(x.dice)}</button>`).join('');
+  },
+
   // A monster trait by name, off its stat block.
   _hasTrait(c, re){
     const e = c && !c.isPC ? this.statBlockFor(c) : null;
@@ -2662,7 +2752,7 @@ registerPanel('combat',{
       host.id = 'cond-save-stack'; host.className = 'cond-save-stack';
       host.addEventListener('click', e => {
         const b = e.target.closest('[data-csp]'); if (!b) return;
-        this._answerCondSave(b.closest('[data-k]').dataset.k, b.dataset.csp);
+        this._answerCondSave(b.closest('[data-k]').dataset.k, b.dataset.csp, b.dataset.r);
       });
       document.body.appendChild(host);
     }
@@ -2671,6 +2761,12 @@ registerPanel('combat',{
     host.innerHTML = live.map(p => {
       const c = state.combatants.find(x => x.id === p.cid);
       const bonus = this.saveBonus(c, p.ab);
+      // Rolled and failed, with something left that might turn it.
+      if (p.rolled) return `<div class="cond-save" data-k="${esc(p.k)}" role="alertdialog" aria-label="Saving throw">
+        <div class="cond-save-what">⟳ <b>${esc(c.name)}</b> — ${esc(String(p.ab).toUpperCase())} ${p.rolled.total} vs DC ${p.dc}: failed, still <b>${esc(p.cond)}</b>. Still:</div>
+        <div class="cond-save-btns">${this._rescueButtons(c, p.rolled, p.ab, p.dc, 'data-csp="rescue"')}
+          <button class="btn small" data-csp="fail">It stays</button>
+        </div></div>`;
       return `<div class="cond-save" data-k="${esc(p.k)}" role="alertdialog" aria-label="Saving throw">
         <div class="cond-save-what">⟳ <b>${esc(c.name)}</b> — end of turn: ${esc(String(p.ab).toUpperCase())} save DC ${p.dc} to end <b>${esc(p.cond)}</b></div>
         <div class="cond-save-btns">
@@ -2681,16 +2777,28 @@ registerPanel('combat',{
     }).join('');
     host.hidden = !live.length;
   },
-  _answerCondSave(k, how){
+  _answerCondSave(k, how, key){
     const p = (this._condSaves || []).find(x => x.k === k); if (!p) return;
     const i = state.combatants.findIndex(c => c.id === p.cid);
     const c = state.combatants[i];
     let passed = how === 'pass';
-    if (how === 'roll' && c){
+    if (how === 'rescue'){
+      if (!c || !p.rolled) return;
+      const line = this._rollRescue(c, p.rolled, p.ab, p.dc, key); if (!line) return;
+      this._spendRescues(c, p.rolled);
+      this._log(`${c.name} vs ${p.cond} — ${line}`);
+      if (typeof showToast === 'function') showToast(`${c.name}: ${line}${p.rolled.passed ? ', ' + p.cond + ' ends' : ''}`);
+      if (c.isPC) panelDefs.party?._render?.();
+      if (!p.rolled.passed){ save(); this._renderCondSaves(); return; }
+      passed = true;
+    } else if (how === 'roll' && c){
       const r = this.rollSave(c, p.ab, p.dc, { spell: !!p.spell });
       passed = r.passed;
       this._log(`${c.name} ${String(p.ab).toUpperCase()} save vs ${p.cond}: ${r.auto ? 'fails' : r.total} (${r.detail}) — ${passed ? 'saved' : 'failed'}`);
       if (typeof showToast === 'function') showToast(`${c.name}: ${String(p.ab).toUpperCase()} ${r.auto ? r.detail : r.total + ' vs DC ' + p.dc} — ${passed ? 'saved, ' + p.cond + ' ends' : 'failed'}`);
+      // A character's failure with a die left to turn it: the card stays.
+      const row = { total: r.auto ? null : r.total, nat: r.nat, passed, detail: r.detail, used: [] };
+      if (!passed && this._saveRescues(c, row, p.ab, p.dc).length){ p.rolled = row; this._renderCondSaves(); return; }
     } else if (c){
       this._log(`${c.name} — ${p.cond}: save ${passed ? 'passed' : 'failed'}`);
     }
@@ -2796,6 +2904,8 @@ registerPanel('combat',{
           const total = rolled.dmg.reduce((s, d) => s + d.amt, 0);
           const takes = r.passed ? (halfMode === 'half' ? Math.floor(total / 2) : 0) : total;
           const lrLeft = (c.lrMax || 0) - (c.lrUsed || 0);
+          // A character's failure, and the dice they hold that might turn it.
+          const rescue = c.isPC && !r.passed && !r.waiting ? this._rescueButtons(c, r, $('#as-ab').value, dcNow(), 'data-as="rescue" data-k="' + k + '"') : '';
           // Still on someone's phone. Nothing is applied until every row has
           // a number, but the DM can always roll it themselves instead of
           // waiting for the player who went to the kitchen.
@@ -2808,7 +2918,7 @@ registerPanel('combat',{
             <td><button class="btn small as-flip" data-as="flip" data-k="${k}" title="Change this result">${r.passed ? '✓ saved' : '✗ failed'}</button>
               ${(!r.passed && lrLeft > 0) ? `<button class="btn small" data-as="lr" data-k="${k}" title="Spend a legendary resistance to succeed instead (${lrLeft} left)">⛨ Resist</button>` : ''}
               ${r.lr ? '<span class="dim">⛨ used</span>' : ''}</td>
-            <td>takes <b>${takes}</b></td></tr>`;
+            <td>takes <b>${takes}</b></td></tr>${rescue ? `<tr class="as-rescue"><td colspan="5"><span class="dim">Still:</span> ${rescue}</td></tr>` : ''}`;
         }).join('')}</tbody></table>
         <div class="as-note">Amounts are before resistances, immunities and temp HP — those apply when you press Apply.</div>`;
       $('[data-as="apply"]').disabled = !rolled.rows.length || rolled.rows.some(r => r.waiting);
@@ -2820,7 +2930,7 @@ registerPanel('combat',{
     const rollRow = (id, ab, dc) => {
       const c = state.combatants.find(x => x.id === id);
       const r = this.rollSave(c, ab, dc, { spell: $('#as-spell') ? $('#as-spell').checked : !!pre.spell });
-      return { id, total: r.auto ? '—' : r.total, detail: r.detail, passed: r.passed, lr: false };
+      return { id, total: r.auto ? '—' : r.total, nat: r.nat, detail: r.detail, passed: r.passed, lr: false };
     };
     const close = () => {
       back.remove();
@@ -2891,6 +3001,11 @@ registerPanel('combat',{
       }
       if (act === 'reroll-dmg' && rolled){ rolled.dmg = rollDamage(); paintResult(); return; }
       if (act === 'flip' && rolled){ const r = rolled.rows[+b.dataset.k]; r.passed = !r.passed; if (!r.passed) r.lr = false; paintResult(); return; }
+      if (act === 'rescue' && rolled){
+        const r = rolled.rows[+b.dataset.k], c = r && state.combatants.find(x => x.id === r.id);
+        if (c && this._rollRescue(c, r, $('#as-ab').value, dcNow(), b.dataset.r)) paintResult();
+        return;
+      }
       if (act === 'lr' && rolled){ const r = rolled.rows[+b.dataset.k]; r.passed = true; r.lr = true; paintResult(); return; }
       if (act === 'apply' && rolled){
         const halfMode = $('#as-half').value;
@@ -2900,6 +3015,7 @@ registerPanel('combat',{
         rolled.rows.forEach(r => {
           const i = state.combatants.findIndex(x => x.id === r.id); if (i < 0) return;
           const c = state.combatants[i];
+          if (r.spend && r.spend.length){ this._spendRescues(c, r); this._log(c.name + ' — ' + r.detail); }
           if (r.lr){
             state.combatants[i] = { ...c, lrUsed: Math.min(c.lrMax || 0, (c.lrUsed || 0) + 1) };
             this._log(c.name + ' uses Legendary Resistance');

@@ -16267,6 +16267,109 @@ for (const cls of Object.keys(rule)) for (let L = 1; L <= 20; L++) for (const sc
       } catch(e){ ok('round 234 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
       finally { window.sktD = keepD; T._lastPcHit = null; T._lastPcMiss = null; state.party = JSON.parse(keepP); state.combatants = JSON.parse(keepC); state.activeCombatantId = keepA; save(); }
     }
+    // -- Round 235: a character's failed save offers what might still turn it — Bardic Inspiration, Luck, Heroic Inspiration, Indomitable, Aberrant Dragonmark --
+    if (!PLAYER){
+      const keepC = JSON.stringify(state.combatants), keepA = state.activeCombatantId, keepP = JSON.stringify(state.party);
+      const T = panelDefs.turnview, C = panelDefs.combat, keepD = window.sktD;
+      try {
+        for (let k = 0; k < 100 && !(typeof _5eLoaded !== 'undefined' && _5eLoaded); k++) await sleep(100);
+        const find = (n, src) => _5eData.find(r => r.cat === 'monster' && r.name === n && r._source === src);
+        state.party.push({ id: 'r235n', name: 'Nam', hp: 40, hpMax: 40, ac: 15, rules: '2024', level: 6, bardicInspiration: 'd6', bardicFrom: 'Zindle',
+          resources: [{ name: 'Aberrant Dragonmark', current: 1, max: 1 }],
+          sheet: { saves: { con: 2, dex: 1, wis: 6 }, activations: [{ name: 'Aberrant Dragonmark', action: 'Reaction', resource: 'Aberrant Dragonmark', amount: 1, dice: '1d4',
+            desc: 'When you fail a Constitution saving throw, you can take a Reaction to roll 1d4 and add the number rolled to the save, potentially turning the failure into a success.' }] } });
+        state.party.push({ id: 'r235w', name: 'Wil', hp: 40, hpMax: 40, ac: 17, rules: '2024', level: 9, inspiration: true,
+          resources: [{ name: 'Indomitable', current: 1, max: 1 }, { name: 'Luck Points', current: 2, max: 3 }],
+          sheet: { saves: { con: 5, dex: 1, str: 7 }, classLevels: [{ cls: 'fighter', level: 9 }] } });
+        state.combatants = [{ id: 'r235n', name: 'Nam', isPC: true, hp: 40, hpMax: 40, ac: 15, initiative: 20, conditions: [] },
+                            { id: 'r235w', name: 'Wil', isPC: true, hp: 40, hpMax: 40, ac: 17, initiative: 19, conditions: [] }];
+        C.addMonster(find('Ogre', 'MM')); await sleep(20);
+        const get = id => state.combatants.find(c => c.id === id), ogreId = state.combatants[2].id;
+        state.activeCombatantId = ogreId; save();
+        const pn = () => state.party.find(p => p.id === 'r235n'), pw = () => state.party.find(p => p.id === 'r235w');
+        const keys = (c, row, ab, dc) => C._saveRescues(c, row, ab, dc).map(x => x.key + (x.ok ? '' : '!'));
+        // The options themselves.
+        ok('save rescue: Nam fails a CON save by 2 — Bardic Inspiration d6 and Aberrant Dragonmark 1d4',
+          JSON.stringify(keys(get('r235n'), { total: 11, nat: 9, passed: false }, 'con', 13)) === '["bi","act:Aberrant Dragonmark"]', JSON.stringify(keys(get('r235n'), { total: 11, nat: 9, passed: false }, 'con', 13)));
+        ok('save rescue: …a DEX save — no Aberrant Dragonmark (Constitution only)', JSON.stringify(keys(get('r235n'), { total: 11, nat: 10, passed: false }, 'dex', 13)) === '["bi"]');
+        ok('save rescue: …short by 6 — the d6 can reach, the 1d4 can’t', JSON.stringify(keys(get('r235n'), { total: 9, nat: 7, passed: false }, 'con', 15)) === '["bi","act:Aberrant Dragonmark!"]');
+        ok('save rescue: a save that passed — nothing', keys(get('r235n'), { total: 15, nat: 13, passed: true }, 'con', 13).length === 0);
+        const p0 = state.party[0], k0 = p0.bardicInspiration; p0.bardicInspiration = 'd8';
+        ok('save rescue: an ogre’s failure — nothing', keys(get(ogreId), { total: 5, nat: 5, passed: false }, 'con', 13).length === 0);
+        p0.bardicInspiration = k0;
+        ok('save rescue: short by 8 — the d6 can’t reach', keys(get('r235n'), { total: 5, nat: 3, passed: false }, 'con', 13).includes('bi!'));
+        ok('save rescue: Wil (fighter 9, 2024) — a Luck Point, Heroic Inspiration, Indomitable +9',
+          JSON.stringify(keys(get('r235w'), { total: 8, nat: 3, passed: false }, 'str', 15)) === '["luck","hero","indom"]'
+          && C._saveRescues(get('r235w'), { total: 8, nat: 3, passed: false }, 'str', 15).find(x => x.key === 'indom').dice === 'd20+9');
+        get('r235n').reactionUsed = true;
+        ok('save rescue: Nam’s Reaction used — Aberrant Dragonmark not allowed', keys(get('r235n'), { total: 11, nat: 9, passed: false }, 'con', 13).includes('act:Aberrant Dragonmark!'));
+        get('r235n').reactionUsed = false;
+        // The area save: a CON 13 fireball-like burst; Nam rolls 9 (+2 = 11), Wil rolls 9 (+5 = 14).
+        window.sktD = n => (n === 20 ? 9 : 2);
+        const back = C.openAreaSave({ name: 'Burst', ab: 'CON', dc: 13, parts: [{ dice: '4d6', type: 'fire' }], half: true, targets: ['r235n', 'r235w'] });
+        back.querySelector('[data-as="roll"]').click(); await sleep(20);
+        const rowOf = n => [...back.querySelectorAll('.as-table tr')].find(tr => tr.textContent.includes(n));
+        const resc = n => { const tr = rowOf(n), nx = tr && tr.nextElementSibling; return nx && nx.classList.contains('as-rescue') ? nx : null; };
+        const nb = resc('Nam'), wb = resc('Wil');
+        ok('area save: Nam’s failed row offers Bardic Inspiration and Aberrant Dragonmark; Wil saved — none',
+          !!nb && nb.querySelectorAll('[data-as="rescue"]').length === 2 && !wb && !rowOf('Wil').querySelector('[data-as="rescue"]'), nb && nb.textContent);
+        window.sktD = n => 3;
+        nb.querySelector('[data-r="act:Aberrant Dragonmark"]').click(); await sleep(20);
+        const nb2 = rowOf('Nam');
+        ok('area save: Aberrant Dragonmark +3 — 14, saved: half of 8; no rescue row now', !!nb2 && nb2.classList.contains('ok') && /14/.test(nb2.textContent) && /takes 4/.test(nb2.textContent) && !resc('Nam'), nb2 && nb2.textContent);
+        ok('area save: …nothing spent until Apply', pn().resources[0].current === 1 && !get('r235n').reactionUsed);
+        back.querySelector('[data-as="apply"]').click(); await sleep(20);
+        ok('area save: Apply — Nam takes 4, the mark’s use and the Reaction are spent, the d6 kept',
+          get('r235n').hp === 36 && pn().resources[0].current === 0 && get('r235n').reactionUsed === true && pn().bardicInspiration === 'd6', JSON.stringify([get('r235n').hp, pn().resources, get('r235n').reactionUsed]));
+        // The end-of-turn save card: Wil paralyzed, WIS... STR 15; rolls 3 (+7 = 10).
+        get('r235w').conditions = ['Paralyzed'];
+        window.sktD = n => 3;
+        C._queueCondSave(get('r235w'), 'Paralyzed', { ab: 'con', dc: 15 }); await sleep(20);
+        let card = document.querySelector('#cond-save-stack .cond-save');
+        card.querySelector('[data-csp="roll"]').click(); await sleep(20);
+        card = document.querySelector('#cond-save-stack .cond-save');
+        ok('end-of-turn save: Wil fails (8 vs DC 15) — the card stays with a Luck Point, Heroic Inspiration, Indomitable',
+          !!card && /Still:/.test(card.textContent) && card.querySelectorAll('[data-csp="rescue"]').length === 3, card && card.textContent);
+        // Luck: another d20 of 2 — keeps the higher, the 3: still 8, a fail.
+        window.sktD = n => 2;
+        card.querySelector('[data-r="luck"]').click(); await sleep(20);
+        card = document.querySelector('#cond-save-stack .cond-save');
+        ok('end-of-turn save: a Luck Point rolls 2 — keeps the 3, still 8; the point spent, the card still up without it',
+          pw().resources[1].current === 1 && !!card && /CON 8 vs DC 15/.test(card.textContent) && !card.querySelector('[data-r="luck"]') && !!card.querySelector('[data-r="indom"]') && (get('r235w').conditions || []).includes('Paralyzed'), card && card.textContent);
+        // Indomitable: reroll 2 + 5 + 9 = 16 — saved; Paralyzed ends.
+        window.sktD = n => 2;
+        card.querySelector('[data-r="indom"]').click(); await sleep(20);
+        ok('end-of-turn save: Indomitable rerolls 2 +5 +9 — 16, saved: Paralyzed ends, the use spent, Heroic Inspiration kept',
+          !(get('r235w').conditions || []).includes('Paralyzed') && pw().resources[0].current === 0 && pw().inspiration === true && !document.querySelector('#cond-save-stack .cond-save'),
+          JSON.stringify([get('r235w').conditions, pw().resources]));
+        // A hit's save in the Turn View: the ogre's hit, DC 14 STR or prone; Wil rolls 4 (+7 = 11).
+        if (!T._body){ openPanel('turnview'); await sleep(200); }
+        T._onHits = [];
+        T._queueOnHit({ onHit: { cond: 'Prone', dc: 14, ability: 'Str' }, target: get('r235w'), attacker: 'Ogre', attackerId: ogreId, label: 'Greatclub' });
+        window.sktD = n => 4;
+        T._onHitAct('roll', 0); await sleep(20);
+        ok('hit save: Wil fails (11 vs DC 14) — not prone yet; asked first', !(get('r235w').conditions || []).includes('Prone') && T._onHits.length === 1 && !!T._onHits[0].rolled, JSON.stringify(T._onHits));
+        T._painted = {}; T._render(); await sleep(20);
+        const ohr = document.querySelector('.tv-ohres');
+        ok('hit save: drawn — “failed the Str save — 11 vs DC 14”, with Luck and Heroic Inspiration', !!ohr && /failed the Str save — 11 vs DC 14/.test(ohr.textContent) && ohr.querySelectorAll('[data-tv="ohres"]').length === 2, ohr && ohr.textContent);
+        window.sktD = n => 12;
+        ohr.querySelector('[data-r="hero"]').click(); await sleep(20);
+        ok('hit save: Heroic Inspiration rerolls 12 — 19, saved: not prone, the inspiration spent', !(get('r235w').conditions || []).includes('Prone') && pw().inspiration === false && !T._onHits.length && /resists/.test(T._result), JSON.stringify([T._result, pw().inspiration]));
+        // And once nothing is left: straight to the condition.
+        T._queueOnHit({ onHit: { cond: 'Prone', dc: 14, ability: 'Str' }, target: get('r235w'), attacker: 'Ogre', attackerId: ogreId, label: 'Greatclub' });
+        pw().resources[1].current = 0;
+        window.sktD = n => 4;
+        T._onHitAct('roll', 0); await sleep(20);
+        ok('hit save: nothing left to spend — Prone at once', (get('r235w').conditions || []).includes('Prone') && !T._onHits.length);
+        // 2014: Indomitable has no bonus.
+        pw().rules = '2014'; pw().resources[0].current = 1; pw().inspiration = true;
+        ok('save rescue (2014): Inspiration isn’t a reroll — not offered', !keys(get('r235w'), { total: 8, nat: 3, passed: false }, 'str', 15).includes('hero'));
+        const i14 = C._saveRescues(get('r235w'), { total: 8, nat: 3, passed: false }, 'str', 15).find(x => x.key === 'indom');
+        ok('save rescue (2014): Indomitable is a plain reroll', !!i14 && i14.dice === 'd20' && !i14.plus, JSON.stringify(i14));
+      } catch(e){ ok('round 235 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
+      finally { window.sktD = keepD; T._onHits = []; document.getElementById('area-save-back')?.remove(); C._condSaves = []; C._renderCondSaves?.();
+        state.party = JSON.parse(keepP); state.combatants = JSON.parse(keepC); state.activeCombatantId = keepA; save(); }
+    }
     // -- Class features: represented, not just text ------------------------
     {
       try {

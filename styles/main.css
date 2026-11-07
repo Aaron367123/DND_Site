@@ -4873,7 +4873,11 @@ button.pa-cond.on{outline:2px solid currentColor; outline-offset:1px}
 .cond-save-stack[hidden]{display:none}
 .cond-save{background:var(--panel); border:1px solid var(--accent); border-radius:var(--r-md); padding:10px 12px;
   box-shadow:0 8px 28px rgba(0,0,0,.45); font-size:var(--fs-sm)}
-.cond-save-btns{display:flex; gap:6px; margin-top:8px}
+.cond-save-btns{display:flex; flex-wrap:wrap; gap:6px; margin-top:8px}
+.cond-save-btns .btn, .as-rescue .btn{white-space:nowrap}
+.cond-save-btns .btn[disabled], .as-rescue .btn[disabled]{opacity:.5}
+.as-table tr.as-rescue td{border-top:0; padding-top:0}
+.as-rescue .btn{margin:0 4px 4px 0}
 
 /* ─── Area save dialog (combat.openAreaSave) ─────────────────────────── */
 .area-save{width:min(680px, calc(100vw - 24px)); max-height:90vh; overflow:auto}
