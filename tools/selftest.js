@@ -14866,8 +14866,8 @@ for (const cls of Object.keys(rule)) for (let L = 1; L <= 20; L++) for (const sc
         window.sktD = () => 2;
         const rb = document.querySelector('.tv-onhit [data-tv="ohroll"]'); rb && rb.click(); await sleep(30);
         ok('on hit: Roll save — a failed STR save knocks the character prone', pc.conditions.includes('Prone') && !T._onHits.length, JSON.stringify([pc.conditions, T._onHits]));
-        if (typeof sktUndo === 'function'){ sktUndo(); await sleep(40); ok('on hit: undo takes the prone off again', !(pc.conditions || []).includes('Prone'), JSON.stringify(pc.conditions)); }
-        pc.conditions = []; state.combatants.forEach(x => { if (x.id === 'r210p') x.hp = 40; }); 
+        if (typeof sktUndo === 'function'){ sktUndo(); await sleep(40); ok('on hit: undo takes the prone off again, and the line is back to answer', !(pc.conditions || []).includes('Prone') && T._onHits.length === 1, JSON.stringify([pc.conditions, T._onHits.length])); }
+        T._onHits = []; pc.conditions = []; state.combatants.forEach(x => { if (x.id === 'r210p') x.hp = 40; }); 
         window.sktD = () => 15;
         T._rollAttack(bite, { attacker: wolf, target: pc });
         ok('on hit: (a second bite, a second line)', T._onHits.length === 1, T._onHits.length);
