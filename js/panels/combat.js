@@ -2191,6 +2191,25 @@ registerPanel('combat',{
         // excess damage is discarded (except for the massive-damage rule
         // below). Same defect party.js had; see AUDIT.
         c.hp = Math.max(0, hpBefore - damageDealt);
+        // A zombie's Undead Fortitude: brought to 0 by anything but radiant
+        // damage or a critical hit, a CON save (DC 5 + the damage taken)
+        // leaves it at 1. One save for the whole blow (_blow, set by the Turn
+        // View around a hit's parts): a save made holds against its other parts.
+        if (!c.isPC && c.hp <= 0 && hpBefore > 0 && !c.dead && this._hasTrait(c, /^Undead Fortitude\b/i)){
+          const blow = this._blow && this._blow.id === c.id ? this._blow : null;
+          const radiant = String(dmgType || '').toLowerCase() === 'radiant' || !!(blow && blow.radiant);
+          if (blow && blow.saved) c.hp = 1;
+          else if (!radiant && !this._lastAtkCrit){
+            const dc = 5 + (blow ? blow.total : damageDealt), sv = this.rollSave(c, 'con', dc, {});
+            const how = sv.auto ? sv.detail : sv.total + ' vs DC ' + dc + ' (' + sv.detail + ')';
+            if (sv.passed){
+              c.hp = 1; if (blow) blow.saved = true;
+              logParts.push('Undead Fortitude: 1 HP');
+              this._log(`${c.name}'s Undead Fortitude — CON ${how}: it stays up at 1 HP`);
+              if (typeof showToast === 'function') showToast(`🧟 ${c.name} stays up — Undead Fortitude, CON ${sv.total} vs DC ${dc}`, { alert: true });
+            } else this._log(`${c.name}'s Undead Fortitude — CON ${how}: it drops`);
+          } else this._log(`${c.name}'s Undead Fortitude doesn't help — ${radiant ? 'radiant damage' : 'a critical hit'}`);
+        }
         // A troll burned: no Regeneration at the start of its next turn.
         if (!c.isPC && damageDealt > 0) this._noteRegenHamper(c, dmgType);
         logParts.push(damageDealt + ' HP');

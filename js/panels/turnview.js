@@ -2618,6 +2618,9 @@ registerPanel('turnview', {
     const prev = C._lastAtkProp, prevCrit = C._lastAtkCrit;
     C._lastAtkProp = magical ? 'magical' : null;
     C._lastAtkCrit = !!crit;
+    // The blow as a whole, for what reads "the damage taken" (Undead Fortitude).
+    const prevBlow = C._blow;
+    C._blow = { id: target.id, total: parts.reduce((n, p) => n + (+p.amt || 0), 0), radiant: parts.some(p => String(p.type || '').toLowerCase() === 'radiant' && p.amt > 0) };
     this._applying = true;
     try {
       this._lastDmgNotes = [];
@@ -2646,7 +2649,7 @@ registerPanel('turnview', {
           if (this._lastDmgNotes.indexOf(t) < 0) this._lastDmgNotes.push(t);
         }
       });
-    } finally { C._lastAtkProp = prev; C._lastAtkCrit = prevCrit; this._applying = false; }
+    } finally { C._lastAtkProp = prev; C._lastAtkCrit = prevCrit; C._blow = prevBlow; this._applying = false; }
     C._render?.();
   },
   // Damage parts, kept in step with the total. A reaction that halves the

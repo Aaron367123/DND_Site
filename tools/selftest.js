@@ -16735,6 +16735,58 @@ for (const cls of Object.keys(rule)) for (let L = 1; L <= 20; L++) for (const sc
       finally { window.sktD = keepD; T._lastPcHit = null; T._lastPcMiss = null;
         state.party = JSON.parse(keepP); state.combatants = JSON.parse(keepC); state.activeCombatantId = keepA; save(); }
     }
+    // -- Round 245: a zombie's Undead Fortitude — dropped to 0, a CON save (DC 5 + the damage) leaves it at 1; not against radiant or a crit --
+    if (!PLAYER){
+      const keepC = JSON.stringify(state.combatants), keepA = state.activeCombatantId, keepP = JSON.stringify(state.party);
+      const T = panelDefs.turnview, C = panelDefs.combat, keepD = window.sktD;
+      try {
+        for (let k = 0; k < 100 && !(typeof _5eLoaded !== 'undefined' && _5eLoaded); k++) await sleep(100);
+        const find = (n, src) => _5eData.find(r => r.cat === 'monster' && r.name === n && r._source === src);
+        state.party.push({ id: 'r245k', name: 'Kael', hp: 40, hpMax: 40, ac: 15, rules: '2024', level: 6,
+          sheet: { attacks: [{ name: 'Shortsword', atkBonus: '+7', damage: '1d6+3 piercing', props: ['F', 'L'] }] } });
+        state.combatants = [{ id: 'r245k', name: 'Kael', isPC: true, hp: 40, hpMax: 40, ac: 15, initiative: 20, conditions: [] }];
+        C.addMonster(find('Zombie', 'MM')); C.addMonster(find('Ogre', 'MM')); await sleep(20);
+        const get = id => state.combatants.find(c => c.id === id), zId = state.combatants[1].id, ogId = state.combatants[2].id, z = () => get(zId);
+        state.activeCombatantId = 'r245k'; save();
+        let q = [], d20s = 0;
+        const stub = () => { d20s = 0; window.sktD = n => (n === 20 ? (d20s++, q.shift() || 10) : 3); };
+        const swing = tgt => T._rollAttack(T._attacksFor(get('r245k')).findIndex(a => a.name === 'Shortsword'), { attacker: get('r245k'), target: get(tgt), mode: 0 });
+        ok('undead fortitude: the zombie has it', C._hasTrait(z(), /^Undead Fortitude\b/i));
+        // 4 HP; the shortsword's 3 + 3 = 6 → DC 11; a 10 + 3 = 13 — it stays up at 1.
+        z().hp = 4; z().ac = 5; q = [15, 10]; stub();
+        swing(zId);
+        ok('undead fortitude: 6 damage drops it — CON 13 vs DC 11: it stays up at 1 HP', z().hp === 1 && !z().dead && d20s === 2, JSON.stringify([z().hp, d20s]));
+        // A 2 + 3 = 5 — it drops.
+        z().hp = 4; get('r245k').onceTurn = undefined; q = [15, 2]; stub();
+        swing(zId);
+        ok('undead fortitude: CON 5 vs DC 11 — it drops', z().hp === 0, JSON.stringify(z().hp));
+        // Radiant, or a critical hit: no save.
+        z().hp = 4; q = [20]; stub();
+        T._applyDamage(z(), [{ amt: 6, type: 'radiant' }], false, false);
+        ok('undead fortitude: radiant damage — no save, it drops', z().hp === 0 && d20s === 0, JSON.stringify([z().hp, d20s]));
+        z().hp = 4; q = [20]; stub();
+        T._applyDamage(z(), [{ amt: 6, type: 'piercing' }], false, true);
+        ok('undead fortitude: a critical hit — no save, it drops', z().hp === 0 && d20s === 0, JSON.stringify([z().hp, d20s]));
+        // A hit of two parts — 3 piercing + 3 fire at 2 HP: one save, DC 5 + 6 = 11; an 8 + 3 = 11 holds against both.
+        z().hp = 2; q = [8]; stub();
+        T._applyDamage(z(), [{ amt: 3, type: 'piercing' }, { amt: 3, type: 'fire' }], false, false);
+        ok('undead fortitude: two parts, one blow — one save against DC 11, and it holds for both', z().hp === 1 && d20s === 1, JSON.stringify([z().hp, d20s]));
+        // The DC counts the whole blow: a 6 + 3 = 9 would beat DC 8 (the first part), not DC 11.
+        z().hp = 2; q = [6]; stub();
+        T._applyDamage(z(), [{ amt: 3, type: 'piercing' }, { amt: 3, type: 'fire' }], false, false);
+        ok('undead fortitude: the DC is 5 + the whole hit (11), not its first part — 9 fails', z().hp === 0 && d20s === 1, JSON.stringify([z().hp, d20s]));
+        // Typed in on the tracker: DC 5 + 6, rolled the same way.
+        z().hp = 4; q = [12]; stub();
+        C._applyHpDelta(state.combatants.indexOf(z()), -6, 'slashing');
+        ok('undead fortitude: damage typed on the tracker — the save too (15 vs DC 11)', z().hp === 1 && d20s === 1, JSON.stringify([z().hp, d20s]));
+        // An ogre has no such thing.
+        get(ogId).hp = 4; q = [20]; stub();
+        T._applyDamage(get(ogId), [{ amt: 6, type: 'piercing' }], false, false);
+        ok('undead fortitude: an ogre just drops', get(ogId).hp === 0 && d20s === 0);
+      } catch(e){ ok('round 245 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
+      finally { window.sktD = keepD; T._lastPcHit = null; T._lastPcMiss = null;
+        state.party = JSON.parse(keepP); state.combatants = JSON.parse(keepC); state.activeCombatantId = keepA; save(); }
+    }
     // -- Class features: represented, not just text ------------------------
     {
       try {
