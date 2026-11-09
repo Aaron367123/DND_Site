@@ -200,6 +200,10 @@ registerPanel('turnview', {
     // Damage-side: these change what lands.
     'Uncanny Dodge':    { when:'damage', halve:true },
     'Spirit Shield':    { when:'damage', reduce:[2,6], needs:'raging' },
+    // A monk's: 1d10 + Dexterity modifier + monk level off the damage — 2024
+    // against bludgeoning, piercing or slashing; 2014 against a ranged weapon.
+    'Deflect Attacks':  { when:'damage', deflect:true, onlyTypes:['bludgeoning','piercing','slashing'] },
+    'Deflect Missiles': { when:'damage', deflect:true, rangedOnly:true },
     'Absorb Elements':  { when:'damage', halve:true,
                           onlyTypes:['acid','cold','fire','lightning','thunder'] },
     // To-hit side: these can turn a hit into a miss, so the roll is re-tested.
@@ -958,6 +962,7 @@ registerPanel('turnview', {
                             : (r.scope === 'ally' || r.scope === 'both');
         if (!ok) return;
         if (r.when === 'damage' && !o.hit) return;          // nothing to reduce
+        if (r.rangedOnly && !o.ranged) return;
         // A saving throw is not an attack roll, so nothing that modifies one
         // can answer it. Absorb Elements still can, because it triggers on
         // taking the damage.
@@ -2309,6 +2314,7 @@ registerPanel('turnview', {
       let preview = '';
       if (r.when === 'damage' && r.halve) preview = ` → ${Math.floor(o.dmg / 2)}`;
       if (r.when === 'damage' && r.reduce) preview = ` −${r.reduce[0]}d${r.reduce[1]}`;
+      if (r.when === 'damage' && r.deflect) preview = ' −1d10+' + this._deflectBonus(who).n;
       if (r.when === 'tohit' && r.ac)     preview = ` AC +${r.ac}`;
       if (r.when === 'tohit' && r.acDie)  preview = ` AC +d${r.acDie}`;
       if (r.when === 'tohit' && r.die)    preview = ` −d${r.die}`;
@@ -2479,6 +2485,7 @@ registerPanel('turnview', {
         ft: who.id === o.target.id ? 0 : ft,
         preview: r.when === 'damage' && r.halve ? `${o.dmg} → ${Math.floor(o.dmg / 2)}`
                : r.when === 'damage' && r.reduce ? `−${r.reduce[0]}d${r.reduce[1]}`
+               : r.when === 'damage' && r.deflect ? '−1d10+' + this._deflectBonus(who).n
                : r.when === 'tohit' && r.ac ? `AC +${r.ac}`
                : r.when === 'tohit' && r.acDie ? `AC +d${r.acDie}`
                : r.when === 'tohit' && r.disadv ? 'disadvantage'
@@ -2658,6 +2665,18 @@ registerPanel('turnview', {
     o.dmg = o.parts.reduce((s, p) => s + p.amt, 0);
   },
 
+  // Deflect Attacks / Deflect Missiles: 1d10 + Dexterity modifier + monk level.
+  _deflectBonus(who){
+    const p = this._partyOf(who) || {}, sh = p.sheet || {};
+    const cl = (sh.classLevels || []).find(x => x && x.cls === 'monk');
+    const lv = cl ? +cl.level || 0 : (+p.level || 1);
+    const dex = Math.floor((((p.abilities || {}).dex) || 10) / 2) - 5;
+    return { dex, lv, n: dex + lv };
+  },
+  _deflectRoll(who){
+    const b = this._deflectBonus(who), d = this._d(10);
+    return { total: d + b.n, detail: `d10 ${d} + ${b.dex} Dex + ${b.lv} monk = ${d + b.n}` };
+  },
   _useReaction(whoId, key){
     const o = this._pending; if (!o || o.kind !== 'hit') return;
     const who = this._order().find(c => c.id === whoId);
@@ -2676,7 +2695,13 @@ registerPanel('turnview', {
         let n = 0; for (let i = 0; i < r.reduce[0]; i++) n += this._d(r.reduce[1]);
         this._reduceParts(o, n);
       }
-      this._commit(o, `${by}, ${was} → ${o.dmg}`);
+      let tail = '';
+      if (r.deflect){
+        const n = this._deflectRoll(who);
+        this._reduceParts(o, n.total);
+        tail = ` (${n.detail})` + (o.dmg === 0 ? ' — down to 0: ' + (this._edOf(who) === '2014' ? 'it can be caught and thrown back (1 ki point)' : 'a Focus Point redirects it') : '');
+      }
+      this._commit(o, `${by}, ${was} → ${o.dmg}${tail}`);
       return;
     }
     if (r.when === 'tohit'){

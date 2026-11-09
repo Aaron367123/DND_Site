@@ -16551,6 +16551,61 @@ for (const cls of Object.keys(rule)) for (let L = 1; L <= 20; L++) for (const sc
       finally { window.sktD = keepD; T._pending = null;
         state.party = JSON.parse(keepP); state.combatants = JSON.parse(keepC); state.activeCombatantId = keepA; save(); }
     }
+    // -- Round 240: a monk's Deflect Attacks is offered against a hit and takes 1d10 + Dex + monk level off it; 2014 Deflect Missiles, ranged only --
+    if (!PLAYER){
+      const keepC = JSON.stringify(state.combatants), keepA = state.activeCombatantId, keepP = JSON.stringify(state.party);
+      const T = panelDefs.turnview, C = panelDefs.combat, keepD = window.sktD;
+      try {
+        for (let k = 0; k < 100 && !(typeof _5eLoaded !== 'undefined' && _5eLoaded); k++) await sleep(100);
+        const find = (n, src) => _5eData.find(r => r.cat === 'monster' && r.name === n && r._source === src);
+        state.party.push({ id: 'r240m', name: 'Cream', cls: 'monk', level: 6, rules: '2024', hp: 40, hpMax: 40, ac: 10, build: { edition: '2024' },
+          abilities: { str: 9, dex: 17, con: 14, int: 13, wis: 13, cha: 10 }, resources: [{ name: 'Focus Points', current: 6, max: 6 }],
+          sheet: { classLevels: [{ cls: 'monk', level: 6 }], activations: [{ name: 'Deflect Attacks', action: 'Reaction', feature: 'Deflect Attacks',
+            desc: 'Reduce bludgeoning, piercing or slashing damage from an attack by 1d10 + 9; at 0, spend 1 Focus Point to redirect it.' }] } });
+        // Stamped as worked out by these rules, so the saved build isn't recomputed from its (empty) choices.
+        { const pm = state.party.find(p => p.id === 'r240m'); pm.rulesRev = SKT_RULES_REV; pm.sheet.stateSig = sktStateSig(pm); }
+        state.party.push({ id: 'r240o', name: 'Old', cls: 'monk', level: 6, rules: '2014', hp: 40, hpMax: 40, ac: 10,
+          abilities: { str: 10, dex: 16, con: 12, int: 10, wis: 14, cha: 8 }, sheet: {} });
+        state.combatants = [{ id: 'r240m', name: 'Cream', isPC: true, hp: 40, hpMax: 40, ac: 10, initiative: 20, conditions: [] },
+                            { id: 'r240o', name: 'Old', isPC: true, hp: 40, hpMax: 40, ac: 10, initiative: 19, conditions: [] }];
+        C.addMonster(find('Ogre', 'MM')); await sleep(20);
+        const get = id => state.combatants.find(c => c.id === id), ogId = state.combatants[2].id, og = () => get(ogId);
+        state.activeCombatantId = ogId; save();
+        if (!T._body){ openPanel('turnview'); await sleep(200); }
+        const club = T._attacksFor(og()).findIndex(a => /Greatclub/.test(a.name));
+        const swing = (tgt, dmgDie) => { window.sktD = n => (n === 20 ? 15 : dmgDie); T._pending = null; T._rollAttack(club, { attacker: og(), target: get(tgt), mode: 0 }); };
+        const names = () => T._pending ? T._gatherReactions(T._pending).map(x => x.who.name + ':' + x.r.name) : [];
+        // The greatclub: 2d8 + 4 = 10 bludgeoning.
+        swing('r240m', 3);
+        ok('deflect attacks: the ogre’s 10 bludgeoning — Cream can deflect it', names().includes('Cream:Deflect Attacks'), JSON.stringify(names()));
+        T._painted = {}; T._render(); await sleep(20);
+        const btn = document.querySelector('[data-tv="react"][data-key="Deflect Attacks"]');
+        ok('deflect attacks: drawn — “−1d10+9” (Dex 3 + monk 6)', !!btn && /−1d10\+9/.test(btn.textContent), btn && btn.textContent);
+        window.sktD = n => 3;
+        T._useReaction('r240m', 'Deflect Attacks'); await sleep(20);
+        ok('deflect attacks: d10 3 + 3 + 6 = 12 — all 10 stopped; it says a Focus Point redirects it',
+          get('r240m').hp === 40 && get('r240m').reactionUsed === true && /Focus Point redirects it/.test(T._result) && /d10 3 \+ 3 Dex \+ 6 monk = 12/.test(T._result), JSON.stringify([get('r240m').hp, T._result]));
+        // A bigger hit: 2d8 + 4 = 20; a d10 of 1 — 10 off, 10 lands.
+        get('r240m').reactionUsed = false;
+        swing('r240m', 8);
+        window.sktD = n => 1;
+        T._useReaction('r240m', 'Deflect Attacks'); await sleep(20);
+        ok('deflect attacks: 20 — d10 1 + 9 = 10 off, 10 lands', get('r240m').hp === 30 && !/redirects/.test(T._result), JSON.stringify([get('r240m').hp, T._result]));
+        // Not against fire.
+        get('r240m').reactionUsed = false;
+        const fire = { kind: 'hit', hit: true, target: get('r240m'), attackerId: ogId, dmg: 10, type: 'fire' };
+        ok('deflect attacks: not against fire', !T._gatherReactions(fire).some(x => x.r.name === 'Deflect Attacks'));
+        // 2014: Deflect Missiles — a ranged weapon attack only.
+        const melee = { kind: 'hit', hit: true, target: get('r240o'), attackerId: ogId, dmg: 10, type: 'bludgeoning', ranged: false };
+        const ranged = Object.assign({}, melee, { type: 'piercing', ranged: true });
+        ok('deflect missiles (2014): not against the greatclub; against a javelin thrown, yes',
+          !T._gatherReactions(melee).some(x => x.r.name === 'Deflect Missiles') && T._gatherReactions(ranged).some(x => x.r.name === 'Deflect Missiles'),
+          JSON.stringify([T._gatherReactions(melee).map(x => x.r.name), T._gatherReactions(ranged).map(x => x.r.name)]));
+        ok('deflect missiles (2014): 1d10 + 3 + 6', T._deflectBonus(get('r240o')).n === 9);
+      } catch(e){ ok('round 240 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
+      finally { window.sktD = keepD; T._pending = null;
+        state.party = JSON.parse(keepP); state.combatants = JSON.parse(keepC); state.activeCombatantId = keepA; save(); }
+    }
     // -- Class features: represented, not just text ------------------------
     {
       try {
