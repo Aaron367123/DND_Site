@@ -16686,6 +16686,55 @@ for (const cls of Object.keys(rule)) for (let L = 1; L <= 20; L++) for (const sc
       finally { window.sktD = keepD; T._pending = null; T._lastPcHit = null; T._lastPcMiss = null;
         state.party = JSON.parse(keepP); state.combatants = JSON.parse(keepC); state.activeCombatantId = keepA; save(); }
     }
+    // -- Round 244: Savage Attacker rerolls a weapon's dice once a turn and keeps the better; Elemental Cleaver only while raging --
+    if (!PLAYER){
+      const keepC = JSON.stringify(state.combatants), keepA = state.activeCombatantId, keepP = JSON.stringify(state.party);
+      const T = panelDefs.turnview, C = panelDefs.combat, keepD = window.sktD;
+      try {
+        for (let k = 0; k < 100 && !(typeof _5eLoaded !== 'undefined' && _5eLoaded); k++) await sleep(100);
+        const find = (n, src) => _5eData.find(r => r.cat === 'monster' && r.name === n && r._source === src);
+        state.party.push({ id: 'r244u', name: 'Ulf', cls: 'barbarian', subclass: 'Giant', level: 6, rules: '2024', hp: 60, hpMax: 60, ac: 14, rage: false,
+          sheet: { classLevels: [{ cls: 'barbarian', level: 6 }], featureList: [{ name: 'Savage Attacker', from: 'feat' }],
+            extraDamage: [{ label: 'Elemental Cleaver', dice: '1d6', note: 'While you wield the infused weapon during your rage, it deals an extra 1d6 damage of the chosen type when it hits.' }],
+            attacks: [{ name: 'Greataxe', atkBonus: '+6', damage: '1d12+3 slashing', props: ['H', '2H'], str: true },
+                      { name: 'Longbow', atkBonus: '+4', damage: '1d8+1 piercing', props: ['A', 'H', '2H'] }] } });
+        state.combatants = [{ id: 'r244u', name: 'Ulf', isPC: true, hp: 60, hpMax: 60, ac: 14, initiative: 20, conditions: [] }];
+        C.addMonster(find('Ogre', 'MM')); await sleep(20);
+        const get = id => state.combatants.find(c => c.id === id), ogId = state.combatants[1].id, og = () => get(ogId), pu = () => state.party.find(p => p.id === 'r244u');
+        Object.assign(og(), { hp: 500, hpMax: 500, ac: 5 });
+        state.activeCombatantId = 'r244u'; save();
+        const hit = (name, die) => { window.sktD = n => (n === 20 ? 15 : die); T._rollAttack(T._attacksFor(get('r244u')).findIndex(a => a.name === name), { attacker: get('r244u'), target: og(), mode: 0 }); };
+        const opt = l => T._lastPcHit ? T._pcExtraOptions(T._lastPcHit).find(o => o.label === l) : null;
+        // Calm: a greataxe hit of 2 + 3 = 5 — Savage Attacker offered, Elemental Cleaver not.
+        hit('Greataxe', 2);
+        ok('savage attacker: a greataxe hit offers it — the 1d12 again (it came to 2)', !!opt('Savage Attacker') && /1d12 again \(they came to 2\)/.test(opt('Savage Attacker').why), JSON.stringify(opt('Savage Attacker')));
+        ok('elemental cleaver: not while calm', !opt('Elemental Cleaver'));
+        // The d12 again: 10 — 8 more.
+        window.sktD = n => 10;
+        const hp0 = og().hp;
+        T._usePcExtra('savage'); await sleep(20);
+        ok('savage attacker: 10 against 2 — the new roll, +8', hp0 - og().hp === 8 && /\+8/.test(T._result), JSON.stringify([hp0 - og().hp, T._result]));
+        hit('Greataxe', 2);
+        ok('savage attacker: once a turn', !opt('Savage Attacker'));
+        // Next turn, raging: Elemental Cleaver offered; a worse reroll changes nothing.
+        get('r244u').onceTurn = undefined; pu().rage = true;
+        hit('Greataxe', 9);
+        ok('elemental cleaver: raging — offered', !!opt('Elemental Cleaver'));
+        window.sktD = n => 4;
+        const hp1 = og().hp;
+        T._usePcExtra('savage'); await sleep(20);
+        ok('savage attacker: 4 against 9 — the first roll stands, nothing more', og().hp === hp1 && /first roll stands/.test(T._result), JSON.stringify([hp1 - og().hp, T._result]));
+        // 2014: a melee weapon only.
+        get('r244u').onceTurn = undefined; pu().rules = '2014';
+        hit('Longbow', 3);
+        ok('savage attacker (2014): not for a longbow', !opt('Savage Attacker'));
+        pu().rules = '2024';
+        hit('Longbow', 3);
+        ok('savage attacker (2024): any weapon — the longbow too', !!opt('Savage Attacker'));
+      } catch(e){ ok('round 244 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
+      finally { window.sktD = keepD; T._lastPcHit = null; T._lastPcMiss = null;
+        state.party = JSON.parse(keepP); state.combatants = JSON.parse(keepC); state.activeCombatantId = keepA; save(); }
+    }
     // -- Class features: represented, not just text ------------------------
     {
       try {

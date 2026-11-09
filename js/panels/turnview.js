@@ -2598,7 +2598,8 @@ registerPanel('turnview', {
     if (o.onHit && !o.save) this._queueOnHit(o);
     // A character's hit: the damage their features add, one click away.
     if (o.pcAtk) this._lastPcHit = { turn: this._turnKey(), atkId: o.attackerId, tgtId: t.id, crit: !!o.crit, mode: o.mode || 0,
-      ranged: !!o.ranged, spell: !!o.spellAtk, props: o.props || null, type: o.type || '', magical: !!o.magical, label: o.label, used: [] };
+      ranged: !!o.ranged, spell: !!o.spellAtk, props: o.props || null, type: o.type || '', magical: !!o.magical, label: o.label, used: [],
+      wDice: o.wDice || null, wSum: o.wSum, wName: o.label };
     if (o.queued && this._queue){ this._queue.hits++; this._advanceQueue(); return; }
     this._render();
   },
@@ -2846,7 +2847,7 @@ registerPanel('turnview', {
       hitNote = (hitNote ? hitNote + ' · ' : '') + 'automatic crit within 5 ft';
     }
     // Damage is carried as PARTS all the way to the tracker, never flattened.
-    let parts = [], detail = '';
+    let parts = [], detail = '', wDice = null, wSum = null;
     const dbl = d => String(d).replace(/^(\d*)d/, (s, n) => (2 * (parseInt(n || '1'))) + 'd');
     if (a.pc){
       // "1d8+3 slashing" off the imported sheet.
@@ -2858,6 +2859,7 @@ registerPanel('turnview', {
       if (pp && typeof sktDamageRoll === 'function' && typeof csDamageOpts === 'function' && /\d*d\d+/.test(dice)){
         const r = sktDamageRoll(dice, crit, csDamageOpts(pp, a, false));
         parts = [{ amt: r.total, type }]; detail = r.detail;
+        if (!a.spell){ wDice = dice; wSum = r.dice; }
       } else {
         const r = this._roll(crit ? dbl(dice) : dice);
         parts = [{ amt: r.total, type }];
@@ -2893,7 +2895,7 @@ registerPanel('turnview', {
     this._resolve({ attackerId: c.id, attacker: c.name, label: o.label || a.name, target: t,
                     total, crit, hit, dmg, parts, queued: !!o.queued, nat, bonus, hitNote, onHit: a.pc ? null : (a.onHit || null),
                     type: parts.length ? parts[0].type : '', detail,
-                    pcAtk: !!a.pc, critAt, mode, ranged: !!a.ranged, spellAtk: !!a.spell, props: a.props || null,
+                    pcAtk: !!a.pc, critAt, wDice, wSum, mode, ranged: !!a.ranged, spellAtk: !!a.spell, props: a.props || null,
                     magical: a.pc || a.magical ? !!a.magical : panelDefs.attacks && this._entryOf(c) && this._entryOf(c)._raw
                              ? panelDefs.attacks._parsed(this._entryOf(c)._raw).magical : false });
   },
@@ -3352,11 +3354,18 @@ registerPanel('turnview', {
       const pool = (p.resources || []).find(r => r.name === x.label) || (p.resources || []).find(r => r.name && note.includes(r.name));
       if (pool && (+pool.current || 0) < 1) return;
       if (/weapon/i.test(note) && !weapon) return;
+      if (/during your rage|while (?:you(?:'|’)re |you are )?raging|while your rage/i.test(note) && !p.rage) return;
       const onceT = !!(x.once || pool || /once (?:per|on each of your|each) turn|(?:first|once) [a-z ]*each turn|each turn/i.test(note));
       if (onceT && once(x.label)) return;
       out.push({ key: 'x' + i, label: x.label, dice: x.dice, type: '', ok: true, once: onceT, res: pool ? pool.name : undefined,
         why: note + (pool ? ' (' + pool.current + ' left)' : '') });
     });
+    // Savage Attacker: once a turn, the weapon's damage dice rolled again and
+    // the better roll used (2014: a melee weapon).
+    const savage = (sh.featureList || []).some(f => f && f.name === 'Savage Attacker' && !f.info) || (p.feats || []).some(f => /^Savage Attacker$/i.test(String(f && f.name || f)));
+    if (savage && h.wDice && h.wSum != null && !once('Savage Attacker') && !(ed === '2014' && h.ranged))
+      out.push({ key: 'savage', label: 'Savage Attacker', dice: '', savage: true, type: h.type, once: true, ok: true,
+        why: 'roll the ' + h.wName + '’s ' + h.wDice.replace(/[+-]\s*\d+(?!\s*d)/g, '').trim() + ' again (they came to ' + h.wSum + ') and keep the better' });
     // Fury of the Small (a goblin): a creature larger than you, once a turn —
     // the proficiency bonus (2024) or your level (2014), from its uses.
     const fury = (p.resources || []).find(r => r.name === 'Fury of the Small');
@@ -3506,6 +3515,18 @@ registerPanel('turnview', {
     const c = this._order().find(x => x.id === h.atkId), t = this._order().find(x => x.id === h.tgtId), p = this._partyOf(c);
     if (!c || !t || typeof sktDamageRoll !== 'function') return;
     this._snapshot(`${c.name} · ${o.label} → ${t.name}`);
+    if (o.savage){
+      const r2 = sktDamageRoll(h.wDice, h.crit, Object.assign({}, typeof csDamageOpts === 'function' && p ? csDamageOpts(p, { name: h.wName, props: h.props || [], spell: false }, false) : {}, { add: [] }));
+      const gain = Math.max(0, r2.dice - h.wSum), before0 = t.hp;
+      if (gain) this._applyDamage(t, [{ amt: gain, type: h.type || '' }], h.magical, h.crit);
+      h.used.push(key); c.onceTurn = Object.assign({}, c.onceTurn, { [o.label]: this._turnKey() });
+      const after0 = (this._order().find(x => x.id === t.id) || t).hp;
+      const txt0 = `<strong>${esc(c.name)}</strong> — Savage Attacker: the dice again, ${r2.dice} against ${h.wSum} — `
+        + (gain ? `the new roll: <strong>+${gain}</strong> to <strong>${esc(t.name)}</strong> <span class="dim">[${esc(r2.detail)}] · ${before0} → ${after0}</span>` : `the first roll stands <span class="dim">[${esc(r2.detail)}]</span>`);
+      this._setResult(txt0, true); this._log.unshift(txt0);
+      save(); panelDefs.combat?._render?.(); this._render();
+      return;
+    }
     const r = o.dice ? sktDamageRoll(o.dice + (o.type && !/[a-z]{3,}/i.test(o.dice) ? ' ' + o.type : ''), h.crit) : { total: 0, detail: (o.picked || []).length ? 'every die spent on Cunning Strike' : '', type: '' };
     const type = r.type || o.type || h.type || '';
     const before = t.hp;

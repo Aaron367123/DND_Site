@@ -734,7 +734,7 @@ function sktDamageRoll(expr, crit, opts){
   const s = String(expr || '');
   const math = s.split(/[a-z]{2,}/i)[0];
   const type = s.slice(math.length).trim();
-  let total = 0; const parts = [];
+  let total = 0, dice = 0; const parts = [];
   math.replace(/([+-]?)\s*(\d*)d(\d+)|([+-]?)\s*(\d+)/gi, (m, sg, n, d, sg2, k) => {
     if (d){
       // A crit doubles the dice; Brutal Critical / Savage Attacks add more of
@@ -749,13 +749,14 @@ function sktDamageRoll(expr, crit, opts){
         rs.push(x);
       }
       const sum = rs.reduce((x, y) => x + y, 0) * (sg === '-' ? -1 : 1);
-      total += sum; parts.push(cnt + 'd' + d + ' [' + rs.join(', ') + ']');
+      total += sum; dice += sum; parts.push(cnt + 'd' + d + ' [' + rs.join(', ') + ']');
     } else if (k){ const v = (+k) * (sg2 === '-' ? -1 : 1); total += v; parts.push(String(v)); }
     return m;
   });
   // Flat bonuses the attack itself doesn't carry, each named: Rage.
   (opts.add || []).forEach(x => { if (x && +x.n){ total += +x.n; parts.push(x.n + ' ' + x.label); } });
-  return { total: Math.max(0, total), detail: parts.join(' + '), type, crit: !!crit };
+  // `dice`: what the dice alone came to (Savage Attacker rerolls just those).
+  return { total: Math.max(0, total), detail: parts.join(' + '), type, crit: !!crit, dice };
 }
 // A raging barbarian's Rage Damage on this attack: +2, +3 from 9th level,
 // +4 from 16th — on an attack using Strength (2014: a melee weapon attack;
