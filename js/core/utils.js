@@ -1460,7 +1460,11 @@ function sktParseMonsterAttack(action){
   if (saveDc != null && !attackFirst){
     const seg = _sktFirstDamageSentence(desc, saveAt);
     const parts = _sktDamageClauses(seg);
-    if (parts.length){
+    // What a failed save inflicts besides damage: a dragon's Frightful
+    // Presence (frightened, and nothing else), a mind flayer's Mind Blast
+    // (stunned), a Wing Attack (prone).
+    const cond = typeof sktSaveCondition === 'function' ? sktSaveCondition(desc, saveAt) : null;
+    if (parts.length || cond){
       return {
         name, recharge, uses, toHit: null,
         save: { dc: saveDc, ability: saveAbility,
@@ -1468,9 +1472,10 @@ function sktParseMonsterAttack(action){
         // "takes only half the damage" (the Bulette, among others). Missing a
         // phrasing here silently drops the Saved ½ button, so the DM applies
         // the full amount to a creature that made its save.
-        half: /half as much|half damage|half the damage/i.test(desc) },
+        half: parts.length > 0 && /half as much|half damage|half the damage/i.test(desc) },
         parts: parts.map(p => ({avg:p.avg, dice:p.dice, type:p.type, ifAdv:p.ifAdv})),
         alt: null, altLabel: '',
+        ...(cond ? { cond, effect: parts.length ? '' : sktCondText(cond) } : {}),
       };
     }
   }
@@ -1641,17 +1646,63 @@ function sktOnHitCondition(desc){
     if (also && cap(also[1]) !== out.cond) out.also = cap(also[1]);
     // How long, and whether it can be shaken off: "paralyzed for 1 minute.
     // The target can repeat the saving throw at the end of each of its turns".
-    // (A duration measured on the ATTACKER's turn is left to the DM.)
-    const near = sentences.slice(k, k + 2).join(' ');
-    const rounds = /\bfor (\d+) minutes?\b/i.exec(near), rds = /\bfor (\d+) rounds?\b/i.exec(near);
-    if (/\buntil the end of (?:its|the target['’]s) next turn\b/i.test(sen)) out.dur = { kind: 'end-next' };
-    else if (/\buntil the start of (?:its|the target['’]s) next turn\b/i.test(sen)) out.dur = { kind: 'start-next' };
-    else if (rds) out.dur = { kind: 'rounds', left: +rds[1] };
-    else if (rounds && +rounds[1] <= 10) out.dur = { kind: 'rounds', left: 10 * +rounds[1] };
-    if (out.dc && /\b(?:repeat|repeating) the sav(?:ing throw|e) at the end of each of its turns|\bat the end of each of its turns,? (?:repeating|it (?:can )?repeats?) the sav/i.test(near)) out.repeat = true;
+    Object.assign(out, _sktCondDuration(sen, sentences.slice(k, k + 2).join(' '), !!out.dc));
     return out;
   }
   return null;
+}
+// How long a condition lasts, read off its sentence (`sen`) and the one after
+// (`near`): "for 1 minute", "for 3 rounds", "until the end of its next turn"
+// (the target's), "until the end of the otyugh's next turn" (`src`: timed on
+// the attacker's turns), and whether the save is repeated each turn.
+function _sktCondDuration(sen, near, hasDc){
+  const out = {};
+  const mins = /\bfor (\d+) minutes?\b/i.exec(near), rds = /\bfor (\d+) rounds?\b/i.exec(near);
+  const own = /\buntil the (end|start) of (?:its|the target['’]s|the creature['’]s|that creature['’]s) next turn\b/i.exec(sen);
+  const src = own ? null : /\buntil the (end|start) of the [a-z][a-z ,'’-]*?['’]s next turn\b/i.exec(sen);
+  if (own) out.dur = { kind: own[1].toLowerCase() + '-next' };
+  else if (src) out.dur = { kind: src[1].toLowerCase() + '-next', src: true };
+  else if (rds) out.dur = { kind: 'rounds', left: +rds[1] };
+  else if (mins && +mins[1] <= 10) out.dur = { kind: 'rounds', left: 10 * +mins[1] };
+  if (hasDc && /\b(?:repeat|repeating) the sav(?:ing throw|e) at the end of each of its turns|\bat the end of each of its turns,? (?:repeating|it (?:can )?repeats?) the sav/i.test(near)) out.repeat = true;
+  return out;
+}
+// What a FAILED save inflicts, for a save action: "or become Frightened for 1
+// minute" (Frightful Presence), "or take 22 (4d8 + 4) psychic damage and be
+// Stunned for 1 minute" (Mind Blast), "and be knocked Prone" (a Wing
+// Attack), 2024's "Failure: … has the Frightened condition". Not the success
+// clause ("isn't stunned"), and not a choice of breath weapons, where the
+// condition belongs to the other one.
+//   → { cond, dur?, repeat? } or null
+function sktSaveCondition(desc, saveAt){
+  const s = String(desc || '');
+  if (/\bone of the following\b/i.test(s)) return null;
+  const sentences = s.slice(Math.max(0, saveAt || 0)).split(/(?<=\.)\s+/).slice(0, 4);
+  const C = SKT_HIT_CONDS;
+  const res = [
+    new RegExp('saving throw[^.]*?\\b(?:or|and)\\s+(?:take[^.]*?\\s+and\\s+)?(?:be |become |is |fall |be knocked |have the )?(?:knocked )?(' + C + ')\\b', 'i'),
+    new RegExp('\\bOn a fail(?:ed save|ure),?[^.]*?\\b(?:is|be|becomes?|has the|falls?)\\s+(?:knocked\\s+)?(' + C + ')\\b', 'i'),
+    new RegExp('\\bFailure:[^.]*?\\b(' + C + ')\\b', 'i'),
+  ];
+  for (let k = 0; k < sentences.length; k++){
+    const sen = sentences[k];
+    for (const re of res){
+      const m = re.exec(sen); if (!m) continue;
+      const out = { cond: m[1].charAt(0).toUpperCase() + m[1].slice(1).toLowerCase() };
+      // (the repeat save can come a sentence later: a ghost's ageing sits between)
+      return Object.assign(out, _sktCondDuration(sen, sentences.slice(k, k + 3).join(' '), true));
+    }
+  }
+  return null;
+}
+// "Frightened for 1 minute, saving again each turn".
+function sktCondText(c){
+  if (!c || !c.cond) return '';
+  const d = c.dur;
+  const how = !d ? '' : d.kind === 'rounds'
+    ? (d.left % 10 === 0 ? ' for ' + (d.left / 10) + ' minute' + (d.left === 10 ? '' : 's') : ' for ' + d.left + ' round' + (d.left === 1 ? '' : 's'))
+    : ' until the ' + (d.kind === 'end-next' ? 'end' : 'start') + ' of ' + (d.src ? 'its' : 'the target’s') + ' next turn';
+  return c.cond + how + (c.repeat ? ', saving again each turn' : '');
 }
 
 // Every damaging action on a monster, across the action groups worth having in

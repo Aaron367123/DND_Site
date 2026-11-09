@@ -16841,6 +16841,76 @@ for (const cls of Object.keys(rule)) for (let L = 1; L <= 20; L++) for (const sc
       finally { window.sktD = keepD; T._pending = null; document.getElementById('area-save-back')?.remove(); T._attacksFor = keepAF;
         state.party = JSON.parse(keepP); state.combatants = JSON.parse(keepC); state.activeCombatantId = keepA; save(); }
     }
+    // -- Round 248: what a failed save inflicts — Frightful Presence frightens (it was missing), Mind Blast stuns, a Wing Attack knocks prone; timed on the monster's turns when it says so --
+    if (!PLAYER){
+      const keepC = JSON.stringify(state.combatants), keepA = state.activeCombatantId, keepP = JSON.stringify(state.party);
+      const T = panelDefs.turnview, C = panelDefs.combat, keepD = window.sktD;
+      try {
+        for (let k = 0; k < 100 && !(typeof _5eLoaded !== 'undefined' && _5eLoaded); k++) await sleep(100);
+        const find = (n, src) => _5eData.find(r => r.cat === 'monster' && r.name === n && r._source === src);
+        const atk = (n, src, an) => sktParseMonsterAttacks(find(n, src)._raw).find(a => a.name.startsWith(an));
+        // The parse.
+        const fp = atk('Adult Red Dragon', 'MM', 'Frightful Presence');
+        ok('save conditions: Frightful Presence is an action now — DC 19 WIS, frightened 1 minute, saving again each turn, no damage',
+          !!fp && fp.save.dc === 19 && !fp.parts.length && !fp.save.half && fp.cond.cond === 'Frightened' && fp.cond.dur.kind === 'rounds' && fp.cond.dur.left === 10 && fp.cond.repeat === true, JSON.stringify(fp));
+        const wa = atk('Adult Red Dragon', 'MM', 'Wing Attack'), mb = atk('Mind Flayer', 'MM', 'Mind Blast'), ts = atk('Otyugh', 'MM', 'Tentacle Slam');
+        ok('save conditions: Wing Attack — prone; Mind Blast — stunned 1 minute, repeating; Tentacle Slam — stunned until the end of the otyugh’s next turn',
+          wa.cond.cond === 'Prone' && !wa.cond.dur && mb.cond.cond === 'Stunned' && mb.cond.repeat && ts.cond.cond === 'Stunned' && ts.cond.dur.kind === 'end-next' && ts.cond.dur.src === true && wa.parts.length && ts.parts.length,
+          JSON.stringify([wa.cond, mb.cond, ts.cond]));
+        ok('save conditions: not the success clause; not a choice of breath weapons; a damage-only breath has none',
+          !sktSaveCondition('must make a DC 14 Constitution saving throw. On a successful save, the target isn’t stunned.', 0)
+          && !atk('Adult Silver Dragon', 'MM', 'Breath Weapons').cond && !atk('Adult Red Dragon', 'MM', 'Fire Breath').cond);
+        const gv = atk('Ghost', 'MM', 'Horrifying Visage');
+        ok('save conditions: a ghost’s visage — its repeat save a sentence past the ageing', !!gv && gv.cond.cond === 'Frightened' && gv.cond.repeat === true, JSON.stringify(gv && gv.cond));
+        const odd = sktParseMonsterAttack({ name: 'Odd Gaze', desc: 'Each creature within 30 feet must succeed on a DC 12 Wisdom saving throw or become frightened for 1 minute, or half as much on a success.' });
+        ok('save conditions: no damage, no “Saved ½”', !!odd && odd.cond && odd.save.half === false, JSON.stringify(odd));
+        ok('save conditions: “On a failure” (a revenant’s glare) — paralyzed', (atk('Revenant', 'MM', 'Vengeful Glare') || {}).cond?.cond === 'Paralyzed');
+        // The area save: the dragon's Frightful Presence on two characters and a ghost.
+        state.party.push({ id: 'r248a', name: 'Ann', hp: 40, hpMax: 40, ac: 15, rules: '2024', level: 6, sheet: { saves: { wis: 0 } } });
+        state.party.push({ id: 'r248b', name: 'Bo', hp: 40, hpMax: 40, ac: 15, rules: '2024', level: 6, sheet: { saves: { wis: 9 } } });
+        state.combatants = [{ id: 'r248a', name: 'Ann', isPC: true, hp: 40, hpMax: 40, ac: 15, initiative: 20, conditions: [] },
+                            { id: 'r248b', name: 'Bo', isPC: true, hp: 40, hpMax: 40, ac: 15, initiative: 19, conditions: [] }];
+        C.addMonster(find('Adult Red Dragon', 'MM')); C.addMonster(find('Ghost', 'MM')); C.addMonster(find('Otyugh', 'MM')); await sleep(20);
+        const get = id => state.combatants.find(c => c.id === id), drId = state.combatants[2].id, ghId = state.combatants[3].id, otId = state.combatants[4].id;
+        get(drId).lrMax = 0;
+        state.activeCombatantId = drId; save();
+        if (!T._body){ openPanel('turnview'); await sleep(200); }
+        window.sktD = n => 10;   // Ann 10, Bo 19, the ghost 10 + 1
+        const fpi = T._attacksFor(get(drId)).findIndex(a => a.name === 'Frightful Presence');
+        ok('save conditions: the dragon’s list has Frightful Presence', fpi >= 0);
+        T._armed = null; T._areaSave(fpi);
+        const back = document.getElementById('area-save-back');
+        back.querySelectorAll('#as-targets input').forEach(i => { i.checked = ['r248a', 'r248b', ghId].includes(i.value); });
+        back.querySelector('[data-as="roll"]').click(); await sleep(20);
+        ok('save conditions: the dialog says what a failure does', /On a failed save: Frightened for 1 minute/.test(back.textContent), back.querySelector('.as-cond') && back.querySelector('.as-cond').textContent);
+        back.querySelector('[data-as="apply"]').click(); await sleep(20);
+        const at = get('r248a').condTimers || {};
+        ok('save conditions: Apply — Ann (10) frightened for 10 rounds with a WIS 19 save each turn; Bo (19) not; the ghost immune',
+          (get('r248a').conditions || []).includes('Frightened') && at.Frightened && at.Frightened.kind === 'rounds' && at.Frightened.left === 10 && at.Frightened.save && at.Frightened.save.dc === 19 && at.Frightened.save.ab === 'wis'
+          && !(get('r248b').conditions || []).includes('Frightened') && !(get(ghId).conditions || []).includes('Frightened'),
+          JSON.stringify([get('r248a').conditions, at, get('r248b').conditions, get(ghId).conditions]));
+        // The Turn View's Failed: the otyugh's Tentacle Slam on Bo — 10 bludgeoning... and stunned until the end of the otyugh's next turn.
+        state.activeCombatantId = otId; T._armed = 'r248b'; window.sktD = n => 3; T._pending = null;
+        const tsi = T._attacksFor(get(otId)).findIndex(a => a.name === 'Tentacle Slam');
+        T._rollSave(tsi, false); await sleep(20);
+        if (T._pending) T._commit(T._pending, null);
+        const bt = (get('r248b').condTimers || {}).Stunned;
+        ok('save conditions: Tentacle Slam failed — Bo stunned, timed on the otyugh’s turns', (get('r248b').conditions || []).includes('Stunned') && bt && bt.kind === 'end-next' && bt.by === otId && /stunned/i.test(T._result), JSON.stringify([get('r248b').conditions, bt, T._result]));
+        // The otyugh's turn ends now (set this turn: not this one); Bo's, the others'; then the otyugh's next ends it.
+        C._nextTurn(); C._nextTurn(); C._nextTurn(); C._nextTurn();
+        ok('save conditions: …still stunned until the otyugh’s next turn ends', (get('r248b').conditions || []).includes('Stunned'), JSON.stringify([state.activeCombatantId, get('r248b').conditions]));
+        while (state.activeCombatantId !== otId) C._nextTurn();
+        C._nextTurn();
+        ok('save conditions: …and then it ends', !(get('r248b').conditions || []).includes('Stunned'), JSON.stringify(get('r248b').conditions));
+        // A hit's condition timed on the attacker's turns: queued with its source.
+        T._onHits = [];
+        state.activeCombatantId = otId;
+        T._queueOnHit({ onHit: { cond: 'Paralyzed', dc: 12, ability: 'Con', dur: { kind: 'end-next', src: true } }, target: get('r248a'), attacker: 'Otyugh', attackerId: otId, label: 'Glare' });
+        ok('save conditions: a hit’s “until the end of the otyugh’s next turn” — timed by the otyugh', T._onHits.length === 1 && T._onHits[0].dur.by === otId && !T._onHits[0].dur.src && /Otyugh’s next turn/.test(T._onHitText(T._onHits[0])), JSON.stringify(T._onHits[0]));
+      } catch(e){ ok('round 248 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
+      finally { window.sktD = keepD; T._pending = null; T._onHits = []; document.getElementById('area-save-back')?.remove();
+        state.party = JSON.parse(keepP); state.combatants = JSON.parse(keepC); state.activeCombatantId = keepA; save(); }
+    }
     // -- Class features: represented, not just text ------------------------
     {
       try {

@@ -2624,6 +2624,27 @@ registerPanel('combat',{
     return passed ? (halfOnSave ? Math.floor(amt / 2) : 0) : amt;
   },
 
+  // What a failed save inflicts (a parsed `cond`: { cond, dur?, repeat? }),
+  // put on combatant `c` with its duration and its repeat save. `src`, the
+  // creature whose turns time "until the end of the dragon's next turn".
+  // 'immune', 'had' (already has it) or 'applied'.
+  _inflictCond(c, x, dc, ability, src){
+    if (!c || !x || !x.cond) return '';
+    const low = x.cond.toLowerCase();
+    if (!c.isPC){
+      const e = this.statBlockFor(c), raw = e && (e._raw || e);
+      if (JSON.stringify((raw && raw.condition_immunities) || '').toLowerCase().includes(low)) return 'immune';
+    }
+    if ((c.conditions || []).some(k => String(k).toLowerCase() === low)) return 'had';
+    const i = state.combatants.indexOf(c); if (i < 0) return '';
+    let dur = x.dur ? Object.assign({}, x.dur) : null;
+    if (dur && dur.src){ delete dur.src; dur = src ? Object.assign(dur, { by: src.id, byName: src.name }) : null; }
+    const timer = (dur || x.repeat) ? Object.assign({}, dur || {}, x.repeat && dc ? { save: { ab: String(ability || '').slice(0, 3).toLowerCase(), dc } } : {}) : null;
+    if (timer) this._setCondTimer(i, x.cond, timer);
+    else state.combatants[i] = { ...c, conditions: [...(c.conditions || []), x.cond] };
+    return 'applied';
+  },
+
   // A monster trait by name, off its stat block.
   _hasTrait(c, re){
     const e = c && !c.isPC ? this.statBlockFor(c) : null;
@@ -2981,6 +3002,7 @@ registerPanel('combat',{
               ${r.lr ? '<span class="dim">⛨ used</span>' : ''}</td>
             <td>takes <b>${takes}</b>${ev ? ' <span class="dim" title="No damage on a successful Dexterity save, half on a failure">Evasion</span>' : ''}</td></tr>${rescue ? `<tr class="as-rescue"><td colspan="5"><span class="dim">Still:</span> ${rescue}</td></tr>` : ''}`;
         }).join('')}</tbody></table>
+        ${pre.cond && pre.cond.cond ? `<div class="as-note as-cond">On a failed save: <b>${esc(typeof sktCondText === 'function' ? sktCondText(pre.cond) : pre.cond.cond)}</b> — put on each creature that failed when you press Apply.</div>` : ''}
         <div class="as-note">Amounts are before resistances, immunities and temp HP — those apply when you press Apply.</div>`;
       $('[data-as="apply"]').disabled = !rolled.rows.length || rolled.rows.some(r => r.waiting);
     };
@@ -3085,7 +3107,14 @@ registerPanel('combat',{
             const amt = this._saveDamage(c, d.amt, r.passed, ab, halfMode === 'half');
             if (amt > 0) this._applyHpDelta(i, -amt, d.type || null);
           });
-          this._log(`${label} — ${c.name} ${r.total} ${r.passed ? 'saved' : 'failed'}`);
+          // What the failed save inflicts besides damage (Frightful Presence).
+          let condNote = '';
+          if (!r.passed && pre.cond && pre.cond.cond){
+            const now = state.combatants.find(x => x.id === r.id);
+            const got = now && (now.hp || 0) > 0 ? this._inflictCond(now, pre.cond, dc, ab, pre.src || null) : '';
+            condNote = got === 'applied' ? ' — ' + pre.cond.cond.toLowerCase() : got === 'immune' ? ' — immune to ' + pre.cond.cond.toLowerCase() : '';
+          }
+          this._log(`${label} — ${c.name} ${r.total} ${r.passed ? 'saved' : 'failed'}${condNote}`);
           if (c.isPC) partyTouched = true;
         });
         save(); this._render();

@@ -3196,7 +3196,9 @@ registerPanel('turnview', {
       if (ci.includes(oh.cond.toLowerCase())){ this._log.unshift(`<strong>${esc(t.name)}</strong> is immune to ${esc(oh.cond.toLowerCase())} (${esc(name)})`); return; }
     }
     (this._onHits = (this._onHits || []).filter(x => x.turn === this._turnKey())).push(Object.assign({
-      turn: this._turnKey(), srcId: o.attackerId, srcName: o.attacker, tgtId: t.id, tgtName: t.name, name }, oh));
+      turn: this._turnKey(), srcId: o.attackerId, srcName: o.attacker, tgtId: t.id, tgtName: t.name, name }, oh,
+      // "until the end of the mummy's next turn": timed on the attacker's turns.
+      oh.dur && oh.dur.src ? { dur: { kind: oh.dur.kind, by: o.attackerId, byName: o.attacker } } : {}));
   },
   _renderOnHits(){
     const list = (this._onHits || []).filter(x => x.turn === this._turnKey() && this._order().some(c => c.id === x.tgtId));
@@ -3836,9 +3838,16 @@ registerPanel('turnview', {
       detail += (detail ? ' · ' : '') + pt.type + ' ' + r.detail + (ev ? (half ? ' → 0' : ' ÷2') : half ? ' ÷2' : '');
       return { amt, type: pt.type };
     });
+    // What the failed save inflicts besides damage (Frightful Presence's fear).
+    let condNote = '';
+    if (!half && !rider && a.cond && C && typeof C._inflictCond === 'function'){
+      const got = C._inflictCond(t, a.cond, a.save.dc, a.save.ability, c);
+      condNote = got === 'applied' ? ' — ' + (typeof sktCondText === 'function' ? sktCondText(a.cond) : a.cond.cond).toLowerCase()
+        : got === 'immune' ? ' — immune to ' + a.cond.cond.toLowerCase() : got === 'had' ? ' — already ' + a.cond.cond.toLowerCase() : '';
+    }
     this._resolve({
-      attackerId: c.id, attacker: c.name, target: t, save: true,
-      label: a.name + (half ? ' (saved)' : ' (failed)') + (ev ? ' — Evasion' : ''),
+      attackerId: c.id, attacker: c.name, target: this._order().find(x => x.id === t.id) || t, save: true,
+      label: a.name + (half ? ' (saved)' : ' (failed)') + (ev ? ' — Evasion' : '') + condNote,
       total: null, crit: false, hit: true, parts, detail,
       dmg: parts.reduce((s, x) => s + x.amt, 0),
       type: parts.length ? parts[0].type : '',
@@ -3860,6 +3869,7 @@ registerPanel('turnview', {
       name: c.name + ' · ' + a.name, ab: a.save.ability, dc: a.save.dc,
       parts: (a.parts || []).map(p => ({ dice: p.dice, type: p.type })),
       half: !!a.save.half, exclude: c.id, targets: this._armed && this._armed !== c.id ? [this._armed] : [], spell: !!a.spell,
+      cond: a.cond || null, src: { id: c.id, name: c.name },
       onApplied: () => {
         if (a.recharge) this._markRechargeSpent(c, a.name);
         this._markUsed(c, a);
