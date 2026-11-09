@@ -3827,15 +3827,18 @@ registerPanel('turnview', {
       this._spend(c, 'actionUsed');
     }
     let detail = '';
+    // Evasion: a Dexterity save for half — nothing when saved, half when not.
+    const C = panelDefs.combat;
+    const ev = !rider && a.save && a.save.half !== false && /^dex/i.test(String(a.save.ability || '')) && C && typeof C._hasEvasion === 'function' && C._hasEvasion(t);
     const parts = ((rider ? a.rider : a).parts || []).map(pt => {
       const r = this._roll(pt.dice);
-      const amt = half ? Math.floor(r.total / 2) : r.total;
-      detail += (detail ? ' · ' : '') + pt.type + ' ' + r.detail + (half ? ' ÷2' : '');
+      const amt = ev ? (half ? 0 : Math.floor(r.total / 2)) : half ? Math.floor(r.total / 2) : r.total;
+      detail += (detail ? ' · ' : '') + pt.type + ' ' + r.detail + (ev ? (half ? ' → 0' : ' ÷2') : half ? ' ÷2' : '');
       return { amt, type: pt.type };
     });
     this._resolve({
       attackerId: c.id, attacker: c.name, target: t, save: true,
-      label: a.name + (half ? ' (saved)' : ' (failed)'),
+      label: a.name + (half ? ' (saved)' : ' (failed)') + (ev ? ' — Evasion' : ''),
       total: null, crit: false, hit: true, parts, detail,
       dmg: parts.reduce((s, x) => s + x.amt, 0),
       type: parts.length ? parts[0].type : '',

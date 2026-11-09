@@ -2605,6 +2605,25 @@ registerPanel('combat',{
       `<button class="btn small${x.ok ? '' : ' tv-cant'}" ${attr} data-r="${esc(x.key)}" title="${esc(x.label + ': ' + x.why)}"${x.ok ? '' : ' disabled'}>${esc(x.label)} ${esc(x.dice)}</button>`).join('');
   },
 
+  // Evasion (a rogue's or monk's, or a monster's): against a Dexterity save
+  // for half damage, nothing on a success and half on a failure — not while
+  // incapacitated.
+  _hasEvasion(c){
+    if (!c) return false;
+    const conds = (c.conditions || []).map(x => String(x).toLowerCase());
+    if (conds.some(x => /^(incapacitated|paralyzed|petrified|stunned|unconscious)/.test(x))) return false;
+    if (!c.isPC) return this._hasTrait(c, /^Evasion$/i);
+    const p = state.party.find(x => x.id === c.id), sh = (p && p.sheet) || {};
+    return (sh.notes || []).some(n => /^Evasion:/.test(String(n))) || (sh.featureList || []).some(f => f && f.name === 'Evasion' && !f.info);
+  },
+  // What a creature takes from damage `amt` that a save halves: Evasion's
+  // nothing-or-half on a Dexterity save, otherwise the usual.
+  _saveDamage(c, amt, passed, ab, halfOnSave){
+    const ev = halfOnSave && String(ab || '').slice(0, 3).toLowerCase() === 'dex' && this._hasEvasion(c);
+    if (ev) return passed ? 0 : Math.floor(amt / 2);
+    return passed ? (halfOnSave ? Math.floor(amt / 2) : 0) : amt;
+  },
+
   // A monster trait by name, off its stat block.
   _hasTrait(c, re){
     const e = c && !c.isPC ? this.statBlockFor(c) : null;
@@ -2943,7 +2962,8 @@ registerPanel('combat',{
         <table class="as-table"><tbody>${rolled.rows.map((r, k) => {
           const c = state.combatants.find(x => x.id === r.id); if (!c) return '';
           const total = rolled.dmg.reduce((s, d) => s + d.amt, 0);
-          const takes = r.passed ? (halfMode === 'half' ? Math.floor(total / 2) : 0) : total;
+          const ev = halfMode === 'half' && /^dex/i.test($('#as-ab').value) && this._hasEvasion(c);
+          const takes = this._saveDamage(c, total, r.passed, $('#as-ab').value, halfMode === 'half');
           const lrLeft = (c.lrMax || 0) - (c.lrUsed || 0);
           // A character's failure, and the dice they hold that might turn it.
           const rescue = c.isPC && !r.passed && !r.waiting ? this._rescueButtons(c, r, $('#as-ab').value, dcNow(), 'data-as="rescue" data-k="' + k + '"') : '';
@@ -2959,7 +2979,7 @@ registerPanel('combat',{
             <td><button class="btn small as-flip" data-as="flip" data-k="${k}" title="Change this result">${r.passed ? '✓ saved' : '✗ failed'}</button>
               ${(!r.passed && lrLeft > 0) ? `<button class="btn small" data-as="lr" data-k="${k}" title="Spend a legendary resistance to succeed instead (${lrLeft} left)">⛨ Resist</button>` : ''}
               ${r.lr ? '<span class="dim">⛨ used</span>' : ''}</td>
-            <td>takes <b>${takes}</b></td></tr>${rescue ? `<tr class="as-rescue"><td colspan="5"><span class="dim">Still:</span> ${rescue}</td></tr>` : ''}`;
+            <td>takes <b>${takes}</b>${ev ? ' <span class="dim" title="No damage on a successful Dexterity save, half on a failure">Evasion</span>' : ''}</td></tr>${rescue ? `<tr class="as-rescue"><td colspan="5"><span class="dim">Still:</span> ${rescue}</td></tr>` : ''}`;
         }).join('')}</tbody></table>
         <div class="as-note">Amounts are before resistances, immunities and temp HP — those apply when you press Apply.</div>`;
       $('[data-as="apply"]').disabled = !rolled.rows.length || rolled.rows.some(r => r.waiting);
@@ -3062,7 +3082,7 @@ registerPanel('combat',{
             this._log(c.name + ' uses Legendary Resistance');
           }
           rolled.dmg.forEach(d => {
-            const amt = r.passed ? (halfMode === 'half' ? Math.floor(d.amt / 2) : 0) : d.amt;
+            const amt = this._saveDamage(c, d.amt, r.passed, ab, halfMode === 'half');
             if (amt > 0) this._applyHpDelta(i, -amt, d.type || null);
           });
           this._log(`${label} — ${c.name} ${r.total} ${r.passed ? 'saved' : 'failed'}`);

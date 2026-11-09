@@ -16787,6 +16787,60 @@ for (const cls of Object.keys(rule)) for (let L = 1; L <= 20; L++) for (const sc
       finally { window.sktD = keepD; T._lastPcHit = null; T._lastPcMiss = null;
         state.party = JSON.parse(keepP); state.combatants = JSON.parse(keepC); state.activeCombatantId = keepA; save(); }
     }
+    // -- Round 247: Evasion — a Dexterity save for half: nothing on a success, half on a failure; not on a CON save, not while unconscious --
+    if (!PLAYER){
+      const keepC = JSON.stringify(state.combatants), keepA = state.activeCombatantId, keepP = JSON.stringify(state.party);
+      const T = panelDefs.turnview, C = panelDefs.combat, keepD = window.sktD, keepAF = T._attacksFor;
+      try {
+        for (let k = 0; k < 100 && !(typeof _5eLoaded !== 'undefined' && _5eLoaded); k++) await sleep(100);
+        const find = (n, src) => _5eData.find(r => r.cat === 'monster' && r.name === n && r._source === src);
+        state.party.push({ id: 'r247z', name: 'Zo', cls: 'rogue', level: 7, rules: '2024', hp: 60, hpMax: 60, ac: 15, build: { edition: '2024' },
+          sheet: { saves: { dex: 7, con: 1 }, notes: ['Evasion: no damage on a successful Dexterity save against area effects, half on a failure.'] } });
+        state.party.push({ id: 'r247n', name: 'Nam', cls: 'druid', level: 7, rules: '2024', hp: 60, hpMax: 60, ac: 15, sheet: { saves: { dex: 1, con: 2 } } });
+        { const pz = state.party.find(p => p.id === 'r247z'); pz.rulesRev = SKT_RULES_REV; pz.sheet.stateSig = sktStateSig(pz); }
+        state.combatants = [{ id: 'r247z', name: 'Zo', isPC: true, hp: 60, hpMax: 60, ac: 15, initiative: 20, conditions: [] },
+                            { id: 'r247n', name: 'Nam', isPC: true, hp: 60, hpMax: 60, ac: 15, initiative: 19, conditions: [] }];
+        C.addMonster(find('Assassin', 'MM')); await sleep(20);
+        const get = id => state.combatants.find(c => c.id === id), asId = state.combatants[2].id;
+        save();
+        ok('evasion: Zo has it (her notes), Nam doesn’t, the Assassin does (its trait)', C._hasEvasion(get('r247z')) && !C._hasEvasion(get('r247n')) && C._hasEvasion(get(asId)));
+        // An area DEX save, DC 15, 4d6 = 12 fire, half on a success. Everyone rolls 15.
+        const burst = (ab, d20) => {
+          window.sktD = n => (n === 20 ? d20 : 3);
+          const back = C.openAreaSave({ name: 'Fireball', ab, dc: 15, parts: [{ dice: '4d6', type: 'fire' }], half: true, targets: ['r247z', 'r247n', asId] });
+          back.querySelector('[data-as="roll"]').click();
+          const takes = n => { const tr = [...back.querySelectorAll('.as-table tr')].find(x => x.textContent.includes(n)); return tr ? +((/takes (\d+)/.exec(tr.textContent) || [])[1]) : null; };
+          return { back, takes };
+        };
+        let b = burst('DEX', 15);
+        ok('evasion: DEX saves made — Zo and the Assassin take 0, Nam 6', b.takes('Zo') === 0 && b.takes('Assassin') === 0 && b.takes('Nam') === 6, JSON.stringify([b.takes('Zo'), b.takes('Assassin'), b.takes('Nam')]));
+        b.back.querySelector('[data-as="apply"]').click(); await sleep(20);
+        ok('evasion: …applied — Zo 60, Nam 54', get('r247z').hp === 60 && get('r247n').hp === 54, JSON.stringify([get('r247z').hp, get('r247n').hp]));
+        b = burst('DEX', 1);
+        ok('evasion: DEX saves failed — Zo and the Assassin take half (6), Nam all 12', b.takes('Zo') === 6 && b.takes('Assassin') === 6 && b.takes('Nam') === 12, JSON.stringify([b.takes('Zo'), b.takes('Assassin'), b.takes('Nam')]));
+        b.back.remove();
+        b = burst('CON', 20);
+        ok('evasion: a CON save — no Evasion: Zo takes half', b.takes('Zo') === 6, JSON.stringify(b.takes('Zo')));
+        b.back.remove();
+        get('r247z').conditions = ['Unconscious'];
+        b = burst('DEX', 20);
+        ok('evasion: unconscious — none (and she fails anyway): all 12', b.takes('Zo') === 12, JSON.stringify(b.takes('Zo')));
+        b.back.remove();
+        get('r247z').conditions = []; get('r247z').hp = 60;
+        // The Turn View: the Assassin's turn, a DEX-for-half against Zo, "saved" — 0.
+        const fake = { name: 'Flash', save: { ability: 'DEX', dc: 15, half: true }, parts: [{ dice: '4d6', type: 'fire' }] };
+        T._attacksFor = c => [fake];
+        state.activeCombatantId = asId; T._armed = 'r247z'; window.sktD = n => 3; T._pending = null;
+        T._rollSave(0, true); await sleep(20);
+        if (T._pending) T._commit(T._pending, null);
+        ok('evasion (Turn View): saved — Zo takes 0', get('r247z').hp === 60 && /Evasion/.test(T._result), JSON.stringify([get('r247z').hp, T._result]));
+        T._rollSave(0, false); await sleep(20);
+        if (T._pending) T._commit(T._pending, null);
+        ok('evasion (Turn View): failed — half, 6', get('r247z').hp === 54, JSON.stringify([get('r247z').hp, T._result]));
+      } catch(e){ ok('round 247 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
+      finally { window.sktD = keepD; T._pending = null; document.getElementById('area-save-back')?.remove(); T._attacksFor = keepAF;
+        state.party = JSON.parse(keepP); state.combatants = JSON.parse(keepC); state.activeCombatantId = keepA; save(); }
+    }
     // -- Class features: represented, not just text ------------------------
     {
       try {
