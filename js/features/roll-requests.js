@@ -113,6 +113,10 @@ function sktOnRollAnswers(){
     if (st.r.kind === 'save' && C && typeof C._areaSaveOnAnswers === 'function'){
       try { C._areaSaveOnAnswers(st.r); } catch(e){ console.warn('[roll answers]', e); }
     }
+    // One asked from an end-of-turn save card (Hold Person): the card resolves.
+    if (st.r.kind === 'save' && st.r.via === 'cond' && C && typeof C._condSaveOnAnswers === 'function'){
+      try { C._condSaveOnAnswers(st.r); } catch(e){ console.warn('[roll answers]', e); }
+    }
   }
   sktRollCardPaint();
 }

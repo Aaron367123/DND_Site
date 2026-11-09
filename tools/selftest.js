@@ -17049,6 +17049,47 @@ for (const cls of Object.keys(rule)) for (let L = 1; L <= 20; L++) for (const sc
       finally { window.sktD = keepD; T._pending = null; document.getElementById('area-save-back')?.remove();
         state.party = JSON.parse(keepP); state.combatants = JSON.parse(keepC); state.activeCombatantId = keepA; save(); }
     }
+    // -- Round 252: an end-of-turn save card asks the player to roll it on their phone; the answer resolves it --
+    if (!PLAYER){
+      const keepC = JSON.stringify(state.combatants), keepA = state.activeCombatantId, keepP = JSON.stringify(state.party);
+      const C = panelDefs.combat, keepD = window.sktD, keepRR = localStorage.getItem(SKT_RR_KEY);
+      try {
+        for (let k = 0; k < 100 && !(typeof _5eLoaded !== 'undefined' && _5eLoaded); k++) await sleep(100);
+        const find = (n, src) => _5eData.find(r => r.cat === 'monster' && r.name === n && r._source === src);
+        state.party.push({ id: 'r252a', name: 'Ann', hp: 40, hpMax: 40, ac: 15, rules: '2024', level: 6, bardicInspiration: 'd8', bardicFrom: 'Zin', sheet: { saves: { wis: 1 } } });
+        state.combatants = [{ id: 'r252a', name: 'Ann', isPC: true, hp: 40, hpMax: 40, ac: 15, initiative: 20, conditions: ['Paralyzed'] }];
+        C.addMonster(find('Ogre', 'MM')); await sleep(20);
+        const get = id => state.combatants.find(c => c.id === id), ogId = state.combatants[1].id;
+        save();
+        const card = () => document.querySelector('#cond-save-stack .cond-save');
+        const para = () => (get('r252a').conditions || []).includes('Paralyzed');
+        const answer = v => { const r = sktRollReq(); r.answers = Object.assign({}, r.answers, { r252a: { v, rid: r.id, at: Date.now() } }); saveJson(SKT_RR_KEY, r, 'test'); sktOnRollAnswers(); };
+        C._condSaves = [];
+        C._queueCondSave(get('r252a'), 'Paralyzed', { ab: 'wis', dc: 13 }); await sleep(20);
+        ok('cond save ask: a character’s card has 📱 Ask', !!card() && !!card().querySelector('[data-csp="ask"]'));
+        card().querySelector('[data-csp="ask"]').click(); await sleep(20);
+        const rq = sktRollReq();
+        ok('cond save ask: asked — a WIS 13 save to Ann’s phone; the card says it’s waiting', !!rq && rq.kind === 'save' && rq.via === 'cond' && rq.ab === 'WIS' && rq.dc === 13 && rq.pcs.join() === 'r252a' && /waiting for Ann/.test(card().textContent) && !card().querySelector('[data-csp="ask"]'),
+          JSON.stringify([rq, card() && card().textContent]));
+        answer(15); await sleep(20);
+        ok('cond save ask: she rolls 15 — saved, the paralysis ends, the card and the request close', !para() && !card() && sktRollReq().closed === true, JSON.stringify([get('r252a').conditions, !!card(), sktRollReq().closed]));
+        // Again: she rolls 9 — failed, and her bard's d8 is still there to try.
+        get('r252a').conditions = ['Paralyzed'];
+        C._queueCondSave(get('r252a'), 'Paralyzed', { ab: 'wis', dc: 13 }); await sleep(20);
+        card().querySelector('[data-csp="ask"]').click(); await sleep(20);
+        answer(9); await sleep(20);
+        ok('cond save ask: she rolls 9 — failed; the card stays, offering Bardic Inspiration', para() && !!card() && /9 vs DC 13/.test(card().textContent) && !!card().querySelector('[data-r="bi"]'), card() && card().textContent);
+        card().querySelector('[data-csp="fail"]').click(); await sleep(20);
+        // A monster's card: no one to ask.
+        get(ogId).conditions = ['Paralyzed'];
+        C._queueCondSave(get(ogId), 'Paralyzed', { ab: 'wis', dc: 13 }); await sleep(20);
+        ok('cond save ask: an ogre’s card has no 📱 Ask', !!card() && !card().querySelector('[data-csp="ask"]'));
+      } catch(e){ ok('round 252 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
+      finally { window.sktD = keepD; C._condSaves = []; C._renderCondSaves?.();
+        if (keepRR == null) localStorage.removeItem(SKT_RR_KEY); else localStorage.setItem(SKT_RR_KEY, keepRR);
+        document.getElementById('rr-card')?.remove();
+        state.party = JSON.parse(keepP); state.combatants = JSON.parse(keepC); state.activeCombatantId = keepA; save(); }
+    }
     // -- Class features: represented, not just text ------------------------
     {
       try {

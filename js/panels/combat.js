@@ -2880,8 +2880,10 @@ registerPanel('combat',{
         </div></div>`;
       return `<div class="cond-save" data-k="${esc(p.k)}" role="alertdialog" aria-label="Saving throw">
         <div class="cond-save-what">⟳ <b>${esc(c.name)}</b> — end of turn: ${esc(String(p.ab).toUpperCase())} save DC ${p.dc} to end <b>${esc(p.cond)}</b></div>
+        ${p.asked ? `<div class="cond-save-wait dim">📱 waiting for ${esc(c.name)} to roll…</div>` : ''}
         <div class="cond-save-btns">
           <button class="btn small primary" data-csp="roll">🎲 Roll (${bonus >= 0 ? '+' : ''}${bonus})</button>
+          ${c.isPC && !p.asked ? '<button class="btn small" data-csp="ask" title="Ask the player to roll it on their phone">📱 Ask</button>' : ''}
           <button class="btn small" data-csp="pass">Saved</button>
           <button class="btn small" data-csp="fail">Failed</button>
         </div></div>`;
@@ -2902,8 +2904,17 @@ registerPanel('combat',{
       if (c.isPC) panelDefs.party?._render?.();
       if (!p.rolled.passed){ save(); this._renderCondSaves(); return; }
       passed = true;
-    } else if (how === 'roll' && c){
-      const r = this.rollSave(c, p.ab, p.dc, { spell: !!p.spell });
+    } else if (how === 'ask' && c){
+      // The player rolls it on their phone; the answer comes back through
+      // _condSaveOnAnswers. The DM can still roll it or call it meanwhile.
+      const req = typeof sktAskRoll === 'function' ? sktAskRoll({ kind: 'save', ab: p.ab, dc: p.dc, name: p.cond, pcs: [c.id], via: 'cond' }) : null;
+      if (req){ p.asked = req.id; this._renderCondSaves(); }
+      return;
+    } else if ((how === 'roll' || how === 'answer') && c){
+      // 'answer': the total the player rolled (`key`).
+      const r = how === 'answer' ? { total: +key, nat: null, passed: +key >= p.dc, auto: '', detail: 'their roll' }
+        : this.rollSave(c, p.ab, p.dc, { spell: !!p.spell });
+      p.asked = null;
       passed = r.passed;
       this._log(`${c.name} ${String(p.ab).toUpperCase()} save vs ${p.cond}: ${r.auto ? 'fails' : r.total} (${r.detail}) — ${passed ? 'saved' : 'failed'}`);
       if (typeof showToast === 'function') showToast(`${c.name}: ${String(p.ab).toUpperCase()} ${r.auto ? r.detail : r.total + ' vs DC ' + p.dc} — ${passed ? 'saved, ' + p.cond + ' ends' : 'failed'}`);
@@ -2920,6 +2931,17 @@ registerPanel('combat',{
       if (c.isPC) panelDefs.party?._render?.();
     }
     this._renderCondSaves();
+  },
+
+  // A player's answer to an end-of-turn save asked from its card.
+  _condSaveOnAnswers(r){
+    if (!r || r.via !== 'cond') return;
+    (this._condSaves || []).filter(p => p.asked === r.id).forEach(p => {
+      const a2 = (r.answers || {})[p.cid];
+      if (!a2 || a2.rid !== r.id) return;
+      this._answerCondSave(p.k, 'answer', a2.v);
+    });
+    if (!(this._condSaves || []).some(p => p.asked === r.id) && typeof sktCloseRoll === 'function') sktCloseRoll();
   },
 
   // ─── Players roll on their phones ──────────────────────────────────────────
