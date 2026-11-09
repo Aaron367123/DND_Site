@@ -2481,8 +2481,16 @@ registerPanel('combat',{
   // feature that adds its die when "you fail a Constitution saving throw"
   // (Aberrant Dragonmark, a Reaction). `row`: { total, nat?, passed, used:[] }.
   _saveRescues(c, row, ab, dc){
-    const p = c && c.isPC ? state.party.find(x => x.id === c.id) : null;
-    if (!p || !row || row.passed || typeof row.total !== 'number') return [];
+    if (!c || !row || row.passed || typeof row.total !== 'number') return [];
+    // A monster's: Legendary Resistance — "if it fails a saving throw, it
+    // can choose to succeed instead".
+    if (!c.isPC){
+      const left = (c.lrMax || 0) - (c.lrUsed || 0);
+      return left > 0 && !(row.used || []).includes('lr')
+        ? [{ key: 'lr', label: 'Legendary Resistance', dice: '⛨', ok: true, why: 'it chooses to succeed instead (' + left + ' left)' }] : [];
+    }
+    const p = state.party.find(x => x.id === c.id);
+    if (!p) return [];
     ab = String(ab || '').slice(0, 3).toLowerCase();
     const ed = (p.build && p.build.edition) || p.rules || '2024', need = dc - row.total, out = [];
     const used = row.used || [];
@@ -2527,6 +2535,12 @@ registerPanel('combat',{
     const x = this._saveRescues(c, row, ab, dc).find(y => y.key === key); if (!x || !x.ok) return '';
     const was = row.total, mod = typeof row.nat === 'number' ? row.total - row.nat : this.saveBonus(c, String(ab).slice(0, 3).toLowerCase());
     let desc;
+    if (key === 'lr'){
+      row.passed = true;
+      (row.used = row.used || []).push(key); (row.spend = row.spend || []).push(key);
+      row.detail = (row.detail ? row.detail + ' · ' : '') + 'Legendary Resistance';
+      return 'Legendary Resistance: ' + was + ' vs DC ' + dc + ' — it succeeds instead';
+    }
     if (key === 'bi' || x.act){
       const r = forced > 0 ? { total: forced } : sktRollDice(key === 'bi' ? '1' + x.dice : x.dice);
       row.total += r.total; desc = x.label + ' +' + r.total;
@@ -2543,6 +2557,13 @@ registerPanel('combat',{
     return desc + ': ' + was + ' → ' + row.total + ' vs DC ' + dc + ' — ' + (row.passed ? 'saved' : 'still failed');
   },
   _spendRescues(c, row){
+    if (c && !c.isPC && row && row.spend && row.spend.includes('lr')){
+      const live = state.combatants.find(y => y.id === c.id) || c;
+      live.lrUsed = Math.min(live.lrMax || 0, (live.lrUsed || 0) + 1);
+      this._log(live.name + ' uses Legendary Resistance (' + ((live.lrMax || 0) - live.lrUsed) + ' left)');
+      row.spend = [];
+      return;
+    }
     const p = c && c.isPC ? state.party.find(x => x.id === c.id) : null;
     if (!p || !row || !row.spend) return;
     const res = n => (p.resources || []).find(r => r.name === n);

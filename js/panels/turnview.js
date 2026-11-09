@@ -2369,7 +2369,7 @@ registerPanel('turnview', {
         // (a Life Drain's lowered maximum, and a condition's timer)
         hpMax:c.hpMax, hpMaxNormal:c.hpMaxNormal, hpMaxNote:c.hpMaxNote,
         condTimers: c.condTimers ? JSON.parse(JSON.stringify(c.condTimers)) : undefined,
-        legendaryUsed:c.legendaryUsed, extraDmgTurn:c.extraDmgTurn, onceTurn:c.onceTurn ? {...c.onceTurn} : undefined,
+        legendaryUsed:c.legendaryUsed, lrUsed:c.lrUsed, extraDmgTurn:c.extraDmgTurn, onceTurn:c.onceTurn ? {...c.onceTurn} : undefined,
         deathSaves: c.deathSaves ? {...c.deathSaves} : c.deathSaves,
         rechargeSpent: (c.rechargeSpent || []).slice(),
         usesSpent: c.usesSpent ? {...c.usesSpent} : undefined, usesRound: c.usesRound ? {...c.usesRound} : undefined, slotsUsed: c.slotsUsed ? {...c.slotsUsed} : undefined,
@@ -3183,7 +3183,7 @@ registerPanel('turnview', {
         this._setResult(txt, true); this._log.unshift(txt);
         save(); this._render(); return;
       }
-      fail = false; why = x.ability + ' save ' + x.rolled.detail.split(' · ').pop() + ' vs DC ' + x.dc;
+      fail = false; why = key === 'lr' ? 'Legendary Resistance (' + x.ability + ' ' + x.rolled.total + ' vs DC ' + x.dc + ')' : x.ability + ' save ' + x.rolled.detail.split(' · ').pop() + ' vs DC ' + x.dc;
     } else if (kind === 'roll'){
       const sv = C && typeof C.rollSave === 'function' ? C.rollSave(t, x.ability, x.dc, {}) : null;
       if (!sv){ this._render(); return; }
@@ -3191,7 +3191,7 @@ registerPanel('turnview', {
       why = x.ability + ' save ' + (sv.auto ? sv.detail : sv.total + ' vs DC ' + x.dc + ' (' + sv.detail + ')');
       // A character's failure that a die might still turn: asked first.
       const row = { total: sv.auto ? null : sv.total, nat: sv.nat, passed: sv.passed, detail: sv.detail, used: [] };
-      if (fail && t.isPC && typeof C._saveRescues === 'function' && C._saveRescues(t, row, x.ability, x.dc).some(y => y.ok)){
+      if (fail && typeof C._saveRescues === 'function' && C._saveRescues(t, row, x.ability, x.dc).some(y => y.ok)){
         x.rolled = row; this._onHits.splice(i, 0, x);
         const txt = `<strong>${esc(t.name)}</strong> fails the ${esc(x.ability)} save — ${sv.total} vs DC ${x.dc} <span class="dim">(${esc(sv.detail)}) · ${esc(x.name)}</span>`;
         this._setResult(txt, true); this._log.unshift(txt);

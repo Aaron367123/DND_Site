@@ -16434,6 +16434,65 @@ for (const cls of Object.keys(rule)) for (let L = 1; L <= 20; L++) for (const sc
       finally { window.sktD = keepD; T._onHits = []; T._lastPcHit = null; T._lastPcMiss = null;
         state.party = JSON.parse(keepP); state.combatants = JSON.parse(keepC); state.activeCombatantId = keepA; save(); }
     }
+    // -- Round 238: a legendary monster's failed save offers Legendary Resistance — a hit's save, an end-of-turn save; undo gives it back --
+    if (!PLAYER){
+      const keepC = JSON.stringify(state.combatants), keepA = state.activeCombatantId, keepP = JSON.stringify(state.party);
+      const T = panelDefs.turnview, C = panelDefs.combat, keepD = window.sktD;
+      try {
+        for (let k = 0; k < 100 && !(typeof _5eLoaded !== 'undefined' && _5eLoaded); k++) await sleep(100);
+        const find = (n, src) => _5eData.find(r => r.cat === 'monster' && r.name === n && r._source === src);
+        state.party.push({ id: 'r238m', name: 'Cream', hp: 40, hpMax: 40, ac: 16, rules: '2024', level: 6, sheet: {} });
+        state.combatants = [{ id: 'r238m', name: 'Cream', isPC: true, hp: 40, hpMax: 40, ac: 16, initiative: 20, conditions: [] }];
+        C.addMonster(find('Adult Red Dragon', 'MM')); C.addMonster(find('Ogre', 'MM')); await sleep(20);
+        const get = id => state.combatants.find(c => c.id === id), drId = state.combatants[1].id, ogId = state.combatants[2].id, dr = () => get(drId), og = () => get(ogId);
+        ok('legendary resistance: the dragon has 3', dr().lrMax === 3 && !(dr().lrUsed || 0), JSON.stringify([dr().lrMax, dr().lrUsed]));
+        state.activeCombatantId = 'r238m'; save();
+        if (!T._body){ openPanel('turnview'); await sleep(200); }
+        T._onHits = [];
+        const stun = (tgt, dc) => T._queueOnHit({ onHit: { cond: 'Stunned', dc, ability: 'Con', dur: { kind: 'start-next', by: 'r238m', byName: 'Cream' } },
+          target: tgt, attacker: 'Cream', attackerId: 'r238m', label: 'Stunning Strike' });
+        // DC 25: a 2 + 13 = 15 — failed; asked first.
+        stun(dr(), 25);
+        window.sktD = n => 2;
+        T._onHitAct('roll', 0); await sleep(20);
+        ok('legendary resistance: the dragon fails (15 vs DC 25) — not stunned yet; asked first', !(dr().conditions || []).includes('Stunned') && T._onHits.length === 1 && !!T._onHits[0].rolled, JSON.stringify([dr().conditions, T._onHits.length]));
+        T._painted = {}; T._render(); await sleep(20);
+        const row = document.querySelector('.tv-ohres');
+        ok('legendary resistance: drawn — “Legendary Resistance” beside Failed', !!row && !!row.querySelector('[data-r="lr"]') && /3 left/.test(row.querySelector('[data-r="lr"]').title), row && row.innerHTML);
+        row.querySelector('[data-r="lr"]').click(); await sleep(20);
+        ok('legendary resistance: spent — not stunned, 2 left, and it says so', !(dr().conditions || []).includes('Stunned') && dr().lrUsed === 1 && !T._onHits.length && /Legendary Resistance/.test(T._result), JSON.stringify([dr().lrUsed, T._result]));
+        sktUndo(); await sleep(30);
+        ok('legendary resistance: undo — 3 again, and the line is back', !(dr().lrUsed || 0) && T._onHits.length === 1, JSON.stringify([dr().lrUsed, T._onHits.length]));
+        // Let it fail: stunned, nothing spent.
+        T._onHitAct('fail', 0); await sleep(20);
+        ok('legendary resistance: Failed — stunned, all 3 kept', (dr().conditions || []).includes('Stunned') && !(dr().lrUsed || 0));
+        dr().conditions = []; dr().condTimers = undefined;
+        // None left: stunned at once.
+        dr().lrUsed = 3;
+        stun(dr(), 25); T._onHitAct('roll', 0); await sleep(20);
+        ok('legendary resistance: none left — stunned at once', (dr().conditions || []).includes('Stunned') && !T._onHits.length);
+        dr().conditions = []; dr().condTimers = undefined; dr().lrUsed = 1;
+        // An ogre has none: stunned at once.
+        stun(og(), 25); T._onHitAct('roll', 0); await sleep(20);
+        ok('legendary resistance: an ogre has none — stunned at once', (og().conditions || []).includes('Stunned') && !T._onHits.length);
+        // The end-of-turn save: Hold Monster, WIS 25; the dragon fails, keeps the card with the choice.
+        dr().conditions = ['Paralyzed'];
+        C._queueCondSave(dr(), 'Paralyzed', { ab: 'wis', dc: 25 }); await sleep(20);
+        document.querySelector('#cond-save-stack [data-csp="roll"]').click(); await sleep(20);
+        let card = document.querySelector('#cond-save-stack .cond-save');
+        ok('legendary resistance: an end-of-turn save failed — the card offers it', !!card && !!card.querySelector('[data-r="lr"]'), card && card.textContent);
+        card.querySelector('[data-r="lr"]').click(); await sleep(20);
+        ok('legendary resistance: …spent — Paralyzed ends, 1 left', !(dr().conditions || []).includes('Paralyzed') && dr().lrUsed === 2 && !document.querySelector('#cond-save-stack .cond-save'), JSON.stringify([dr().conditions, dr().lrUsed]));
+        // The area save keeps its own ⛨ Resist for monsters — no second row.
+        window.sktD = n => 2;
+        const back = C.openAreaSave({ name: 'Burst', ab: 'CON', dc: 25, parts: [{ dice: '2d6', type: 'fire' }], half: true, targets: [drId] });
+        back.querySelector('[data-as="roll"]').click(); await sleep(20);
+        ok('legendary resistance: the area save — its own Resist button, no rescue row', !!back.querySelector('[data-as="lr"]') && !back.querySelector('.as-rescue'));
+        back.remove();
+      } catch(e){ ok('round 238 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
+      finally { window.sktD = keepD; T._onHits = []; document.getElementById('area-save-back')?.remove(); C._condSaves = []; C._renderCondSaves?.();
+        state.party = JSON.parse(keepP); state.combatants = JSON.parse(keepC); state.activeCombatantId = keepA; save(); }
+    }
     // -- Class features: represented, not just text ------------------------
     {
       try {
