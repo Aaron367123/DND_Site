@@ -1641,6 +1641,8 @@ registerPanel('combat',{
     // nothing did, and a marked Sneak Attack stayed spent until a rest.
     for (const p of state.party || []) for (const r of (p && p.resources) || []) if (r.recharge === 'turn' && (r.current || 0) < (r.max || 1)) r.current = r.max || 1;
     c.reactionUsed = false;
+    // Sap lasts "before the start of your next turn": the sapper's turn begins.
+    (state.combatants || []).forEach(x => { if (x.sapped && x.sapped.by === id) x.sapped = undefined; });
     c.actionUsed = false;
     c.bonusUsed = false;
     c.dodging = false;
@@ -1672,6 +1674,8 @@ registerPanel('combat',{
   _endTurnEconomy(id){
     const c = state.combatants.find(x => x.id === id);
     if (c) c.disengaged = false;
+    // Vex lasts "before the end of your next turn": this turn's end, then the next.
+    if (c && c.vex){ c.vex.left = (c.vex.left || 1) - 1; if (c.vex.left <= 0) c.vex = undefined; }
     if (c) this._tickCondTimers(c, 'end');
     if (c) this._tickByTimers(c, 'end');
   },

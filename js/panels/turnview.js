@@ -2396,7 +2396,7 @@ registerPanel('turnview', {
         // (a Life Drain's lowered maximum, and a condition's timer)
         hpMax:c.hpMax, hpMaxNormal:c.hpMaxNormal, hpMaxNote:c.hpMaxNote,
         condTimers: c.condTimers ? JSON.parse(JSON.stringify(c.condTimers)) : undefined,
-        legendaryUsed:c.legendaryUsed, lrUsed:c.lrUsed, concentration:c.concentration, extraDmgTurn:c.extraDmgTurn, onceTurn:c.onceTurn ? {...c.onceTurn} : undefined,
+        legendaryUsed:c.legendaryUsed, lrUsed:c.lrUsed, concentration:c.concentration, vex:c.vex ? {...c.vex} : undefined, sapped:c.sapped ? {...c.sapped} : undefined, extraDmgTurn:c.extraDmgTurn, onceTurn:c.onceTurn ? {...c.onceTurn} : undefined,
         deathSaves: c.deathSaves ? {...c.deathSaves} : c.deathSaves,
         rechargeSpent: (c.rechargeSpent || []).slice(),
         usesSpent: c.usesSpent ? {...c.usesSpent} : undefined, usesRound: c.usesRound ? {...c.usesRound} : undefined, slotsUsed: c.slotsUsed ? {...c.slotsUsed} : undefined,
@@ -2544,6 +2544,7 @@ registerPanel('turnview', {
     this._clearPrompt();          // whatever happens next, the question is closed
     const t = o.target;
     const tag = usedName ? ` <span class="dim">(${esc(usedName)})</span>` : '';
+    if (o.hit && o.pcAtk && o.mastery){ const mn = this._masteryOnHit(o, t); if (mn) o.hitNote = (o.hitNote ? o.hitNote + ' · ' : '') + mn; }
     // A save has no attack roll, so there is no "18 vs AC 16" to show.
     const vs = o.total == null ? ''
       : ` <strong>${o.total}</strong> <span class="dim">vs AC ${t.ac}${o.hitNote ? ' · ' + esc(o.hitNote) : ''}</span>`;
@@ -2789,6 +2790,11 @@ registerPanel('turnview', {
     // An ally's Help against this target: used by this roll.
     const helper = this._order().find(o => o !== c && o.helping && o.helping.target === t.id && this._sideOf(o) === this._sideOf(c));
     if (helper){ advWhy.push('helped by ' + helper.name); helper.helping = null; }
+    // Weapon mastery left from an earlier hit: Vex (this attacker's next
+    // attack on that creature has advantage), Sap (this attacker's next attack
+    // has disadvantage). Each is used by the attack that reads it.
+    if (c.vex && c.vex.tgt === t.id){ advWhy.push('Vex'); c.vex = undefined; }
+    if (c.sapped){ disWhy.push('sapped'); c.sapped = undefined; }
     if (a.ranged && !a.closeOk){ const foe = this._rangedThreat(c); if (foe) disWhy.push('ranged, ' + foe.name + ' within 5 ft'); }
     // Blood Frenzy (a sahuagin, a quipper): "advantage on melee attack rolls
     // against any creature that doesn't have all its hit points".
@@ -2908,7 +2914,10 @@ registerPanel('turnview', {
     this._resolve({ attackerId: c.id, attacker: c.name, label: o.label || a.name, target: t,
                     total, crit, hit, dmg, parts, queued: !!o.queued, nat, bonus, hitNote, onHit: a.pc ? null : (a.onHit || null),
                     type: parts.length ? parts[0].type : '', detail,
-                    pcAtk: !!a.pc, critAt, wDice, wSum, mode, ranged: !!a.ranged, spellAtk: !!a.spell, props: a.props || null,
+                    pcAtk: !!a.pc, critAt, wDice, wSum, mode,
+                    // its weapon mastery, and the ability modifier its damage carries (Graze, Topple)
+                    mastery: a.pc && !a.spell ? String(a.mastery || '') : '',
+                    masteryMod: a.pc ? (parseInt(((/[+-]\d+(?!\d*d)/.exec(String(a.dmgText || '').replace(/\s+/g, '')) || ['0'])[0]), 10) || 0) : 0, ranged: !!a.ranged, spellAtk: !!a.spell, props: a.props || null,
                     magical: a.pc || a.magical ? !!a.magical : panelDefs.attacks && this._entryOf(c) && this._entryOf(c)._raw
                              ? panelDefs.attacks._parsed(this._entryOf(c)._raw).magical : false });
   },
@@ -3410,6 +3419,28 @@ registerPanel('turnview', {
   // Zindle's Bardic Inspiration on Zoey, a Luck Point, Heroic Inspiration:
   // each spent after the d20 shows a miss. Turned into a hit, the swing goes
   // through _commit like any hit — damage, extras, what it inflicts.
+  // A character's weapon mastery on a hit (2024): Vex and Sap leave a mark the
+  // next attack reads, Topple queues its save, the rest are said.
+  _masteryOnHit(o, t){
+    const c = this._order().find(x => x.id === o.attackerId); if (!c || !t) return '';
+    const k = String(o.mastery || '').toLowerCase();
+    if (k === 'vex'){
+      if (!(o.dmg > 0)) return '';
+      c.vex = { tgt: t.id, left: 2 };
+      return 'Vex: advantage on your next attack against ' + t.name;
+    }
+    if (k === 'sap'){ t.sapped = { by: c.id }; return 'Sap: ' + t.name + '’s next attack has disadvantage'; }
+    if (k === 'topple'){
+      const p = this._partyOf(c), pb = +((p && p.sheet) || {}).profBonus || this._pb((p && p.level) || 1);
+      const dc = 8 + pb + (o.masteryMod || 0);
+      this._queueOnHit({ onHit: { cond: 'Prone', dc, ability: 'Con' }, target: t, attacker: c.name, attackerId: c.id, label: o.label + ' (Topple)' });
+      return 'Topple: DC ' + dc + ' CON or prone';
+    }
+    if (k === 'slow') return 'Slow: ' + t.name + '’s speed −10 ft until the start of your next turn';
+    if (k === 'push') return 'Push: you can push ' + t.name + ' 10 ft away (Large or smaller)';
+    if (k === 'cleave') return 'Cleave: one more attack against a creature within 5 ft of ' + t.name + ' (once a turn)';
+    return '';
+  },
   _pcMissOptions(m){
     const o = m.o, c = this._order().find(x => x.id === o.attackerId), t = this._order().find(x => x.id === o.target.id);
     const p = c ? this._partyOf(c) : null; if (!p || !t) return [];
@@ -3425,6 +3456,9 @@ registerPanel('turnview', {
       out.push({ key: 'luck', label: 'Luck Point', dice: 'd20', ok: true, why: 'roll another d20 and keep the higher (' + luck.current + ' left)' });
     if (p.inspiration && ed !== '2014')
       out.push({ key: 'hero', label: 'Heroic Inspiration', dice: 'd20', ok: true, why: 'reroll the d20 — the new roll stands' });
+    // Graze (a weapon mastery): a miss still deals the ability modifier.
+    if (String(o.mastery || '').toLowerCase() === 'graze' && (o.masteryMod || 0) > 0)
+      out.push({ key: 'graze', label: 'Graze', dice: String(o.masteryMod) + (o.type ? ' ' + o.type : ''), ok: true, why: 'a miss with this weapon still deals ' + o.masteryMod + ' damage' });
     return out.filter(x => !m.used.includes(x.key));
   },
   _renderPcMiss(){
@@ -3443,6 +3477,16 @@ registerPanel('turnview', {
     const o = m.o, c = this._order().find(y => y.id === o.attackerId), t = this._order().find(y => y.id === o.target.id), p = this._partyOf(c);
     if (!c || !t || !p) return;
     this._snapshot(`${c.name} · ${x.label}`);
+    if (key === 'graze'){
+      const before = t.hp;
+      this._applyDamage(t, [{ amt: o.masteryMod, type: o.type || '' }], o.magical, false);
+      const after = (this._order().find(y => y.id === t.id) || t).hp;
+      this._lastPcMiss = null;
+      const txt = `<strong>${esc(c.name)}</strong> — Graze: <strong>${o.masteryMod}${o.type ? ' ' + esc(o.type) : ''}</strong> to <strong>${esc(t.name)}</strong> on the miss <span class="dim">· ${before} → ${after}</span>`;
+      this._setResult(txt, true); this._log.unshift(txt);
+      save(); panelDefs.combat?._render?.(); this._render();
+      return;
+    }
     const ac = (t.ac || 0) + (o.acBonus || 0), was = o.total;
     let desc;
     if (key === 'bi'){

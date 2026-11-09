@@ -17090,6 +17090,79 @@ for (const cls of Object.keys(rule)) for (let L = 1; L <= 20; L++) for (const sc
         document.getElementById('rr-card')?.remove();
         state.party = JSON.parse(keepP); state.combatants = JSON.parse(keepC); state.activeCombatantId = keepA; save(); }
     }
+    // -- Round 253: weapon mastery in the Turn View — Vex gives the next attack advantage, Sap disadvantage, Topple a save or prone, Graze damage on a miss --
+    if (!PLAYER){
+      const keepC = JSON.stringify(state.combatants), keepA = state.activeCombatantId, keepP = JSON.stringify(state.party);
+      const T = panelDefs.turnview, C = panelDefs.combat, keepD = window.sktD;
+      try {
+        for (let k = 0; k < 100 && !(typeof _5eLoaded !== 'undefined' && _5eLoaded); k++) await sleep(100);
+        const find = (n, src) => _5eData.find(r => r.cat === 'monster' && r.name === n && r._source === src);
+        state.party.push({ id: 'r253z', name: 'Zo', hp: 40, hpMax: 40, ac: 15, rules: '2024', level: 6,
+          resources: [{ name: 'Sneak Attack', die: '3d6', current: 1, max: 1, recharge: 'turn' }],
+          sheet: { profBonus: 3, attacks: [{ name: 'Shortsword', atkBonus: '+7', damage: '1d6+4 piercing', props: ['F', 'L'], mastery: 'Vex' }] } });
+        state.party.push({ id: 'r253w', name: 'Will', hp: 50, hpMax: 50, ac: 18, rules: '2024', level: 6,
+          sheet: { profBonus: 3, attacks: [{ name: 'Greatsword', atkBonus: '+7', damage: '2d6+4 slashing', props: ['H', '2H'], mastery: 'Graze' },
+                                            { name: 'Maul', atkBonus: '+7', damage: '2d6+4 bludgeoning', props: ['H', '2H'], mastery: 'Topple' },
+                                            { name: 'Mace', atkBonus: '+7', damage: '1d6+4 bludgeoning', props: [], mastery: 'Sap' }] } });
+        state.combatants = [{ id: 'r253z', name: 'Zo', isPC: true, hp: 40, hpMax: 40, ac: 15, initiative: 20, conditions: [] },
+                            { id: 'r253w', name: 'Will', isPC: true, hp: 50, hpMax: 50, ac: 18, initiative: 19, conditions: [] }];
+        C.addMonster(find('Ogre', 'MM')); await sleep(20);
+        const get = id => state.combatants.find(c => c.id === id), ogId = state.combatants[2].id, og = () => get(ogId);
+        Object.assign(og(), { hp: 300, hpMax: 300, ac: 12 });
+        state.activeCombatantId = 'r253z'; save();
+        T._onHits = []; T._lastPcHit = null; T._lastPcMiss = null;
+        const swing = (who, name, d20) => { window.sktD = n => (n === 20 ? d20 : 3); T._pending = null;
+          T._rollAttack(T._attacksFor(get(who)).findIndex(a => a.name === name), { attacker: get(who), target: og(), mode: 0 }); };
+        // Vex: a hit — and the next attack against the ogre has advantage (and so Sneak Attack).
+        swing('r253z', 'Shortsword', 15);
+        ok('vex: Zo’s shortsword hits — Vex marks the ogre for her next attack', !!get('r253z').vex && get('r253z').vex.tgt === ogId && /Vex: advantage/.test(T._result), JSON.stringify([get('r253z').vex, T._result]));
+        swing('r253z', 'Shortsword', 15);
+        ok('vex: …the next attack has advantage — and Sneak Attack is offered for it; the mark is used',
+          T._lastPcHit && T._lastPcHit.mode === 1 && T._pcExtraOptions(T._lastPcHit).some(o => o.key === 'sa' && o.ok) && /adv/.test(T._result) && get('r253z').vex && get('r253z').vex.tgt === ogId,
+          JSON.stringify([T._lastPcHit && T._lastPcHit.mode, T._result]));
+        // (that second hit marked it again) — it lasts until the end of her next turn.
+        C._endTurnEconomy('r253z');
+        ok('vex: still there after this turn ends', !!get('r253z').vex);
+        C._endTurnEconomy('r253z');
+        ok('vex: …gone after her next turn ends', !get('r253z').vex);
+        // Only against the creature it marked: Will isn't Vexed by Zo's mark.
+        get('r253z').vex = { tgt: ogId, left: 2 };
+        window.sktD = n => (n === 20 ? 15 : 3); T._pending = null;
+        T._rollAttack(T._attacksFor(get('r253z')).findIndex(a => a.name === 'Shortsword'), { attacker: get('r253z'), target: get('r253w'), mode: 0 });
+        if (T._pending) T._commit(T._pending, null);
+        ok('vex: against someone else — a straight roll (and the hit marks Will instead)', T._lastPcHit && T._lastPcHit.mode === 0 && get('r253z').vex && get('r253z').vex.tgt === 'r253w', JSON.stringify([T._lastPcHit && T._lastPcHit.mode, get('r253z').vex]));
+        get('r253z').vex = undefined;
+        // A hit that does no damage: no mark ("hit … and deal damage").
+        ok('vex: a hit that dealt no damage — no mark', T._masteryOnHit({ attackerId: 'r253z', mastery: 'Vex', dmg: 0, hit: true }, og()) === '' && !get('r253z').vex);
+        // A miss leaves no mark.
+        swing('r253z', 'Shortsword', 2);
+        ok('vex: a miss — no mark', !get('r253z').vex);
+        T._lastPcMiss = null;
+        // Graze: Will misses with the greatsword — 4 slashing anyway.
+        state.activeCombatantId = 'r253w';
+        swing('r253w', 'Greatsword', 2);
+        const g = T._lastPcMiss ? T._pcMissOptions(T._lastPcMiss).find(x => x.key === 'graze') : null;
+        ok('graze: a miss offers Graze — 4 slashing', !!g && g.dice === '4 slashing', JSON.stringify(g));
+        const hp0 = og().hp; T._rescueMiss('graze'); await sleep(10);
+        ok('graze: …4 lands; the miss row is done', hp0 - og().hp === 4 && !T._lastPcMiss, JSON.stringify([hp0 - og().hp, T._result]));
+        // Topple: a hit queues DC 8 + 3 + 4 = 15 CON or prone.
+        T._onHits = [];
+        swing('r253w', 'Maul', 15);
+        ok('topple: a maul hit — DC 15 CON or prone, queued', T._onHits.length === 1 && T._onHits[0].cond === 'Prone' && T._onHits[0].dc === 15 && /Con/i.test(T._onHits[0].ability), JSON.stringify(T._onHits));
+        T._onHits = [];
+        // Sap: a hit — the ogre's next attack has disadvantage; gone once used.
+        swing('r253w', 'Mace', 15);
+        ok('sap: a mace hit saps the ogre', og().sapped && og().sapped.by === 'r253w' && /Sap:/.test(T._result));
+        state.activeCombatantId = ogId; window.sktD = n => (n === 20 ? 18 : 3); T._pending = null;
+        T._rollAttack(T._attacksFor(og()).findIndex(a => /Greatclub/.test(a.name)), { attacker: og(), target: get('r253z'), mode: 0 });
+        if (T._pending) T._commit(T._pending, null);
+        ok('sap: …the ogre’s next attack has disadvantage, and the mark is used', /dis/.test(T._result) && !og().sapped, JSON.stringify([T._result, og().sapped]));
+        og().sapped = { by: 'r253w' }; C._refreshTurnEconomy('r253w');
+        ok('sap: …or it ends as Will’s next turn starts', !og().sapped);
+      } catch(e){ ok('round 253 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
+      finally { window.sktD = keepD; T._pending = null; T._onHits = []; T._lastPcHit = null; T._lastPcMiss = null;
+        state.party = JSON.parse(keepP); state.combatants = JSON.parse(keepC); state.activeCombatantId = keepA; save(); }
+    }
     // -- Class features: represented, not just text ------------------------
     {
       try {
