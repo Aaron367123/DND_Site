@@ -16912,6 +16912,52 @@ for (const cls of Object.keys(rule)) for (let L = 1; L <= 20; L++) for (const sc
       finally { window.sktD = keepD; T._pending = null; T._onHits = []; document.getElementById('area-save-back')?.remove();
         state.party = JSON.parse(keepP); state.combatants = JSON.parse(keepC); state.activeCombatantId = keepA; save(); }
     }
+    // -- Round 249: an incapacitated creature takes no reactions, opportunity attacks or legendary actions; its own turn says it can't act --
+    if (!PLAYER){
+      const keepC = JSON.stringify(state.combatants), keepA = state.activeCombatantId, keepP = JSON.stringify(state.party);
+      const T = panelDefs.turnview, C = panelDefs.combat, keepD = window.sktD, keepTok = T._tokenFor;
+      try {
+        for (let k = 0; k < 100 && !(typeof _5eLoaded !== 'undefined' && _5eLoaded); k++) await sleep(100);
+        const find = (n, src) => _5eData.find(r => r.cat === 'monster' && r.name === n && r._source === src);
+        state.party.push({ id: 'r249z', name: 'Zo', cls: 'rogue', level: 6, rules: '2024', hp: 40, hpMax: 40, ac: 12, build: { edition: '2024' },
+          sheet: { activations: [{ name: 'Uncanny Dodge', action: 'Reaction', feature: 'Uncanny Dodge', desc: 'Halve the damage of an attack that hits you from an attacker you can see.' }] } });
+        { const pz = state.party.find(p => p.id === 'r249z'); pz.rulesRev = SKT_RULES_REV; pz.sheet.stateSig = sktStateSig(pz); }
+        state.combatants = [{ id: 'r249z', name: 'Zo', isPC: true, hp: 40, hpMax: 40, ac: 12, initiative: 20, conditions: [] }];
+        C.addMonster(find('Ogre', 'MM')); C.addMonster(find('Adult Red Dragon', 'MM')); await sleep(20);
+        const get = id => state.combatants.find(c => c.id === id), ogId = state.combatants[1].id, drId = state.combatants[2].id;
+        state.activeCombatantId = ogId; save();
+        const hit = { kind: 'hit', hit: true, target: get('r249z'), attackerId: ogId, dmg: 10, type: 'bludgeoning', total: 20 };
+        ok('incapacitated: Zo can Uncanny Dodge the ogre’s hit', T._gatherReactions(hit).some(x => x.r.name === 'Uncanny Dodge'));
+        get('r249z').conditions = ['Stunned'];
+        ok('incapacitated: …stunned, she can’t', !T._gatherReactions(hit).some(x => x.who.id === 'r249z'), JSON.stringify(T._gatherReactions(hit).map(x => x.r.name)));
+        get('r249z').conditions = [];
+        // Legendary actions: the dragon's, after the ogre's turn — not while paralyzed.
+        ok('incapacitated: the dragon has legendary actions to spend', T._legendaryRows().some(r => r.c.id === drId));
+        get(drId).conditions = ['Paralyzed'];
+        ok('incapacitated: …paralyzed, it has none', !T._legendaryRows().some(r => r.c.id === drId));
+        get(drId).conditions = [];
+        // Opportunity attacks: Zo walks away from the ogre — not if the ogre is unconscious.
+        // (pixel centres, 50 to a square: the ogre's two squares, Zo beside it, then 4 squares off)
+        const pos = { r249z: { x: 125, y: 50, size: 1 }, [ogId]: { x: 50, y: 50, size: 2 }, [drId]: { x: 1000, y: 1000, size: 3 } };
+        T._tokenFor = c => pos[c.id] || null;
+        const from = { x: 125, y: 50 }; pos.r249z = { x: 325, y: 50, size: 1 };
+        const before = T._provokedBy(get('r249z'), from).map(c => c.id);
+        get(ogId).conditions = ['Unconscious'];
+        const after = T._provokedBy(get('r249z'), from).map(c => c.id);
+        T._tokenFor = keepTok;
+        ok('incapacitated: walking away provokes the ogre — but not an unconscious one', before.includes(ogId) && !after.includes(ogId), JSON.stringify([before, after]));
+        // Its own turn: said.
+        get(ogId).conditions = ['Stunned'];
+        if (!T._body){ openPanel('turnview'); await sleep(200); }
+        T._painted = {}; T._render(); await sleep(20);
+        const note = document.querySelector('.tv-incap');
+        ok('incapacitated: the stunned ogre’s turn says it can’t act', !!note && /Stunned — Ogre can’t take actions or reactions/.test(note.textContent), note && note.textContent);
+        get(ogId).conditions = []; T._painted = {}; T._render(); await sleep(20);
+        ok('incapacitated: …and nothing said once it isn’t', !document.querySelector('.tv-incap'));
+      } catch(e){ ok('round 249 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
+      finally { window.sktD = keepD; T._pending = null; T._tokenFor = keepTok;
+        state.party = JSON.parse(keepP); state.combatants = JSON.parse(keepC); state.activeCombatantId = keepA; save(); }
+    }
     // -- Class features: represented, not just text ------------------------
     {
       try {

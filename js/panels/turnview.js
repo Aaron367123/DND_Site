@@ -900,6 +900,10 @@ registerPanel('turnview', {
   // Can't act: no Pack Tactics help, no threat to a ranged attacker.
   _INCAP: ['incapacitated', 'paralyzed', 'petrified', 'stunned', 'unconscious'],
   _incap(c){ return this._INCAP.some(n => this._hasCond(c, n)); },
+  _incapNote(c){
+    return this._incap(c)
+      ? `<div class="tv-incap" role="note">⚠ ${esc(this._INCAP.filter(n => this._hasCond(c, n)).map(n => n.charAt(0).toUpperCase() + n.slice(1)).join(', '))} — ${esc(c.name)} can’t take actions or reactions</div>` : '';
+  },
   // A ranged attack with an enemy within 5 ft who can see you (and isn't
   // incapacitated): disadvantage. The nearest such enemy, or null.
   _rangedThreat(attacker){
@@ -953,6 +957,8 @@ registerPanel('turnview', {
     const rows = [];
     this._order().forEach(c => {
       if (c.reactionUsed || (c.hp || 0) <= 0) return;
+      // Stunned, paralyzed, unconscious…: no reactions at all.
+      if (this._incap(c)) return;
       if (o.attackerId && c.id === o.attackerId) return;    // not the one swinging
       const isTarget = c.id === o.target.id;
       this._reactionsFor(c).forEach(r => {
@@ -1409,7 +1415,7 @@ registerPanel('turnview', {
     // the pips were only drawn for a creature with attacks to roll.
     // (Unless a legendary action off this turn is waiting for its targets.)
     if (!list.length && !this._queue){
-      return `<div class="tv-actions-wrap"><div class="tv-actions">${this._renderEconomy(c)}${this._renderCompanions(c)}${this._renderClassRow(c)}${manual}</div></div>`;
+      return `<div class="tv-actions-wrap"><div class="tv-actions">${this._incapNote(c)}${this._renderEconomy(c)}${this._renderCompanions(c)}${this._renderClassRow(c)}${manual}</div></div>`;
     }
     const manualSlot = this._manualOpen ? manual
       : `<button class="tv-manual-open" data-tv="manualopen">✎ Rolled it yourself?</button>`;
@@ -1505,8 +1511,11 @@ registerPanel('turnview', {
     // or more attacks the "rolled it yourself" row scrolled out of reach —
     // and that row is the fallback for every attack the parser didn't get,
     // so it is the last thing that should disappear when the list gets long.
+    // Stunned or paralyzed on its own turn: it can't act — said, not enforced
+    // (the DM may have left a condition on by mistake).
+    const incapNote = this._incapNote(c);
     return `<div class="tv-actions-wrap">
-      <div class="tv-actions">${this._renderEconomy(c)}${this._renderCompanions(c)}${this._renderClassRow(c)}${head}${this._renderBonusActions(c)}${advBar}${rows}</div>
+      <div class="tv-actions">${incapNote}${this._renderEconomy(c)}${this._renderCompanions(c)}${this._renderClassRow(c)}${head}${this._renderBonusActions(c)}${advBar}${rows}</div>
       ${manualSlot}
     </div>`;
   },
@@ -1578,7 +1587,8 @@ registerPanel('turnview', {
   _legendaryRows(){
     const cur = this._turnOf();
     return this._order()
-      .filter(c => c.legendaryMax && (c.hp || 0) > 0 && c.id !== (cur && cur.id))
+      // (an incapacitated creature can't take legendary actions)
+      .filter(c => c.legendaryMax && (c.hp || 0) > 0 && c.id !== (cur && cur.id) && !this._incap(c))
       .map(c => ({
         c,
         left: (c.legendaryMax || 0) - (c.legendaryUsed || 0),
@@ -3975,7 +3985,7 @@ registerPanel('turnview', {
     // attacked for walking away.
     if (mover.disengaged) return [];
     return this._order().filter(c => {
-      if (c.id === mover.id || (c.hp || 0) <= 0 || c.reactionUsed) return false;
+      if (c.id === mover.id || (c.hp || 0) <= 0 || c.reactionUsed || this._incap(c)) return false;
       if (this._sideOf(c) === this._sideOf(mover)) return false;
       const t = this._tokenFor(c); if (!t) return false;
       const reach = this._reachOf(c);
