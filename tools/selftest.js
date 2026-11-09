@@ -16606,6 +16606,41 @@ for (const cls of Object.keys(rule)) for (let L = 1; L <= 20; L++) for (const sc
       finally { window.sktD = keepD; T._pending = null;
         state.party = JSON.parse(keepP); state.combatants = JSON.parse(keepC); state.activeCombatantId = keepA; save(); }
     }
+    // -- Round 241: Silvery Barbs answers a hit on an ally within 60 feet, not only on the caster --
+    if (!PLAYER){
+      const keepC = JSON.stringify(state.combatants), keepA = state.activeCombatantId, keepP = JSON.stringify(state.party);
+      const T = panelDefs.turnview, C = panelDefs.combat, keepD = window.sktD;
+      try {
+        for (let k = 0; k < 100 && !(typeof _5eLoaded !== 'undefined' && _5eLoaded); k++) await sleep(100);
+        const find = (n, src) => _5eData.find(r => r.cat === 'monster' && r.name === n && r._source === src);
+        state.party.push({ id: 'r241b', name: 'Zin', cls: 'bard', subclass: 'Valor', level: 6, rules: '2024', hp: 40, hpMax: 40, ac: 14,
+          sheet: { spells: ['Silvery Barbs', 'Healing Word'], spellSlots: { 1: { total: 4, expended: 0 } } } });
+        state.party.push({ id: 'r241z', name: 'Zo', cls: 'rogue', level: 6, rules: '2024', hp: 40, hpMax: 40, ac: 15, sheet: { spells: ['Shield'] } });
+        state.combatants = [{ id: 'r241b', name: 'Zin', isPC: true, hp: 40, hpMax: 40, ac: 14, initiative: 20, conditions: [] },
+                            { id: 'r241z', name: 'Zo', isPC: true, hp: 40, hpMax: 40, ac: 15, initiative: 19, conditions: [] }];
+        C.addMonster(find('Ogre', 'MM')); await sleep(20);
+        const get = id => state.combatants.find(c => c.id === id), ogId = state.combatants[2].id, og = () => get(ogId);
+        state.activeCombatantId = ogId; save();
+        const club = T._attacksFor(og()).findIndex(a => /Greatclub/.test(a.name));
+        window.sktD = n => (n === 20 ? 12 : 3); T._pending = null;
+        T._rollAttack(club, { attacker: og(), target: get('r241z'), mode: 0 });   // 18 vs AC 15
+        const offers = () => T._pending ? T._gatherReactions(T._pending).map(x => x.who.name + ':' + x.r.name) : [];
+        ok('silvery barbs: the ogre hits Zo — Zin can answer with Silvery Barbs', offers().includes('Zin:Silvery Barbs'), JSON.stringify(offers()));
+        ok('silvery barbs: …but Zo’s own Shield stays hers alone', !offers().includes('Zin:Shield'));
+        window.sktD = n => 2;
+        T._useReaction('r241b', 'Silvery Barbs'); await sleep(20);
+        ok('silvery barbs: the ogre rerolls a 2 — 8, a miss; Zin’s Reaction and a 1st-level slot spent',
+          get('r241z').hp === 40 && /Miss/.test(T._result) && get('r241b').reactionUsed === true && state.party.find(p => p.id === 'r241b').sheet.spellSlots[1].expended === 1,
+          JSON.stringify([get('r241z').hp, T._result, state.party.find(p => p.id === 'r241b').sheet.spellSlots]));
+        // Shield, by contrast: still only the one hit.
+        get('r241b').reactionUsed = false;
+        const shieldRx = T._reactionsFor(get('r241z')).find(r => r.name === 'Shield');
+        const sbRx = T._reactionsFor(get('r241b')).find(r => r.name === 'Silvery Barbs');
+        ok('silvery barbs: ally or self, within 60 ft; Shield: self', !!shieldRx && shieldRx.scope === 'self' && !!sbRx && sbRx.scope === 'both' && sbRx.range === 60, JSON.stringify([shieldRx, sbRx]));
+      } catch(e){ ok('round 241 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
+      finally { window.sktD = keepD; T._pending = null;
+        state.party = JSON.parse(keepP); state.combatants = JSON.parse(keepC); state.activeCombatantId = keepA; save(); }
+    }
     // -- Class features: represented, not just text ------------------------
     {
       try {

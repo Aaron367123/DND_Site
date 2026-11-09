@@ -221,7 +221,9 @@ registerPanel('turnview', {
     'Instinctive Charm':{ when:'tohit', disadv:true },
     // Reroll: a fresh d20, not the lower of two. Silvery Barbs makes the
     // creature reroll and it must use the new roll even if it is better.
-    'Silvery Barbs':    { when:'tohit', reroll:true },
+    // "a creature you can see within 60 feet of yourself succeeds on an
+    // attack roll": an ally's hit as much as your own.
+    'Silvery Barbs':    { when:'tohit', reroll:true, scope:'both', range:60 },
     'Second Chance':    { when:'tohit', reroll:true },
   },
   // A monster's Parry says how much it adds in its own text — "adds 2 to its
