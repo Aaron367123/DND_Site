@@ -19222,6 +19222,64 @@ for (const cls of Object.keys(rule)) for (let L = 1; L <= 20; L++) for (const sc
         if (state.party[0]) paSetPc(state.party[0].id); paTab = tab0; paRender(); await sleep(200);
       }
     }
+    // -- Round 237: the phone's failed concentration save offers what might still hold it — Aberrant Dragonmark, a Luck Point; a real die typed --
+    if (PLAYER){
+      const party0 = JSON.stringify(state.party), comb0 = JSON.stringify(state.combatants), tab0 = paTab, keepD = window.sktD;
+      try {
+        state.party.push({ id: 'r237n', name: 'R237 Nam', cls: 'druid', level: 6, rules: '2024', hp: 40, hpMax: 40, ac: 15, concentration: 'Moonbeam',
+          bardicInspiration: 'd4', bardicFrom: 'Zindle',
+          resources: [{ name: 'Aberrant Dragonmark', current: 1, max: 1 }, { name: 'Luck Points', current: 1, max: 3 }],
+          sheet: { saves: { con: 2 }, activations: [{ name: 'Aberrant Dragonmark', action: 'Reaction', resource: 'Aberrant Dragonmark', amount: 1, dice: '1d4',
+            desc: 'When you fail a Constitution saving throw, you can take a Reaction to roll 1d4 and add the number rolled to the save, potentially turning the failure into a success.' }] } });
+        state.combatants = [{ id: 'r237n', name: 'R237 Nam', isPC: true, hp: 40, hpMax: 40, ac: 15, initiative: 12, conditions: [] }];
+        paSetPc('r237n'); paTab = 'you'; paRender(); await sleep(300);
+        const me = () => state.party.find(p => p.id === 'r237n');
+        const ask = dc => { me().concCheck = { id: 'cc' + dc + Math.random(), dc, spell: 'Moonbeam', at: Date.now() }; document.getElementById('pa-conc-save')?.remove(); paCheckConc(); };
+        // DC 10: a 6 + 2 = 8 — failed; Aberrant Dragonmark (and the d4, which needs 2) still might hold it.
+        ask(10);
+        window.sktD = n => 6;
+        document.querySelector('#pa-conc-save [data-pa-cs="roll"]').click(); await sleep(40);
+        let ov = document.getElementById('pa-conc-save');
+        ok('phone conc: 8 vs DC 10 failed — Moonbeam not ended yet; “Still:” with Aberrant Dragonmark',
+          me().concentration === 'Moonbeam' && !!ov && /failed/.test(ov.textContent) && !!ov.querySelector('[data-pa-cs="res"][data-r="act:Aberrant Dragonmark"]'), ov && ov.textContent);
+        // A real d4 showed 3: typed — 11, it holds; the mark’s use and the Reaction spent.
+        window.sktD = n => 1;
+        ov.querySelector('#pa-cs-die').value = '3';
+        ov.querySelector('[data-r="act:Aberrant Dragonmark"]').click(); await sleep(40);
+        ov = document.getElementById('pa-conc-save');
+        ok('phone conc: the d4 typed as 3 — 11, Moonbeam holds; the use and the Reaction spent',
+          me().concentration === 'Moonbeam' && !me().concCheck && me().resources[0].current === 0 && state.combatants[0].reactionUsed === true && !!ov && /holds/.test(ov.textContent),
+          JSON.stringify([me().concentration, me().resources, state.combatants[0].reactionUsed, ov && ov.textContent]));
+        // DC 16: an 8 — a d4 can’t reach 16, the mark is spent; a Luck Point: another d20, 15 → 17, holds.
+        ask(16);
+        window.sktD = n => 6;
+        document.querySelector('#pa-conc-save [data-pa-cs="roll"]').click(); await sleep(40);
+        ov = document.getElementById('pa-conc-save');
+        ok('phone conc: 8 vs DC 16 — the Luck Point offered, the d4 shown but out of reach',
+          !!ov.querySelector('[data-r="luck"]') && !!ov.querySelector('[data-r="bi"][disabled]') && !ov.querySelector('[data-r="act:Aberrant Dragonmark"]'), ov.textContent);
+        window.sktD = n => 2;
+        ov.querySelector('#pa-cs-die').value = '15';
+        ov.querySelector('[data-r="luck"]').click(); await sleep(40);
+        ok('phone conc: the Luck Point’s real d20 typed as 15 — 17, holds; the point spent',
+          me().concentration === 'Moonbeam' && me().resources[1].current === 0 && /holds/.test(document.getElementById('pa-conc-save').textContent), JSON.stringify([me().concentration, me().resources]));
+        // DC 16 again: nothing that can reach — it ends at once, no “Still:”.
+        ask(16);
+        window.sktD = n => 6;
+        document.querySelector('#pa-conc-save [data-pa-cs="roll"]').click(); await sleep(40);
+        ok('phone conc: nothing left that could hold it — Moonbeam ends at once', me().concentration === null && /ends/.test(document.getElementById('pa-conc-save').textContent));
+        // Failed with a die left, and let go: it ends; nothing spent.
+        me().concentration = 'Moonbeam'; me().bardicInspiration = 'd8';
+        ask(10);
+        document.querySelector('#pa-conc-save [data-pa-cs="roll"]').click(); await sleep(40);
+        document.querySelector('#pa-conc-save [data-pa-cs="end"]').click(); await sleep(40);
+        ok('phone conc: “Let Moonbeam end” — it ends, the d8 kept', me().concentration === null && me().bardicInspiration === 'd8');
+      } catch(e){ ok('round 237 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
+      finally {
+        window.sktD = keepD; document.getElementById('pa-conc-save')?.remove();
+        state.party = JSON.parse(party0); state.combatants = JSON.parse(comb0);
+        if (state.party[0]) paSetPc(state.party[0].id); paTab = tab0; paRender(); await sleep(200);
+      }
+    }
   }
 
   // ══════════════════════════════════════════════════════════ mobile / phone

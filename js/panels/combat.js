@@ -2522,15 +2522,16 @@ registerPanel('combat',{
   // Roll one of them onto the row: its total, d20 and result change; what it
   // costs is listed in row.spend for _spendRescues (the area-save dialog
   // spends only on Apply). Returns the line saying what happened.
-  _rollRescue(c, row, ab, dc, key){
+  // `forced`: the number a real die showed (the bard's die, or the new d20).
+  _rollRescue(c, row, ab, dc, key, forced){
     const x = this._saveRescues(c, row, ab, dc).find(y => y.key === key); if (!x || !x.ok) return '';
     const was = row.total, mod = typeof row.nat === 'number' ? row.total - row.nat : this.saveBonus(c, String(ab).slice(0, 3).toLowerCase());
     let desc;
     if (key === 'bi' || x.act){
-      const r = sktRollDice(key === 'bi' ? '1' + x.dice : x.dice);
+      const r = forced > 0 ? { total: forced } : sktRollDice(key === 'bi' ? '1' + x.dice : x.dice);
       row.total += r.total; desc = x.label + ' +' + r.total;
     } else {
-      const n2 = sktD(20), keep = key === 'luck' ? Math.max(typeof row.nat === 'number' ? row.nat : was - mod, n2) : n2;
+      const n2 = forced > 0 ? forced : sktD(20), keep = key === 'luck' ? Math.max(typeof row.nat === 'number' ? row.nat : was - mod, n2) : n2;
       row.total = key === 'luck' ? Math.max(was, n2 + mod) : n2 + mod + (x.plus || 0);
       row.nat = keep;
       desc = x.label + ': ' + (key === 'luck' ? 'another d20 ' + n2 + (row.total === was ? ', keeps ' + was : '') : 'reroll ' + n2 + (x.plus ? ' + ' + x.plus : ''));
@@ -2798,7 +2799,7 @@ registerPanel('combat',{
       if (typeof showToast === 'function') showToast(`${c.name}: ${String(p.ab).toUpperCase()} ${r.auto ? r.detail : r.total + ' vs DC ' + p.dc} — ${passed ? 'saved, ' + p.cond + ' ends' : 'failed'}`);
       // A character's failure with a die left to turn it: the card stays.
       const row = { total: r.auto ? null : r.total, nat: r.nat, passed, detail: r.detail, used: [] };
-      if (!passed && this._saveRescues(c, row, p.ab, p.dc).length){ p.rolled = row; this._renderCondSaves(); return; }
+      if (!passed && this._saveRescues(c, row, p.ab, p.dc).some(x => x.ok)){ p.rolled = row; this._renderCondSaves(); return; }
     } else if (c){
       this._log(`${c.name} — ${p.cond}: save ${passed ? 'passed' : 'failed'}`);
     }

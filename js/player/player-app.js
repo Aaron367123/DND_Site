@@ -1902,18 +1902,43 @@ function paCheckConc(){
     const b = e.target.closest('[data-pa-cs]'); if (!b) return;
     const act = b.dataset.paCs;
     if (act === 'ok'){ ov.remove(); return; }
+    // A die that might still hold it (Aberrant Dragonmark, a bard's die, a
+    // Luck Point…): rolled here, or the number a real die showed typed in.
+    if (act === 'res'){
+      const row = ov._row, me = paPc(), C = panelDefs.combat; if (!row || !me || !C) return;
+      const cmb = paCombatant() || { id: me.id, isPC: true };
+      const typed = parseInt((ov.querySelector('#pa-cs-die') || {}).value, 10);
+      const line = C._rollRescue(cmb, row, 'con', cc.dc, b.dataset.r, typed > 0 ? typed : undefined); if (!line) return;
+      C._spendRescues(cmb, row);
+      return paResolveConc(cc.id, row.passed, `<div class="pa-init-who">${paEsc(line)}</div>`, row.total, row);
+    }
+    if (act === 'end'){ const row = ov._row; return paResolveConc(cc.id, false, '', row ? row.total : -99); }
     let total = null, r = null;
     if (act === 'send'){ const v = parseInt(ov.querySelector('#pa-cs-val').value, 10); if (isNaN(v)) return; total = v; }
     else { r = paRollD20(paPc() || pc, mod, 'conc', act === 'roll' ? 'normal' : act); total = r.autoFail ? -99 : r.total; }
-    paResolveConc(cc.id, total >= cc.dc, r ? paD20Html('Concentration · DC ' + cc.dc, r) : '', total);
+    const row = total > -99 ? { total, nat: r ? r.nat : total - mod, passed: total >= cc.dc, detail: '', used: [] } : null;
+    paResolveConc(cc.id, total >= cc.dc, r ? paD20Html('Concentration · DC ' + cc.dc, r) : '', total, row);
   });
   document.body.appendChild(ov);
   try { navigator.vibrate && navigator.vibrate([90, 50, 90]); } catch(e){}
 }
-function paResolveConc(id, made, rollHtml, total){
+function paResolveConc(id, made, rollHtml, total, row){
   const i = paMyIdx(); if (i < 0) return;
   const pc = state.party[i]; if (!pc.concCheck || pc.concCheck.id !== id) return;
   const spell = pc.concCheck.spell || pc.concentration;
+  // Failed, with something left that might still hold it: asked first.
+  const C = panelDefs.combat, cmb = paCombatant() || { id: pc.id, isPC: true }, ov0 = document.getElementById('pa-conc-save');
+  if (!made && row && ov0 && C && typeof C._saveRescues === 'function' && C._saveRescues(cmb, row, 'con', pc.concCheck.dc).some(x => x.ok)){
+    save();
+    ov0._row = row;
+    ov0.querySelector('.pa-init-card').innerHTML = `<div class="pa-init-l">🌀 ${paEsc(spell)} — ${row.total} vs DC ${pc.concCheck.dc}: failed</div>`
+      + (rollHtml || '')
+      + `<div class="pa-init-who">Still:</div><div class="pa-init-roll pa-cs-res">${C._rescueButtons(cmb, row, 'con', pc.concCheck.dc, 'data-pa-cs="res"')}</div>`
+      + `<label class="pa-init-type">Rolled the die yourself? Type it <input id="pa-cs-die" type="number" inputmode="numeric" placeholder="e.g. 3"></label>`
+      + `<button class="btn pa-init-send" data-pa-cs="end">Let ${paEsc(spell)} end</button>`;
+    paRender();
+    return;
+  }
   state.party[i] = Object.assign({}, pc, { concCheck: null }, made ? {} : { concentration: null });
   if (typeof sktKeepRoll === 'function') sktKeepRoll(state.party[i], (total > -99 ? total : 'fail') + ' — ' + (made ? 'keeps ' : 'loses ') + spell, { label: 'Concentration', total });
   save();

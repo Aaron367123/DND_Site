@@ -3191,7 +3191,7 @@ registerPanel('turnview', {
       why = x.ability + ' save ' + (sv.auto ? sv.detail : sv.total + ' vs DC ' + x.dc + ' (' + sv.detail + ')');
       // A character's failure that a die might still turn: asked first.
       const row = { total: sv.auto ? null : sv.total, nat: sv.nat, passed: sv.passed, detail: sv.detail, used: [] };
-      if (fail && t.isPC && typeof C._saveRescues === 'function' && C._saveRescues(t, row, x.ability, x.dc).length){
+      if (fail && t.isPC && typeof C._saveRescues === 'function' && C._saveRescues(t, row, x.ability, x.dc).some(y => y.ok)){
         x.rolled = row; this._onHits.splice(i, 0, x);
         const txt = `<strong>${esc(t.name)}</strong> fails the ${esc(x.ability)} save — ${sv.total} vs DC ${x.dc} <span class="dim">(${esc(sv.detail)}) · ${esc(x.name)}</span>`;
         this._setResult(txt, true); this._log.unshift(txt);
