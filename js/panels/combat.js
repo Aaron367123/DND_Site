@@ -495,6 +495,31 @@ registerPanel('combat',{
     if (changed) save();
     return changed;
   },
+  // A condition held by someone's concentration (a cult fanatic's Hold
+  // Person) ends when they stop concentrating on that spell, or leave.
+  _endConcConditions(){
+    if (document.body.classList.contains('player-mode')) return false;
+    let changed = false;
+    (state.combatants || []).forEach((x, i) => {
+      const timers = x && x.condTimers; if (!timers) return;
+      const ended = Object.keys(timers).filter(k => {
+        const t = timers[k], cc = t && t.conc; if (!cc) return false;
+        const by = state.combatants.find(y => y.id === cc.id);
+        const p = by && by.isPC ? (state.party || []).find(y => y.id === by.id) : null;
+        const on = by ? (by.isPC ? p && p.concentration : by.concentration) : null;
+        return on !== cc.spell;   // (dropping to 0 HP ends the concentration itself)
+      });
+      if (!ended.length) return;
+      const left = Object.assign({}, timers); ended.forEach(k => delete left[k]);
+      state.combatants[i] = { ...x, conditions: (x.conditions || []).filter(k => !ended.includes(k)), condTimers: Object.keys(left).length ? left : undefined };
+      ended.forEach(k => this._log(x.name + ' — ' + k + ' ends (' + timers[k].conc.spell + ': concentration ended)'));
+      if (typeof showToast === 'function') showToast(x.name + ': ' + ended.join(', ') + ' ended — concentration on ' + timers[ended[0]].conc.spell + ' ended');
+      if (x.isPC) setTimeout(() => panelDefs.party?._render?.(), 0);
+      changed = true;
+    });
+    if (changed) save();
+    return changed;
+  },
   // A concentration summon leaves when the caster's concentration on that
   // spell ends (Summon Beast's spirit "disappears"), and with its caster.
   _endSummons(){
@@ -563,6 +588,7 @@ registerPanel('combat',{
     this._takeSummonRequests();
     this._endConcOnIncap();
     this._endSummons();
+    this._endConcConditions();
     const b=this._body;if(!b)return;
     const inCombat=state.combatants.length>0;
     const compact = !!(state.settings && state.settings.combatCompact);
@@ -2639,7 +2665,11 @@ registerPanel('combat',{
     const i = state.combatants.indexOf(c); if (i < 0) return '';
     let dur = x.dur ? Object.assign({}, x.dur) : null;
     if (dur && dur.src){ delete dur.src; dur = src ? Object.assign(dur, { by: src.id, byName: src.name }) : null; }
-    const timer = (dur || x.repeat) ? Object.assign({}, dur || {}, x.repeat && dc ? { save: { ab: String(ability || '').slice(0, 3).toLowerCase(), dc } } : {}) : null;
+    // Held by a caster's concentration (Hold Person): ends when that does.
+    const conc = x.concSpell && src ? { conc: { id: src.id, spell: x.concSpell } } : {};
+    // (the caster is concentrating on it from the moment it lands)
+    if (conc.conc){ const by = state.combatants.find(y => y.id === src.id); if (by && !by.isPC && by.concentration !== x.concSpell) by.concentration = x.concSpell; }
+    const timer = (dur || x.repeat || conc.conc) ? Object.assign({}, dur || {}, x.repeat && dc ? { save: { ab: String(ability || '').slice(0, 3).toLowerCase(), dc } } : {}, conc) : null;
     if (timer) this._setCondTimer(i, x.cond, timer);
     else state.combatants[i] = { ...c, conditions: [...(c.conditions || []), x.cond] };
     return 'applied';

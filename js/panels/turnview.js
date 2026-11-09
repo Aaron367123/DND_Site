@@ -2396,7 +2396,7 @@ registerPanel('turnview', {
         // (a Life Drain's lowered maximum, and a condition's timer)
         hpMax:c.hpMax, hpMaxNormal:c.hpMaxNormal, hpMaxNote:c.hpMaxNote,
         condTimers: c.condTimers ? JSON.parse(JSON.stringify(c.condTimers)) : undefined,
-        legendaryUsed:c.legendaryUsed, lrUsed:c.lrUsed, extraDmgTurn:c.extraDmgTurn, onceTurn:c.onceTurn ? {...c.onceTurn} : undefined,
+        legendaryUsed:c.legendaryUsed, lrUsed:c.lrUsed, concentration:c.concentration, extraDmgTurn:c.extraDmgTurn, onceTurn:c.onceTurn ? {...c.onceTurn} : undefined,
         deathSaves: c.deathSaves ? {...c.deathSaves} : c.deathSaves,
         rechargeSpent: (c.rechargeSpent || []).slice(),
         usesSpent: c.usesSpent ? {...c.usesSpent} : undefined, usesRound: c.usesRound ? {...c.usesRound} : undefined, slotsUsed: c.slotsUsed ? {...c.slotsUsed} : undefined,
@@ -3733,6 +3733,12 @@ registerPanel('turnview', {
   _ordLevel(n){ return n + ([, 'st', 'nd', 'rd'][n % 10 > 3 || ~~(n % 100 / 10) === 1 ? 0 : n % 10] || 'th'); },
   _usesMax(a){ return a && a.slotLevel ? a.slotMax : a && a.uses; },
   _markUsed(c, a){
+    // A monster casting a concentration spell concentrates on it — and stops
+    // concentrating on the one before, whose effects end with it.
+    if (a && a.conc && a.spellName && c && !c.isPC && c.concentration !== a.spellName){
+      if (c.concentration) this._log.unshift(`<strong>${esc(c.name)}</strong> — ${esc(c.concentration)} ends (concentrating on ${esc(a.spellName)})`);
+      c.concentration = a.spellName;
+    }
     if (!a || !(a.uses || a.slotLevel)) return;
     const at = (state.combatRound || 0) + ':' + (state.activeCombatantId || '');
     if ((c.usesRound || {})[a.name] === at) return;

@@ -16996,6 +16996,59 @@ for (const cls of Object.keys(rule)) for (let L = 1; L <= 20; L++) for (const sc
       finally { window.sktD = keepD; T._pending = null;
         state.party = JSON.parse(keepP); state.combatants = JSON.parse(keepC); state.activeCombatantId = keepA; save(); }
     }
+    // -- Round 251: a monster concentrates on the spell it casts; the conditions it holds end when its concentration does --
+    if (!PLAYER){
+      const keepC = JSON.stringify(state.combatants), keepA = state.activeCombatantId, keepP = JSON.stringify(state.party);
+      const T = panelDefs.turnview, C = panelDefs.combat, keepD = window.sktD;
+      try {
+        for (let k = 0; k < 100 && !(typeof _5eLoaded !== 'undefined' && _5eLoaded); k++) await sleep(100);
+        await sktRulesLoad('2014');
+        const find = (n, src) => _5eData.find(r => r.cat === 'monster' && r.name === n && r._source === src);
+        state.party.push({ id: 'r251a', name: 'Ann', hp: 40, hpMax: 40, ac: 15, rules: '2024', level: 6, sheet: { saves: { wis: 0 } } });
+        state.party.push({ id: 'r251b', name: 'Bo', hp: 40, hpMax: 40, ac: 15, rules: '2024', level: 6, sheet: { saves: { wis: 0 } } });
+        state.combatants = [{ id: 'r251a', name: 'Ann', isPC: true, hp: 40, hpMax: 40, ac: 15, initiative: 20, conditions: [] },
+                            { id: 'r251b', name: 'Bo', isPC: true, hp: 40, hpMax: 40, ac: 15, initiative: 19, conditions: [] }];
+        C.addMonster(find('Cult Fanatic', 'MM')); await sleep(20);
+        const get = id => state.combatants.find(c => c.id === id), cfId = state.combatants[2].id, cf = () => get(cfId);
+        const para = id => (get(id).conditions || []).includes('Paralyzed');
+        state.activeCombatantId = cfId; save();
+        const hp = T._attacksFor(cf()).find(a => a.spellName === 'Hold Person');
+        ok('concentration: Hold Person is a concentration spell, its paralysis held by it', !!hp && hp.conc === true && hp.cond.concSpell === 'Hold Person', JSON.stringify(hp && [hp.conc, hp.cond]));
+        // Cast on Ann: she fails.
+        window.sktD = n => 1; T._armed = 'r251a'; T._pending = null;
+        T._rollSave(T._attacksFor(cf()).indexOf(hp), false); await sleep(20);
+        if (T._pending) T._commit(T._pending, null);
+        ok('concentration: Ann paralyzed; the fanatic concentrating on Hold Person', para('r251a') && cf().concentration === 'Hold Person', JSON.stringify([get('r251a').conditions, cf().concentration]));
+        C._render(); await sleep(10);
+        ok('concentration: …and it holds while the fanatic concentrates', para('r251a'));
+        // Undo: as it was.
+        sktUndo(); await sleep(30); C._render(); await sleep(10);
+        ok('concentration: undo — Ann free, the fanatic not concentrating', !para('r251a') && !cf().concentration, JSON.stringify([get('r251a').conditions, cf().concentration]));
+        // Ann saves: the fanatic is concentrating on it all the same.
+        window.sktD = n => 20;
+        T._rollSave(T._attacksFor(cf()).indexOf(hp), true); await sleep(20);
+        if (T._pending) T._commit(T._pending, null);
+        ok('concentration: Ann saves — not paralyzed, but the fanatic is concentrating on Hold Person', !para('r251a') && cf().concentration === 'Hold Person', JSON.stringify([get('r251a').conditions, cf().concentration]));
+        cf().concentration = null; window.sktD = n => 1;
+        // Again, then the fanatic is hit and fails its concentration save: the paralysis ends.
+        T._rollSave(T._attacksFor(cf()).indexOf(hp), false); await sleep(20);
+        if (T._pending) T._commit(T._pending, null);
+        C._rollConcFor(cfId, 10, 'Hold Person'); await sleep(20); C._render(); await sleep(10);
+        ok('concentration: the fanatic’s concentration breaks — Ann’s paralysis ends with it', !para('r251a') && !cf().concentration, JSON.stringify([get('r251a').conditions, cf().concentration]));
+        // The area save: both fail; both paralyzed; the fanatic concentrating.
+        T._areaSave(T._attacksFor(cf()).indexOf(hp));
+        const back = document.getElementById('area-save-back');
+        back.querySelectorAll('#as-targets input').forEach(i => { i.checked = ['r251a', 'r251b'].includes(i.value); });
+        back.querySelector('[data-as="roll"]').click(); await sleep(20);
+        back.querySelector('[data-as="apply"]').click(); await sleep(30); C._render(); await sleep(10);
+        ok('concentration: an area Hold Person — Ann and Bo paralyzed, the fanatic concentrating', para('r251a') && para('r251b') && cf().concentration === 'Hold Person', JSON.stringify([get('r251a').conditions, get('r251b').conditions, cf().concentration]));
+        // Down to 0 HP: concentration and both paralyses end.
+        C._applyHpDelta(state.combatants.indexOf(cf()), -999, 'slashing'); await sleep(10); C._render(); await sleep(10);
+        ok('concentration: the fanatic drops — both are free', !para('r251a') && !para('r251b'), JSON.stringify([get('r251a').conditions, get('r251b').conditions, cf().concentration, cf().hp]));
+      } catch(e){ ok('round 251 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
+      finally { window.sktD = keepD; T._pending = null; document.getElementById('area-save-back')?.remove();
+        state.party = JSON.parse(keepP); state.combatants = JSON.parse(keepC); state.activeCombatantId = keepA; save(); }
+    }
     // -- Class features: represented, not just text ------------------------
     {
       try {

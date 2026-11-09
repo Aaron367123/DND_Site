@@ -1844,6 +1844,8 @@ function sktMonsterSpellRows(raw, R){
         const rounds = u === 'round' ? amt : u === 'minute' ? amt * 10 : 0;
         if (rounds && rounds <= 100) cond.dur = { kind: 'rounds', left: rounds };
       }
+      // Held by the caster's concentration: it ends when that does.
+      if (cond && d && d.concentration) cond.concSpell = s.name;
     }
     if (!dms.length && !cond && s.name !== 'Magic Missile') return;
     const up = Math.max(0, castAt - lvl);
@@ -1877,6 +1879,7 @@ function sktMonsterSpellRows(raw, R){
       save: !isAtk && save && sc.dc != null ? { dc: sc.dc, ability: ab, half: /half as much|half damage/i.test(txt) } : null,
       parts, alt: null, altLabel: '', recharge: null,
       ...(cond && !isAtk ? { cond, effect: parts.length ? '' : sktCondText(cond) } : {}),
+      conc: !!(((s.duration || [])[0] || {}).concentration),
       uses: sp.per === 'day' ? sp.n : 0, slotLevel: sp.per === 'slot' ? sp.level : 0, slotMax: sp.per === 'slot' ? sp.n : 0,
       // A spell: Magic Resistance applies to its save, and its damage is magical.
       ranged: /\bR\b/.test((s.spellAttack || []).join(' ')), group: 'spell', spell: true, magical: true,
