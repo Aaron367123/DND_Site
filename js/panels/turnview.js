@@ -2835,7 +2835,9 @@ registerPanel('turnview', {
     // A marut's Unerring Slam: "automatic hit", no roll to compare.
     const autoHit = !a.pc && a.toHit === 'auto';
     if (autoHit) hitNote = 'automatic hit';
-    const natCrit = !autoHit && nat === 20;
+    // A Champion's Improved Critical: a weapon crits on 19 (Superior, 18).
+    const critAt = a.pc && !a.spell ? Math.min(20, +(((this._partyOf(c) || {}).sheet || {}).critRange) || 20) : 20;
+    const natCrit = !autoHit && nat >= critAt;
     const hit = autoHit || natCrit || (nat !== 1 && total >= (t.ac || 10));
     const crit = natCrit || (!autoHit && hit && cm.autoCrit);
     // What a hit does when it deals no damage (a roper's tendril grapples).
@@ -2850,12 +2852,19 @@ registerPanel('turnview', {
       // "1d8+3 slashing" off the imported sheet.
       const m = String(a.dmgText).match(/(\d*d\d+(?:\s*[+-]\s*\d+)?)\s*(.*)/i);
       const dice = m ? m[1] : a.dmgText;
-      const r = this._roll(crit ? dbl(dice) : dice);
-      parts = [{ amt: r.total, type: (m && m[2] ? m[2] : '').trim().replace(/^damage\s*/i, '') }];
-      detail = r.detail;
-      // Raging: the Rage Damage, on an attack using Strength.
-      const rb = typeof sktRageBonus === 'function' ? sktRageBonus(this._partyOf(c), a) : 0;
-      if (rb){ parts[0].amt += rb; detail += ' + ' + rb + ' rage'; }
+      const type = (m && m[2] ? m[2] : '').trim().replace(/^damage\s*/i, ''), pp = this._partyOf(c);
+      // The sheet's own roller and options, so a hit here lands what the sheet
+      // would roll: Rage Damage, Great Weapon Fighting, a crit's extra dice.
+      if (pp && typeof sktDamageRoll === 'function' && typeof csDamageOpts === 'function' && /\d*d\d+/.test(dice)){
+        const r = sktDamageRoll(dice, crit, csDamageOpts(pp, a, false));
+        parts = [{ amt: r.total, type }]; detail = r.detail;
+      } else {
+        const r = this._roll(crit ? dbl(dice) : dice);
+        parts = [{ amt: r.total, type }];
+        detail = r.detail;
+        const rb = typeof sktRageBonus === 'function' ? sktRageBonus(pp, a) : 0;
+        if (rb){ parts[0].amt += rb; detail += ' + ' + rb + ' rage'; }
+      }
     } else {
       // Damage that comes only with advantage is left off a roll without it.
       parts = (a.parts || []).filter(pt => !pt.ifAdv || mode > 0).map(pt => {
@@ -2884,7 +2893,7 @@ registerPanel('turnview', {
     this._resolve({ attackerId: c.id, attacker: c.name, label: o.label || a.name, target: t,
                     total, crit, hit, dmg, parts, queued: !!o.queued, nat, bonus, hitNote, onHit: a.pc ? null : (a.onHit || null),
                     type: parts.length ? parts[0].type : '', detail,
-                    pcAtk: !!a.pc, mode, ranged: !!a.ranged, spellAtk: !!a.spell, props: a.props || null,
+                    pcAtk: !!a.pc, critAt, mode, ranged: !!a.ranged, spellAtk: !!a.spell, props: a.props || null,
                     magical: a.pc || a.magical ? !!a.magical : panelDefs.attacks && this._entryOf(c) && this._entryOf(c)._raw
                              ? panelDefs.attacks._parsed(this._entryOf(c)._raw).magical : false });
   },
@@ -3420,7 +3429,7 @@ registerPanel('turnview', {
       const n2 = this._d(20), keep = key === 'luck' ? Math.max(o.nat, n2) : n2;
       desc = `${x.label}: ${o.nat} → ${key === 'luck' ? o.nat + ' / ' + n2 + ', keeps ' + keep : n2}`;
       o.total = keep + (o.bonus || 0) + (o.total - o.nat - (o.bonus || 0));
-      o.nat = keep; o.crit = keep === 20;
+      o.nat = keep; o.crit = keep >= (o.critAt || 20);
       if (key === 'luck'){ const r = (p.resources || []).find(y => y.name === 'Luck Points'); if (r) r.current = Math.max(0, (+r.current || 0) - 1); }
       else p.inspiration = false;
     }

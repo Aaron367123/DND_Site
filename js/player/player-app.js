@@ -2136,25 +2136,27 @@ function paRollAttack(i){
   const d = sktD;                       // shared roller, see js/core/utils.js
   const bonus = parseInt(String(a.atkBonus || '').replace(/[^\d+-]/g, ''), 10) || 0;
   const nat = d(20), total = nat + bonus;
+  // A Champion's weapon crits on 19 (the sheet's critRange); a spell on 20.
+  const crit = nat >= (a.spell ? 20 : Math.min(20, +((pc.sheet || {}).critRange) || 20));
   // Damage off the sheet, every term of it ("2d6+1d4+3 slashing").
   let dmg = '', type = '';
   if (a.damage && /\d*d\d+/.test(a.damage) && typeof sktDamageRoll === 'function'){
     // (the sheet's own options: Rage, Great Weapon Fighting, extra crit dice)
-    const r = sktDamageRoll(a.damage, nat === 20, typeof csDamageOpts === 'function' ? csDamageOpts(pc, a, false) : {});
+    const r = sktDamageRoll(a.damage, crit, typeof csDamageOpts === 'function' ? csDamageOpts(pc, a, false) : {});
     dmg = String(r.total); type = r.type;
   }
-  if (typeof sktKeepRoll === 'function') sktKeepRoll(pc, total + ' to hit' + (dmg ? ', ' + dmg + ' ' + type : '') + (nat === 20 ? ' (crit)' : nat === 1 ? ' (nat 1)' : ''), { label: a.name, total });
+  if (typeof sktKeepRoll === 'function') sktKeepRoll(pc, total + ' to hit' + (dmg ? ', ' + dmg + ' ' + type : '') + (crit ? ' (crit)' : nat === 1 ? ' (nat 1)' : ''), { label: a.name, total });
   // Attacking is taking the Attack action, however many swings it gives.
   if (paMarkEcon('action')) { save(); paRenderScreen(); }
   // Shown, not applied. The player reads it out; the DM decides whether it
   // hit. Applying a player's damage to a monster from here would be the
   // player running the DM's side of the table.
-  paShowRoll(`<div class="pa-roll-in${nat === 20 ? ' crit' : nat === 1 ? ' fumble' : ''}">
+  paShowRoll(`<div class="pa-roll-in${crit ? ' crit' : nat === 1 ? ' fumble' : ''}">
     <span class="pa-roll-l">${paEsc(a.name)}</span>
     <span class="pa-roll-hit">${total}<i> to hit</i></span>
     <span class="pa-roll-d">d20 ${nat}${bonus ? (bonus > 0 ? ' + ' + bonus : ' − ' + Math.abs(bonus)) : ''}</span>
     ${dmg ? `<span class="pa-roll-dmg">${dmg}<i> ${paEsc(type)}</i></span>` : ''}
-    ${nat === 20 ? '<span class="pa-roll-tag">crit</span>' : nat === 1 ? '<span class="pa-roll-tag">nat 1</span>' : ''}
+    ${crit ? '<span class="pa-roll-tag">crit</span>' : nat === 1 ? '<span class="pa-roll-tag">nat 1</span>' : ''}
   </div>`);
 }
 

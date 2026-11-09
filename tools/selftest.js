@@ -16641,6 +16641,51 @@ for (const cls of Object.keys(rule)) for (let L = 1; L <= 20; L++) for (const sc
       finally { window.sktD = keepD; T._pending = null;
         state.party = JSON.parse(keepP); state.combatants = JSON.parse(keepC); state.activeCombatantId = keepA; save(); }
     }
+    // -- Round 242: the Turn View rolls a character's weapon the way the sheet does — a Champion's 19 crits; Great Weapon Fighting; a crit's extra dice --
+    if (!PLAYER){
+      const keepC = JSON.stringify(state.combatants), keepA = state.activeCombatantId, keepP = JSON.stringify(state.party);
+      const T = panelDefs.turnview, C = panelDefs.combat, keepD = window.sktD;
+      try {
+        for (let k = 0; k < 100 && !(typeof _5eLoaded !== 'undefined' && _5eLoaded); k++) await sleep(100);
+        const find = (n, src) => _5eData.find(r => r.cat === 'monster' && r.name === n && r._source === src);
+        state.party.push({ id: 'r242w', name: 'Will', cls: 'fighter', subclass: 'Champion', level: 6, rules: '2024', hp: 50, hpMax: 50, ac: 18, inspiration: true,
+          sheet: { critRange: 19, attacks: [{ name: 'Longsword', atkBonus: '+7', damage: '1d8+4 slashing', props: ['V'] },
+                                            { name: 'Fire Bolt', spell: true, atkBonus: '+5', damage: '1d10 fire' }] } });
+        state.party.push({ id: 'r242u', name: 'Ulf', cls: 'barbarian', level: 6, rules: '2024', hp: 60, hpMax: 60, ac: 14,
+          sheet: { greatWeaponFighting: true, critExtraDice: 1, attacks: [{ name: 'Greatsword', atkBonus: '+6', damage: '2d6+3 slashing', props: ['H', '2H'], str: true }] } });
+        state.combatants = [{ id: 'r242w', name: 'Will', isPC: true, hp: 50, hpMax: 50, ac: 18, initiative: 20, conditions: [] },
+                            { id: 'r242u', name: 'Ulf', isPC: true, hp: 60, hpMax: 60, ac: 14, initiative: 19, conditions: [] }];
+        C.addMonster(find('Ogre', 'MM')); await sleep(20);
+        const get = id => state.combatants.find(c => c.id === id), ogId = state.combatants[2].id, og = () => get(ogId);
+        Object.assign(og(), { hp: 500, hpMax: 500, ac: 30 });
+        state.activeCombatantId = 'r242w'; save();
+        T._lastPcMiss = null;
+        const atk = (who, name, d20, die) => { window.sktD = n => (n === 20 ? d20 : die); T._pending = null;
+          const hp = og().hp; T._rollAttack(T._attacksFor(get(who)).findIndex(a => a.name === name), { attacker: get(who), target: og(), mode: 0 }); return hp - og().hp; };
+        // A 19 against AC 30: 26 wouldn't hit, but it's a critical — 2d8 (3+3) + 4 = 10.
+        let d = atk('r242w', 'Longsword', 19, 3);
+        ok('champion: a natural 19 crits — hits AC 30, 2d8 + 4 = 10', d === 10 && /Critical|crit/i.test(T._result), JSON.stringify([d, T._result]));
+        d = atk('r242w', 'Longsword', 18, 3);
+        ok('champion: an 18 is no crit — 25 misses AC 30', d === 0 && /Miss/.test(T._result), JSON.stringify([d, T._result]));
+        d = atk('r242w', 'Fire Bolt', 19, 3);
+        ok('champion: a spell’s 19 is no crit — Fire Bolt misses', d === 0, JSON.stringify([d, T._result]));
+        // Heroic Inspiration rerolls the 18: a 19 — a crit.
+        atk('r242w', 'Longsword', 18, 3);
+        window.sktD = n => (n === 20 ? 19 : 3);
+        const hpR = og().hp;
+        T._rescueMiss('hero'); await sleep(20);
+        ok('champion: Heroic Inspiration rerolls a 19 — a critical hit', og().hp < hpR && /Critical|crit/i.test(T._result), JSON.stringify([hpR - og().hp, T._result]));
+        // Great Weapon Fighting (2024): 1s and 2s count as 3 — 3 + 3 + 3 = 9.
+        state.activeCombatantId = 'r242u'; og().ac = 5;
+        d = atk('r242u', 'Greatsword', 12, 1);
+        ok('great weapon fighting: two 1s count as 3s — 3 + 3 + 3 = 9', d === 9, JSON.stringify([d, T._result]));
+        // A crit's extra die (Savage Attacks / Brutal Critical): 2d6 doubled + 1 more = 5d6 of 3s, + 3 = 18.
+        d = atk('r242u', 'Greatsword', 20, 3);
+        ok('extra crit dice: a 20 rolls 5d6 (doubled, plus one) — 15 + 3 = 18', d === 18, JSON.stringify([d, T._result]));
+      } catch(e){ ok('round 242 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
+      finally { window.sktD = keepD; T._pending = null; T._lastPcHit = null; T._lastPcMiss = null;
+        state.party = JSON.parse(keepP); state.combatants = JSON.parse(keepC); state.activeCombatantId = keepA; save(); }
+    }
     // -- Class features: represented, not just text ------------------------
     {
       try {
@@ -19484,6 +19529,29 @@ for (const cls of Object.keys(rule)) for (let L = 1; L <= 20; L++) for (const sc
       finally {
         window.sktD = keepD; document.getElementById('pa-conc-save')?.remove();
         state.party = JSON.parse(party0); state.combatants = JSON.parse(comb0);
+        if (state.party[0]) paSetPc(state.party[0].id); paTab = tab0; paRender(); await sleep(200);
+      }
+    }
+    // -- Round 243: the phone's attack card — a Champion's 19 is a critical --
+    if (PLAYER){
+      const party0 = JSON.stringify(state.party), tab0 = paTab, keepD = window.sktD;
+      try {
+        state.party.push({ id: 'r243w', name: 'R243 Will', cls: 'fighter', subclass: 'Champion', level: 6, rules: '2024', hp: 50, hpMax: 50, ac: 18,
+          sheet: { critRange: 19, attacks: [{ name: 'Longsword', atkBonus: '+7', damage: '1d8+4 slashing', props: ['V'] }, { name: 'Fire Bolt', spell: true, atkBonus: '+5', damage: '1d10 fire' }] } });
+        paSetPc('r243w'); paTab = 'you'; paRender(); await sleep(300);
+        const card = () => document.querySelector('#pa-roll .pa-roll-in');
+        window.sktD = n => (n === 20 ? 19 : 3);
+        paRollAttack(0); await sleep(60);
+        ok('phone: a Champion’s 19 — “crit”, and the dice doubled: 3 + 3 + 4 = 10',
+          !!card() && card().classList.contains('crit') && /crit/.test(card().textContent) && parseInt(card().querySelector('.pa-roll-dmg').textContent, 10) === 10, card() && card().textContent);
+        paRollAttack(1); await sleep(60);
+        ok('phone: a Fire Bolt’s 19 — no crit, 3', !!card() && !card().classList.contains('crit') && parseInt(card().querySelector('.pa-roll-dmg').textContent, 10) === 3, card() && card().textContent);
+        window.sktD = n => (n === 20 ? 18 : 3);
+        paRollAttack(0); await sleep(60);
+        ok('phone: an 18 — no crit, 7', !!card() && !card().classList.contains('crit') && parseInt(card().querySelector('.pa-roll-dmg').textContent, 10) === 7, card() && card().textContent);
+      } catch(e){ ok('round 243 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
+      finally {
+        window.sktD = keepD; state.party = JSON.parse(party0);
         if (state.party[0]) paSetPc(state.party[0].id); paTab = tab0; paRender(); await sleep(200);
       }
     }
