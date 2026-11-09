@@ -1464,7 +1464,9 @@ function sktParseMonsterAttack(action){
     // Presence (frightened, and nothing else), a mind flayer's Mind Blast
     // (stunned), a Wing Attack (prone).
     const cond = typeof sktSaveCondition === 'function' ? sktSaveCondition(desc, saveAt) : null;
-    if (parts.length || cond){
+    // (a condition alone makes it a save action only when nothing rolls to hit
+    // first: a green dragon's Lashing Root attacks, +7, and THEN calls for the save)
+    if (parts.length || (cond && !/\bto hit\b|\battack roll\b/i.test(desc.slice(0, saveAt)))){
       return {
         name, recharge, uses, toHit: null,
         save: { dc: saveDc, ability: saveAbility,

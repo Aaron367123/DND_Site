@@ -4897,7 +4897,8 @@
           state.activeCombatantId = dr.id; save();
           openPanel('turnview'); await sleep(500);
           const T = panelDefs.turnview; T._render(); await sleep(150);
-          const ab = T._body.querySelector('[data-tv="area"]');
+          // (Fire Breath's: Frightful Presence, a save too, comes before it)
+          const ab = T._body.querySelector('[data-tv="area"][data-ai="' + T._attacksFor(dr).findIndex(a => a.name === 'Fire Breath') + '"]');
           ok('area save: the Turn View offers it on a breath weapon', !!ab);
           ab && ab.click(); await sleep(60);
           const d2 = document.getElementById('area-save-back');
