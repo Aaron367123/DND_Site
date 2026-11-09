@@ -17163,6 +17163,45 @@ for (const cls of Object.keys(rule)) for (let L = 1; L <= 20; L++) for (const sc
       finally { window.sktD = keepD; T._pending = null; T._onHits = []; T._lastPcHit = null; T._lastPcMiss = null;
         state.party = JSON.parse(keepP); state.combatants = JSON.parse(keepC); state.activeCombatantId = keepA; save(); }
     }
+    // -- Round 254: Cleave — after a hit, the same weapon at a second creature within 5 ft, without the ability modifier, once a turn --
+    if (!PLAYER){
+      const keepC = JSON.stringify(state.combatants), keepA = state.activeCombatantId, keepP = JSON.stringify(state.party);
+      const T = panelDefs.turnview, C = panelDefs.combat, keepD = window.sktD, keepTok = T._tokenFor, keepArm = T._armed;
+      try {
+        for (let k = 0; k < 100 && !(typeof _5eLoaded !== 'undefined' && _5eLoaded); k++) await sleep(100);
+        const find = (n, src) => _5eData.find(r => r.cat === 'monster' && r.name === n && r._source === src);
+        state.party.push({ id: 'r254u', name: 'Ulf', hp: 60, hpMax: 60, ac: 14, rules: '2024', level: 6,
+          sheet: { profBonus: 3, attacks: [{ name: 'Greataxe', atkBonus: '+6', damage: '1d12+3 slashing', props: ['H', '2H'], str: true, mastery: 'Cleave' }] } });
+        state.combatants = [{ id: 'r254u', name: 'Ulf', isPC: true, hp: 60, hpMax: 60, ac: 14, initiative: 20, conditions: [] }];
+        C.addMonster(find('Ogre', 'MM')); C.addMonster(find('Ogre', 'MM')); await sleep(20);
+        const get = id => state.combatants.find(c => c.id === id), o1 = state.combatants[1].id, o2 = state.combatants[2].id;
+        state.combatants.forEach(c => { if (!c.isPC){ c.hp = 300; c.hpMax = 300; c.ac = 5; } });
+        state.activeCombatantId = 'r254u'; save();
+        T._lastPcHit = null; T._armed = null;
+        const opt = () => T._lastPcHit ? T._pcExtraOptions(T._lastPcHit).find(o => o.key === 'cleave') : null;
+        window.sktD = n => (n === 20 ? 15 : 3);
+        T._rollAttack(0, { attacker: get('r254u'), target: get(o1), mode: 0 });
+        ok('cleave: a greataxe hit — Cleave offered, waiting for a second creature to be armed', !!opt() && !opt().ok && /arm a second creature/.test(opt().why), JSON.stringify(opt()));
+        T._armed = o2;
+        ok('cleave: the second ogre armed — Cleave ready', !!opt() && opt().ok, JSON.stringify(opt()));
+        // Too far: 20 ft between them.
+        const pos = { [o1]: { x: 50, y: 50, size: 2 }, [o2]: { x: 300, y: 50, size: 2 }, r254u: { x: 0, y: 0, size: 1 } };
+        T._tokenFor = c => pos[c.id] || null;
+        ok('cleave: …not if it’s 20 ft from the first', !!opt() && !opt().ok && /Cleave needs one within 5 ft/.test(opt().why), JSON.stringify(opt()));
+        T._tokenFor = keepTok;
+        // The swing: 3 slashing, no +3 (the rage-free, modifier-free weapon damage).
+        const hp2 = get(o2).hp;
+        T._usePcExtra('cleave'); await sleep(20);
+        if (T._pending) T._commit(T._pending, null);
+        ok('cleave: the second ogre is hit for 3 — the d12, no ability modifier', hp2 - get(o2).hp === 3 && /Cleave/.test(T._result), JSON.stringify([hp2 - get(o2).hp, T._result]));
+        // Once a turn.
+        T._armed = o2;
+        T._rollAttack(0, { attacker: get('r254u'), target: get(o1), mode: 0 });
+        ok('cleave: once a turn — not offered again', !opt());
+      } catch(e){ ok('round 254 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
+      finally { window.sktD = keepD; T._tokenFor = keepTok; T._armed = keepArm; T._pending = null; T._lastPcHit = null;
+        state.party = JSON.parse(keepP); state.combatants = JSON.parse(keepC); state.activeCombatantId = keepA; save(); }
+    }
     // -- Class features: represented, not just text ------------------------
     {
       try {

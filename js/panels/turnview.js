@@ -2609,7 +2609,7 @@ registerPanel('turnview', {
     if (o.onHit && !o.save) this._queueOnHit(o);
     // A character's hit: the damage their features add, one click away.
     if (o.pcAtk) this._lastPcHit = { turn: this._turnKey(), atkId: o.attackerId, tgtId: t.id, crit: !!o.crit, mode: o.mode || 0,
-      ranged: !!o.ranged, spell: !!o.spellAtk, props: o.props || null, type: o.type || '', magical: !!o.magical, label: o.label, used: [],
+      ranged: !!o.ranged, spell: !!o.spellAtk, props: o.props || null, type: o.type || '', magical: !!o.magical, label: o.label, used: [], mastery: o.mastery || '',
       wDice: o.wDice || null, wSum: o.wSum, wName: o.label };
     if (o.queued && this._queue){ this._queue.hits++; this._advanceQueue(); return; }
     this._render();
@@ -2871,7 +2871,8 @@ registerPanel('turnview', {
     if (a.pc){
       // "1d8+3 slashing" off the imported sheet.
       const m = String(a.dmgText).match(/(\d*d\d+(?:\s*[+-]\s*\d+)?)\s*(.*)/i);
-      const dice = m ? m[1] : a.dmgText;
+      // Cleave's second swing: the weapon's damage without the ability modifier.
+      const dice = o.cleave ? String(m ? m[1] : a.dmgText).replace(/\+\s*\d+(?!\s*\d*d)/g, '') : (m ? m[1] : a.dmgText);
       const type = (m && m[2] ? m[2] : '').trim().replace(/^damage\s*/i, ''), pp = this._partyOf(c);
       // The sheet's own roller and options, so a hit here lands what the sheet
       // would roll: Rage Damage, Great Weapon Fighting, a crit's extra dice.
@@ -3386,6 +3387,16 @@ registerPanel('turnview', {
     });
     // Savage Attacker: once a turn, the weapon's damage dice rolled again and
     // the better roll used (2014: a melee weapon).
+    // Cleave (a weapon mastery): the same weapon at a second creature within
+    // 5 ft of the first — the one armed on the right — once a turn.
+    if (String(h.mastery || '').toLowerCase() === 'cleave' && weapon && !h.cleave && !once('Cleave')){
+      const t2 = this._order().find(x => x.id === this._armed && x.id !== t.id && x.id !== c.id && (x.hp || 0) > 0 && this._sideOf(x) !== this._sideOf(c));
+      const ft = t2 ? this._feetBetween(t, t2) : null;
+      const near = t2 && (ft == null || ft <= 5);
+      out.push({ key: 'cleave', label: 'Cleave', dice: '', cleave: true, once: true, ok: !!near,
+        why: near ? 'attack ' + t2.name + ' with the ' + h.label + ' — its damage without your ability modifier'
+          : t2 ? t2.name + ' is ' + ft + ' ft from ' + t.name + ' — Cleave needs one within 5 ft' : 'arm a second creature within 5 ft of ' + t.name + ' on the right' });
+    }
     const savage = (sh.featureList || []).some(f => f && f.name === 'Savage Attacker' && !f.info) || (p.feats || []).some(f => /^Savage Attacker$/i.test(String(f && f.name || f)));
     if (savage && h.wDice && h.wSum != null && !once('Savage Attacker') && !(ed === '2014' && h.ranged))
       out.push({ key: 'savage', label: 'Savage Attacker', dice: '', savage: true, type: h.type, once: true, ok: true,
@@ -3573,6 +3584,14 @@ registerPanel('turnview', {
     const o = this._pcExtraOptions(h).find(x => x.key === key); if (!o) return;
     const c = this._order().find(x => x.id === h.atkId), t = this._order().find(x => x.id === h.tgtId), p = this._partyOf(c);
     if (!c || !t || typeof sktDamageRoll !== 'function') return;
+    if (o.cleave){
+      if (!o.ok) return;
+      const t2 = this._order().find(x => x.id === this._armed);
+      const ai = this._attacksFor(c).findIndex(x => x.name === h.label); if (!t2 || ai < 0) return;
+      h.used.push(key); c.onceTurn = Object.assign({}, c.onceTurn, { Cleave: this._turnKey() });
+      this._rollAttack(ai, { attacker: c, target: t2, mode: 0, cleave: true, label: h.label + ' (Cleave)' });
+      return;
+    }
     this._snapshot(`${c.name} · ${o.label} → ${t.name}`);
     if (o.savage){
       const r2 = sktDamageRoll(h.wDice, h.crit, Object.assign({}, typeof csDamageOpts === 'function' && p ? csDamageOpts(p, { name: h.wName, props: h.props || [], spell: false }, false) : {}, { add: [] }));
