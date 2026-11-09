@@ -1666,7 +1666,8 @@ function _sktCondDuration(sen, near, hasDc){
   else if (src) out.dur = { kind: src[1].toLowerCase() + '-next', src: true };
   else if (rds) out.dur = { kind: 'rounds', left: +rds[1] };
   else if (mins && +mins[1] <= 10) out.dur = { kind: 'rounds', left: 10 * +mins[1] };
-  if (hasDc && /\b(?:repeat|repeating) the sav(?:ing throw|e) at the end of each of its turns|\bat the end of each of its turns,? (?:repeating|it (?:can )?repeats?) the sav/i.test(near)) out.repeat = true;
+  // (Hold Person: "At the end of each of its turns, the target can make another Wisdom saving throw")
+  if (hasDc && /\b(?:repeat|repeating) the sav(?:ing throw|e) at the end of each of its turns|\bat the end of each of its turns,? (?:repeating|(?:it|the target|the creature) (?:can )?repeats?) the sav|\bat the end of each of its turns,? (?:the target|it|the creature) can make another (?:[a-z]+ )?saving throw/i.test(near)) out.repeat = true;
   return out;
 }
 // What a FAILED save inflicts, for a save action: "or become Frightened for 1
@@ -1690,6 +1691,9 @@ function sktSaveCondition(desc, saveAt){
     const sen = sentences[k];
     for (const re of res){
       const m = re.exec(sen); if (!m) continue;
+      // "the Blinded or Deafened condition (your choice)": not one to pick for them.
+      if (new RegExp('^\\s*(?:condition\\s+)?or (?:the )?(?:' + C + ')\\b', 'i').test(sen.slice(m.index + m[0].length))
+        || new RegExp('\\b(?:' + C + ')\\s+or\\s+$', 'i').test(sen.slice(0, m.index + m[0].length - m[1].length))) return null;
       const out = { cond: m[1].charAt(0).toUpperCase() + m[1].slice(1).toLowerCase() };
       // (the repeat save can come a sentence later: a ghost's ageing sits between)
       return Object.assign(out, _sktCondDuration(sen, sentences.slice(k, k + 3).join(' '), true));
@@ -1826,7 +1830,22 @@ function sktMonsterSpellRows(raw, R){
     }
     const dms = tags.map(x => x.d).slice(0, types.length);
     tags.forEach((x, i) => { if (x.type) types[i] = x.type; });
-    if (!dms.length) return;
+    // What a failed save inflicts (Hold Person's paralysis), for the spell's
+    // duration when its text says "for the duration".
+    let cond = null;
+    if ((s.savingThrow || []).length && typeof sktSaveCondition === 'function'){
+      const plain = (s.entries || []).map(e => typeof e === 'string' ? e : JSON.stringify(e)).join(' ').replace(/\{@\w+ ([^}|]+)[^}]*\}/g, '$1');
+      // (from the sentence with the save: Web's comes after four about the webs)
+      const at = plain.search(/saving throw/i);
+      cond = sktSaveCondition(plain, at < 0 ? 0 : plain.lastIndexOf('.', at) + 1);
+      const d = (s.duration || [])[0];
+      if (cond && !cond.dur && d && d.type === 'timed' && d.duration){
+        const amt = +d.duration.amount || 1, u = d.duration.type;
+        const rounds = u === 'round' ? amt : u === 'minute' ? amt * 10 : 0;
+        if (rounds && rounds <= 100) cond.dur = { kind: 'rounds', left: rounds };
+      }
+    }
+    if (!dms.length && !cond && s.name !== 'Magic Missile') return;
     const up = Math.max(0, castAt - lvl);
     const scl = /\{@scaledamage [^|]+\|[^|]+\|([^}|]+)/.exec(JSON.stringify(s.higher || s.entriesHigherLevel || []));
     const parts = dms.map((d0, i) => {
@@ -1840,6 +1859,16 @@ function sktMonsterSpellRows(raw, R){
       return { avg: _sktDiceAvg(dice), dice, type: types[i] || types[0] || '' };
     });
     const isAtk = (s.spellAttack || []).length > 0, save = (s.savingThrow || [])[0];
+    // Magic Missile: no roll at all — three darts of 1d4 + 1 force, one more
+    // for each slot level above 1st, every one a hit.
+    if (s.name === 'Magic Missile'){
+      const n = 3 + up;
+      out.push({ name: s.name + (castAt > lvl ? ' (' + ord(castAt) + ' level)' : ''), spellName: s.name, monsterSpell: true, spellLevel: lvl,
+        toHit: 'auto', save: null, parts: [{ avg: _sktDiceAvg(n + 'd4+' + n), dice: n + 'd4+' + n, type: 'force' }], alt: null, altLabel: '', recharge: null,
+        uses: sp.per === 'day' ? sp.n : 0, slotLevel: sp.per === 'slot' ? sp.level : 0, slotMax: sp.per === 'slot' ? sp.n : 0,
+        ranged: true, group: 'spell', spell: true, magical: true, effect: n + ' darts, all to one target here' });
+      return;
+    }
     if (!isAtk && !save) return;
     const ab = save ? save.charAt(0).toUpperCase() + save.slice(1) : '';
     out.push({
@@ -1847,6 +1876,7 @@ function sktMonsterSpellRows(raw, R){
       toHit: isAtk && atk != null ? (atk >= 0 ? '+' : '') + atk : null,
       save: !isAtk && save && sc.dc != null ? { dc: sc.dc, ability: ab, half: /half as much|half damage/i.test(txt) } : null,
       parts, alt: null, altLabel: '', recharge: null,
+      ...(cond && !isAtk ? { cond, effect: parts.length ? '' : sktCondText(cond) } : {}),
       uses: sp.per === 'day' ? sp.n : 0, slotLevel: sp.per === 'slot' ? sp.level : 0, slotMax: sp.per === 'slot' ? sp.n : 0,
       // A spell: Magic Resistance applies to its save, and its damage is magical.
       ranged: /\bR\b/.test((s.spellAttack || []).join(' ')), group: 'spell', spell: true, magical: true,

@@ -34,7 +34,7 @@
  */
 'use strict';
 
-const BUILD = 'eca477d122';
+const BUILD = '597aa53169';
 const PRECACHE = [
   'skt-workspace.html',
   'styles/main.css?v=a09b3a89c0',
@@ -46,7 +46,7 @@ const PRECACHE = [
   'js/generated/token-index.js?v=2840810fc7',
   'js/generated/species-portraits.js?v=56581792b0',
   'js/core/campaign.js?v=171a617f55',
-  'js/core/utils.js?v=d25b85b17c',
+  'js/core/utils.js?v=1b7758d199',
   'js/ui/dice-fx.js?v=1acff2694d',
   'js/core/state.js?v=f7606a5b33',
   'js/core/undo.js?v=63ed223198',

@@ -16958,6 +16958,44 @@ for (const cls of Object.keys(rule)) for (let L = 1; L <= 20; L++) for (const sc
       finally { window.sktD = keepD; T._pending = null; T._tokenFor = keepTok;
         state.party = JSON.parse(keepP); state.combatants = JSON.parse(keepC); state.activeCombatantId = keepA; save(); }
     }
+    // -- Round 250: a monster's spells — Magic Missile always hits; Hold Person paralyzes on a failed save, saving again each turn --
+    if (!PLAYER){
+      const keepC = JSON.stringify(state.combatants), keepA = state.activeCombatantId, keepP = JSON.stringify(state.party);
+      const T = panelDefs.turnview, C = panelDefs.combat, keepD = window.sktD;
+      try {
+        for (let k = 0; k < 100 && !(typeof _5eLoaded !== 'undefined' && _5eLoaded); k++) await sleep(100);
+        await sktRulesLoad('2014'); await sktRulesLoad('2024');
+        const find = (n, src) => _5eData.find(r => r.cat === 'monster' && r.name === n && r._source === src);
+        state.party.push({ id: 'r250a', name: 'Ann', hp: 40, hpMax: 40, ac: 30, rules: '2024', level: 6, sheet: { saves: { wis: 0 } } });
+        state.combatants = [{ id: 'r250a', name: 'Ann', isPC: true, hp: 40, hpMax: 40, ac: 30, initiative: 20, conditions: [] }];
+        C.addMonster(find('Mage', 'MM')); C.addMonster(find('Cult Fanatic', 'MM')); await sleep(20);
+        const get = id => state.combatants.find(c => c.id === id), mgId = state.combatants[1].id, cfId = state.combatants[2].id;
+        save();
+        const mm = T._attacksFor(get(mgId)).find(a => a.spellName === 'Magic Missile');
+        ok('monster spells: the mage’s Magic Missile — three darts, 3d4 + 3 force, no roll', !!mm && mm.toHit === 'auto' && mm.parts[0].dice === '3d4+3' && mm.parts[0].type === 'force', JSON.stringify(mm));
+        state.activeCombatantId = mgId; window.sktD = n => (n === 20 ? 1 : 2); T._pending = null;
+        T._rollAttack(T._attacksFor(get(mgId)).indexOf(mm), { attacker: get(mgId), target: get('r250a'), mode: 0 }); await sleep(20);
+        if (T._pending) T._commit(T._pending, null);
+        ok('monster spells: …against AC 30 on a natural 1 — it still hits: 2+2+2 + 3 = 9', get('r250a').hp === 31, JSON.stringify([get('r250a').hp, T._result]));
+        const hp = T._attacksFor(get(cfId)).find(a => a.spellName === 'Hold Person');
+        ok('monster spells: the fanatic’s Hold Person — DC 11 WIS, paralyzed for 1 minute, saving again each turn, no damage',
+          !!hp && hp.save && hp.save.dc === 11 && /wis/i.test(hp.save.ability) && !hp.parts.length && hp.cond.cond === 'Paralyzed' && hp.cond.dur.left === 10 && hp.cond.repeat && /Paralyzed for 1 minute/.test(hp.effect), JSON.stringify(hp));
+        // Failed: Ann is paralyzed, with the save each turn.
+        state.activeCombatantId = cfId; T._armed = 'r250a'; T._pending = null;
+        T._rollSave(T._attacksFor(get(cfId)).indexOf(hp), false); await sleep(20);
+        if (T._pending) T._commit(T._pending, null);
+        const tm = (get('r250a').condTimers || {}).Paralyzed;
+        ok('monster spells: Hold Person failed — Ann paralyzed, a WIS 11 save at the end of each of her turns', (get('r250a').conditions || []).includes('Paralyzed') && tm && tm.save && tm.save.dc === 11 && tm.save.ab === 'wis' && tm.left === 10, JSON.stringify([get('r250a').conditions, tm]));
+        // The spell text: 2024's "repeats the save"; a choice of conditions isn't one to pick.
+        const row = (ed, n) => sktMonsterSpellRows({ special_abilities: [{ name: 'Spellcasting', desc: 'The mage is a 9th-level spellcaster. Its spellcasting ability is Intelligence (spell save DC 14, +6 to hit with spell attacks). The mage has the following wizard spells prepared:\n\u00042nd level (3 slots)\u0004 ' + n }], challenge_rating: '6' }, _sktRulesReady[ed]).find(x => x.spellName === n);
+        const hp24 = row('2024', 'Hold Person');
+        ok('monster spells: 2024 Hold Person — “the target repeats the save”, read as a repeat', !!hp24 && hp24.cond && hp24.cond.repeat === true, JSON.stringify(hp24 && hp24.cond));
+        ok('monster spells: Blindness/Deafness — blinded or deafened is the caster’s choice: no row to guess at', !row('2024', 'Blindness/Deafness'));
+        ok('monster spells: Web — restrained', (row('2014', 'Web') || {}).cond?.cond === 'Restrained');
+      } catch(e){ ok('round 250 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
+      finally { window.sktD = keepD; T._pending = null;
+        state.party = JSON.parse(keepP); state.combatants = JSON.parse(keepC); state.activeCombatantId = keepA; save(); }
+    }
     // -- Class features: represented, not just text ------------------------
     {
       try {
