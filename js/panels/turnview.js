@@ -301,6 +301,14 @@ registerPanel('turnview', {
       T.spells.forEach(sp => {
         if (known.includes(sp.name.toLowerCase())) out.push({ ...sp, from:'spell', scope:'self' });
       });
+      // A Valor bard's die, held: Combat Inspiration — hit by an attack, roll
+      // it and add it to AC against that attack (2014 and 2024 alike).
+      const giver = p.bardicInspiration && p.bardicFrom ? (state.party || []).find(b => b.name === p.bardicFrom && b.id !== p.id) : null;
+      if (giver && /valor/i.test(String(giver.subclass || ''))){
+        const die = typeof p.bardicInspiration === 'string' ? p.bardicInspiration.replace(/^1?d/, 'd') : 'd6';
+        out.push({ name: 'Combat Inspiration', from: 'bardic', scope: 'self', range: null, when: 'tohit', acDie: parseInt(die.slice(1), 10) || 6,
+          note: 'When an attack hits you, roll the Bardic Inspiration die ' + giver.name + ' gave you (' + die + ') and add it to your AC against that attack.' });
+      }
       out.forEach(r => { r._lvl = lvl; });
     } else {
       // A monster's reactions are printed in its stat block, so they are read
@@ -2302,6 +2310,7 @@ registerPanel('turnview', {
       if (r.when === 'damage' && r.halve) preview = ` → ${Math.floor(o.dmg / 2)}`;
       if (r.when === 'damage' && r.reduce) preview = ` −${r.reduce[0]}d${r.reduce[1]}`;
       if (r.when === 'tohit' && r.ac)     preview = ` AC +${r.ac}`;
+      if (r.when === 'tohit' && r.acDie)  preview = ` AC +d${r.acDie}`;
       if (r.when === 'tohit' && r.die)    preview = ` −d${r.die}`;
       if (r.when === 'tohit' && r.disadv) preview = ' disadv';
       if (r.when === 'tohit' && r.reroll) preview = ' reroll';
@@ -2471,6 +2480,7 @@ registerPanel('turnview', {
         preview: r.when === 'damage' && r.halve ? `${o.dmg} → ${Math.floor(o.dmg / 2)}`
                : r.when === 'damage' && r.reduce ? `−${r.reduce[0]}d${r.reduce[1]}`
                : r.when === 'tohit' && r.ac ? `AC +${r.ac}`
+               : r.when === 'tohit' && r.acDie ? `AC +d${r.acDie}`
                : r.when === 'tohit' && r.disadv ? 'disadvantage'
                : r.when === 'tohit' && r.reroll ? 'reroll'
                : r.when === 'tohit' && r.die ? `−d${r.die}` : '',
@@ -2673,7 +2683,11 @@ registerPanel('turnview', {
       // A to-hit reaction can turn a hit into a miss, so the roll is always
       // re-tested against AC rather than assumed still to land.
       let desc;
-      if (r.ac != null){
+      if (r.acDie){
+        const n = this._d(r.acDie), hp = this._partyOf(who);
+        o.acBonus = (o.acBonus || 0) + n; desc = `${by}, AC +${n} (d${r.acDie})`;
+        if (hp){ hp.bardicInspiration = false; hp.bardicFrom = null; }
+      } else if (r.ac != null){
         o.acBonus = (o.acBonus || 0) + r.ac; desc = `${by}, AC +${r.ac}`;
       } else if (r.disadv || r.reroll){
         // Nothing to reroll on a hand-entered total — the DM typed a number,
@@ -2686,7 +2700,9 @@ registerPanel('turnview', {
         o.total = keep + (o.bonus || 0);
         o.crit = keep === 20;
       } else {
-        const sub = r.pb ? this._pb(r._lvl || (this._partyOf(who) || {}).level) : this._d(r.die);
+        // Cutting Words rolls the bard's own die: a d6 to 4th level, d8, d10, d12.
+        const bd = r.name === 'Cutting Words' && typeof sktBardicDie === 'function' && this._partyOf(who) ? parseInt(String(sktBardicDie(this._partyOf(who))).slice(1), 10) : 0;
+        const sub = r.pb ? this._pb(r._lvl || (this._partyOf(who) || {}).level) : this._d(bd || r.die);
         o.total -= sub; desc = `${by}, −${sub}`;
       }
       const ac = (o.target.ac || 0) + (o.acBonus || 0);

@@ -16493,6 +16493,64 @@ for (const cls of Object.keys(rule)) for (let L = 1; L <= 20; L++) for (const sc
       finally { window.sktD = keepD; T._onHits = []; document.getElementById('area-save-back')?.remove(); C._condSaves = []; C._renderCondSaves?.();
         state.party = JSON.parse(keepP); state.combatants = JSON.parse(keepC); state.activeCombatantId = keepA; save(); }
     }
+    // -- Round 239: a Valor bard's die answers a hit — Combat Inspiration adds it to AC; Cutting Words rolls the bard's own die --
+    if (!PLAYER){
+      const keepC = JSON.stringify(state.combatants), keepA = state.activeCombatantId, keepP = JSON.stringify(state.party);
+      const T = panelDefs.turnview, C = panelDefs.combat, keepD = window.sktD;
+      try {
+        for (let k = 0; k < 100 && !(typeof _5eLoaded !== 'undefined' && _5eLoaded); k++) await sleep(100);
+        const find = (n, src) => _5eData.find(r => r.cat === 'monster' && r.name === n && r._source === src);
+        state.party.push({ id: 'r239b', name: 'Zin', cls: 'bard', subclass: 'Valor', level: 6, rules: '2024', hp: 40, hpMax: 40, ac: 14,
+          resources: [{ name: 'Bardic Inspiration', current: 3, max: 4, die: 'd8' }], sheet: {} });
+        state.party.push({ id: 'r239z', name: 'Zo', cls: 'rogue', level: 6, rules: '2024', hp: 40, hpMax: 40, ac: 15, bardicInspiration: 'd8', bardicFrom: 'Zin', sheet: {} });
+        state.party.push({ id: 'r239l', name: 'Lor', cls: 'bard', subclass: 'Lore', level: 3, rules: '2024', hp: 30, hpMax: 30, ac: 13,
+          resources: [{ name: 'Bardic Inspiration', current: 3, max: 3 }], sheet: {} });
+        state.combatants = [{ id: 'r239b', name: 'Zin', isPC: true, hp: 40, hpMax: 40, ac: 14, initiative: 20, conditions: [] },
+                            { id: 'r239z', name: 'Zo', isPC: true, hp: 40, hpMax: 40, ac: 15, initiative: 19, conditions: [] },
+                            { id: 'r239l', name: 'Lor', isPC: true, hp: 30, hpMax: 30, ac: 13, initiative: 18, conditions: [] }];
+        C.addMonster(find('Ogre', 'MM')); await sleep(20);
+        const get = id => state.combatants.find(c => c.id === id), ogId = state.combatants[3].id, og = () => get(ogId), pz = () => state.party.find(p => p.id === 'r239z');
+        state.activeCombatantId = ogId; save();
+        if (!T._body){ openPanel('turnview'); await sleep(200); }
+        const club = T._attacksFor(og()).findIndex(a => /Greatclub/.test(a.name));
+        const swing = (tgt, d20) => { window.sktD = n => (n === 20 ? d20 : 3); T._pending = null; T._rollAttack(club, { attacker: og(), target: get(tgt), mode: 0 }); };
+        const offer = (name, whoId) => T._pending ? T._gatherReactions(T._pending).find(x => x.r.name === name && (!whoId || x.who.id === whoId)) : null;
+        // 10 + 6 = 16 vs Zo's AC 15: a hit; she holds Zin's d8.
+        swing('r239z', 10);
+        const ci = offer('Combat Inspiration', 'r239z');
+        ok('combat inspiration: the ogre’s 16 hits Zo — she can roll Zin’s d8 onto her AC', !!ci && ci.r.acDie === 8 && !ci.problem, JSON.stringify(ci && ci.r));
+        T._painted = {}; T._render(); await sleep(20);
+        const btn = document.querySelector('[data-tv="react"][data-key="Combat Inspiration"]');
+        ok('combat inspiration: drawn — “AC +d8”', !!btn && /AC \+d8/.test(btn.textContent), btn && btn.textContent);
+        window.sktD = n => 3;
+        const hp0 = get('r239z').hp;
+        T._useReaction('r239z', 'Combat Inspiration'); await sleep(20);
+        ok('combat inspiration: +3 — AC 18, the 16 misses; her die and her Reaction are spent',
+          get('r239z').hp === hp0 && !T._pending && /Miss/.test(T._result) && pz().bardicInspiration === false && !pz().bardicFrom && get('r239z').reactionUsed === true,
+          JSON.stringify([get('r239z').hp, T._result, pz().bardicInspiration, get('r239z').reactionUsed]));
+        // A roll it can't beat: 18 vs 15+1 — it still hits.
+        get('r239z').reactionUsed = false; pz().bardicInspiration = 'd8'; pz().bardicFrom = 'Zin';
+        swing('r239z', 12);
+        window.sktD = n => 1;
+        T._useReaction('r239z', 'Combat Inspiration'); await sleep(20);
+        ok('combat inspiration: +1 — AC 16, the 18 still hits', get('r239z').hp < hp0 && pz().bardicInspiration === false, JSON.stringify([get('r239z').hp, T._result]));
+        // A die from a Lore bard: no Combat Inspiration.
+        get('r239z').reactionUsed = false; pz().bardicInspiration = 'd6'; pz().bardicFrom = 'Lor';
+        swing('r239z', 10);
+        ok('combat inspiration: a Lore bard’s die — not offered', !offer('Combat Inspiration'), JSON.stringify(T._pending && T._gatherReactions(T._pending).map(x => x.r.name)));
+        T._pending = null;
+        // Cutting Words: Lor (3rd level) rolls a d6, not a d8.
+        state.party.find(p => p.id === 'r239l').subclass = 'Lore';
+        swing('r239b', 12);   // 18 vs Zin's AC 14
+        const cw = offer('Cutting Words', 'r239l');
+        ok('cutting words: Lor can answer the hit on Zin', !!cw, JSON.stringify(T._pending && T._gatherReactions(T._pending).map(x => x.who.name + ':' + x.r.name)));
+        const sides = []; window.sktD = n => { sides.push(n); return n; };
+        if (cw) T._useReaction('r239l', 'Cutting Words');
+        ok('cutting words: a 3rd-level bard’s d6 — 18 − 6 = 12, a miss', sides.includes(6) && !sides.includes(8) && /Miss/.test(T._result), JSON.stringify([sides, T._result]));
+      } catch(e){ ok('round 239 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
+      finally { window.sktD = keepD; T._pending = null;
+        state.party = JSON.parse(keepP); state.combatants = JSON.parse(keepC); state.activeCombatantId = keepA; save(); }
+    }
     // -- Class features: represented, not just text ------------------------
     {
       try {
