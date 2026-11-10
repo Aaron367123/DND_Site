@@ -17336,6 +17336,51 @@ for (const cls of Object.keys(rule)) for (let L = 1; L <= 20; L++) for (const sc
       finally { window.sktD = keepD; T._pending = null; T._lastPcHit = null;
         state.party = JSON.parse(keepP); state.combatants = JSON.parse(keepC); state.activeCombatantId = keepA; save(); }
     }
+    // -- Round 259: Push (a weapon mastery) — after a hit, the token moved 10 ft straight away on the map; not a Huge one --
+    if (!PLAYER){
+      const keepC = JSON.stringify(state.combatants), keepA = state.activeCombatantId, keepP = JSON.stringify(state.party);
+      const T = panelDefs.turnview, C = panelDefs.combat, keepD = window.sktD; let keepMap = null;
+      try {
+        for (let k = 0; k < 100 && !(typeof _5eLoaded !== 'undefined' && _5eLoaded); k++) await sleep(100);
+        const find = (n, src) => _5eData.find(r => r.cat === 'monster' && r.name === n && r._source === src);
+        state.party.push({ id: 'r259w', name: 'Will', hp: 50, hpMax: 50, ac: 18, rules: '2024', level: 6,
+          sheet: { profBonus: 3, attacks: [{ name: 'Warhammer', atkBonus: '+7', damage: '1d8+4 bludgeoning', props: ['V'], mastery: 'Push' }] } });
+        state.combatants = [{ id: 'r259w', name: 'Will', isPC: true, hp: 50, hpMax: 50, ac: 18, initiative: 20, conditions: [] }];
+        C.addMonster(find('Goblin', 'MM')); C.addMonster(find('Hill Giant', 'MM')); await sleep(20);
+        const get = id => state.combatants.find(c => c.id === id), gbId = state.combatants[1].id, hgId = state.combatants[2].id;
+        state.combatants.forEach(c => { if (!c.isPC){ c.hp = 300; c.hpMax = 300; c.ac = 5; } });
+        state.activeCombatantId = 'r259w'; save();
+        openPanel('battlemap'); await sleep(500);
+        const B = panelDefs.battlemap;
+        keepMap = localStorage.getItem('skt-battlemap-v1');
+        sktEnsureCombatTokens(true); await sleep(100);
+        const cs = B._csScreen(), cell = (col, row, size) => ({ x: (col + (size || 1) / 2) * cs, y: (row + (size || 1) / 2) * cs });
+        const tok = id => sktTokenForCombatant(B._tokens, get(id));
+        // Will at (2,2), the goblin beside him at (3,2), the giant far off.
+        Object.assign(tok('r259w'), cell(2, 2)); Object.assign(tok(gbId), cell(3, 2)); Object.assign(tok(hgId), cell(10, 10, 3));
+        B._saveMap(); B._renderTokens(); T._mapCache = null;
+        const opt = () => T._lastPcHit ? T._pcExtraOptions(T._lastPcHit).find(o => o.key === 'push') : null;
+        window.sktD = n => (n === 20 ? 15 : 3); T._pending = null;
+        T._rollAttack(0, { attacker: get('r259w'), target: get(gbId), mode: 0 }); T._mapCache = null;
+        ok('push: a warhammer hit on the goblin — Push 10 ft offered', !!opt() && opt().ok, JSON.stringify(opt()));
+        T._usePcExtra('push'); await sleep(30);
+        const g = tok(gbId);
+        ok('push: the goblin’s token is 10 ft further away — two squares on, in line', Math.abs(g.x - cell(5, 2).x) < 1 && Math.abs(g.y - cell(5, 2).y) < 1 && /moved 10 ft away/.test(T._result), JSON.stringify([g.x, g.y, cell(5, 2), T._result]));
+        ok('push: used — not offered again for this hit', !opt());
+        // A hill giant is Huge: too big.
+        T._rollAttack(0, { attacker: get('r259w'), target: get(hgId), mode: 0 }); T._mapCache = null;
+        ok('push: a Huge hill giant — too big', !!opt() && !opt().ok && /too big to push/.test(opt().why), JSON.stringify(opt()));
+        // Diagonal, in an empty corner: Will at (14,8), the goblin at (15,9) — pushed to (17,11).
+        Object.assign(tok('r259w'), cell(14, 8)); Object.assign(tok(gbId), cell(15, 9)); B._saveMap(); B._renderTokens(); T._mapCache = null;
+        T._rollAttack(0, { attacker: get('r259w'), target: get(gbId), mode: 0 }); T._mapCache = null;
+        T._usePcExtra('push'); await sleep(30);
+        ok('push: diagonally — two squares on the diagonal', Math.abs(tok(gbId).x - cell(17, 11).x) < 1 && Math.abs(tok(gbId).y - cell(17, 11).y) < 1, JSON.stringify([tok(gbId).x, tok(gbId).y, cell(17, 11), B._tokens.filter(t => t.x != null && Math.abs(t.x - cell(17, 11).x) < 60 && Math.abs(t.y - cell(17, 11).y) < 60).map(t => t.label)]));
+      } catch(e){ ok('round 259 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
+      finally { window.sktD = keepD; T._pending = null; T._lastPcHit = null; T._mapCache = null;
+        state.party = JSON.parse(keepP); state.combatants = JSON.parse(keepC); state.activeCombatantId = keepA; save();
+        // the map as it was (its tokens' places), then the tokens for the restored fight
+        try { if (keepMap != null && panelDefs.battlemap.applyMapState){ panelDefs.battlemap.applyMapState(JSON.parse(keepMap), { source: 'test' }); } sktEnsureCombatTokens(true); } catch(e){} }
+    }
     // -- Class features: represented, not just text ------------------------
     {
       try {

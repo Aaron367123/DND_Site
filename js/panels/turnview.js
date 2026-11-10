@@ -3392,6 +3392,16 @@ registerPanel('turnview', {
     });
     // Savage Attacker: once a turn, the weapon's damage dice rolled again and
     // the better roll used (2014: a melee weapon).
+    // Push (a weapon mastery): a Large or smaller creature 10 ft straight away —
+    // the token moved on the map, when both are on it.
+    if (String(h.mastery || '').toLowerCase() === 'push' && weapon){
+      const SZ = ['tiny', 'small', 'medium', 'large', 'huge', 'gargantuan'];
+      const tSize = String(t.isPC ? (((this._partyOf(t) || {}).sheet || {}).size || 'Medium') : ((((this._entryOf(t) || {})._raw) || {}).size || t.size || 'Medium')).toLowerCase().split(/\s/)[0];
+      const B = this._bm(), tt = this._tokenFor(t), ct = this._tokenFor(c);
+      const big = SZ.indexOf(tSize) > SZ.indexOf('large');
+      out.push({ key: 'push', label: 'Push 10 ft', dice: '', push: true, ok: !big && !!(B && B._body && tt && ct),
+        why: big ? t.name + ' is ' + tSize + ' — too big to push' : !(B && B._body && tt && ct) ? 'move ' + t.name + ' 10 ft away yourself (its token and yours on the open map, and this does it)' : 'move ' + t.name + ' 10 ft straight away from you' });
+    }
     // Cleave (a weapon mastery): the same weapon at a second creature within
     // 5 ft of the first — the one armed on the right — once a turn.
     if (String(h.mastery || '').toLowerCase() === 'cleave' && weapon && !h.cleave && !once('Cleave')){
@@ -3589,6 +3599,15 @@ registerPanel('turnview', {
     const o = this._pcExtraOptions(h).find(x => x.key === key); if (!o) return;
     const c = this._order().find(x => x.id === h.atkId), t = this._order().find(x => x.id === h.tgtId), p = this._partyOf(c);
     if (!c || !t || typeof sktDamageRoll !== 'function') return;
+    if (o.push){
+      if (!o.ok) return;
+      const B = this._bm(), tt = this._tokenFor(t), ct = this._tokenFor(c);
+      const ft = B && tt && ct ? B.pushToken(tt.id, { x: ct.x, y: ct.y }, 10) : 0;
+      h.used.push(key);
+      const txt = `<strong>${esc(c.name)}</strong> — Push: <strong>${esc(t.name)}</strong> ${ft ? 'moved ' + ft + ' ft away' : 'couldn’t be moved (no room)'}`;
+      this._setResult(txt, true); this._log.unshift(txt); this._render();
+      return;
+    }
     if (o.cleave){
       if (!o.ok) return;
       const t2 = this._order().find(x => x.id === this._armed);

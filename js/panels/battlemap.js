@@ -1994,6 +1994,25 @@ registerPanel('battlemap',{
   // A body (a dead token) and a Tiny creature can share a square, as in the
   // rules; the DM can stack on purpose (a mount, a swarm, a grapple) by
   // holding Alt. (x, y) is already snapped and clamped; so is the answer.
+  // Forced movement (a weapon's Push): token `id` moved `ft` feet straight
+  // away from point `from`, square by square as the grid counts them, onto a
+  // free cell. Not the creature moving, so nothing provokes. → feet moved.
+  pushToken(id, from, ft){
+    const t = (this._tokens || []).find(x => x && x.id === id);
+    if (!t || !from || t.x == null) return 0;
+    const cs = this._csScreen(), per = +this._ftPerCell || 5, size = t.size || 1;
+    const dx = t.x - from.x, dy = t.y - from.y, m = Math.max(Math.abs(dx), Math.abs(dy));
+    if (!m) return 0;
+    const step = (ft / per) * cs, ox = t.x, oy = t.y;
+    let nx = t.x + dx / m * step, ny = t.y + dy / m * step;
+    nx = Math.round(nx / cs - size / 2) * cs + size * cs / 2;
+    ny = Math.round(ny / cs - size / 2) * cs + size * cs / 2;
+    const half = size * this._tokenUnitScreen() / 2, W = this._cols * cs, H = this._rows * cs;
+    const land = this._landing(t, Math.max(half, Math.min(W - half, nx)), Math.max(half, Math.min(H - half, ny)), { x: ox, y: oy }, false);
+    t.x = land.x; t.y = land.y;
+    this._saveMap(); this._renderTokens();
+    return Math.round(Math.max(Math.abs(t.x - ox), Math.abs(t.y - oy)) / cs) * per;
+  },
   _landing(t, x, y, from, stack){
     const unit = this._tokenUnitScreen(), cs = this._csScreen(), size = t.size || 1;
     const stageW = this._cols * cs, stageH = this._rows * cs, half = size * unit / 2;
