@@ -17606,6 +17606,8 @@ for (const cls of Object.keys(rule)) for (let L = 1; L <= 20; L++) for (const sc
         const B = panelDefs.battlemap; keepMap = localStorage.getItem('skt-battlemap-v1');
         sktEnsureCombatTokens(true); await sleep(100);
         const zt = sktTokenForCombatant(B._tokens, get('r266z')), mt = sktTokenForCombatant(B._tokens, og());
+        // Only this fight's tokens on the board (the map is restored after): earlier rounds leave theirs about.
+        { const mine = new Set([zt, mt]); B._tokens.forEach(t => { if (!mine.has(t)){ t.x = null; t.y = null; } }); }
         Object.assign(zt, { x: 600, y: 400 }); Object.assign(mt, { x: 200, y: 200 }); delete zt.mv; delete mt.mv;
         B._renderTokens(); await sleep(20);
         // A real drag of the ogre's token, as the mouse does it.
@@ -17902,6 +17904,8 @@ for (const cls of Object.keys(rule)) for (let L = 1; L <= 20; L++) for (const sc
         const B = panelDefs.battlemap; keepMap = localStorage.getItem('skt-battlemap-v1');
         sktEnsureCombatTokens(true); await sleep(100);
         const zt = sktTokenForCombatant(B._tokens, get('r270z')), mt = sktTokenForCombatant(B._tokens, og());
+        // Only this fight's tokens on the board (the map is restored after): earlier rounds leave theirs about.
+        { const mine = new Set([zt, mt]); B._tokens.forEach(t => { if (!mine.has(t)){ t.x = null; t.y = null; } }); }
         Object.assign(zt, { x: 600, y: 400 }); Object.assign(mt, { x: 200, y: 200 }); delete zt.mv; delete mt.mv;
         B._renderTokens(); await sleep(20);
         const drag = async (tok, dx, dy) => {
@@ -17989,6 +17993,8 @@ for (const cls of Object.keys(rule)) for (let L = 1; L <= 20; L++) for (const sc
         sktEnsureCombatTokens(true); await sleep(100);
         const zt = sktTokenForCombatant(B._tokens, zo()), mt = sktTokenForCombatant(B._tokens, og());
         const gt = sktTokenForCombatant(B._tokens, get(gbId)), rt = sktTokenForCombatant(B._tokens, get(raId));
+        // Only this fight's tokens on the board (the map is restored after): earlier rounds leave theirs about.
+        { const mine = new Set([zt, mt, gt, rt]); B._tokens.forEach(t => { if (!mine.has(t)){ t.x = null; t.y = null; } }); }
         Object.assign(mt, { x: 200, y: 200 }); Object.assign(zt, { x: 300, y: 200 }); Object.assign(gt, { x: 600, y: 500 }); Object.assign(rt, { x: 700, y: 500 });
         [zt, mt, gt, rt].forEach(t => delete t.mv);
         B._renderTokens(); await sleep(20);
