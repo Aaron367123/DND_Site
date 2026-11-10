@@ -17384,6 +17384,31 @@ for (const cls of Object.keys(rule)) for (let L = 1; L <= 20; L++) for (const sc
         // the map as it was (its tokens' places), then the tokens for the restored fight
         try { if (keepMap != null && panelDefs.battlemap.applyMapState){ panelDefs.battlemap.applyMapState(JSON.parse(keepMap), { source: 'test' }); } sktEnsureCombatTokens(true); } catch(e){} }
     }
+    // -- Round 260: a character's flat damage (an Unarmed Strike's 1 + Strength) lands; a chain of dice keeps its type --
+    if (!PLAYER){
+      const keepC = JSON.stringify(state.combatants), keepA = state.activeCombatantId, keepP = JSON.stringify(state.party);
+      const T = panelDefs.turnview, C = panelDefs.combat, keepD = window.sktD;
+      try {
+        for (let k = 0; k < 100 && !(typeof _5eLoaded !== 'undefined' && _5eLoaded); k++) await sleep(100);
+        const find = (n, src) => _5eData.find(r => r.cat === 'monster' && r.name === n && r._source === src);
+        state.party.push({ id: 'r260u', name: 'Ulf', hp: 60, hpMax: 60, ac: 14, rules: '2024', level: 6,
+          sheet: { attacks: [{ name: 'Unarmed Strike', atkBonus: '+6', damage: '4 bludgeoning', props: [], str: true },
+                             { name: 'Flame Axe', atkBonus: '+6', damage: '2d6+1d4+3 slashing', props: [], str: true }] } });
+        state.combatants = [{ id: 'r260u', name: 'Ulf', isPC: true, hp: 60, hpMax: 60, ac: 14, initiative: 20, conditions: [] }];
+        C.addMonster(find('Ogre', 'MM')); await sleep(20);
+        const get = id => state.combatants.find(c => c.id === id), ogId = state.combatants[1].id, og = () => get(ogId);
+        Object.assign(og(), { hp: 300, hpMax: 300, ac: 5 });
+        state.activeCombatantId = 'r260u'; save();
+        const hit = (name, d20) => { window.sktD = n => (n === 20 ? d20 : 1); T._pending = null; const hp = og().hp;
+          T._rollAttack(T._attacksFor(get('r260u')).findIndex(a => a.name === name), { attacker: get('r260u'), target: og(), mode: 0 }); if (T._pending) T._commit(T._pending, null); return hp - og().hp; };
+        ok('flat damage: an Unarmed Strike of 4 bludgeoning — 4 lands (it was 0)', hit('Unarmed Strike', 15) === 4 && /4 bludgeoning/.test(T._result), JSON.stringify(T._result));
+        ok('flat damage: …a critical has no dice to double — still 4', hit('Unarmed Strike', 20) === 4);
+        ok('flat damage: 2d6 + 1d4 + 3 slashing — 1+1+1+3 = 6, and its type is slashing', hit('Flame Axe', 15) === 6 && /6 slashing/.test(T._result), JSON.stringify(T._result));
+        ok('flat damage: Savage Attacker has no dice to reroll on a flat hit', (() => { hit('Unarmed Strike', 15); return !T._lastPcHit.wDice; })());
+      } catch(e){ ok('round 260 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
+      finally { window.sktD = keepD; T._pending = null; T._lastPcHit = null;
+        state.party = JSON.parse(keepP); state.combatants = JSON.parse(keepC); state.activeCombatantId = keepA; save(); }
+    }
     // -- Class features: represented, not just text ------------------------
     {
       try {

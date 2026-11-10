@@ -2875,16 +2875,18 @@ registerPanel('turnview', {
     const dbl = d => String(d).replace(/^(\d*)d/, (s, n) => (2 * (parseInt(n || '1'))) + 'd');
     if (a.pc){
       // "1d8+3 slashing" off the imported sheet.
-      const m = String(a.dmgText).match(/(\d*d\d+(?:\s*[+-]\s*\d+)?)\s*(.*)/i);
+      // Any sum of dice and numbers — "2d6+1d4+3", and a flat "1" (an Unarmed
+      // Strike's 1 + Strength), which came out as 0 when only dice were read.
+      const m = String(a.dmgText).match(/^\s*((?:\d*d\d+|\d+)(?:\s*[+-]\s*(?:\d*d\d+|\d+))*)\s*(.*)$/i);
       // Cleave's second swing: the weapon's damage without the ability modifier.
       const dice = o.cleave ? String(m ? m[1] : a.dmgText).replace(/\+\s*\d+(?!\s*\d*d)/g, '') : (m ? m[1] : a.dmgText);
       const type = (m && m[2] ? m[2] : '').trim().replace(/^damage\s*/i, ''), pp = this._partyOf(c);
       // The sheet's own roller and options, so a hit here lands what the sheet
       // would roll: Rage Damage, Great Weapon Fighting, a crit's extra dice.
-      if (pp && typeof sktDamageRoll === 'function' && typeof csDamageOpts === 'function' && /\d*d\d+/.test(dice)){
+      if (pp && typeof sktDamageRoll === 'function' && typeof csDamageOpts === 'function' && /\d/.test(dice)){
         const r = sktDamageRoll(dice, crit, csDamageOpts(pp, a, false));
         parts = [{ amt: r.total, type }]; detail = r.detail;
-        if (!a.spell){ wDice = dice; wSum = r.dice; }
+        if (!a.spell && /\d*d\d+/.test(dice)){ wDice = dice; wSum = r.dice; }
       } else {
         const r = this._roll(crit ? dbl(dice) : dice);
         parts = [{ amt: r.total, type }];
