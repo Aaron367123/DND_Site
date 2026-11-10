@@ -17570,6 +17570,25 @@ for (const cls of Object.keys(rule)) for (let L = 1; L <= 20; L++) for (const sc
       finally { window.sktD = keepD; T._pending = null;
         state.party = JSON.parse(keepP); state.combatants = JSON.parse(keepC); state.activeCombatantId = keepA; save(); try { sktEnsureCombatTokens(true); } catch(e){} }
     }
+    // -- Round 265: the map's grid is drawn once per piece of work, not once per call — and still drawn --
+    if (!PLAYER){
+      try {
+        openPanel('battlemap'); await sleep(400);
+        const B = panelDefs.battlemap;
+        let n = 0; const keep = B._drawGridNow; B._drawGridNow = function(...a){ n++; return keep.apply(this, a); };
+        const canvas = B._body.querySelector('canvas');
+        B._drawGrid(canvas, B._csScreen()); B._drawGrid(canvas, B._csScreen()); B._drawGrid(canvas, B._csScreen());
+        ok('grid: three calls in a row — none drawn yet (it waits for the end of the work)', n === 0);
+        await sleep(0);
+        ok('grid: …then drawn once', n === 1, String(n));
+        // A setting change redraws it (the grid's own path).
+        n = 0;
+        if (typeof B._setupMap === 'function') B._setupMap();
+        await sleep(20);
+        ok('grid: setting the map up again — drawn once, and the canvas is sized to the map', n === 1 && canvas && canvas.width > 0, JSON.stringify([n, canvas && canvas.width]));
+        B._drawGridNow = keep;
+      } catch(e){ ok('round 265 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
+    }
     // -- Class features: represented, not just text ------------------------
     {
       try {

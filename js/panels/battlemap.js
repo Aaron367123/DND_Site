@@ -4847,7 +4847,18 @@ registerPanel('battlemap',{
     }
   },
 
-  _drawGrid(canvas,cs){
+  // Drawn once for however many calls one piece of work makes — mounting the
+  // map called this seven times, ~26 ms each (most of 200 ms on a phone's
+  // switch to the Map tab). The draw runs before the next paint, with the
+  // last call's canvas and cell size.
+  _drawGrid(canvas, cs){
+    this._gridPend = { canvas, cs };
+    if (this._gridQueued) return;
+    this._gridQueued = true;
+    const run = () => { this._gridQueued = false; const p = this._gridPend; this._gridPend = null; if (p && p.canvas) this._drawGridNow(p.canvas, p.cs); };
+    if (typeof queueMicrotask === 'function') queueMicrotask(run); else Promise.resolve().then(run);
+  },
+  _drawGridNow(canvas,cs){
     const W=this._cols*cs, H=this._rows*cs;
     // Sizes the backing store (at k× for sharpness — see _sizeLayer) and
     // returns a context pre-scaled by k, so everything below stays in stage
