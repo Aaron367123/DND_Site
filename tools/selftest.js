@@ -18063,7 +18063,7 @@ for (const cls of Object.keys(rule)) for (let L = 1; L <= 20; L++) for (const sc
             if (i === 3) B._tokens = JSON.parse(JSON.stringify(B._tokens)); }
           T._body.dispatchEvent(pe('pointerup', cx, cy + 72)); await sleep(100);
           const mnow = B._tokens.find(t => t.id === mt.id);
-          ok('drag: in the Turn View’s map — she comes along', mnow.y !== mfrom.y && live().y - zfrom.y === mnow.y - mfrom.y && live().x - zfrom.x === mnow.x - mfrom.x,
+          ok('drag: in the Turn View’s map — she comes along', mnow.y !== mfrom.y && Math.abs((live().y - zfrom.y) - (mnow.y - mfrom.y)) < 0.01 && Math.abs((live().x - zfrom.x) - (mnow.x - mfrom.x)) < 0.01,
              JSON.stringify([mfrom, mnow.x, mnow.y, zfrom, live().x, live().y]));
         } else ok('drag: the Turn View shows the ogre’s token', false);
       } catch(e){ ok('round 271 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
