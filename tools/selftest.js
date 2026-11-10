@@ -17182,17 +17182,20 @@ for (const cls of Object.keys(rule)) for (let L = 1; L <= 20; L++) for (const sc
         window.sktD = n => (n === 20 ? 15 : 3);
         T._rollAttack(0, { attacker: get('r254u'), target: get(o1), mode: 0 });
         ok('cleave: a greataxe hit — Cleave offered, waiting for a second creature to be armed', !!opt() && !opt().ok && /arm a second creature/.test(opt().why), JSON.stringify(opt()));
+        // (on the map: side by side, then 20 ft apart)
+        const near = { [o1]: { x: 50, y: 50, size: 2 }, [o2]: { x: 150, y: 50, size: 2 }, r254u: { x: 0, y: 0, size: 1 } };
+        const far = { [o1]: { x: 50, y: 50, size: 2 }, [o2]: { x: 300, y: 50, size: 2 }, r254u: { x: 0, y: 0, size: 1 } };
+        T._tokenFor = c => near[c.id] || null;
         T._armed = o2;
-        ok('cleave: the second ogre armed — Cleave ready', !!opt() && opt().ok, JSON.stringify(opt()));
-        // Too far: 20 ft between them.
-        const pos = { [o1]: { x: 50, y: 50, size: 2 }, [o2]: { x: 300, y: 50, size: 2 }, r254u: { x: 0, y: 0, size: 1 } };
-        T._tokenFor = c => pos[c.id] || null;
+        ok('cleave: the second ogre armed, beside the first — Cleave ready', !!opt() && opt().ok, JSON.stringify(opt()));
+        T._tokenFor = c => far[c.id] || null;
         ok('cleave: …not if it’s 20 ft from the first', !!opt() && !opt().ok && /Cleave needs one within 5 ft/.test(opt().why), JSON.stringify(opt()));
-        T._tokenFor = keepTok;
+        T._tokenFor = c => near[c.id] || null;
         // The swing: 3 slashing, no +3 (the rage-free, modifier-free weapon damage).
         const hp2 = get(o2).hp;
         T._usePcExtra('cleave'); await sleep(20);
         if (T._pending) T._commit(T._pending, null);
+        T._tokenFor = keepTok;
         ok('cleave: the second ogre is hit for 3 — the d12, no ability modifier', hp2 - get(o2).hp === 3 && /Cleave/.test(T._result), JSON.stringify([hp2 - get(o2).hp, T._result]));
         // Once a turn.
         T._armed = o2;
@@ -17220,6 +17223,16 @@ for (const cls of Object.keys(rule)) for (let L = 1; L <= 20; L++) for (const sc
         ok('token conditions: two — "Stunned +1", both on hover', !!badge() && badge().textContent === 'Stunned +1' && badge().title === 'Stunned, Frightened', JSON.stringify([badge() && badge().textContent, badge() && badge().title]));
         c0.conditions = []; save(); sktEnsureCombatTokens(); await sleep(100);
         ok('token conditions: none left — no badge, nothing on the token', !badge() && !tokOf().conds);
+        // Undo takes back the condition — not just the badge it put on the map.
+        const T = panelDefs.turnview; T._onHits = [];
+        state.activeCombatantId = c0.id;
+        T._queueOnHit({ onHit: { cond: 'Prone' }, target: c0, attacker: 'Someone', attackerId: 'x', label: 'Shove' });
+        T._onHitAct('fail', 0); await sleep(50); sktEnsureCombatTokens(); await sleep(100);
+        ok('token conditions: knocked prone in the Turn View — on its token', (c0.conditions || []).includes('Prone') && (tokOf().conds || []).includes('Prone'));
+        sktUndo(); await sleep(60); sktEnsureCombatTokens(); await sleep(100);
+        const c0b = state.combatants.find(c => c.id === c0.id);
+        ok('token conditions: undo — not prone, and no badge (the map change isn’t undone in its place)', !(c0b.conditions || []).includes('Prone') && !tokOf().conds && !badge(), JSON.stringify([c0b.conditions, tokOf().conds]));
+        T._onHits = [];
         const hp0 = c0.hp;
         c0.conditions = ['Prone']; c0.hp = 0; save(); sktEnsureCombatTokens(); await sleep(100);
         ok('token conditions: a dead creature shows none', !badge() && tokOf().dead === true);

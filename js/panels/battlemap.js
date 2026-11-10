@@ -530,13 +530,17 @@ registerPanel('battlemap',{
     this._body = null;
   },
 
-  _saveMap(){
+  // `derived`: a change that only mirrors the tracker (a token's label, death
+  // or conditions) — saved, but not an undo step of its own: the tracker's
+  // undo puts it back, and an entry here would be undone in its place.
+  _saveMap(derived){
     // Undo is captured HERE rather than at each mutation site. There are 20+
     // places that change tokens/fog/drawings, every one of them ends in
     // _saveMap(), and hooking them individually would guarantee a missed one.
     // Snapshotting on commit also gets the granularity right for free: a fog
     // drag, a token drag and a pencil stroke each save once, at the end.
-    this._captureUndo();
+    if (derived === true){ this._lastCommitted = this._undoSnapshot(); }
+    else this._captureUndo();
     try{
       const fogArr=this._fog?Array.from(this._fog):null;
       localStorage.setItem('skt-battlemap-v1',JSON.stringify({tokens:this._tokens,cellSize:this._cellSize,cols:this._cols,rows:this._rows,bgColor:this._bgColor,fog:fogArr,bgMapPath:this._bgMapPath,showGrid:this._showGrid,gridType:this._gridType,cellHighlight:this._cellHighlight,bgMapScale:this._bgMapScale,bgMapSize:this._bgMapSize||null,snapToGrid:this._snapToGrid,drawings:this._drawings,gridOffsetX:this._gridOffsetX,gridOffsetY:this._gridOffsetY,mapRotation:this._mapRotation,ftPerCell:this._ftPerCell,diagRule:this._diagRule||'five',fogHardness:this._fogHardness,gridOpacity:this._gridOpacity,gridColor:this._gridColor,gridWidth:this._gridWidth,tokensVisible:this._tokensVisible,namesVisible:this._namesVisible,pcsVisible:this._pcsVisible,npcsVisible:this._npcsVisible,fogPaintMode:this._fogPaintMode,fogBrushMode:this._fogBrushMode,fogBrushShape:this._fogBrushShape,fogStrokes:this._fogStrokes}));
@@ -6137,7 +6141,7 @@ function sktEnsureCombatTokens(force){
       const r = sktReconcileTokens(def._tokens, state.combatants,
                                    def._cols, def._rows, def._csScreen(), centre, rules);
       rules.done(def._tokens);
-      if (r.added || r.removed || r.renamed){ def._renderTokens(); def._saveMap(); }
+      if (r.added || r.removed || r.renamed){ def._renderTokens(); def._saveMap(!r.added && !r.removed); }
       return r;
     }
 
