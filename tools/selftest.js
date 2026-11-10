@@ -17240,6 +17240,62 @@ for (const cls of Object.keys(rule)) for (let L = 1; L <= 20; L++) for (const sc
       } catch(e){ ok('round 255 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
       finally { state.party = JSON.parse(keepP); state.combatants = JSON.parse(keepC); state.activeCombatantId = keepA; save(); try { sktEnsureCombatTokens(true); } catch(e){} }
     }
+    // -- Round 256: surprise — 2024, initiative at disadvantage (the players asked to roll so); 2014, no reactions until its first turn ends --
+    if (!PLAYER){
+      const keepC = JSON.stringify(state.combatants), keepA = state.activeCombatantId, keepP = JSON.stringify(state.party), keepEd = state.settings.builderEdition;
+      const T = panelDefs.turnview, C = panelDefs.combat, keepD = window.sktD, keepRR = localStorage.getItem(SKT_RR_KEY);
+      try {
+        for (let k = 0; k < 100 && !(typeof _5eLoaded !== 'undefined' && _5eLoaded); k++) await sleep(100);
+        const find = (n, src) => _5eData.find(r => r.cat === 'monster' && r.name === n && r._source === src);
+        state.party.push({ id: 'r256z', name: 'Zo', hp: 40, hpMax: 40, ac: 15, rules: '2024', level: 6, sheet: {} });
+        state.combatants = [{ id: 'r256z', name: 'Zo', isPC: true, hp: 40, hpMax: 40, ac: 15, initiative: 10, conditions: [] }];
+        C.addMonster(find('Ogre', 'MM')); C.addMonster(find('Ogre', 'MM')); await sleep(20);
+        const get = id => state.combatants.find(c => c.id === id), o1 = state.combatants[1].id, o2 = state.combatants[2].id;
+        state.settings.builderEdition = '2024'; save();
+        // 2024: the surprised ogre rolls two d20s and keeps the lower; the other one d20.
+        get(o1).surprised = true;
+        let rolls = []; window.sktD = n => { const v = [15, 4, 12][rolls.length % 3]; rolls.push(v); return v; };
+        C._rollInitiative();
+        const b1 = get(o1).initBonus || 0, b2 = get(o2).initBonus || 0;
+        ok('surprise (2024): the surprised ogre’s initiative at disadvantage — 15 and 4, keeps 4; the other rolls 12', get(o1).initiative === 4 + b1 && get(o2).initiative === 12 + b2, JSON.stringify([get(o1).initiative, get(o2).initiative, rolls]));
+        // The card says so.
+        if (!C._body){ openPanel('combat'); await sleep(200); }
+        C._render(); await sleep(20);
+        const card = [...document.querySelectorAll('.combatant-card')].find(el => el.textContent.includes('Surprised'));
+        ok('surprise: the card shows “Surprised”', !!card);
+        // Asking the players: the surprised one is told.
+        get('r256z').surprised = true;
+        C.askInitiative();
+        const rq = sktRollReq();
+        ok('surprise (2024): asking for initiative — Zo flagged as surprised', !!rq && rq.kind === 'init' && (rq.surprised || []).includes('r256z'), JSON.stringify(rq));
+        // Its first turn ends: no longer surprised.
+        C._endTurnEconomy(o1);
+        ok('surprise: over once its first turn ends', !get(o1).surprised);
+        // 2014: no initiative change; no reactions while surprised; its turn says so.
+        state.settings.builderEdition = '2014'; get(o1).surprised = true; save();
+        rolls = []; C._rollInitiative();
+        ok('surprise (2014): initiative rolled normally', get(o1).initiative === 15 + b1, JSON.stringify([get(o1).initiative, rolls]));
+        // A bandit captain's Parry: there before the surprise, gone while surprised.
+        C.addMonster(find('Bandit Captain', 'MM')); await sleep(20);
+        const bc = state.combatants[state.combatants.length - 1];
+        const hit = { kind: 'hit', hit: true, target: bc, attackerId: 'r256z', dmg: 5, type: 'slashing', total: 14 };
+        const parry = () => T._gatherReactions(hit).some(x => x.who.id === bc.id && x.r.name === 'Parry');
+        const before = parry(); bc.surprised = true;
+        ok('surprise (2014): a captain can Parry — but not while surprised', before && T._surprisedNow(bc) && !parry(), JSON.stringify([before, T._gatherReactions(hit).map(x => x.r.name)]));
+        bc.surprised = undefined;
+        state.activeCombatantId = o1;
+        if (!T._body){ openPanel('turnview'); await sleep(200); }
+        T._painted = {}; T._render(); await sleep(20);
+        const note = document.querySelector('.tv-incap');
+        ok('surprise (2014): its turn says it can’t move or act', !!note && /Surprised — Ogre/.test(note.textContent), note && note.textContent);
+        state.settings.builderEdition = '2024';
+        ok('surprise (2024): no such limit', !T._surprisedNow(get(o1)));
+      } catch(e){ ok('round 256 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
+      finally { window.sktD = keepD; state.settings.builderEdition = keepEd;
+        if (keepRR == null) localStorage.removeItem(SKT_RR_KEY); else localStorage.setItem(SKT_RR_KEY, keepRR);
+        document.getElementById('rr-card')?.remove();
+        state.party = JSON.parse(keepP); state.combatants = JSON.parse(keepC); state.activeCombatantId = keepA; save(); }
+    }
     // -- Class features: represented, not just text ------------------------
     {
       try {
@@ -20107,6 +20163,30 @@ for (const cls of Object.keys(rule)) for (let L = 1; L <= 20; L++) for (const sc
       finally {
         window.sktD = keepD; state.party = JSON.parse(party0);
         if (state.party[0]) paSetPc(state.party[0].id); paTab = tab0; paRender(); await sleep(200);
+      }
+    }
+    // -- Round 257: the phone's initiative prompt for a surprised character — says so, and "Roll for me" rolls at disadvantage --
+    if (PLAYER){
+      const party0 = JSON.stringify(state.party), tab0 = paTab, keepD = window.sktD, keepRR = localStorage.getItem(SKT_RR_KEY);
+      try {
+        const me = state.party[0]; paSetPc(me.id); paRender(); await sleep(200);
+        const ask = surprised => { saveJson(SKT_RR_KEY, { id: 'rr_' + Math.random().toString(36).slice(2), askedAt: Date.now(), kind: 'init', ab: '', skill: '', dc: null, showDc: false, name: '', via: '',
+          pcs: [me.id], answers: {}, closed: false, ...(surprised ? { surprised: [me.id] } : {}) }, 'test'); document.getElementById('pa-roll-req')?.remove(); paOnRollRequest(); };
+        ask(true); await sleep(100);
+        let ov = document.getElementById('pa-roll-req');
+        ok('phone surprise: the initiative prompt says you’re surprised', !!ov && /You’re surprised — roll with disadvantage/.test(ov.textContent), ov && ov.textContent);
+        let n = 0; window.sktD = s => [16, 5][n++ % 2];
+        ov.querySelector('[data-pa-rr="roll"]').click(); await sleep(30);
+        ok('phone surprise: “Roll for me” rolls two d20s and keeps the lower (16, 5 → 5)', /2d20 \(16, 5\) keep 5/.test(ov.querySelector('#pa-rr-dice').textContent), ov.querySelector('#pa-rr-dice').textContent);
+        ask(false); await sleep(100);
+        ov = document.getElementById('pa-roll-req'); n = 0;
+        ov.querySelector('[data-pa-rr="roll"]').click(); await sleep(30);
+        ok('phone surprise: not surprised — one d20, no note', !/surprised/.test(ov.textContent) && /d20 \(16\)/.test(ov.querySelector('#pa-rr-dice').textContent), ov.textContent);
+      } catch(e){ ok('round 257 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
+      finally {
+        window.sktD = keepD; document.getElementById('pa-roll-req')?.remove();
+        if (keepRR == null) localStorage.removeItem(SKT_RR_KEY); else localStorage.setItem(SKT_RR_KEY, keepRR);
+        state.party = JSON.parse(party0); if (state.party[0]) paSetPc(state.party[0].id); paTab = tab0; paRender(); await sleep(200);
       }
     }
   }

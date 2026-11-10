@@ -968,6 +968,7 @@ registerPanel('combat',{
         ${dmgStripRow}
         ${hpBar}
         ${statusRow}
+        ${c.surprised ? `<div class="conditions"><span class="condition-tag timed" title="Surprised — ${(state.settings && state.settings.builderEdition) === '2014' ? 'no move, action or reaction on its first turn' : 'initiative at disadvantage'}; ends after its first turn">Surprised</span></div>` : ''}
         ${c.conditions&&c.conditions.length?`<div class="conditions">${c.conditions.map(cd=>{ const tl = this._condTimerText(c, cd);
           return `<span class="condition-tag${tl ? ' timed' : ''}" data-act="rmcond" data-idx="${i}" data-cond="${esc(cd)}" title="${tl ? esc(tl) + ' — ' : ''}click to remove">${esc(cd)}${tl ? ' <i class="cond-timer">⏱' + esc(this._condTimerShort(c, cd)) + '</i>' : ''} ×</span>`; }).join('')}</div>`:''}
         ${(!isPC && (c.legendaryMax || c.legendaryMax === 0)) ? this._renderLegendary(i, c) : ''}
@@ -1188,6 +1189,14 @@ registerPanel('combat',{
         const resolve = () => state.combatants.findIndex(x => x.id === cid);
         const have=new Set(c.conditions||[]);
         const items = [];
+        // Surprised at the start of the fight: 2024, initiative at
+        // disadvantage; 2014, no move, action or reaction on its first turn.
+        items.push({ label:'😲 Surprised', checked: !!c.surprised, onClick:()=>{
+          const i = resolve(); if (i < 0) return;
+          const cur = state.combatants[i];
+          state.combatants[i] = {...cur, surprised: cur.surprised ? undefined : true};
+          save(); this._render(); panelDefs.turnview?._render?.();
+        }});
         // Monsters get a "Legendary actions" sub-section at the top: enable
         // with a default of 3, or adjust to 0/1/2/3/4/5 once enabled.
         if (!c.isPC){
@@ -1674,6 +1683,8 @@ registerPanel('combat',{
   _endTurnEconomy(id){
     const c = state.combatants.find(x => x.id === id);
     if (c) c.disengaged = false;
+    // Surprise lasts until the end of its first turn.
+    if (c && c.surprised) c.surprised = undefined;
     // Vex lasts "before the end of your next turn": this turn's end, then the next.
     if (c && c.vex){ c.vex.left = (c.vex.left || 1) - 1; if (c.vex.left <= 0) c.vex = undefined; }
     if (c) this._tickCondTimers(c, 'end');
@@ -1860,7 +1871,7 @@ registerPanel('combat',{
       // A block that rolls initiative with advantage (or disadvantage), and
       // in the 2024 rules an Invisible creature (advantage) or an
       // Incapacitated one (disadvantage).
-      const mode = sktInitCondMode(c.initMode, c.conditions, (state.settings && state.settings.builderEdition) || '2024');
+      const mode = sktInitCondMode(c.initMode, (c.conditions || []).concat(c.surprised ? ['surprised'] : []), (state.settings && state.settings.builderEdition) || '2024');
       const a = sktD(20), b2 = mode ? sktD(20) : a;
       const d20 = mode === 'adv' ? Math.max(a, b2) : mode === 'dis' ? Math.min(a, b2) : a;
       state.combatants[i] = {...c, initiative: d20 + bonus};
@@ -2954,7 +2965,9 @@ registerPanel('combat',{
   // stay as the tracker's own names for the two it starts itself.
   askInitiative(){
     const pcs = state.combatants.filter(c => c.isPC && !c.dead).map(c => c.id);
-    const r = (typeof sktAskRoll === 'function') ? sktAskRoll({ kind: 'init', pcs }) : null;
+    // (2024: the surprised roll theirs at disadvantage — their phone says so)
+    const surprised = (state.settings && state.settings.builderEdition) === '2014' ? [] : state.combatants.filter(c => c.isPC && c.surprised).map(c => c.id);
+    const r = (typeof sktAskRoll === 'function') ? sktAskRoll({ kind: 'init', pcs, surprised }) : null;
     this._render();
     return r ? r.id : false;
   },

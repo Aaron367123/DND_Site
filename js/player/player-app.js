@@ -237,6 +237,8 @@ function paOnRollRequest(){
   const pc = (state.party || []).find(x => x.id === me) || {};
   const bonus = paRollBonus(r, me);
   const sign = n => (n >= 0 ? '+' : '') + n;
+  // Surprised (2024): initiative at disadvantage — "Roll for me" rolls it so.
+  const surprised = r.kind === 'init' && Array.isArray(r.surprised) && r.surprised.includes(me);
   const title = r.kind === 'init' ? '⚔ Roll initiative!'
     : r.kind === 'save' ? '🛡 ' + (PA_ABS[r.ab] || r.ab) + ' saving throw!'
     : '🎲 ' + (typeof sktRollTitle === 'function' ? sktRollTitle(r) : 'Check') + '!';
@@ -247,6 +249,7 @@ function paOnRollRequest(){
     + '<div class="pa-init-who">' + paEsc(pc.name || 'Your character') + ' · bonus <b>' + sign(bonus) + '</b>'
     +   (r.showDc && r.dc ? ' · beat <b>' + r.dc + '</b>' : '')
     +   (r.name ? '<span class="pa-save-src">' + paEsc(r.name) + '</span>' : '') + '</div>'
+    + (surprised ? '<div class="pa-init-who pa-surprised">😲 You’re surprised — roll with disadvantage</div>' : '')
     + '<div class="pa-init-roll">'
     +   '<button class="btn primary" data-pa-rr="roll">🎲 Roll for me</button>'
     +   '<button class="btn" data-pa-rr="adv" title="Advantage">🎲🎲 Adv</button>'
@@ -264,8 +267,9 @@ function paOnRollRequest(){
     const b = e.target.closest('[data-pa-rr]'); if (!b) return;
     const act = b.dataset.paRr;
     if (act === 'roll' || act === 'adv' || act === 'dis'){
-      const a = sktD(20), c = act === 'roll' ? null : sktD(20);
-      const d = c == null ? a : (act === 'adv' ? Math.max(a, c) : Math.min(a, c));
+      const how = act === 'roll' && surprised ? 'dis' : act;
+      const a = sktD(20), c = how === 'roll' ? null : sktD(20);
+      const d = c == null ? a : (how === 'adv' ? Math.max(a, c) : Math.min(a, c));
       const total = d + bonus;
       val.value = String(total); send.disabled = false;
       dice.textContent = (c == null ? 'd20 (' + a + ')' : '2d20 (' + a + ', ' + c + ') keep ' + d)

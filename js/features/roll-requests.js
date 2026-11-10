@@ -55,6 +55,7 @@ function sktAskRoll(opts){
     skill: opts.skill || '', dc: opts.dc ? Math.max(1, parseInt(opts.dc, 10) || 10) : null,
     showDc: opts.showDc !== false && !!opts.dc, name: opts.name || '', via: opts.via || '',
     pcs, answers: {}, closed: false,
+    ...(opts.surprised && opts.surprised.length ? { surprised: opts.surprised.slice() } : {}),
   };
   saveJson(SKT_RR_KEY, r, 'roll request');
   _sktRrApplied = {}; _sktRrAllToasted = null;

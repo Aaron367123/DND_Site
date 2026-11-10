@@ -2770,7 +2770,7 @@ function sktInitCondMode(own, conditions, edition){
   if (edition !== '2014'){
     const cs = (conditions || []).map(x => String(x).toLowerCase());
     if (cs.some(x => /^invisible\b/.test(x))) up = true;
-    if (cs.some(x => /^(incapacitated|paralyzed|petrified|stunned|unconscious)\b/.test(x))) down = true;
+    if (cs.some(x => /^(incapacitated|paralyzed|petrified|stunned|unconscious|surprised)\b/.test(x))) down = true;
   }
   return up && !down ? 'adv' : down && !up ? 'dis' : '';
 }

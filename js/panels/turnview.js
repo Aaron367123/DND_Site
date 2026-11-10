@@ -900,7 +900,12 @@ registerPanel('turnview', {
   // Can't act: no Pack Tactics help, no threat to a ranged attacker.
   _INCAP: ['incapacitated', 'paralyzed', 'petrified', 'stunned', 'unconscious'],
   _incap(c){ return this._INCAP.some(n => this._hasCond(c, n)); },
+  // 2014 surprise: no move, action or reaction until its first turn ends
+  // (2024's is only initiative at disadvantage).
+  _surprisedNow(c){ return !!(c && c.surprised) && this._edOf(c) === '2014'; },
   _incapNote(c){
+    if (!this._incap(c) && this._surprisedNow(c))
+      return `<div class="tv-incap" role="note">⚠ Surprised — ${esc(c.name)} can’t move or take an action this turn, or a reaction until it ends</div>`;
     return this._incap(c)
       ? `<div class="tv-incap" role="note">⚠ ${esc(this._INCAP.filter(n => this._hasCond(c, n)).map(n => n.charAt(0).toUpperCase() + n.slice(1)).join(', '))} — ${esc(c.name)} can’t take actions or reactions</div>` : '';
   },
@@ -957,8 +962,8 @@ registerPanel('turnview', {
     const rows = [];
     this._order().forEach(c => {
       if (c.reactionUsed || (c.hp || 0) <= 0) return;
-      // Stunned, paralyzed, unconscious…: no reactions at all.
-      if (this._incap(c)) return;
+      // Stunned, paralyzed, unconscious…: no reactions at all (nor surprised, 2014).
+      if (this._incap(c) || this._surprisedNow(c)) return;
       if (o.attackerId && c.id === o.attackerId) return;    // not the one swinging
       const isTarget = c.id === o.target.id;
       this._reactionsFor(c).forEach(r => {
@@ -4054,7 +4059,7 @@ registerPanel('turnview', {
     // attacked for walking away.
     if (mover.disengaged) return [];
     return this._order().filter(c => {
-      if (c.id === mover.id || (c.hp || 0) <= 0 || c.reactionUsed || this._incap(c)) return false;
+      if (c.id === mover.id || (c.hp || 0) <= 0 || c.reactionUsed || this._incap(c) || this._surprisedNow(c)) return false;
       if (this._sideOf(c) === this._sideOf(mover)) return false;
       const t = this._tokenFor(c); if (!t) return false;
       const reach = this._reachOf(c);

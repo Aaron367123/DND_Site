@@ -34,7 +34,7 @@
  */
 'use strict';
 
-const BUILD = '2be0b48aaa';
+const BUILD = '6dc406f42d';
 const PRECACHE = [
   'skt-workspace.html',
   'styles/main.css?v=6cbeeda80e',
@@ -46,18 +46,18 @@ const PRECACHE = [
   'js/generated/token-index.js?v=2840810fc7',
   'js/generated/species-portraits.js?v=56581792b0',
   'js/core/campaign.js?v=171a617f55',
-  'js/core/utils.js?v=ee37553901',
+  'js/core/utils.js?v=07859d384a',
   'js/ui/dice-fx.js?v=1acff2694d',
   'js/core/state.js?v=f7606a5b33',
   'js/core/undo.js?v=63ed223198',
-  'js/features/roll-requests.js?v=5e09891beb',
+  'js/features/roll-requests.js?v=2218dcc003',
   'js/features/monster-picker.js?v=7030540ec7',
   'js/core/window-manager.js?v=e2aed9109b',
-  'js/panels/combat.js?v=9df8a8554c',
+  'js/panels/combat.js?v=ae0f701292',
   'js/panels/attacks.js?v=99097afcf2',
   'js/generated/reactions.js?v=0e74ab8786',
   'js/generated/rules.js?v=8efb8beae9',
-  'js/panels/turnview.js?v=5c5aca2554',
+  'js/panels/turnview.js?v=6e661c38cd',
   'js/panels/party.js?v=7329ac6590',
   'js/panels/shop.js?v=8f95de4cf4',
   'js/sync/notes-sync.js?v=7ee89969f6',
@@ -100,7 +100,7 @@ const PRECACHE = [
   'js/features/char-print.js?v=940c5d7b3f',
   'js/features/char-builder.js?v=ec3a5f6b21',
   'js/features/pdf-import.js?v=cefe36cb0b',
-  'js/player/player-app.js?v=290c3fd617',
+  'js/player/player-app.js?v=becc2995c0',
   'js/ui/player-view.js?v=2481f28c78',
   'js/sync/realtime.js?v=15b5b701a9',
   'js/sync/presence.js?v=50e9bead2e',
