@@ -4882,17 +4882,18 @@ button.pa-cond.on{outline:2px solid currentColor; outline-offset:1px}
 .as-rescue .btn{margin:0 4px 4px 0}
 
 /* ─── Area save dialog (combat.openAreaSave) ─────────────────────────── */
-.area-save{width:min(680px, calc(100vw - 24px)); max-height:90vh; overflow:auto}
+.area-save{width:min(680px, calc(100vw - 24px)); max-width:none; max-height:90vh; overflow:auto}   /* .modal caps at 420 — this one holds a table */
 .as-row{display:flex; flex-wrap:wrap; gap:10px; align-items:flex-end; margin-bottom:10px}
 .as-row label{display:flex; flex-direction:column; gap:3px; font-size:var(--fs-xs); color:var(--text-muted)}
 .as-row input, .as-row select{font:inherit; font-size:var(--fs-md)}
 .as-row #as-dc{width:64px}
 .as-grow{flex:1 1 220px}
 .as-quick{display:flex; gap:6px; margin-bottom:8px}
-.as-targets{display:grid; grid-template-columns:repeat(auto-fill, minmax(180px, 1fr)); gap:4px; margin-bottom:10px}
+.as-targets{display:grid; grid-template-columns:repeat(auto-fill, minmax(230px, 1fr)); gap:4px; margin-bottom:10px}
 .as-t{display:flex; align-items:center; gap:6px; padding:5px 8px; border:1px solid var(--border); border-radius:var(--r-sm); background:var(--panel-2); cursor:pointer}
 .as-tn{flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap}
 .as-tb{font-size:var(--fs-xs); color:var(--text-muted)}
+.as-cov{font-size:var(--fs-xs); padding:1px 20px 1px 4px; background-position:right 6px center; flex:none; width:auto; background-color:var(--panel); color:var(--text); border:1px solid var(--border); border-radius:var(--r-sm)}
 .as-dmg{margin-bottom:8px}
 .as-table{width:100%; border-collapse:collapse; font-size:var(--fs-sm)}
 .as-table td{padding:4px 6px; border-top:1px solid var(--border)}

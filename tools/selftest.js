@@ -17801,6 +17801,90 @@ for (const cls of Object.keys(rule)) for (let L = 1; L <= 20; L++) for (const sc
       finally { window.sktD = keepD; T._pending = null; T._tokenFor = keepTok; T._covers = {}; T._armed = null; T._manualOpen = false;
         state.party = JSON.parse(keepP); state.combatants = JSON.parse(keepC); state.activeCombatantId = keepA; state.combatRound = keepR; save(); }
     }
+    // -- Round 269: cover on a Dexterity save — +2 / +5 per creature in the area-save dialog; a ray from a creature counts what's in the way --
+    if (!PLAYER){
+      const keepC = JSON.stringify(state.combatants), keepA = state.activeCombatantId, keepP = JSON.stringify(state.party), keepR = state.combatRound;
+      const T = panelDefs.turnview, C = panelDefs.combat, keepD = window.sktD, keepTok = T._tokenFor;
+      try {
+        for (let k = 0; k < 100 && !(typeof _5eLoaded !== 'undefined' && _5eLoaded); k++) await sleep(100);
+        const find = (n, src) => _5eData.find(r => r.cat === 'monster' && r.name === n && r._source === src);
+        state.party.push({ id: 'r269z', name: 'Zo', hp: 40, hpMax: 40, ac: 15, spd: 30, rules: '2024', level: 6, sheet: { featureList: [] },
+          resources: [{ name: 'Luck Points', current: 3, max: 3 }] });
+        state.combatants = [{ id: 'r269z', name: 'Zo', isPC: true, hp: 40, hpMax: 40, ac: 15, initiative: 20, conditions: [] }];
+        C.addMonster(find('Ogre', 'MM')); C.addMonster(find('Goblin', 'MM')); C.addMonster(find('Young Red Dragon', 'MM')); await sleep(20);
+        const get = id => state.combatants.find(c => c.id === id), ogId = state.combatants[1].id, gbId = state.combatants[2].id, drId = state.combatants[3].id;
+        const og = () => get(ogId), zo = () => get('r269z');
+        state.combatRound = 1; state.activeCombatantId = drId; save();
+        window.sktD = () => 10;
+        const ob = C.saveBonus(og(), 'dex'), gb = C.saveBonus(get(gbId), 'dex'), zb = C.saveBonus(zo(), 'dex');
+        // The save itself: cover adds to Dexterity, and only to Dexterity.
+        const s0 = C.rollSave(og(), 'DEX', 99, {}), s2 = C.rollSave(og(), 'DEX', 99, { cover: 2 }), sc = C.rollSave(og(), 'CON', 99, { cover: 2 });
+        ok('dex cover: +2 on the save, and it says so', s2.total === s0.total + 2 && /½ cover/.test(s2.detail), JSON.stringify([s0, s2]));
+        ok('dex cover: …not on a Constitution save', sc.total === 10 + C.saveBonus(og(), 'con'), JSON.stringify(sc));
+        // The dialog: a cover pick per creature, while the save is DEX.
+        const dc = 10 + gb + 1;           // the goblin's 10 fails it by one
+        const back = C.openAreaSave({ name: 'Fireball', ab: 'DEX', dc, parts: [{ dice: '8d6', type: 'fire' }], half: true, targets: [ogId, gbId] });
+        await sleep(30);
+        const sel = id => back.querySelector('[data-cov="' + id + '"]');
+        const pick = (id, v) => { const s = sel(id); s.value = String(v); s.dispatchEvent(new Event('change', { bubbles: true })); };
+        ok('dex cover: each creature in the dialog has a cover pick', !!sel(ogId) && !!sel(gbId) && !!sel('r269z'));
+        pick(ogId, 5);
+        back.querySelector('[data-as="roll"]').click(); await sleep(20);
+        const row = () => back.querySelectorAll('.as-table tbody tr');
+        const rowOf = name => [...row()].find(tr => tr.firstElementChild && tr.firstElementChild.textContent === name);
+        ok('dex cover: the ogre behind ¾ cover rolls 10 + its save + 5', rowOf('Ogre') && rowOf('Ogre').querySelector('b').textContent === String(10 + ob + 5) && /¾ cover/.test(rowOf('Ogre').textContent),
+           rowOf('Ogre') && rowOf('Ogre').textContent);
+        ok('dex cover: the goblin in the open — one short, failed', rowOf('Goblin').classList.contains('bad'), rowOf('Goblin').textContent);
+        // Set after the roll: the row's total moves with it, and back.
+        pick(gbId, 2); await sleep(10);
+        ok('dex cover: ½ cover picked after the roll — 2 more, now saved', rowOf('Goblin').classList.contains('ok') && rowOf('Goblin').querySelector('b').textContent === String(10 + gb + 2), rowOf('Goblin').textContent);
+        pick(gbId, 0); await sleep(10);
+        ok('dex cover: …taken off again — failed, and the note gone', rowOf('Goblin').classList.contains('bad') && !/cover/.test(rowOf('Goblin').textContent), rowOf('Goblin').textContent);
+        // A Constitution save has no cover to pick.
+        const abSel = back.querySelector('#as-ab'); abSel.value = 'CON'; abSel.dispatchEvent(new Event('change')); await sleep(10);
+        ok('dex cover: a CON save — no cover picks', !sel(ogId));
+        abSel.value = 'DEX'; abSel.dispatchEvent(new Event('change')); await sleep(10);
+        ok('dex cover: back to DEX — the ogre’s ¾ is remembered', sel(ogId) && sel(ogId).value === '5');
+        back.querySelector('[data-as="cancel"]').click(); await sleep(20);
+        // Zo rolls her own on her phone; the DM adds her cover.
+        const b2 = C.openAreaSave({ name: 'Fireball', ab: 'DEX', dc: 15, parts: [{ dice: '8d6', type: 'fire' }], half: true, targets: ['r269z'] });
+        await sleep(30);
+        const sel2 = b2.querySelector('[data-cov="r269z"]'); sel2.value = '2'; sel2.dispatchEvent(new Event('change', { bubbles: true }));
+        b2.querySelector('[data-as="ask"]').click(); await sleep(30);
+        const rq = JSON.parse(localStorage.getItem('skt-rollreq-v1'));
+        C._areaSaveOnAnswers({ id: rq.id, answers: { r269z: { v: 14, rid: rq.id, at: Date.now() } } }); await sleep(10);
+        const zr = () => [...b2.querySelectorAll('.as-table tbody tr')].find(tr => tr.firstElementChild && tr.firstElementChild.textContent === 'Zo');
+        ok('dex cover: her 14 behind half cover is 16 — saved', zr() && zr().classList.contains('ok') && zr().querySelector('b').textContent === '16' && /cover/.test(zr().textContent), zr() && zr().textContent);
+        b2.querySelector('[data-as="cancel"]').click(); await sleep(20);
+        // Her Luck Point on a phone roll keeps the cover: 9 + 2 = 11 fails DC 15;
+        // another d20 of 12 is 12 + her save + 2.
+        const prow = { id: 'r269z', total: 11, passed: false, cover: 2, detail: 'their roll + 2 (½ cover)' };
+        C._rollRescue(zo(), prow, 'DEX', 15, 'luck', 12);
+        ok('dex cover: a Luck Point on her phone roll keeps the +2', prow.total === Math.max(11, 12 + zb + 2), JSON.stringify([prow.total, zb]));
+        // The Turn View: the DM's own pick for the dragon this turn carries into its breath.
+        openPanel('turnview'); await sleep(200);
+        T._covers = {}; T._armed = null; T._actAs = null;
+        T._covers[T._coverKey(get(drId), get(gbId))] = 5;
+        const breath = T._attacksFor(get(drId)).findIndex(a => /Breath/.test(a.name) && a.save);
+        T._areaSave(breath); await sleep(30);
+        const b3 = document.getElementById('area-save-back');
+        ok('dex cover: the dragon’s breath opens with the goblin behind the ¾ cover the DM set', !!b3 && b3.querySelector('[data-cov="' + gbId + '"]').value === '5'
+           && b3.querySelector('[data-cov="' + ogId + '"]').value === '0', breath);
+        b3 && b3.querySelector('[data-as="cancel"]').click(); await sleep(20);
+        T._covers = {};
+        // A save straight from the creature (a queued one): what's in its way counts.
+        const toks = { [drId]: { x: 100, y: 100, size: 2 }, [gbId]: { x: 200, y: 100, size: 1 }, [ogId]: { x: 300, y: 100, size: 2 } };
+        T._tokenFor = c => c && toks[c.id] || null;
+        T._pending = null; T._queueSave(get(drId), og(), breath); if (T._pending) T._commit(T._pending, null);
+        ok('dex cover: the goblin between the dragon and the ogre — the ogre’s save gets ½ cover', /½ cover/.test(T._result || ''), T._result);
+        toks[gbId].y = 400;
+        T._pending = null; T._queueSave(get(drId), og(), breath); if (T._pending) T._commit(T._pending, null);
+        ok('dex cover: …the goblin out of the way — none', !/cover/.test(T._result || ''), T._result);
+      } catch(e){ ok('round 269 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
+      finally { window.sktD = keepD; T._pending = null; T._tokenFor = keepTok; T._covers = {}; T._armed = null;
+        document.getElementById('area-save-back')?.remove(); C._areaSaveOnAnswers = null;
+        state.party = JSON.parse(keepP); state.combatants = JSON.parse(keepC); state.activeCombatantId = keepA; state.combatRound = keepR; save(); }
+    }
     // -- Class features: represented, not just text ------------------------
     {
       try {

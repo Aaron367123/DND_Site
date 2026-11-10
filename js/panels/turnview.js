@@ -3106,7 +3106,10 @@ registerPanel('turnview', {
     this._markUsed(c, a);
     if (!this._queue || (this._queue.i === 0 && !this._queue.legendary)) this._spend(c, 'actionUsed');
     const C = panelDefs.combat;
-    const sv = eff.save && C && typeof C.rollSave === 'function' ? C.rollSave(t, eff.save.ability, eff.save.dc, {}) : null;
+    // Cover from the creature to its target counts against a Dexterity save
+    // (a ray, a line — it starts at the creature).
+    const cov = eff.save && /^dex/i.test(String(eff.save.ability || '')) ? this._coverFor(c, t) : null;
+    const sv = eff.save && C && typeof C.rollSave === 'function' ? C.rollSave(t, eff.save.ability, eff.save.dc, { cover: cov && cov.ac || 0 }) : null;
     const passed = !!(sv && sv.passed), half = passed && !!(eff.save && eff.save.half);
     let detail = sv ? String(eff.save.ability).slice(0, 3).toUpperCase() + ' save ' + (sv.auto ? sv.detail : sv.total + ' vs DC ' + eff.save.dc + ' (' + sv.detail + ')') : '';
     const parts = passed && !half ? [] : (eff.parts || []).map(pt => {
@@ -4135,7 +4138,12 @@ registerPanel('turnview', {
     const c = src || this._active(); if (!c) return;
     const a = this._attacksFor(c)[ai]; if (!a || !a.save) return;
     const C = panelDefs.combat; if (!C || typeof C.openAreaSave !== 'function') return;
-    C.openAreaSave({
+    // The DM's own cover picks for this creature this turn carry over (a wall
+    // they set for its attacks stands for its breath). The map's guess does
+    // not: an area's cover is judged from where it starts, not from the caster.
+    const covers = {};
+    this._order().forEach(o => { const v = this._covers[this._coverKey(c, o)]; if (v === 2 || v === 5) covers[o.id] = v; });
+    C.openAreaSave({ covers,
       name: c.name + ' · ' + a.name, ab: a.save.ability, dc: a.save.dc,
       parts: (a.parts || []).map(p => ({ dice: p.dice, type: p.type })),
       half: !!a.save.half, exclude: c.id, targets: this._armed && this._armed !== c.id ? [this._armed] : [], spell: !!a.spell,

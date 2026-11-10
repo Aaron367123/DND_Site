@@ -2540,10 +2540,13 @@ registerPanel('combat',{
     const mode = adv.length && !dis.length ? 1 : dis.length && !adv.length ? -1 : 0;
     const a = sktD(20), b = mode ? sktD(20) : null;
     const nat = b == null ? a : mode > 0 ? Math.max(a, b) : Math.min(a, b);
-    const total = nat + bonus + extra;
+    // Cover: +2 (half) or +5 (three-quarters) to a Dexterity save — the
+    // caller knows the geometry, this only adds it.
+    const cov = ab === 'dex' ? Math.max(0, +(opts && opts.cover) || 0) : 0;
+    const total = nat + bonus + extra + cov;
     const why = [adv.length ? 'advantage: ' + adv.join(', ') : '', dis.length ? 'disadvantage: ' + dis.join(', ') : '', extra ? 'exhaustion ' + extra : ''].filter(Boolean).join('; ');
     return { total, nat, passed: total >= dc, auto: '',
-      detail: 'd20 ' + (b == null ? a : a + '/' + b) + (bonus ? (bonus > 0 ? ' + ' : ' − ') + Math.abs(bonus) : '') + (extra ? ' ' + extra : '') + (why ? ' (' + why + ')' : '') };
+      detail: 'd20 ' + (b == null ? a : a + '/' + b) + (bonus ? (bonus > 0 ? ' + ' : ' − ') + Math.abs(bonus) : '') + (extra ? ' ' + extra : '') + (cov ? ' + ' + cov + ' (' + (cov >= 5 ? '¾' : '½') + ' cover)' : '') + (why ? ' (' + why + ')' : '') };
   },
   // ─── A character's failed save, and what might still turn it ───────────────
   // The dice a character holds for exactly this: a bard's die added to the
@@ -2604,7 +2607,7 @@ registerPanel('combat',{
   // `forced`: the number a real die showed (the bard's die, or the new d20).
   _rollRescue(c, row, ab, dc, key, forced){
     const x = this._saveRescues(c, row, ab, dc).find(y => y.key === key); if (!x || !x.ok) return '';
-    const was = row.total, mod = typeof row.nat === 'number' ? row.total - row.nat : this.saveBonus(c, String(ab).slice(0, 3).toLowerCase());
+    const was = row.total, mod = typeof row.nat === 'number' ? row.total - row.nat : this.saveBonus(c, String(ab).slice(0, 3).toLowerCase()) + (row.cover || 0);
     let desc;
     if (key === 'lr'){
       row.passed = true;
@@ -3045,14 +3048,35 @@ registerPanel('combat',{
     document.body.appendChild(back);
     const $ = sel => back.querySelector(sel);
     const alive = () => state.combatants.filter(c => !c.dead && (c.hp || 0) > 0 && c.id !== pre.exclude);
+    // Cover against a Dexterity save: +2 behind half cover, +5 behind
+    // three-quarters. An area's cover is judged from its point of origin,
+    // which the panel can't see (a fireball's bead lands anywhere), so it's
+    // the DM's pick per creature. Total cover means the effect can't reach
+    // it — untick it instead.
+    const covers = Object.assign({}, pre.covers || {});
+    const isDex = () => /^dex/i.test($('#as-ab').value);
     const paintTargets = () => {
       $('#as-targets').innerHTML = alive().map(c =>
         `<label class="as-t"><input type="checkbox" value="${esc(c.id)}"${want.has(c.id) ? ' checked' : ''}>
-           <span class="as-tn">${esc(c.name)}</span><span class="as-tb">${this._fmtBonus(this.saveBonus(c, $('#as-ab').value))}</span></label>`).join('')
+           <span class="as-tn">${esc(c.name)}</span><span class="as-tb">${this._fmtBonus(this.saveBonus(c, $('#as-ab').value))}</span>${isDex() ? `<select class="as-cov" data-cov="${esc(c.id)}" title="Cover adds to a Dexterity save: +2 for half, +5 for three-quarters" aria-label="Cover for ${esc(c.name)}">
+             ${[[0, 'no cover'], [2, '½ cover'], [5, '¾ cover']].map(([v, l]) => `<option value="${v}"${(covers[c.id] || 0) === v ? ' selected' : ''}>${l}</option>`).join('')}</select>` : ''}</label>`).join('')
         || '<div class="as-empty">No one standing to roll for.</div>';
     };
     paintTargets();
     $('#as-ab').addEventListener('change', () => { picked().forEach(id => want.add(id)); paintTargets(); });
+    // Changed after the roll: the row's total moves with it.
+    $('#as-targets').addEventListener('change', e => {
+      const sel = e.target.closest && e.target.closest('[data-cov]'); if (!sel) return;
+      const id = sel.dataset.cov, was = covers[id] || 0, now = +sel.value || 0;
+      if (now) covers[id] = now; else delete covers[id];
+      const row = rolled && rolled.rows.find(r => r.id === id);
+      if (row && !row.waiting && typeof row.total === 'number' && now !== was){
+        row.total += now - was; row.cover = now;
+        if (!row.lr) row.passed = row.total >= dcNow();
+        row.detail = String(row.detail || '').replace(/ \+ \d+ \([½¾] cover\)/, '') + (now ? ' + ' + now + ' (' + (now >= 5 ? '¾' : '½') + ' cover)' : '');
+        paintResult();
+      }
+    });
     const picked = () => [...back.querySelectorAll('#as-targets input:checked')].map(i => i.value);
     let rolled = null;   // { dmg:[{amt,type,detail}], rows:[{id, total, detail, passed, lr}] }
     const parseParts = txt => String(txt || '').split(/[+,]/).map(x => x.trim()).filter(Boolean).map(x => {
@@ -3096,8 +3120,9 @@ registerPanel('combat',{
     const dcNow = () => parseInt($('#as-dc').value, 10) || 10;
     const rollRow = (id, ab, dc) => {
       const c = state.combatants.find(x => x.id === id);
-      const r = this.rollSave(c, ab, dc, { spell: $('#as-spell') ? $('#as-spell').checked : !!pre.spell });
-      return { id, total: r.auto ? '—' : r.total, nat: r.nat, detail: r.detail, passed: r.passed, lr: false };
+      const cover = /^dex/i.test(ab) ? covers[id] || 0 : 0;
+      const r = this.rollSave(c, ab, dc, { spell: $('#as-spell') ? $('#as-spell').checked : !!pre.spell, cover });
+      return { id, total: r.auto ? '—' : r.total, nat: r.nat, detail: r.detail, passed: r.passed, lr: false, cover: r.auto ? 0 : cover };
     };
     const close = () => {
       back.remove();
@@ -3149,8 +3174,10 @@ registerPanel('combat',{
             const a2 = (r.answers || {})[row.id];
             if (!a2 || a2.rid !== r.id) return;
             row.waiting = false;
-            row.total = +a2.v;
-            row.detail = 'their roll';
+            // Their phone asked for the save; the cover is the DM's to add.
+            const cv = isDex() ? covers[row.id] || 0 : 0;
+            row.total = +a2.v + cv; row.cover = cv;
+            row.detail = 'their roll' + (cv ? ' + ' + cv + ' (' + (cv >= 5 ? '¾' : '½') + ' cover)' : '');
             row.passed = row.total >= dcNow();
             row.lr = false;
             got = true;
