@@ -17202,6 +17202,31 @@ for (const cls of Object.keys(rule)) for (let L = 1; L <= 20; L++) for (const sc
       finally { window.sktD = keepD; T._tokenFor = keepTok; T._armed = keepArm; T._pending = null; T._lastPcHit = null;
         state.party = JSON.parse(keepP); state.combatants = JSON.parse(keepC); state.activeCombatantId = keepA; save(); }
     }
+    // -- Round 255: a creature's conditions show on its map token, and follow the tracker --
+    if (!PLAYER){
+      const keepC = JSON.stringify(state.combatants), keepA = state.activeCombatantId, keepP = JSON.stringify(state.party);
+      try {
+        for (let k = 0; k < 100 && !(typeof _5eLoaded !== 'undefined' && _5eLoaded); k++) await sleep(100);
+        openPanel('battlemap'); await sleep(500);
+        const B = panelDefs.battlemap;
+        sktEnsureCombatTokens(true); await sleep(100);
+        const c0 = state.combatants.find(c => !c.isPC && !c.dead && (c.hp || 0) > 0);
+        const tokOf = () => sktTokenForCombatant(B._tokens, c0);
+        const badge = () => { const t = tokOf(); return t ? document.querySelector('.map-token-conds[data-tid="' + CSS.escape(String(t.id)) + '"]') : null; };
+        ok('token conditions: the creature has a token', !!tokOf() && tokOf().cid === c0.id, JSON.stringify(tokOf()));
+        c0.conditions = ['Prone']; save(); sktEnsureCombatTokens(); await sleep(100);
+        ok('token conditions: prone in the tracker — "Prone" on its token', (tokOf().conds || []).join() === 'Prone' && !!badge() && badge().textContent === 'Prone', JSON.stringify([tokOf().conds, badge() && badge().textContent]));
+        c0.conditions = ['stunned', 'Frightened']; save(); sktEnsureCombatTokens(); await sleep(100);
+        ok('token conditions: two — "Stunned +1", both on hover', !!badge() && badge().textContent === 'Stunned +1' && badge().title === 'Stunned, Frightened', JSON.stringify([badge() && badge().textContent, badge() && badge().title]));
+        c0.conditions = []; save(); sktEnsureCombatTokens(); await sleep(100);
+        ok('token conditions: none left — no badge, nothing on the token', !badge() && !tokOf().conds);
+        const hp0 = c0.hp;
+        c0.conditions = ['Prone']; c0.hp = 0; save(); sktEnsureCombatTokens(); await sleep(100);
+        ok('token conditions: a dead creature shows none', !badge() && tokOf().dead === true);
+        c0.hp = hp0;
+      } catch(e){ ok('round 255 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
+      finally { state.party = JSON.parse(keepP); state.combatants = JSON.parse(keepC); state.activeCombatantId = keepA; save(); try { sktEnsureCombatTokens(true); } catch(e){} }
+    }
     // -- Class features: represented, not just text ------------------------
     {
       try {

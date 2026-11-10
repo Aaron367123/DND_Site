@@ -4235,6 +4235,7 @@ select.tv-in.wide { width:126px; }
 .tv-onhit { display:flex; align-items:center; gap:6px; flex-wrap:wrap; padding:6px 9px; margin-top:6px;
   background:var(--panel-2); border:1px solid var(--border); border-radius:var(--r-md); font-size:var(--fs-sm); }
 .tv-onhit-l { flex:1; min-width:180px; }
+.map-token-conds{padding:0 5px; border-radius:8px; background:var(--warning); color:#1a1a1a; font-weight:700; line-height:1.3; white-space:nowrap; box-shadow:0 1px 3px rgba(0,0,0,.5)}
 .tv-incap{padding:6px 10px; border:1px solid var(--warning); border-radius:var(--r-md); color:var(--warning); font-size:var(--fs-sm); background:color-mix(in srgb, var(--warning) 10%, var(--panel-2))}
 .tv-pcx .btn.tv-cant, .tv-pcmiss .btn.tv-cant { opacity:.55; }
 /* Cunning Strike: the effects to trade Sneak Attack dice for, on a line of their own. */

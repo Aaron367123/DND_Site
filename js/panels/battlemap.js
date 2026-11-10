@@ -2262,6 +2262,9 @@ registerPanel('battlemap',{
     b.querySelectorAll('.map-token-name').forEach(el => {
       el.style.fontSize = Math.max(11 / vs, 10 * bg).toFixed(1) + 'px';
     });
+    b.querySelectorAll('.map-token-conds').forEach(el => {
+      el.style.fontSize = (0.8 * Math.max(11 / vs, 10 * bg)).toFixed(1) + 'px';
+    });
     b.querySelectorAll('.map-token').forEach(el => {
       const t = this._tokens.find(x => x.id === el.dataset.tid); if (!t) return;
       const iconSource = this._tokenFace(t);
@@ -2815,6 +2818,8 @@ registerPanel('battlemap',{
     if (el){ el.style.left = x + 'px'; el.style.top = y + 'px'; }
     const nm = b.querySelector('.map-token-name[data-tid="' + CSS.escape(String(id)) + '"]');
     if (nm){ nm.style.left = x + 'px'; nm.style.top = (y + (+nm.dataset.dy || 0)) + 'px'; }
+    const cd = b.querySelector('.map-token-conds[data-tid="' + CSS.escape(String(id)) + '"]');
+    if (cd){ cd.style.left = (x + (+cd.dataset.dx || 0)) + 'px'; cd.style.top = (y + (+cd.dataset.dy || 0)) + 'px'; }
     // The Turn View draws the same creature; let it follow too.
     const T = (typeof panelDefs !== 'undefined') && panelDefs.turnview;
     if (T && T._body && typeof T._syncFromMap === 'function'){
@@ -5298,7 +5303,7 @@ registerPanel('battlemap',{
     // Facing divs (.map-token-facing) are appended per rotated token below;
     // if they aren't cleared here they accumulate every _renderTokens() call
     // (fog paint, drag, zoom all re-render) and pile up as z-fighting clones.
-    stage.querySelectorAll('.map-token, .map-token-name, .map-token-facing').forEach(el=>el.remove());
+    stage.querySelectorAll('.map-token, .map-token-name, .map-token-facing, .map-token-conds').forEach(el=>el.remove());
 
     const tokScale = this._bgMapScale || 1;
     // Player view: hide non-PC tokens that sit in unrevealed cells. The DM
@@ -5411,6 +5416,21 @@ registerPanel('battlemap',{
       nameEl.style.cssText = `left:${px}px;top:${py + dim/2 + 4}px;font-size:${nameFs.toFixed(1)}px;position:absolute;transform:translateX(-50%);z-index:2;pointer-events:none;color:#fff;background:rgba(0,0,0,.6);padding:1px 6px;border-radius:8px;text-shadow:0 1px 2px rgba(0,0,0,0.9);white-space:nowrap;font-weight:600;line-height:1.25;box-sizing:border-box;overflow:hidden;text-overflow:ellipsis`;
       nameEl.textContent = displayLabel;
       frag.appendChild(nameEl);
+      // Its conditions, a small pill at the token's top right: "Prone",
+      // "Stunned +1" — every one of them on hover.
+      if (Array.isArray(t.conds) && t.conds.length && !t.dead){
+        const ce = document.createElement('div');
+        ce.className = 'map-token-conds';
+        ce.dataset.tid = t.id;
+        ce.dataset.dx = '0'; ce.dataset.dy = (-dim / 2).toFixed(1);
+        const cap = k => String(k).charAt(0).toUpperCase() + String(k).slice(1);
+        ce.title = t.conds.map(cap).join(', ');
+        ce.textContent = cap(t.conds[0]) + (t.conds.length > 1 ? ' +' + (t.conds.length - 1) : '');
+        // Centred on the top edge and no wider than the token (zoomed far out:
+        // wide enough to read), so two side by side don't overlap.
+        ce.style.cssText = `left:${px}px;top:${py - dim / 2}px;font-size:${(nameFs * 0.8).toFixed(1)}px;max-width:${Math.max(dim, 56 / (this._viewScale || 1)).toFixed(0)}px;position:absolute;transform:translate(-50%,-50%);z-index:3;pointer-events:none;overflow:hidden;text-overflow:ellipsis`;
+        frag.appendChild(ce);
+      }
       // _fitTokenNames may have shortened it to fit beside a neighbour.
       el.addEventListener('mouseenter', () => nameEl.classList.add('full'));
       el.addEventListener('mouseleave', () => nameEl.classList.remove('full'));
@@ -6005,6 +6025,10 @@ function sktReconcileTokens(tokens, combatants, cols, rows, cs, centre, opts){
         // until the DM remembered to hit the skull button on its token.
         const isDead = !!c.dead || (c.hp || 0) <= 0;
         if (!!t.dead !== isDead){ t.dead = isDead; renamed++; }
+        // And its conditions, shown on the token (prone, stunned…) — on the
+        // players' maps too, as they would see it at the table.
+        const cn = (c.conditions || []).filter(Boolean);
+        if ((t.conds || []).join('|') !== cn.join('|')){ if (cn.length) t.conds = cn.slice(); else delete t.conds; renamed++; }
       }
       return;
     }
@@ -6031,7 +6055,7 @@ function sktReconcileTokens(tokens, combatants, cols, rows, cs, centre, opts){
 function _sktRosterSig(){
   if (typeof state === 'undefined' || !Array.isArray(state.combatants)) return '';
   return state.combatants
-    .map(c => sktNormName(c.name) + ((c.dead || (c.hp || 0) <= 0) ? '†' : ''))
+    .map(c => sktNormName(c.name) + ((c.dead || (c.hp || 0) <= 0) ? '†' : '') + ((c.conditions || []).length ? '[' + c.conditions.join(',') + ']' : ''))
     .join('|');
 }
 let _sktLastRosterSig = null;
