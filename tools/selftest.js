@@ -17409,6 +17409,49 @@ for (const cls of Object.keys(rule)) for (let L = 1; L <= 20; L++) for (const sc
       finally { window.sktD = keepD; T._pending = null; T._lastPcHit = null;
         state.party = JSON.parse(keepP); state.combatants = JSON.parse(keepC); state.activeCombatantId = keepA; save(); }
     }
+    // -- Round 261: a charmed creature can't attack its charmer (or target it with a harmful save) — who charmed it is kept --
+    if (!PLAYER){
+      const keepC = JSON.stringify(state.combatants), keepA = state.activeCombatantId, keepP = JSON.stringify(state.party);
+      const T = panelDefs.turnview, C = panelDefs.combat, keepD = window.sktD;
+      try {
+        for (let k = 0; k < 100 && !(typeof _5eLoaded !== 'undefined' && _5eLoaded); k++) await sleep(100);
+        const find = (n, src) => _5eData.find(r => r.cat === 'monster' && r.name === n && r._source === src);
+        state.party.push({ id: 'r261z', name: 'Zo', hp: 40, hpMax: 40, ac: 15, rules: '2024', level: 6,
+          sheet: { saves: { wis: 0 }, attacks: [{ name: 'Shortsword', atkBonus: '+7', damage: '1d6+4 piercing', props: ['F', 'L'] }] } });
+        state.combatants = [{ id: 'r261z', name: 'Zo', isPC: true, hp: 40, hpMax: 40, ac: 15, initiative: 20, conditions: [] }];
+        C.addMonster(find('Harpy', 'MM')); C.addMonster(find('Ogre', 'MM')); await sleep(20);
+        const get = id => state.combatants.find(c => c.id === id), hpId = state.combatants[1].id, ogId = state.combatants[2].id;
+        state.combatants.forEach(c => { if (!c.isPC){ c.hp = 300; c.hpMax = 300; c.ac = 5; } });
+        save();
+        // The harpy's Luring Song, an area save: Zo fails — charmed, by the harpy.
+        state.activeCombatantId = hpId; window.sktD = n => 2;
+        T._areaSave(T._attacksFor(get(hpId)).findIndex(a => a.name === 'Luring Song'));
+        const back = document.getElementById('area-save-back');
+        back.querySelectorAll('#as-targets input').forEach(i => { i.checked = i.value === 'r261z'; });
+        back.querySelector('[data-as="roll"]').click(); await sleep(20);
+        back.querySelector('[data-as="apply"]').click(); await sleep(20);
+        ok('charm: the Luring Song charms Zo — by the harpy', (get('r261z').conditions || []).includes('Charmed') && get('r261z').charmedBy && get('r261z').charmedBy.id === hpId, JSON.stringify([get('r261z').conditions, get('r261z').charmedBy]));
+        // Zo's turn: she can't attack the harpy; the ogre, yes.
+        state.activeCombatantId = 'r261z'; window.sktD = n => (n === 20 ? 15 : 3);
+        const hp0 = get(hpId).hp;
+        T._rollAttack(0, { attacker: get('r261z'), target: get(hpId), mode: 0 });
+        ok('charm: her attack on the harpy is refused, and says why', get(hpId).hp === hp0 && /charmed by Harpy — it can’t attack Harpy/.test(T._result), JSON.stringify(T._result));
+        const og0 = get(ogId).hp;
+        T._rollAttack(0, { attacker: get('r261z'), target: get(ogId), mode: 0 }); if (T._pending) T._commit(T._pending, null);
+        ok('charm: …the ogre she can hit', get(ogId).hp < og0);
+        // Free of it: the harpy is fair game.
+        get('r261z').conditions = [];
+        T._rollAttack(0, { attacker: get('r261z'), target: get(hpId), mode: 0 }); if (T._pending) T._commit(T._pending, null);
+        ok('charm: no longer charmed — she hits the harpy', get(hpId).hp < hp0);
+        // A hit's charm (an on-hit condition) keeps its source too.
+        T._onHits = [];
+        T._queueOnHit({ onHit: { cond: 'Charmed' }, target: get('r261z'), attacker: 'Ogre', attackerId: ogId, label: 'Gaze' });
+        T._onHitAct('fail', 0); await sleep(10);
+        ok('charm: an on-hit charm — by the ogre', get('r261z').charmedBy && get('r261z').charmedBy.id === ogId, JSON.stringify(get('r261z').charmedBy));
+      } catch(e){ ok('round 261 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
+      finally { window.sktD = keepD; T._pending = null; T._onHits = []; document.getElementById('area-save-back')?.remove();
+        state.party = JSON.parse(keepP); state.combatants = JSON.parse(keepC); state.activeCombatantId = keepA; save(); }
+    }
     // -- Class features: represented, not just text ------------------------
     {
       try {

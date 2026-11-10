@@ -900,6 +900,15 @@ registerPanel('turnview', {
   // Can't act: no Pack Tactics help, no threat to a ranged attacker.
   _INCAP: ['incapacitated', 'paralyzed', 'petrified', 'stunned', 'unconscious'],
   _incap(c){ return this._INCAP.some(n => this._hasCond(c, n)); },
+  // Charmed: "can't attack the charmer or target the charmer with damaging
+  // abilities or magical effects" — refused, and said why.
+  _charmBlocks(c, t){
+    const by = c && c.charmedBy;
+    if (!by || !t || by.id !== t.id || !this._hasCond(c, 'charmed')) return false;
+    this._setResult(`<span class="dim"><strong>${esc(c.name)}</strong> is charmed by ${esc(t.name)} — it can’t attack ${esc(t.name)} or target it with harmful effects.</span>`, true);
+    this._render();
+    return true;
+  },
   // 2014 surprise: no move, action or reaction until its first turn ends
   // (2024's is only initiative at disadvantage).
   _surprisedNow(c){ return !!(c && c.surprised) && this._edOf(c) === '2014'; },
@@ -2401,7 +2410,7 @@ registerPanel('turnview', {
         // (a Life Drain's lowered maximum, and a condition's timer)
         hpMax:c.hpMax, hpMaxNormal:c.hpMaxNormal, hpMaxNote:c.hpMaxNote,
         condTimers: c.condTimers ? JSON.parse(JSON.stringify(c.condTimers)) : undefined,
-        legendaryUsed:c.legendaryUsed, lrUsed:c.lrUsed, concentration:c.concentration, vex:c.vex ? {...c.vex} : undefined, sapped:c.sapped ? {...c.sapped} : undefined, slowed:c.slowed ? {...c.slowed} : undefined, extraDmgTurn:c.extraDmgTurn, onceTurn:c.onceTurn ? {...c.onceTurn} : undefined,
+        legendaryUsed:c.legendaryUsed, lrUsed:c.lrUsed, concentration:c.concentration, vex:c.vex ? {...c.vex} : undefined, sapped:c.sapped ? {...c.sapped} : undefined, slowed:c.slowed ? {...c.slowed} : undefined, charmedBy:c.charmedBy ? {...c.charmedBy} : undefined, extraDmgTurn:c.extraDmgTurn, onceTurn:c.onceTurn ? {...c.onceTurn} : undefined,
         deathSaves: c.deathSaves ? {...c.deathSaves} : c.deathSaves,
         rechargeSpent: (c.rechargeSpent || []).slice(),
         usesSpent: c.usesSpent ? {...c.usesSpent} : undefined, usesRound: c.usesRound ? {...c.usesRound} : undefined, slotsUsed: c.slotsUsed ? {...c.slotsUsed} : undefined,
@@ -2773,6 +2782,7 @@ registerPanel('turnview', {
     const t = o.target || this._order().find(x => x.id === this._armed);
     if (!t){ this._setResult('<span class="dim">Pick a target on the right first.</span>'); this._render(); return; }
     const a = this._attacksFor(c)[ai]; if (!a) return;
+    if (this._charmBlocks(c, t)) return;
     this._snapshot(`${c.name} · ${a.name} → ${t.name}`);
     // Advantage and disadvantage, the most-used modifier in the game and the
     // one thing the panel had no way to express. Both dice are shown, because
@@ -3304,6 +3314,7 @@ registerPanel('turnview', {
       // Who holds it: a grapple ends with them, and (2024) the grappled
       // creature's attacks on anyone else are at disadvantage.
       if (add.includes('Grappled')) t.grappledBy = { id: x.srcId, name: x.srcName, escape: x.escape || null, also: x.also || null };
+      if (add.includes('Charmed') && x.srcId) t.charmedBy = { id: x.srcId, name: x.srcName };
       // Its duration and its repeat save, on the tracker's own condition
       // timer: the save comes up at the end of each of the target's turns.
       const C = panelDefs.combat, ti = state.combatants.indexOf(t);
@@ -3927,6 +3938,7 @@ registerPanel('turnview', {
     const t = this._order().find(x => x.id === this._armed);
     if (!t){ this._setResult('<span class="dim">Pick a target on the right first.</span>'); this._render(); return; }
     const a = this._attacksFor(c)[ai]; if (!a || !(rider ? a.rider : a.save)) return;
+    if (!rider && this._charmBlocks(c, t)) return;
     this._snapshot(`${c.name} · ${a.name}${rider ? ' (save)' : ''} → ${t.name}`);
     if (!rider){
       if (a.recharge) this._markRechargeSpent(c, a.name);

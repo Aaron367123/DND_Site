@@ -2687,6 +2687,8 @@ registerPanel('combat',{
     const timer = (dur || x.repeat || conc.conc) ? Object.assign({}, dur || {}, x.repeat && dc ? { save: { ab: String(ability || '').slice(0, 3).toLowerCase(), dc } } : {}, conc) : null;
     if (timer) this._setCondTimer(i, x.cond, timer);
     else state.combatants[i] = { ...c, conditions: [...(c.conditions || []), x.cond] };
+    // Who charmed it: "can't attack the charmer or target it with harmful abilities".
+    if (low === 'charmed' && src) state.combatants[i] = { ...state.combatants[i], charmedBy: { id: src.id, name: src.name } };
     return 'applied';
   },
 
