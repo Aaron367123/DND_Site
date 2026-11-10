@@ -2113,18 +2113,20 @@ registerPanel('combat',{
           return '';
         };
         const ragingBPS = partySlot?.rage && (t === 'bludgeoning' || t === 'piercing' || t === 'slashing');
+        // Petrified: "resistance to all damage".
+        const petri = (c.conditions || []).some(x => /^petrified\b/i.test(String(x)));
         if (c.isPC){
           if (has(partySlot?.immunities) || has(ws?.immunities)){
             remaining = 0;
             typeSuffix = ` (${dmgType} — immune${ws ? ' [beast]' : ''})` + cav(partySlot?.immunities, ws?.immunities);
-          } else if (has(partySlot?.resistances) || has(ws?.resistances) || ragingBPS){
+          } else if (has(partySlot?.resistances) || has(ws?.resistances) || ragingBPS || petri){
             // ceil, NOT floor, and that is deliberate: `remaining` here is a
             // NEGATIVE delta, so rounding the DAMAGE down means rounding this
             // number toward zero. 21 damage resisted is Math.ceil(-21/2) = -10.
             // party.js works with a positive amount and correctly uses floor —
             // the two look inconsistent and are not.
             remaining = Math.ceil(remaining / 2);
-            typeSuffix = ` (${dmgType} — ${ragingBPS ? 'rage resist' : has(ws?.resistances) ? 'beast resist' : 'resisted'}, ½)` + cav(partySlot?.resistances, ws?.resistances);
+            typeSuffix = ` (${dmgType} — ${ragingBPS ? 'rage resist' : has(ws?.resistances) ? 'beast resist' : has(partySlot?.resistances) ? 'resisted' : 'petrified resist'}, ½)` + cav(partySlot?.resistances, ws?.resistances);
           } else if (has(partySlot?.vulnerabilities) || has(ws?.vulnerabilities)){
             remaining = remaining * 2;
             typeSuffix = ` (${dmgType} — vulnerable, ×2${has(ws?.vulnerabilities) ? ' [beast]' : ''})` + cav(partySlot?.vulnerabilities, ws?.vulnerabilities);
@@ -2153,14 +2155,14 @@ registerPanel('combat',{
           if (has(src._immune)){
             remaining = 0;
             typeSuffix = ` (${dmgType} — immune)` + cav(src._immune);
-          } else if (has(src._resist)){
+          } else if (has(src._resist) || petri){
             // ceil, NOT floor, and that is deliberate: `remaining` here is a
             // NEGATIVE delta, so rounding the DAMAGE down means rounding this
             // number toward zero. 21 damage resisted is Math.ceil(-21/2) = -10.
             // party.js works with a positive amount and correctly uses floor —
             // the two look inconsistent and are not.
             remaining = Math.ceil(remaining / 2);
-            typeSuffix = ` (${dmgType} — resisted, ½)` + cav(src._resist);
+            typeSuffix = ` (${dmgType} — ${has(src._resist) ? 'resisted' : 'petrified resist'}, ½)` + cav(src._resist);
           } else if (has(src._vulnerable)){
             remaining = remaining * 2;
             typeSuffix = ` (${dmgType} — vulnerable, ×2)` + cav(src._vulnerable);
@@ -2168,6 +2170,10 @@ registerPanel('combat',{
             typeSuffix = ` (${dmgType})`;
           }
         }
+      } else if ((c.conditions || []).some(x => /^petrified\b/i.test(String(x)))){
+        // Untyped damage to a petrified creature: resisted all the same.
+        remaining = Math.ceil(remaining / 2);
+        typeSuffix = ' (petrified resist, ½)';
       } else if (partySlot?.rage){
         // Untyped damage in rage — the resist only applies to B/P/S, so we
         // can't know without a type. Leave a hint in the log.

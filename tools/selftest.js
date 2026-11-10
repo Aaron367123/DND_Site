@@ -17490,6 +17490,49 @@ for (const cls of Object.keys(rule)) for (let L = 1; L <= 20; L++) for (const sc
         state.party = JSON.parse(keepP); state.combatants = JSON.parse(keepC); state.activeCombatantId = keepA; save();
         try { if (keepMap != null) panelDefs.battlemap.applyMapState(JSON.parse(keepMap), { source: 'test' }); sktEnsureCombatTokens(true); } catch(e){} }
     }
+    // -- Round 263: petrified resists all damage; a character at 0 HP is unconscious — attacked with advantage, a hit a crit, two failures --
+    if (!PLAYER){
+      const keepC = JSON.stringify(state.combatants), keepA = state.activeCombatantId, keepP = JSON.stringify(state.party);
+      const T = panelDefs.turnview, C = panelDefs.combat, keepD = window.sktD;
+      try {
+        for (let k = 0; k < 100 && !(typeof _5eLoaded !== 'undefined' && _5eLoaded); k++) await sleep(100);
+        const find = (n, src) => _5eData.find(r => r.cat === 'monster' && r.name === n && r._source === src);
+        state.party.push({ id: 'r263z', name: 'Zo', hp: 40, hpMax: 40, ac: 15, rules: '2024', level: 6, sheet: {} });
+        state.combatants = [{ id: 'r263z', name: 'Zo', isPC: true, hp: 40, hpMax: 40, ac: 15, initiative: 20, conditions: [] }];
+        C.addMonster(find('Ogre', 'MM')); await sleep(20);
+        const get = id => state.combatants.find(c => c.id === id), ogId = state.combatants[1].id, og = () => get(ogId);
+        Object.assign(og(), { hp: 300, hpMax: 300 });
+        save();
+        const idx = id => state.combatants.findIndex(c => c.id === id);
+        // Petrified: half of everything — typed or not, character or monster.
+        og().conditions = ['Petrified'];
+        C._applyHpDelta(idx(ogId), -20, 'fire');
+        ok('petrified: an ogre takes 10 of 20 fire', og().hp === 290, JSON.stringify(og().hp));
+        C._applyHpDelta(idx(ogId), -20, null);
+        ok('petrified: …and 10 of 20 untyped', og().hp === 280, JSON.stringify(og().hp));
+        og().conditions = [];
+        C._applyHpDelta(idx(ogId), -20, 'fire');
+        ok('petrified: not petrified — all 20', og().hp === 260);
+        get('r263z').conditions = ['Petrified'];
+        C._applyHpDelta(idx('r263z'), -10, 'slashing');
+        ok('petrified: a character takes 5 of 10 slashing', get('r263z').hp === 35, JSON.stringify(get('r263z').hp));
+        get('r263z').conditions = [];
+        // Down at 0 HP: unconscious, as the rules have it, without the tag.
+        get('r263z').hp = 0; get('r263z').deathSaves = { success: 0, fail: 0 };
+        state.party.find(p => p.id === 'r263z').hp = 0;
+        const cm = T._condMods(og(), get('r263z'));
+        ok('down: attacking a character at 0 HP — advantage, and a hit crits', (cm.adv || []).some(x => /unconscious/.test(x)) && cm.autoCrit === true, JSON.stringify(cm));
+        state.activeCombatantId = ogId; window.sktD = n => (n === 20 ? 12 : 3); T._pending = null;
+        T._rollAttack(T._attacksFor(og()).findIndex(a => /Greatclub/.test(a.name)), { attacker: og(), target: get('r263z'), mode: 0 });
+        if (T._pending) T._commit(T._pending, null);
+        ok('down: the ogre’s greatclub hits her — a critical: two death save failures', (get('r263z').deathSaves || {}).fail === 2 && /Critical|crit/i.test(T._result), JSON.stringify([get('r263z').deathSaves, T._result]));
+        ok('down: and she takes no reactions', T._incap(get('r263z')));
+        get('r263z').dead = true;
+        ok('down: dead is not unconscious', !T._hasCond(get('r263z'), 'unconscious'));
+      } catch(e){ ok('round 263 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
+      finally { window.sktD = keepD; T._pending = null;
+        state.party = JSON.parse(keepP); state.combatants = JSON.parse(keepC); state.activeCombatantId = keepA; save(); }
+    }
     // -- Class features: represented, not just text ------------------------
     {
       try {

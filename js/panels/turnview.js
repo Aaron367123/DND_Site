@@ -791,6 +791,10 @@ registerPanel('turnview', {
   // nothing when either token is missing rather than guessing a crit.
   _COND_AUTOCRIT: ["paralyzed", "unconscious"],
   _hasCond(c, name){
+    // A character at 0 hit points (and not dead) IS unconscious, whether or not
+    // the condition was added: attacks have advantage, a hit within 5 ft
+    // crits, and it takes no reactions.
+    if (name === 'unconscious' && c && c.isPC && !c.dead && (c.hp || 0) <= 0 && (c.hpMax || 0) > 0) return true;
     return !!(c && Array.isArray(c.conditions)
       && c.conditions.some(x => String(x).trim().toLowerCase() === name));
   },
