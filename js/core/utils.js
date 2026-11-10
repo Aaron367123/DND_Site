@@ -2840,10 +2840,54 @@ function sktTurnMoved(tok){
 function sktNoteMove(tokens, tok, ft){
   const c = sktMoverOf(tokens, tok);
   if (!c || !(ft > 0)) return null;
-  tok.mv = { k: sktMoveKey(), ft: sktTurnMoved(tok) + Math.round(ft) * (sktProne(c) ? 2 : 1) };
+  tok.mv = { k: sktMoveKey(), ft: sktTurnMoved(tok) + Math.round(ft) * sktMoveCost(c).mult };
   return c;
 }
 function sktProne(c){ return !!(c && (c.conditions || []).some(x => /^prone\b/i.test(String(x)))); }
+// The creatures `c` holds grappled (the grapple came from its hit, so the
+// panel knows who holds whom) and still grappled.
+function sktHeldBy(c){
+  if (!c) return [];
+  return (state.combatants || []).filter(o => o && o.id !== c.id && !o.dead && o.grappledBy && o.grappledBy.id === c.id
+    && (o.conditions || []).some(x => /^grappled\b/i.test(String(x))));
+}
+// Size, 0 (Tiny) … 5 (Gargantuan). A character's from its sheet, else Medium.
+function sktSizeRank(c){
+  let s = c && c.size;
+  if (c && c.isPC){ const p = (state.party || []).find(x => x && x.id === c.id); s = (p && p.sheet && p.sheet.size) || s || 'medium'; }
+  else if (!s && typeof _sktCombatantSize === 'function') s = _sktCombatantSize(c);
+  const k = String(s || 'medium').trim().toLowerCase().split(/[\s,/]+/)[0];
+  const r = { tiny: 0, t: 0, small: 1, s: 1, medium: 2, m: 2, large: 3, l: 3, huge: 4, h: 4, gargantuan: 5, g: 5 }[k];
+  return r == null ? 2 : r;
+}
+// What a foot of movement costs it now: crawling (prone) costs 1 extra foot,
+// and dragging a creature it grapples costs 1 extra foot — "unless the
+// creature is Tiny or two or more sizes smaller" (2024; 2014: "your speed is
+// halved, unless the creature is two or more sizes smaller"). → { mult, why }
+function sktMoveCost(c){
+  const why = [];
+  let mult = 1;
+  if (sktProne(c)){ mult++; why.push('crawling'); }
+  const held = sktHeldBy(c);
+  if (held.length){
+    const p = c && c.isPC ? (state.party || []).find(x => x && x.id === c.id) : null;
+    const ed = (p && ((p.build && p.build.edition) || p.rules)) || (state.settings && state.settings.builderEdition) || '2024';
+    const me = sktSizeRank(c);
+    const heavy = held.filter(o => { const r = sktSizeRank(o); return !(me - r >= 2 || (ed !== '2014' && r === 0)); });
+    why.push('dragging ' + held.map(o => o.name).join(', '));
+    if (heavy.length) mult++;
+  }
+  return { mult, why: why.join(', ') };
+}
+// The grappler moved (dx, dy) on the map: the creatures it holds come with it.
+// → the tokens moved.
+function sktDragHeld(tokens, tok, dx, dy){
+  if (!tok || !(dx || dy) || !Array.isArray(tokens)) return [];
+  const c = (state.combatants || []).find(x => { const m = x && sktTokenForCombatant(tokens, x); return m && (m === tok || (m.id != null && m.id === tok.id)); });
+  const out = [];
+  sktHeldBy(c).forEach(o => { const ot = sktTokenForCombatant(tokens, o); if (ot && ot !== tok){ ot.x += dx; ot.y += dy; out.push(ot); } });
+  return out;
+}
 // How far it may go this turn: its Speed, once more for each Dash.
 function sktMoveBudget(speed, c){
   return speed == null ? null : speed * (1 + Math.max(0, +(c && c.dashes) || 0));

@@ -3151,6 +3151,7 @@ registerPanel('turnview', {
     const status = [c.dodging ? 'Dodging' : '', c.readied ? 'Readied' + (c.readied.target ? ' against ' + esc(c.readied.target.name) : '') : '', c.disengaged ? 'Disengaged' : '', c.helping ? 'Helping against ' + esc(c.helping.name) : '',
       c.hidden ? 'Hidden' + (c.hidden.total != null ? ' (Stealth ' + c.hidden.total + ')' : '') : '',
       (mi => mi && (mi.budget != null || mi.moved) ? '<span class="tv-econ-move' + (mi.budget != null && mi.moved > mi.budget ? ' over' : '') + '" title="Moved this turn on the map, of its Speed' + (c.dashes ? ' (with ' + (c.dashes > 1 ? c.dashes + ' Dashes' : 'a Dash') + ')' : '') + '">Moved ' + mi.moved + (mi.budget != null ? ' / ' + mi.budget : '') + ' ft</span>' : '')(this._moveNow(c)),
+      (h => h.length ? 'Grappling ' + h.map(o => esc(o.name)).join(', ') : '')(typeof sktHeldBy === 'function' ? sktHeldBy(c) : []),
       this._hasCond(c, 'grappled') && c.grappledBy ? 'Grappled by ' + esc(c.grappledBy.name) + (c.grappledBy.escape ? ' (escape DC ' + c.grappledBy.escape + ')' : '') : ''].filter(Boolean);
     return `<div class="tv-econ-bar">
       ${pip('actionUsed', 'Action', 'This turn&rsquo;s action')}
@@ -4742,6 +4743,8 @@ registerPanel('turnview', {
       // lost the DM's move outright.
       // The feet walked, on the turn's count — the battle map's own measure
       // when it is set up (it knows a hex grid), else the squares here.
+      // A grappler brings what it holds along.
+      const held = d.from && typeof sktDragHeld === 'function' ? sktDragHeld(this._map().tokens, tok, tok.x - d.from.x, tok.y - d.from.y) : [];
       if (d.from && typeof sktNoteMove === 'function' && (tok.x !== d.from.x || tok.y !== d.from.y)){
         const cs = this._cs() || 50;
         const ft = B && B._body && typeof B._feetBetweenPts === 'function' ? B._feetBetweenPts(d.from.x, d.from.y, tok.x, tok.y)
@@ -4751,6 +4754,7 @@ registerPanel('turnview', {
       if (B && B._body){
         const live = (B._tokens || []).find(x => x && x.id === tok.id);
         if (live && live !== tok){ live.x = tok.x; live.y = tok.y; live.mv = tok.mv; }
+        held.forEach(h => { const lh = (B._tokens || []).find(x => x && x.id === h.id); if (lh && lh !== h){ lh.x = h.x; lh.y = h.y; } });
         B._renderTokens?.(); B._saveMap?.();
       }
       else {
@@ -4762,6 +4766,7 @@ registerPanel('turnview', {
           const dd = raw ? JSON.parse(raw) : null;
           if (dd && Array.isArray(dd.tokens)){
             const t2 = dd.tokens.find(x => x && x.id === tok.id);
+            held.forEach(h => { const h2 = dd.tokens.find(x => x && x.id === h.id); if (h2){ h2.x = h.x; h2.y = h.y; } });
             if (t2){ t2.x = tok.x; t2.y = tok.y; if (tok.mv) t2.mv = tok.mv;
                      localStorage.setItem('skt-battlemap-v1', JSON.stringify(dd)); }
           }

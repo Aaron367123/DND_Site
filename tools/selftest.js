@@ -17967,6 +17967,104 @@ for (const cls of Object.keys(rule)) for (let L = 1; L <= 20; L++) for (const sc
         state.party = JSON.parse(keepP); state.combatants = JSON.parse(keepC); state.activeCombatantId = keepA; state.combatRound = keepR; save();
         try { if (keepMap != null) panelDefs.battlemap.applyMapState(JSON.parse(keepMap), { source: 'test' }); sktEnsureCombatTokens(true); } catch(e){} }
     }
+    // -- Round 271: a grappler drags what it holds — the held token comes along on the map, and each foot costs one extra unless it's two sizes smaller (2024: or Tiny) --
+    if (!PLAYER){
+      const keepC = JSON.stringify(state.combatants), keepA = state.activeCombatantId, keepP = JSON.stringify(state.party), keepR = state.combatRound;
+      const keepEd = state.settings && state.settings.builderEdition;
+      const T = panelDefs.turnview, C = panelDefs.combat; let keepMap = null;
+      try {
+        for (let k = 0; k < 100 && !(typeof _5eLoaded !== 'undefined' && _5eLoaded); k++) await sleep(100);
+        const find = (n, src) => _5eData.find(r => r.cat === 'monster' && r.name === n && r._source === src);
+        state.party.push({ id: 'r271z', name: 'Zo', hp: 40, hpMax: 40, ac: 15, spd: 30, rules: '2024', level: 6, sheet: { size: 'Medium' } });
+        state.combatants = [{ id: 'r271z', name: 'Zo', isPC: true, hp: 40, hpMax: 40, ac: 15, initiative: 20, conditions: [] }];
+        C.addMonster(find('Ogre', 'MM')); C.addMonster(find('Goblin', 'MM')); C.addMonster(find('Rat', 'MM')); await sleep(20);
+        const get = id => state.combatants.find(c => c.id === id), ogId = state.combatants[1].id, gbId = state.combatants[2].id, raId = state.combatants[3].id;
+        const og = () => get(ogId), zo = () => get('r271z');
+        const hold = (who, by) => { who.conditions = ['Grappled']; who.grappledBy = { id: by.id, name: by.name }; };
+        hold(zo(), og());
+        state.combatRound = 1; state.activeCombatantId = ogId; save();
+        openPanel('turnview'); await sleep(200);
+        openPanel('battlemap'); await sleep(400);
+        const B = panelDefs.battlemap; keepMap = localStorage.getItem('skt-battlemap-v1');
+        sktEnsureCombatTokens(true); await sleep(100);
+        const zt = sktTokenForCombatant(B._tokens, zo()), mt = sktTokenForCombatant(B._tokens, og());
+        const gt = sktTokenForCombatant(B._tokens, get(gbId)), rt = sktTokenForCombatant(B._tokens, get(raId));
+        Object.assign(mt, { x: 200, y: 200 }); Object.assign(zt, { x: 300, y: 200 }); Object.assign(gt, { x: 600, y: 500 }); Object.assign(rt, { x: 700, y: 500 });
+        [zt, mt, gt, rt].forEach(t => delete t.mv);
+        B._renderTokens(); await sleep(20);
+        const drag = async (tok, dx, dy) => {
+          const el = B._body.querySelector('.map-token[data-tid="' + tok.id + '"]');
+          const r = el.getBoundingClientRect(), z = B._screenScale() || 1;
+          const x0 = r.left + r.width / 2, y0 = r.top + r.height / 2;
+          el.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, cancelable: true, button: 0, clientX: x0, clientY: y0 }));
+          document.dispatchEvent(new MouseEvent('mousemove', { bubbles: true, clientX: x0 + dx * z, clientY: y0 + dy * z }));
+          const label = (B._body.querySelector('.bm-measure-l') || {}).textContent || '';
+          document.dispatchEvent(new MouseEvent('mouseup', { bubbles: true, clientX: x0 + dx * z, clientY: y0 + dy * z }));
+          await sleep(20);
+          return label;
+        };
+        // The ogre (Large) holds Zo (Medium): one size apart — each foot costs two.
+        const mc = sktMoveCost(og());
+        ok('drag: the ogre holding Zo — each foot costs two', mc.mult === 2 && /dragging Zo/.test(mc.why), JSON.stringify(mc));
+        T._render(); await sleep(10);
+        ok('drag: its turn says who it holds', /Grappling Zo/.test((T._body.querySelector('.tv-econ-bar') || {}).textContent || ''));
+        let from = { x: mt.x, y: mt.y }, zfrom = { x: zt.x, y: zt.y };
+        const l1 = await drag(mt, 0, 100);
+        const f1 = B._feetBetweenPts(from.x, from.y, mt.x, mt.y);
+        ok('drag: the ogre moves — Zo comes with it, the same way', f1 > 0 && zt.x - zfrom.x === mt.x - from.x && zt.y - zfrom.y === mt.y - from.y, JSON.stringify([from, mt.x, mt.y, zfrom, zt.x, zt.y]));
+        ok('drag: …twice the feet on its count, not on hers', sktTurnMoved(mt) === 2 * f1 && sktTurnMoved(zt) === 0, JSON.stringify([f1, mt.mv, zt.mv]));
+        const m1 = l1.match(/^(\d+) ft dragging Zo \(costs (\d+)\) · (\d+) \/ 40 ft this turn$/);
+        ok('drag: the ruler says so', m1 && +m1[2] === 2 * +m1[1], l1);
+        // Saved: Zo's new place is on the map others see.
+        const saved = JSON.parse(localStorage.getItem('skt-battlemap-v1')).tokens.find(t => t.id === zt.id);
+        ok('drag: …and saved', saved && saved.x === zt.x && saved.y === zt.y, JSON.stringify(saved));
+        // Let go: she stays where she is.
+        zo().conditions = []; delete mt.mv;
+        from = { x: mt.x, y: mt.y }; zfrom = { x: zt.x, y: zt.y };
+        await drag(mt, 100, 0);
+        const f2 = B._feetBetweenPts(from.x, from.y, mt.x, mt.y);
+        ok('drag: no longer grappled — she stays, its feet count once', zt.x === zfrom.x && zt.y === zfrom.y && sktTurnMoved(mt) === f2, JSON.stringify([zt.x, zfrom.x, mt.mv, f2]));
+        // A Small goblin: two sizes smaller than the ogre — no extra cost.
+        hold(get(gbId), og());
+        const mg = sktMoveCost(og());
+        ok('drag: holding a goblin, two sizes smaller — no extra', mg.mult === 1 && /dragging Goblin/.test(mg.why), JSON.stringify(mg));
+        get(gbId).conditions = [];
+        // A goblin holding a Tiny rat: 2024, free; 2014, one size apart — double.
+        hold(get(raId), get(gbId));
+        state.settings.builderEdition = '2024';
+        ok('drag: 2024 — a Tiny creature is no burden', sktMoveCost(get(gbId)).mult === 1);
+        state.settings.builderEdition = '2014';
+        ok('drag: 2014 — the same rat, one size smaller, halves its speed', sktMoveCost(get(gbId)).mult === 2);
+        state.settings.builderEdition = keepEd;
+        // A character's size comes from its sheet.
+        ok('drag: a Small character’s size from her sheet', (state.party.find(p => p.id === 'r271z').sheet.size = 'Small', sktSizeRank(zo()) === 1) && sktSizeRank(og()) === 3);
+        state.party.find(p => p.id === 'r271z').sheet.size = 'Medium';
+        // Prone and dragging: each counts.
+        hold(zo(), og()); og().conditions = ['Prone'];
+        ok('drag: crawling while dragging — three feet a foot', sktMoveCost(og()).mult === 3, JSON.stringify(sktMoveCost(og())));
+        og().conditions = [];
+        // The Turn View's own little map: dragging there brings her too.
+        T._render(); await sleep(100);
+        const el = T._body.querySelector('.tv-tok[data-tvlabel="' + mt.label + '"]');
+        if (el){
+          const live = () => B._tokens.find(t => t.id === zt.id);
+          zfrom = { x: live().x, y: live().y }; const mfrom = { x: mt.x, y: mt.y };
+          const rr = el.getBoundingClientRect(), cx = rr.left + rr.width / 2, cy = rr.top + rr.height / 2;
+          const pe = (ty, x, y) => new PointerEvent(ty, { clientX: x, clientY: y, bubbles: true, pointerId: 9, button: 0, isPrimary: true });
+          el.dispatchEvent(pe('pointerdown', cx, cy));
+          for (let i = 1; i <= 6; i++){ T._body.dispatchEvent(pe('pointermove', cx, cy + i * 12)); await sleep(15);
+            // Mid-drag, another device's update swaps the map's tokens for a fresh copy.
+            if (i === 3) B._tokens = JSON.parse(JSON.stringify(B._tokens)); }
+          T._body.dispatchEvent(pe('pointerup', cx, cy + 72)); await sleep(100);
+          const mnow = B._tokens.find(t => t.id === mt.id);
+          ok('drag: in the Turn View’s map — she comes along', mnow.y !== mfrom.y && live().y - zfrom.y === mnow.y - mfrom.y && live().x - zfrom.x === mnow.x - mfrom.x,
+             JSON.stringify([mfrom, mnow.x, mnow.y, zfrom, live().x, live().y]));
+        } else ok('drag: the Turn View shows the ogre’s token', false);
+      } catch(e){ ok('round 271 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
+      finally { T._pending = null; if (state.settings) state.settings.builderEdition = keepEd;
+        state.party = JSON.parse(keepP); state.combatants = JSON.parse(keepC); state.activeCombatantId = keepA; state.combatRound = keepR; save();
+        try { if (keepMap != null) panelDefs.battlemap.applyMapState(JSON.parse(keepMap), { source: 'test' }); sktEnsureCombatTokens(true); } catch(e){} }
+    }
     // -- Class features: represented, not just text ------------------------
     {
       try {

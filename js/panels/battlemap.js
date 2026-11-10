@@ -1963,23 +1963,26 @@ registerPanel('battlemap',{
     const c = typeof sktMoverOf === 'function' ? sktMoverOf(this._tokens, t) : null;
     if (!c) return null;
     // (+ what standing up from prone cost, kept on the creature)
-    return { c, moved: sktTurnMoved(t) + (+c.stood || 0), budget: sktMoveBudget(this._tokenSpeed(t), c), crawl: sktProne(c) };
+    return { c, moved: sktTurnMoved(t) + (+c.stood || 0), budget: sktMoveBudget(this._tokenSpeed(t), c), cost: sktMoveCost(c) };
   },
   // The ruler on a token being dragged: this drag, and on its turn the whole
   // turn's movement against what it has.
   _measureMove(t, x0, y0, x1, y1){
     const mi = this._moveInfo(t);
-    return this._measureShow(x0, y0, x1, y1, mi ? mi.budget : this._tokenSpeed(t), mi ? mi.moved : 0, mi && mi.crawl);
+    return this._measureShow(x0, y0, x1, y1, mi ? mi.budget : this._tokenSpeed(t), mi ? mi.moved : 0, mi && mi.cost);
   },
   // A drop: the feet walked go on the turn's count.
+  // A grappler brings what it holds along.
   _noteTurnMove(t, from){
-    if (!from || (t.x === from.x && t.y === from.y) || typeof sktNoteMove !== 'function') return;
+    if (!from || (t.x === from.x && t.y === from.y)) return;
+    if (typeof sktDragHeld === 'function') sktDragHeld(this._tokens, t, t.x - from.x, t.y - from.y);
+    if (typeof sktNoteMove !== 'function') return;
     if (sktNoteMove(this._tokens, t, this._feetBetweenPts(from.x, from.y, t.x, t.y))) panelDefs.turnview?._syncMoved?.();
   },
   // The measuring line: dashed, from (x0,y0) to (x1,y1) in stage pixels, the
   // distance on a pill at the far end. Sized in screen pixels, so it reads
   // the same at any zoom. `speed` adds "of N ft" and turns red past it.
-  _measureShow(x0, y0, x1, y1, speed, moved, crawl){
+  _measureShow(x0, y0, x1, y1, speed, moved, extra){
     const stage = this._body && this._body.querySelector('#map-stage'); if (!stage) return;
     let m = stage.querySelector('.bm-measure');
     if (!m){ m = document.createElement('div'); m.className = 'bm-measure'; m.innerHTML = '<svg><line class="bm-measure-line"/><circle class="bm-measure-a"/><circle class="bm-measure-b"/></svg><span class="bm-measure-l"></span>'; stage.appendChild(m); }
@@ -1994,14 +1997,14 @@ registerPanel('battlemap',{
     const ft = this._feetBetweenPts(x0, y0, x1, y1);
     // `moved`: already walked this turn, so the limit is on the sum.
     const before = moved > 0 ? moved : 0;
-    // Crawling (prone): each foot costs two.
-    const cost = crawl ? ft * 2 : ft;
+    // `extra`: crawling, or dragging a creature — each foot costs more.
+    const mult = (extra && extra.mult) || 1, cost = ft * mult;
     const over = speed != null && cost + before > speed;
     const l = m.querySelector('.bm-measure-l');
     const unit = (this._ftPerCell || 5) >= 5280 ? ' mi' : ' ft';
     const show = n => unit === ' mi' ? +(n / 5280).toFixed(1) : n;
-    const crawlNote = crawl ? ' crawling (costs ' + show(cost) + ')' : '';
-    l.textContent = before || crawl ? show(ft) + unit + crawlNote + ' · ' + show(cost + before) + (speed != null ? ' / ' + show(speed) : '') + unit + ' this turn'
+    const crawlNote = extra && extra.why ? ' ' + extra.why + (mult > 1 ? ' (costs ' + show(cost) + ')' : '') : '';
+    l.textContent = before || crawlNote ? show(ft) + unit + crawlNote + ' · ' + show(cost + before) + (speed != null ? ' / ' + show(speed) : '') + unit + ' this turn'
       : show(ft) + (speed != null ? ' / ' + show(speed) : '') + unit;
     l.classList.toggle('over', !!over);
     l.style.left = x1 + 'px'; l.style.top = y1 + 'px'; l.style.fontSize = (13 * k).toFixed(2) + 'px';
