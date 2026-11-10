@@ -1658,6 +1658,8 @@ registerPanel('combat',{
     // A Dash is for the turn it was taken in. (The feet walked are kept on the
     // token, keyed by turn, so they start over by themselves.)
     c.dashes = 0;
+    // Standing up from prone cost half its Speed — this turn's movement.
+    c.stood = 0;
     // A readied action is held "until the start of your next turn".
     c.readied = null;
     // A Help given last turn lapses now, used or not.

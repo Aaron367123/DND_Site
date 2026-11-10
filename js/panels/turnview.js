@@ -125,7 +125,7 @@ registerPanel('turnview', {
       + (state.combatants || []).map(c =>
           [c.id, c.name, c.hp, c.hpMax, c.ac, c.initiative, c.isPC ? 1 : 0,
            c.reactionUsed ? 1 : 0, c.actionUsed ? 1 : 0, c.bonusUsed ? 1 : 0,
-           c.dodging ? 1 : 0, c.disengaged ? 1 : 0, c.legendaryUsed || 0, c.hidden ? 1 : 0, c.dashes || 0, c.readied ? 1 : 0,
+           c.dodging ? 1 : 0, c.disengaged ? 1 : 0, c.legendaryUsed || 0, c.hidden ? 1 : 0, c.dashes || 0, c.readied ? 1 : 0, c.stood || 0,
            c.helping ? c.helping.target : '',
            c.lair ? 1 : 0, c.lairUsed ? c.lairUsed.round + ':' + c.lairUsed.i : '',
            (c.conditions || []).join(',')].join('~')
@@ -2485,7 +2485,7 @@ registerPanel('turnview', {
       round: state.combatRound, active: state.activeCombatantId,
       combat: this._order().map(c => ({
         id:c.id, hp:c.hp, dead:c.dead, stable:c.stable, reactionUsed:c.reactionUsed,
-        actionUsed:c.actionUsed, bonusUsed:c.bonusUsed, dodging:c.dodging, dashes:c.dashes || 0, readied:c.readied ? {...c.readied} : null,
+        actionUsed:c.actionUsed, bonusUsed:c.bonusUsed, dodging:c.dodging, dashes:c.dashes || 0, stood:c.stood || 0, readied:c.readied ? {...c.readied} : null,
         // (a Help used by the roll being undone, and a hiding creature's
         // cover blown by it, come back with it)
         disengaged:c.disengaged, helping:c.helping ? {...c.helping} : null, hidden:c.hidden ? {...c.hidden} : null,
@@ -3158,6 +3158,7 @@ registerPanel('turnview', {
       ${pip('reactionUsed', 'Reaction', 'Refreshes at the start of its own turn')}
       ${status.map(t => `<span class="tv-econ-status">${t}</span>`).join('')}
       ${c.hidden ? '<button class="tv-econ-more" data-tv="unhide" title="Found, or gave itself away">Reveal</button>' : ''}
+      ${c.id === state.activeCombatantId && this._hasCond(c, 'prone') && !this._incap(c) && (c.hp || 0) > 0 ? '<button class="tv-econ-more" data-tv="standup" title="Standing up costs half its Speed">Stand up</button>' : ''}
       <button class="tv-econ-more ${this._stdOpen ? 'on' : ''}" data-tv="stdopen" aria-expanded="${this._stdOpen}"
         title="Dash, Disengage, Dodge, Help, Hide, Ready">${this._stdOpen ? '▾' : '▸'} Other actions</button>
       ${!this._stdOpen ? '' : acts.map(a => `<button class="btn tv-econ-act ${(a === 'Dodge' && c.dodging) || (a === 'Disengage' && c.disengaged) ? 'primary' : ''}"
@@ -3215,7 +3216,7 @@ registerPanel('turnview', {
     const tok = this._tokenFor(c); if (!tok) return null;
     const B = this._bm();
     const sp = B && typeof B._tokenSpeed === 'function' ? B._tokenSpeed(tok) : null;
-    return { moved: sktTurnMoved(tok), budget: sktMoveBudget(sp, c) };
+    return { moved: sktTurnMoved(tok) + (+c.stood || 0), budget: sktMoveBudget(sp, c), speed: sp };
   },
   // A move landed on the map: the count on the economy bar, in place.
   _syncMoved(){
@@ -3224,6 +3225,29 @@ registerPanel('turnview', {
     if (!el || !mi){ if (mi && !el) this._render(); return; }
     el.textContent = 'Moved ' + mi.moved + (mi.budget != null ? ' / ' + mi.budget : '') + ' ft';
     el.classList.toggle('over', mi.budget != null && mi.moved > mi.budget);
+  },
+  // Prone, on its own turn: standing up costs half its Speed (rounded down),
+  // and can't be done with a Speed of 0 or without that much movement left.
+  _standUp(c){
+    if (!c || c.id !== state.activeCombatantId || !this._hasCond(c, 'prone')) return;
+    const B = this._bm(), tok = this._tokenFor(c);
+    const sp = B && typeof B._tokenSpeed === 'function' ? B._tokenSpeed(tok || { cid: c.id, isPC: c.isPC, label: c.name }) : null;
+    const mi = this._moveNow(c);
+    const cost = sp != null ? Math.floor(sp / 2) : null;
+    if (sp === 0){ this._setResult(`<strong>${esc(c.name)}</strong> can&rsquo;t stand up &mdash; its Speed is 0.`, true); this._render(); return; }
+    if (mi && mi.budget != null && cost != null && mi.budget - mi.moved < cost){
+      this._setResult(`<strong>${esc(c.name)}</strong> can&rsquo;t stand up &mdash; it takes ${cost} ft of movement and ${Math.max(0, mi.budget - mi.moved)} ft are left.`, true); this._render(); return;
+    }
+    this._snapshot(`${c.name} · stands up`);
+    const i = state.combatants.indexOf(c), cond = (c.conditions || []).find(x => /^prone\b/i.test(String(x)));
+    const C = panelDefs.combat;
+    if (C && i >= 0 && cond) C._removeCond(i, cond);
+    const live = state.combatants.find(x => x.id === c.id) || c;
+    if (cost) live.stood = (+live.stood || 0) + cost;
+    save();
+    this._log.unshift(`<strong>${esc(c.name)}</strong> stands up${cost ? ' (' + cost + ' ft)' : ''}`);
+    this._setResult(`<strong>${esc(c.name)}</strong> stands up${cost ? ` &mdash; <strong>${cost} ft</strong> of its movement` : ' &mdash; half its Speed'}.`, true);
+    this._render();
   },
   _takeStandardAction(name){
     const c = this._active(); if (!c) return;
@@ -4425,6 +4449,7 @@ registerPanel('turnview', {
       else if (act === 'pcmiss'){ this._rescueMiss(el.dataset.k); }
       else if (act === 'pcmissx'){ this._lastPcMiss = null; this._render(); }
       else if (act === 'pcxx'){ this._lastPcHit = null; this._render(); }
+      else if (act === 'standup'){ this._standUp(this._active()); }
       else if (act === 'unhide'){ const c = this._active(); if (c && c.hidden){ c.hidden = null; this._log.unshift(`<strong>${esc(c.name)}</strong> is no longer hidden`); save(); this._render(); } }
       else if (act === 'bonusact'){ this._useBonusAction(+el.dataset.ai); }
       else if (act === 'undo'){ if (typeof sktUndo === 'function') sktUndo(); else this._undoLast(); }

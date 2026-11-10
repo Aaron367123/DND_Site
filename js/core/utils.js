@@ -2836,12 +2836,14 @@ function sktTurnMoved(tok){
 }
 // A move of `ft` feet by token `tok`: counted when it is the turn of the
 // creature it stands for. → the creature, or null when it wasn't counted.
+// Prone, it crawls: "each foot of movement costs 1 extra foot".
 function sktNoteMove(tokens, tok, ft){
   const c = sktMoverOf(tokens, tok);
   if (!c || !(ft > 0)) return null;
-  tok.mv = { k: sktMoveKey(), ft: sktTurnMoved(tok) + Math.round(ft) };
+  tok.mv = { k: sktMoveKey(), ft: sktTurnMoved(tok) + Math.round(ft) * (sktProne(c) ? 2 : 1) };
   return c;
 }
+function sktProne(c){ return !!(c && (c.conditions || []).some(x => /^prone\b/i.test(String(x)))); }
 // How far it may go this turn: its Speed, once more for each Dash.
 function sktMoveBudget(speed, c){
   return speed == null ? null : speed * (1 + Math.max(0, +(c && c.dashes) || 0));

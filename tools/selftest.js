@@ -17885,6 +17885,88 @@ for (const cls of Object.keys(rule)) for (let L = 1; L <= 20; L++) for (const sc
         document.getElementById('area-save-back')?.remove(); C._areaSaveOnAnswers = null;
         state.party = JSON.parse(keepP); state.combatants = JSON.parse(keepC); state.activeCombatantId = keepA; state.combatRound = keepR; save(); }
     }
+    // -- Round 270: prone — crawling costs double on the map; Stand up costs half its Speed, not with a Speed of 0 or too little left --
+    if (!PLAYER){
+      const keepC = JSON.stringify(state.combatants), keepA = state.activeCombatantId, keepP = JSON.stringify(state.party), keepR = state.combatRound;
+      const T = panelDefs.turnview, C = panelDefs.combat; let keepMap = null;
+      try {
+        for (let k = 0; k < 100 && !(typeof _5eLoaded !== 'undefined' && _5eLoaded); k++) await sleep(100);
+        const find = (n, src) => _5eData.find(r => r.cat === 'monster' && r.name === n && r._source === src);
+        state.party.push({ id: 'r270z', name: 'Zo', hp: 40, hpMax: 40, ac: 15, spd: 30, rules: '2024', level: 6, sheet: {} });
+        state.combatants = [{ id: 'r270z', name: 'Zo', isPC: true, hp: 40, hpMax: 40, ac: 15, initiative: 20, conditions: [] }];
+        C.addMonster(find('Ogre', 'MM')); await sleep(20);
+        const get = id => state.combatants.find(c => c.id === id), ogId = state.combatants[1].id, og = () => get(ogId);
+        state.combatRound = 1; state.activeCombatantId = ogId; og().conditions = ['Prone']; save();
+        openPanel('turnview'); await sleep(200);
+        openPanel('battlemap'); await sleep(400);
+        const B = panelDefs.battlemap; keepMap = localStorage.getItem('skt-battlemap-v1');
+        sktEnsureCombatTokens(true); await sleep(100);
+        const zt = sktTokenForCombatant(B._tokens, get('r270z')), mt = sktTokenForCombatant(B._tokens, og());
+        Object.assign(zt, { x: 600, y: 400 }); Object.assign(mt, { x: 200, y: 200 }); delete zt.mv; delete mt.mv;
+        B._renderTokens(); await sleep(20);
+        const drag = async (tok, dx, dy) => {
+          const el = B._body.querySelector('.map-token[data-tid="' + tok.id + '"]');
+          const r = el.getBoundingClientRect(), z = B._screenScale() || 1;
+          const x0 = r.left + r.width / 2, y0 = r.top + r.height / 2;
+          el.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, cancelable: true, button: 0, clientX: x0, clientY: y0 }));
+          document.dispatchEvent(new MouseEvent('mousemove', { bubbles: true, clientX: x0 + dx * z, clientY: y0 + dy * z }));
+          const label = (B._body.querySelector('.bm-measure-l') || {}).textContent || '';
+          document.dispatchEvent(new MouseEvent('mouseup', { bubbles: true, clientX: x0 + dx * z, clientY: y0 + dy * z }));
+          await sleep(20);
+          return label;
+        };
+        const chip = () => (T._body && T._body.querySelector('.tv-econ-move') || {}).textContent || '';
+        const stand = () => T._body && T._body.querySelector('[data-tv="standup"]');
+        // Prone, it crawls: the feet walked count twice.
+        let from = { x: mt.x, y: mt.y };
+        const l1 = await drag(mt, 0, 100);
+        const f1 = B._feetBetweenPts(from.x, from.y, mt.x, mt.y);
+        ok('prone: crawling — each foot counts two', f1 > 0 && sktTurnMoved(mt) === 2 * f1, JSON.stringify([f1, mt.mv]));
+        const m1 = l1.match(/^(\d+) ft crawling \(costs (\d+)\) · (\d+) \/ 40 ft this turn$/);
+        ok('prone: …and the ruler says so: twice the feet, on the turn’s count', m1 && +m1[2] === 2 * +m1[1] && +m1[3] === +m1[2], l1);
+        delete mt.mv;
+        // Stand up: half its 40 ft.
+        T._render(); await sleep(10);
+        ok('prone: on its turn — a Stand up button', !!stand());
+        stand().click(); await sleep(10);
+        ok('prone: stood — no longer prone, 20 ft of its movement spent', !C._hasCond?.(og(), 'prone') && !(og().conditions || []).some(x => /prone/i.test(x)) && og().stood === 20 && chip() === 'Moved 20 / 40 ft',
+           JSON.stringify([og().conditions, og().stood, chip()]));
+        ok('prone: …said and logged', /20 ft/.test(T._result) && T._log.some(l => /stands up/.test(l)), T._result);
+        ok('prone: …the button gone', !stand());
+        // Undo: prone again, the 20 back.
+        sktUndo(); await sleep(10);
+        ok('prone: undo — prone again, the movement back', (og().conditions || []).includes('Prone') && !og().stood, JSON.stringify([og().conditions, og().stood]));
+        T._render(); stand().click(); await sleep(10);
+        // Walking after: the ruler starts from the 20.
+        from = { x: mt.x, y: mt.y };
+        const l2 = await drag(mt, 0, 100);
+        const f2 = B._feetBetweenPts(from.x, from.y, mt.x, mt.y);
+        ok('prone: walking after standing — the ruler counts the 20 first, no crawling', l2.includes('· ' + (20 + f2) + ' / 40 ft this turn') && !/crawling/.test(l2), JSON.stringify([l2, f2]));
+        delete mt.mv; og().conditions = ['Prone']; og().stood = 0;
+        // Too little left: 25 of 40 walked, 15 left, it needs 20.
+        mt.mv = { k: sktMoveKey(), ft: 25 }; T._render(); await sleep(10);
+        stand().click(); await sleep(10);
+        ok('prone: 15 ft left — can’t stand, still prone', (og().conditions || []).includes('Prone') && !og().stood && /15 ft are left/.test(T._result), T._result);
+        delete mt.mv;
+        // Speed 0: can't stand at all.
+        og().conditions = ['Prone', 'Grappled']; T._render(); await sleep(10);
+        stand().click(); await sleep(10);
+        ok('prone: grappled, Speed 0 — can’t stand', (og().conditions || []).includes('Prone') && /Speed is 0/.test(T._result), T._result);
+        og().conditions = ['Prone'];
+        // Down at 0 HP, or someone else's turn: no button.
+        const hp = og().hp; og().hp = 0; T._render(); await sleep(10);
+        ok('prone: at 0 HP — no Stand up', !stand());
+        og().hp = hp;
+        // Next turn the cost starts over.
+        T._render(); stand().click(); await sleep(10);
+        state.activeCombatantId = 'r270z'; C._refreshTurnEconomy('r270z');
+        state.combatRound = 2; state.activeCombatantId = ogId; C._refreshTurnEconomy(ogId);
+        ok('prone: its next turn — nothing spent', !og().stood && T._moveNow(og()).moved === 0, JSON.stringify([og().stood]));
+      } catch(e){ ok('round 270 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
+      finally { T._pending = null;
+        state.party = JSON.parse(keepP); state.combatants = JSON.parse(keepC); state.activeCombatantId = keepA; state.combatRound = keepR; save();
+        try { if (keepMap != null) panelDefs.battlemap.applyMapState(JSON.parse(keepMap), { source: 'test' }); sktEnsureCombatTokens(true); } catch(e){} }
+    }
     // -- Class features: represented, not just text ------------------------
     {
       try {
