@@ -5219,6 +5219,10 @@ select.cb-sel{padding-right:28px}
 .tv-econ-move.over { color:var(--danger); font-weight:600; }
 .tv-readied { display:flex; align-items:center; gap:8px; flex-wrap:wrap; padding:6px 10px; margin-bottom:6px; border:1px solid var(--accent); border-radius:var(--r-sm); font-size:var(--fs-sm); }
 .tv-readied > span { flex:1; min-width:0; }
+.tv-cover { display:flex; align-items:center; gap:4px; flex-wrap:wrap; margin-top:8px; font-size:var(--fs-sm); }
+.tv-cover-l { color:var(--text-muted); margin-right:4px; }
+.tv-cover-why { color:var(--text-muted); font-size:var(--fs-xs); margin-left:4px; }
+button.tv-cover-why { background:none; border:none; font:inherit; font-size:var(--fs-xs); cursor:pointer; padding:2px 4px; }
 .tv-econ-more { background:none; border:1px solid transparent; color:var(--text-muted); font:inherit; font-size:var(--fs-sm); cursor:pointer; padding:3px 8px; border-radius:var(--r-sm); margin-left:auto; }
 .tv-econ-more:hover, .tv-econ-more.on { color:var(--text); border-color:var(--border); }
 .tv-advbar { display:inline-flex; gap:0; align-self:flex-start; }

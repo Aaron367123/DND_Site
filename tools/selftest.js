@@ -17727,6 +17727,80 @@ for (const cls of Object.keys(rule)) for (let L = 1; L <= 20; L++) for (const sc
       finally { T._pending = null; T._actAs = null; T._armed = null;
         state.party = JSON.parse(keepP); state.combatants = JSON.parse(keepC); state.activeCombatantId = keepA; state.combatRound = keepR; save(); }
     }
+    // -- Round 268: cover — a creature in the way is half cover (+2 AC), the DM can set ¾ or total, Sharpshooter ignores it --
+    if (!PLAYER){
+      const keepC = JSON.stringify(state.combatants), keepA = state.activeCombatantId, keepP = JSON.stringify(state.party), keepR = state.combatRound;
+      const T = panelDefs.turnview, C = panelDefs.combat, keepD = window.sktD, keepTok = T._tokenFor;
+      try {
+        for (let k = 0; k < 100 && !(typeof _5eLoaded !== 'undefined' && _5eLoaded); k++) await sleep(100);
+        const find = (n, src) => _5eData.find(r => r.cat === 'monster' && r.name === n && r._source === src);
+        state.party.push({ id: 'r268z', name: 'Zo', hp: 40, hpMax: 40, ac: 15, spd: 30, rules: '2024', level: 6, sheet: { featureList: [] } });
+        state.combatants = [{ id: 'r268z', name: 'Zo', isPC: true, hp: 40, hpMax: 40, ac: 15, initiative: 20, conditions: [] }];
+        C.addMonster(find('Ogre', 'MM')); C.addMonster(find('Goblin', 'MM')); await sleep(20);
+        const get = id => state.combatants.find(c => c.id === id), ogId = state.combatants[1].id, gbId = state.combatants[2].id, og = () => get(ogId), zo = () => get('r268z');
+        state.combatRound = 1; state.activeCombatantId = ogId; save();
+        openPanel('turnview'); await sleep(200);
+        // On the map: the ogre, the goblin, Zo — in a line.
+        const toks = { [ogId]: { x: 100, y: 100, size: 2 }, [gbId]: { x: 200, y: 100, size: 1 }, r268z: { x: 300, y: 100, size: 1 } };
+        T._tokenFor = c => c && toks[c.id] || null;
+        T._covers = {}; T._actAs = null;
+        let cov = T._coverFor(og(), zo());
+        ok('cover: the goblin stands between the ogre and Zo — half cover, +2', cov.ac === 2 && /Goblin/.test(cov.why), JSON.stringify(cov));
+        // The greatclub: +6. A 10 makes 16 — over her 15, not her 17.
+        const club = T._attacksFor(og()).findIndex(a => /Greatclub/.test(a.name));
+        const swing = nat => { let n = 0; window.sktD = d => (n++, d === 20 ? nat : 3); T._pending = null; T._rollAttack(club, { attacker: og(), target: zo(), mode: 0 }); if (T._pending) T._commit(T._pending, null); return n; };
+        swing(10);
+        ok('cover: 16 against AC 15 behind the goblin — a miss, and it says why', zo().hp === 40 && /½ cover \+2/.test(T._result) && /Goblin in the way/.test(T._result) && /vs AC 17/.test(T._result), JSON.stringify([zo().hp, T._result]));
+        og().actionUsed = false;
+        toks[gbId].y = 300;
+        ok('cover: the goblin steps aside — none', T._coverFor(og(), zo()).ac === 0);
+        swing(10);
+        ok('cover: …the same 16 hits', zo().hp < 40, JSON.stringify(zo().hp));
+        zo().hp = 40; og().actionUsed = false;
+        // A Tiny creature, or a dead one, hides nobody.
+        toks[gbId].y = 100; toks[gbId].size = 0.5;
+        ok('cover: a Tiny creature in the way — none', T._coverFor(og(), zo()).ac === 0);
+        toks[gbId].size = 1; get(gbId).dead = true;
+        ok('cover: a dead one — none', T._coverFor(og(), zo()).ac === 0);
+        get(gbId).dead = false; toks[gbId].y = 300;
+        // The DM sets it: three-quarters, from the buttons under the targets.
+        T._armed = 'r268z'; T._render(); await sleep(10);
+        const btn = v => T._body.querySelector('.tv-cover [data-tv="cover"][data-v="' + v + '"]');
+        ok('cover: the buttons are there for the picked target', !!btn(0) && !!btn(2) && !!btn(5) && !!btn('total'));
+        btn(5).click(); await sleep(10);
+        ok('cover: ¾ set — +5', T._coverFor(og(), zo()).ac === 5 && btn(5).classList.contains('primary'));
+        swing(13);
+        ok('cover: 19 against 15 + 5 — a miss', zo().hp === 40 && /¾ cover \+5/.test(T._result), T._result);
+        og().actionUsed = false;
+        // Total: no roll at all, nothing spent.
+        btn('total').click(); await sleep(10);
+        const rolls = swing(20);
+        ok('cover: total cover — no roll, no action spent, said so', rolls === 0 && !og().actionUsed && /total cover/.test(T._result) && zo().hp === 40, JSON.stringify([rolls, og().actionUsed, T._result]));
+        // Back to the map's call.
+        T._render(); await sleep(10);
+        T._body.querySelector('.tv-cover [data-v="auto"]').click(); await sleep(10);
+        ok('cover: set by hand ✕ — the map decides again', T._covers[T._coverKey(og(), zo())] === undefined && T._coverFor(og(), zo()).ac === 0);
+        // A typed total counts it too.
+        toks[gbId].y = 100;
+        T._manualOpen = true; T._render(); await sleep(10);
+        const fld = k => T._body.querySelector('[data-tvman="' + k + '"]');
+        fld('tohit').value = '16'; fld('dmg').value = '9';
+        T._pending = null; T._manualAttack(); if (T._pending) T._commit(T._pending, null);
+        ok('cover: a typed 16 behind the goblin — a miss', zo().hp === 40, JSON.stringify([zo().hp, T._result]));
+        T._manualOpen = false;
+        // Sharpshooter: a ranged weapon ignores it; not a melee one.
+        state.party.find(p => p.id === 'r268z').sheet.featureList = [{ name: 'Sharpshooter', from: 'feat' }];
+        const back = T._coverFor(zo(), og(), { ranged: true });
+        ok('cover: Sharpshooter — ignored with a bow', back.ac === 0 && back.ignored === 'Sharpshooter', JSON.stringify(back));
+        ok('cover: …not with a sword', T._coverFor(zo(), og(), { ranged: false }).ac === 2);
+        // The next turn starts from the map again.
+        T._covers[T._coverKey(og(), zo())] = 5;
+        state.activeCombatantId = 'r268z'; state.activeCombatantId = ogId; state.combatRound = 2;
+        ok('cover: a pick lasts the turn — next round, the map’s again', T._coverFor(og(), zo()).ac === 2);
+      } catch(e){ ok('round 268 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
+      finally { window.sktD = keepD; T._pending = null; T._tokenFor = keepTok; T._covers = {}; T._armed = null; T._manualOpen = false;
+        state.party = JSON.parse(keepP); state.combatants = JSON.parse(keepC); state.activeCombatantId = keepA; state.combatRound = keepR; save(); }
+    }
     // -- Class features: represented, not just text ------------------------
     {
       try {

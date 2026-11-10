@@ -1892,6 +1892,63 @@ registerPanel('turnview', {
     return this._order().filter(t => t.id !== (c && c.id)).map((t, i) => ({ t, i, r: rank(t) }))
       .sort((a, b) => a.r - b.r || a.i - b.i).map(x => x.t);
   },
+  // ─── Cover ────────────────────────────────────────────────────────────────
+  // Half cover is +2 to AC (and Dexterity saves), three-quarters +5, and
+  // total cover means it can't be targeted directly. "The obstacle might be
+  // a low wall … or a creature, whether that creature is an enemy or a
+  // friend": a creature in the way is the one kind the map can see, so that
+  // is half cover by itself. Walls and trees are the DM's, on the buttons
+  // under the targets — for this attacker and target, this turn.
+  _covers: {},
+  _coverKey(c, t){ return this._turnKey() + '|' + c.id + '>' + t.id; },
+  // The creature standing between the two on the map, if one does: its token
+  // crosses the line from the attacker's centre to the target's.
+  _coverAuto(c, t){
+    const A = this._tokenFor(c), B = this._tokenFor(t); if (!A || !B) return null;
+    const m = this._map(), unit = (this._cs() || 50) * (m.gridType === 'hex' ? Math.sqrt(3) / 2 : 1);
+    const dx = B.x - A.x, dy = B.y - A.y, L2 = dx * dx + dy * dy; if (!L2) return null;
+    for (const o of this._order()){
+      if (o.id === c.id || o.id === t.id || o.dead) continue;
+      const k = this._tokenFor(o); if (!k || k === A || k === B || k.dead) continue;
+      const sz = +k.size || 1; if (sz < 1) continue;      // a Tiny creature hides nobody
+      const u = ((k.x - A.x) * dx + (k.y - A.y) * dy) / L2;
+      if (u <= 0 || u >= 1) continue;
+      if (Math.hypot(A.x + u * dx - k.x, A.y + u * dy - k.y) < sz * unit * 0.4) return o;
+    }
+    return null;
+  },
+  // → { ac, total, why, auto, ignored } for attack `a` (optional) by c on t.
+  _coverFor(c, t, a){
+    if (!c || !t) return { ac: 0 };
+    const set = this._covers[this._coverKey(c, t)];
+    let v = set, why = '', auto = false;
+    if (set == null){ const o = this._coverAuto(c, t); v = o ? 2 : 0; if (o){ why = o.name + ' in the way'; auto = true; } }
+    if (v === 'total') return { ac: 0, total: true, why: 'total cover' };
+    // Sharpshooter (a ranged weapon) and Spell Sniper (a spell attack) ignore
+    // half and three-quarters cover.
+    if (v && a && c.isPC){
+      const fl = (((this._partyOf(c) || {}).sheet) || {}).featureList || [];
+      const has = n => fl.some(f => f && f.name === n);
+      const ig = a.spell ? (has('Spell Sniper') ? 'Spell Sniper' : '') : a.ranged ? (has('Sharpshooter') ? 'Sharpshooter' : '') : '';
+      if (ig) return { ac: 0, ignored: ig, why };
+    }
+    return { ac: v || 0, why, auto };
+  },
+  _coverNote(cov){
+    if (!cov) return '';
+    if (cov.ignored) return 'cover ignored (' + cov.ignored + ')';
+    return cov.ac ? (cov.ac === 5 ? '¾' : '½') + ' cover +' + cov.ac + ' AC' + (cov.why ? ' (' + cov.why + ')' : '') : '';
+  },
+  _renderCover(c){
+    const t = this._armed && this._order().find(x => x.id === this._armed);
+    if (!c || !t || t.id === c.id) return '';
+    const set = this._covers[this._coverKey(c, t)];
+    const cov = this._coverFor(c, t), cur = cov.total ? 'total' : cov.ac;
+    const b = (v, label, title) => `<button class="btn small ${String(cur) === String(v) ? 'primary' : ''}" data-tv="cover" data-v="${v}" title="${title}">${label}</button>`;
+    return `<div class="tv-cover"><span class="tv-cover-l">Cover</span>
+      ${b(0, 'None', 'No cover')}${b(2, '½', 'Half cover: +2 AC and Dexterity saves — a low wall, furniture, a creature in the way')}${b(5, '¾', 'Three-quarters cover: +5 AC and Dexterity saves — an arrow slit, a thick tree trunk')}${b('total', 'Total', 'Total cover: it can&rsquo;t be targeted directly')}
+      ${cov.auto ? `<span class="tv-cover-why">${esc(cov.why)}</span>` : set != null ? '<button class="tv-cover-why tv-cover-auto" data-tv="cover" data-v="auto" title="Let the map decide again">set by hand ✕</button>' : ''}</div>`;
+  },
   _renderTargets(c){
     const rows = this._targetOrder(c).map(t => {
       const pct = t.hpMax ? Math.max(0, (t.hp / t.hpMax) * 100) : 0;
@@ -1924,7 +1981,7 @@ registerPanel('turnview', {
         <span class="tv-hpbar"><i style="width:${pct}%;background:${col}"></i></span>
       </button>`;
     }).join('');
-    return '<h4>Target</h4>' + (rows || '<div class="tv-act-line">No one else in the fight.</div>');
+    return '<h4>Target</h4>' + (rows || '<div class="tv-act-line">No one else in the fight.</div>') + this._renderCover(c);
   },
 
   // The reaction picker, opened from a target's R pip. Spends the reaction and
@@ -2587,7 +2644,8 @@ registerPanel('turnview', {
     if (o.hit && o.pcAtk && o.mastery){ const mn = this._masteryOnHit(o, t); if (mn) o.hitNote = (o.hitNote ? o.hitNote + ' · ' : '') + mn; }
     // A save has no attack roll, so there is no "18 vs AC 16" to show.
     const vs = o.total == null ? ''
-      : ` <strong>${o.total}</strong> <span class="dim">vs AC ${t.ac}${o.hitNote ? ' · ' + esc(o.hitNote) : ''}</span>`;
+      // (the AC it had to beat: cover and a Shield included)
+      : ` <strong>${o.total}</strong> <span class="dim">vs AC ${(t.ac || 0) + (o.acBonus || 0)}${o.hitNote ? ' · ' + esc(o.hitNote) : ''}</span>`;
     this._pending = null;
     this._lastPcMiss = null;
     if (!o.hit){
@@ -2860,6 +2918,13 @@ registerPanel('turnview', {
     (pcSheet.rollAdv || []).forEach(x => { if ((x.on || []).some(k => atkTags.includes(k))) advWhy.push(x.label); });
     const adv = advWhy.length > 0, dis = disWhy.length > 0;
     const mode = (adv && dis) ? 0 : adv ? 1 : dis ? -1 : 0;
+    // Cover: total, and there is no attack to roll; half or three-quarters
+    // raise the AC it has to beat.
+    const cov = this._coverFor(c, t, a);
+    if (cov.total){
+      this._setResult(`<strong>${esc(t.name)}</strong> has total cover from <strong>${esc(c.name)}</strong> — it can&rsquo;t be targeted directly. <span class="dim">(Change it under the targets.)</span>`, true);
+      this._render(); return;
+    }
     let nat = this._d(20);
     // Say which reasons applied, and say when they cancelled — a DM watching
     // a straight roll on a prone, restrained target needs to know the panel
@@ -2899,7 +2964,8 @@ registerPanel('turnview', {
     // A Champion's Improved Critical: a weapon crits on 19 (Superior, 18).
     const critAt = a.pc && !a.spell ? Math.min(20, +(((this._partyOf(c) || {}).sheet || {}).critRange) || 20) : 20;
     const natCrit = !autoHit && nat >= critAt;
-    const hit = autoHit || natCrit || (nat !== 1 && total >= (t.ac || 10));
+    const hit = autoHit || natCrit || (nat !== 1 && total >= (t.ac || 10) + cov.ac);
+    if (this._coverNote(cov)) hitNote = (hitNote ? hitNote + ' · ' : '') + this._coverNote(cov);
     const crit = natCrit || (!autoHit && hit && cm.autoCrit);
     // What a hit does when it deals no damage (a roper's tendril grapples).
     if (hit && !a.pc && !(a.parts || []).length && a.effect) hitNote = (hitNote ? hitNote + ' · ' : '') + a.effect;
@@ -2956,7 +3022,7 @@ registerPanel('turnview', {
     }
     const dmg = parts.reduce((s, x) => s + x.amt, 0);
     this._resolve({ attackerId: c.id, attacker: c.name, label: o.label || a.name, target: t,
-                    total, crit, hit, dmg, parts, queued: !!o.queued, nat, bonus, hitNote, onHit: a.pc ? null : (a.onHit || null),
+                    total, crit, hit, dmg, parts, queued: !!o.queued, nat, bonus, hitNote, onHit: a.pc ? null : (a.onHit || null), acBonus: cov.ac || 0,
                     type: parts.length ? parts[0].type : '', detail,
                     pcAtk: !!a.pc, critAt, wDice, wSum, mode,
                     // its weapon mastery, and the ability modifier its damage carries (Graze, Topple)
@@ -4115,9 +4181,12 @@ registerPanel('turnview', {
     // left the only route where the number is TYPED as the only route with no
     // way back. A stray zero here is the likeliest mistake in the panel.
     this._snapshot(`${c ? c.name : 'Someone'} · manual ${dmg}${type ? ' ' + type : ''} → ${t.name}`);
+    // Cover counts against a typed total too.
+    const cov = c ? this._coverFor(c, t) : { ac: 0 };
+    if (cov.total){ this._setResult(`<strong>${esc(t.name)}</strong> has total cover — it can&rsquo;t be targeted directly. <span class="dim">(Change it under the targets.)</span>`, true); this._render(); return; }
     this._resolve({ attackerId: c && c.id, attacker: c ? c.name : 'Someone', label: 'attack', target: t,
-                    total: rolled ? raw : null, crit: false, magical,
-                    hit: rolled ? raw >= (t.ac || 10) : true, dmg, type, detail: '' });
+                    total: rolled ? raw : null, crit: false, magical, acBonus: cov.ac || 0, hitNote: rolled ? this._coverNote(cov) : '',
+                    hit: rolled ? raw >= (t.ac || 10) + (cov.ac || 0) : true, dmg, type, detail: '' });
   },
 
   _adjust(sign){
@@ -4335,6 +4404,12 @@ registerPanel('turnview', {
         if (cur){ cur[el.dataset.k] = !cur[el.dataset.k]; save(); panelDefs.combat?._render?.(); this._render(); }
       }
       else if (act === 'stdact'){ this._takeStandardAction(el.dataset.a); }
+      else if (act === 'cover'){
+        const c = this._active(), t = this._armed && this._order().find(x => x.id === this._armed);
+        if (c && t){ const k = this._coverKey(c, t), v = el.dataset.v;
+          if (v === 'auto') delete this._covers[k]; else this._covers[k] = v === 'total' ? 'total' : +v;
+          this._render(); }
+      }
       else if (act === 'readytake' || act === 'readydrop'){ this._readiedAct(el.dataset.id, act === 'readytake'); }
       else if (act === 'ohroll' || act === 'ohfail' || act === 'ohx' || act === 'ohres'){ this._onHitAct(act.slice(2), +el.dataset.i, el.dataset.r); }
       else if (act === 'pcx'){ this._usePcExtra(el.dataset.k); }
