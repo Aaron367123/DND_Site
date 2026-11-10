@@ -17639,9 +17639,12 @@ for (const cls of Object.keys(rule)) for (let L = 1; L <= 20; L++) for (const sc
         await drag(zt, 100, 0);
         ok('move: Zo moved on the ogre’s turn — not counted', sktTurnMoved(zt) === 0 && sktTurnMoved(mt) === f1 + f2 && (zt.x !== zf.x || zt.y !== zf.y), JSON.stringify([zt.mv, zf, zt.x]));
         // Past its 40 ft: red.
+        const before3 = sktTurnMoved(mt);
         const d3 = await drag(mt, 0, -300);
         const f3 = sktTurnMoved(mt);
-        ok('move: past 40 ft — the ruler goes red', d3.over && f3 > 40 && d3.label.includes('· ' + f3 + ' / 40 ft this turn'), JSON.stringify([d3, f3]));
+        // (the ruler reads where the pointer is; the count, where the token landed — off someone, it can slide)
+        const m3 = d3.label.match(/^(\d+) ft · (\d+) \/ 40 ft this turn$/);
+        ok('move: past 40 ft — the ruler goes red, the drag added to what came before', d3.over && f3 > 40 && m3 && +m3[2] === before3 + +m3[1], JSON.stringify([d3, before3, f3]));
         ok('move: …and so does the count', !!(T._body && T._body.querySelector('.tv-econ-move.over')), chip());
         T._render(); await sleep(10);
         ok('move: …drawn fresh, too', !!(T._body && T._body.querySelector('.tv-econ-move.over')), chip());
@@ -17674,6 +17677,55 @@ for (const cls of Object.keys(rule)) for (let L = 1; L <= 20; L++) for (const sc
       finally { T._pending = null;
         state.party = JSON.parse(keepP); state.combatants = JSON.parse(keepC); state.activeCombatantId = keepA; state.combatRound = keepR; save();
         try { if (keepMap != null) panelDefs.battlemap.applyMapState(JSON.parse(keepMap), { source: 'test' }); sktEnsureCombatTokens(true); } catch(e){} }
+    }
+    // -- Round 267: Ready — the action is held; on anyone's turn it is taken with the reaction; it lapses at the readier's next turn --
+    if (!PLAYER){
+      const keepC = JSON.stringify(state.combatants), keepA = state.activeCombatantId, keepP = JSON.stringify(state.party), keepR = state.combatRound;
+      const T = panelDefs.turnview, C = panelDefs.combat;
+      try {
+        for (let k = 0; k < 100 && !(typeof _5eLoaded !== 'undefined' && _5eLoaded); k++) await sleep(100);
+        const find = (n, src) => _5eData.find(r => r.cat === 'monster' && r.name === n && r._source === src);
+        state.party.push({ id: 'r267z', name: 'Zo', hp: 40, hpMax: 40, ac: 15, spd: 30, rules: '2024', level: 6, sheet: {} });
+        state.combatants = [{ id: 'r267z', name: 'Zo', isPC: true, hp: 40, hpMax: 40, ac: 15, initiative: 20, conditions: [] }];
+        C.addMonster(find('Ogre', 'MM')); await sleep(20);
+        const get = id => state.combatants.find(c => c.id === id), ogId = state.combatants[1].id, og = () => get(ogId);
+        state.combatRound = 1; state.activeCombatantId = ogId; save();
+        openPanel('turnview'); await sleep(200);
+        T._actAs = null; T._armed = 'r267z'; T._render();
+        // The ogre readies an attack on Zo.
+        T._takeStandardAction('Ready');
+        ok('ready: the ogre readies — its action spent, the action held, on Zo', og().actionUsed === true && og().readied && og().readied.target && og().readied.target.id === 'r267z' && /reaction/.test(T._result), JSON.stringify([og().readied, T._result]));
+        ok('ready: its own turn says so', /Readied/.test((T._body.querySelector('.tv-econ-bar') || {}).textContent || ''));
+        // Zo's turn: the ogre's held action is on offer.
+        C._endTurnEconomy(ogId);
+        state.activeCombatantId = 'r267z'; C._refreshTurnEconomy('r267z'); save(); T._render(); await sleep(10);
+        const take = () => T._body.querySelector('[data-tv="readytake"][data-id="' + ogId + '"]');
+        ok('ready: on Zo’s turn — a button to take the ogre’s readied action', !!take() && og().readied, JSON.stringify(og().readied));
+        // Not if it can't take reactions.
+        og().conditions = ['Stunned']; T._render();
+        ok('ready: stunned — it can’t', !take());
+        og().conditions = []; T._render();
+        T._armed = null; take().click(); await sleep(10);
+        ok('ready: taken — its reaction spent, the panel acting for it, aimed at Zo', og().reactionUsed === true && !og().readied && T._actAs === ogId && T._armed === 'r267z', JSON.stringify([og().reactionUsed, og().readied, T._actAs, T._armed]));
+        ok('ready: …logged', T._log.some(l => /Ogre/.test(l) && /readied/i.test(l)));
+        // Undo gives it back.
+        sktUndo(); await sleep(10);
+        ok('ready: undo — held again, reaction back', !!og().readied && !og().reactionUsed, JSON.stringify([og().readied, og().reactionUsed]));
+        // Let it go.
+        T._actAs = null; T._render();
+        T._body.querySelector('[data-tv="readydrop"][data-id="' + ogId + '"]').click(); await sleep(10);
+        ok('ready: let go — gone, reaction kept', !og().readied && !og().reactionUsed);
+        // It lapses at the start of the ogre's next turn.
+        og().readied = { round: 1 };
+        state.combatRound = 2; state.activeCombatantId = ogId; C._refreshTurnEconomy(ogId);
+        ok('ready: the ogre’s next turn — lapsed', !og().readied);
+        // No target picked: it readies all the same.
+        T._actAs = null; T._armed = null; T._render();
+        T._takeStandardAction('Ready');
+        ok('ready: with no target — held, no target', og().readied && !og().readied.target);
+      } catch(e){ ok('round 267 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
+      finally { T._pending = null; T._actAs = null; T._armed = null;
+        state.party = JSON.parse(keepP); state.combatants = JSON.parse(keepC); state.activeCombatantId = keepA; state.combatRound = keepR; save(); }
     }
     // -- Class features: represented, not just text ------------------------
     {

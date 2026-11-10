@@ -125,7 +125,7 @@ registerPanel('turnview', {
       + (state.combatants || []).map(c =>
           [c.id, c.name, c.hp, c.hpMax, c.ac, c.initiative, c.isPC ? 1 : 0,
            c.reactionUsed ? 1 : 0, c.actionUsed ? 1 : 0, c.bonusUsed ? 1 : 0,
-           c.dodging ? 1 : 0, c.disengaged ? 1 : 0, c.legendaryUsed || 0, c.hidden ? 1 : 0, c.dashes || 0,
+           c.dodging ? 1 : 0, c.disengaged ? 1 : 0, c.legendaryUsed || 0, c.hidden ? 1 : 0, c.dashes || 0, c.readied ? 1 : 0,
            c.helping ? c.helping.target : '',
            c.lair ? 1 : 0, c.lairUsed ? c.lairUsed.round + ':' + c.lairUsed.i : '',
            (c.conditions || []).join(',')].join('~')
@@ -1450,7 +1450,7 @@ registerPanel('turnview', {
     // the pips were only drawn for a creature with attacks to roll.
     // (Unless a legendary action off this turn is waiting for its targets.)
     if (!list.length && !this._queue){
-      return `<div class="tv-actions-wrap"><div class="tv-actions">${this._incapNote(c)}${this._renderEconomy(c)}${this._renderCompanions(c)}${this._renderClassRow(c)}${manual}</div></div>`;
+      return `<div class="tv-actions-wrap"><div class="tv-actions">${this._renderReadied(c)}${this._incapNote(c)}${this._renderEconomy(c)}${this._renderCompanions(c)}${this._renderClassRow(c)}${manual}</div></div>`;
     }
     const manualSlot = this._manualOpen ? manual
       : `<button class="tv-manual-open" data-tv="manualopen">✎ Rolled it yourself?</button>`;
@@ -1550,7 +1550,7 @@ registerPanel('turnview', {
     // (the DM may have left a condition on by mistake).
     const incapNote = this._incapNote(c);
     return `<div class="tv-actions-wrap">
-      <div class="tv-actions">${incapNote}${this._renderEconomy(c)}${this._renderCompanions(c)}${this._renderClassRow(c)}${head}${this._renderBonusActions(c)}${advBar}${rows}</div>
+      <div class="tv-actions">${this._renderReadied(c)}${incapNote}${this._renderEconomy(c)}${this._renderCompanions(c)}${this._renderClassRow(c)}${head}${this._renderBonusActions(c)}${advBar}${rows}</div>
       ${manualSlot}
     </div>`;
   },
@@ -2428,7 +2428,7 @@ registerPanel('turnview', {
       round: state.combatRound, active: state.activeCombatantId,
       combat: this._order().map(c => ({
         id:c.id, hp:c.hp, dead:c.dead, stable:c.stable, reactionUsed:c.reactionUsed,
-        actionUsed:c.actionUsed, bonusUsed:c.bonusUsed, dodging:c.dodging, dashes:c.dashes || 0,
+        actionUsed:c.actionUsed, bonusUsed:c.bonusUsed, dodging:c.dodging, dashes:c.dashes || 0, readied:c.readied ? {...c.readied} : null,
         // (a Help used by the roll being undone, and a hiding creature's
         // cover blown by it, come back with it)
         disengaged:c.disengaged, helping:c.helping ? {...c.helping} : null, hidden:c.hidden ? {...c.hidden} : null,
@@ -3079,7 +3079,7 @@ registerPanel('turnview', {
     // here tracks, so they are recorded and adjudicated — same rule as the
     // reactions with no mechanics.
     const acts = ['Dash', 'Disengage', 'Dodge', 'Help', 'Hide', 'Ready'].concat(this._hasCond(c, 'grappled') ? ['Escape'] : []);
-    const status = [c.dodging ? 'Dodging' : '', c.disengaged ? 'Disengaged' : '', c.helping ? 'Helping against ' + esc(c.helping.name) : '',
+    const status = [c.dodging ? 'Dodging' : '', c.readied ? 'Readied' + (c.readied.target ? ' against ' + esc(c.readied.target.name) : '') : '', c.disengaged ? 'Disengaged' : '', c.helping ? 'Helping against ' + esc(c.helping.name) : '',
       c.hidden ? 'Hidden' + (c.hidden.total != null ? ' (Stealth ' + c.hidden.total + ')' : '') : '',
       (mi => mi && (mi.budget != null || mi.moved) ? '<span class="tv-econ-move' + (mi.budget != null && mi.moved > mi.budget ? ' over' : '') + '" title="Moved this turn on the map, of its Speed' + (c.dashes ? ' (with ' + (c.dashes > 1 ? c.dashes + ' Dashes' : 'a Dash') + ')' : '') + '">Moved ' + mi.moved + (mi.budget != null ? ' / ' + mi.budget : '') + ' ft</span>' : '')(this._moveNow(c)),
       this._hasCond(c, 'grappled') && c.grappledBy ? 'Grappled by ' + esc(c.grappledBy.name) + (c.grappledBy.escape ? ' (escape DC ' + c.grappledBy.escape + ')' : '') : ''].filter(Boolean);
@@ -3098,6 +3098,7 @@ registerPanel('turnview', {
                   : a === 'Help' ? 'Pick the enemy on the right first: the next attack roll an ally makes against it has advantage, until the start of this creature\'s next turn — applied automatically'
                   : a === 'Hide' ? 'A Stealth check (DC 15; in the 2014 rules, the enemies\' best passive Perception). Hidden, its attacks have advantage and attacks against it disadvantage, until it attacks or is found — applied automatically'
                   : a === 'Escape' ? 'An Athletics or Acrobatics check against the grapple’s escape DC (in the 2014 rules, with none written, a contest with the grappler’s Athletics). Made, the grapple ends — applied automatically'
+                  : a === 'Ready' ? 'Hold the action for a trigger (aimed at the creature picked on the right, if any): on anyone&rsquo;s turn, Take it spends the reaction and rolls it here. Lapses at the start of its next turn'
                   : 'Take the ' + a + ' action: spends the action and logs it'}"
           >${a}</button>`).join('')}
     </div>`;
@@ -3114,6 +3115,29 @@ registerPanel('turnview', {
       + out.map(({ x, i }) => `<span class="tv-comp"><b>${esc(x.name)}</b> <span class="dim">${x.hp ?? 0}/${x.hpMax ?? 0} HP</span>
         <button class="btn small" data-tv="addextra" data-i="${i}" title="Add ${esc(x.name)} to the fight, right after ${esc(p.name)} — its hit points stay in step with the sheet">Add to the fight</button></span>`).join('')
       + '</div>';
+  },
+  // Others holding a readied action, while `c` is up: each with Take it
+  // (its reaction) and Let it go. Not one that can't take reactions now.
+  _renderReadied(c){
+    const held = this._order().filter(x => x.readied && (!c || x.id !== c.id) && !x.reactionUsed && (x.hp || 0) > 0 && !this._incap(x));
+    if (!held.length) return '';
+    return held.map(x => `<div class="tv-readied"><span>⏱ <strong>${esc(x.name)}</strong> has an action readied${x.readied.target ? ' against ' + esc(x.readied.target.name) : ''}</span>
+      <button class="btn small primary" data-tv="readytake" data-id="${esc(x.id)}" title="The trigger came: spend ${esc(x.name)}&rsquo;s reaction and roll for it here">Take it</button>
+      <button class="btn small" data-tv="readydrop" data-id="${esc(x.id)}" title="Ignore the trigger — it keeps its reaction">Let it go</button></div>`).join('');
+  },
+  _readiedAct(id, take){
+    const x = this._order().find(c => c.id === id); if (!x || !x.readied) return;
+    this._snapshot(`${x.name} · ${take ? 'readied action' : 'let the readied action go'}`);
+    const tgt = x.readied.target;
+    x.readied = null;
+    if (take){
+      this._spend(x, 'reactionUsed');
+      this._log.unshift(`<strong>${esc(x.name)}</strong> — takes its readied action (reaction)`);
+      this._actAs = x.id;
+      if (tgt && this._order().some(c => c.id === tgt.id)) this._armed = tgt.id;
+      this._setResult(`<strong>${esc(x.name)}</strong> takes its readied action${tgt ? ' against <strong>' + esc(tgt.name) + '</strong>' : ''} — roll it below.`, true);
+    } else this._log.unshift(`<strong>${esc(x.name)}</strong> lets its readied action go`);
+    save(); panelDefs.combat?._render?.(); this._render();
   },
   // The creature whose turn it is: what it has moved on the map this turn,
   // and how far it may go. Null for anyone else, or with no token.
@@ -3153,6 +3177,17 @@ registerPanel('turnview', {
       c.disengaged = true;
       this._setResult(`<strong>${esc(c.name)}</strong> takes the <strong>Disengage</strong> action —
         their movement provokes no opportunity attacks for the rest of the turn.`, true);
+    } else if (name === 'Ready'){
+      // "You take the Ready action on your turn … When the trigger occurs,
+      // you can either take your reaction right after the trigger finishes or
+      // ignore the trigger." Held until the start of its next turn; aimed at
+      // the creature picked on the right, if one is.
+      const t = this._order().find(x => x.id === this._armed && x.id !== c.id);
+      c.readied = { round: state.combatRound || 1, target: t ? { id: t.id, name: t.name } : null };
+      this._setResult(`<strong>${esc(c.name)}</strong> takes the <strong>Ready</strong> action${t ? ` — against <strong>${esc(t.name)}</strong>` : ''}.
+        When the trigger comes, on anyone&rsquo;s turn, <em>Take it</em> above the actions spends its reaction and rolls for it
+        <span class="dim">(one attack, not its Multiattack; a readied spell is cast now and held with concentration)</span>.
+        It lapses at the start of its next turn.`, true);
     } else if (name === 'Help'){
       // "The first attack roll your ally makes against the target before the
       // start of your next turn has advantage" (2024: the next by any ally).
@@ -4300,6 +4335,7 @@ registerPanel('turnview', {
         if (cur){ cur[el.dataset.k] = !cur[el.dataset.k]; save(); panelDefs.combat?._render?.(); this._render(); }
       }
       else if (act === 'stdact'){ this._takeStandardAction(el.dataset.a); }
+      else if (act === 'readytake' || act === 'readydrop'){ this._readiedAct(el.dataset.id, act === 'readytake'); }
       else if (act === 'ohroll' || act === 'ohfail' || act === 'ohx' || act === 'ohres'){ this._onHitAct(act.slice(2), +el.dataset.i, el.dataset.r); }
       else if (act === 'pcx'){ this._usePcExtra(el.dataset.k); }
       else if (act === 'pcxcun'){ this._toggleCunning(el.dataset.k); }

@@ -5217,6 +5217,8 @@ select.cb-sel{padding-right:28px}
 .tv-result:empty, .tv-log:empty { display:none; }
 .tv-econ-status { font-size:var(--fs-xs); color:var(--accent); border:1px solid var(--accent); border-radius:var(--r-pill); padding:1px 8px; }
 .tv-econ-move.over { color:var(--danger); font-weight:600; }
+.tv-readied { display:flex; align-items:center; gap:8px; flex-wrap:wrap; padding:6px 10px; margin-bottom:6px; border:1px solid var(--accent); border-radius:var(--r-sm); font-size:var(--fs-sm); }
+.tv-readied > span { flex:1; min-width:0; }
 .tv-econ-more { background:none; border:1px solid transparent; color:var(--text-muted); font:inherit; font-size:var(--fs-sm); cursor:pointer; padding:3px 8px; border-radius:var(--r-sm); margin-left:auto; }
 .tv-econ-more:hover, .tv-econ-more.on { color:var(--text); border-color:var(--border); }
 .tv-advbar { display:inline-flex; gap:0; align-self:flex-start; }
