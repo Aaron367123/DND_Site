@@ -17452,6 +17452,44 @@ for (const cls of Object.keys(rule)) for (let L = 1; L <= 20; L++) for (const sc
       finally { window.sktD = keepD; T._pending = null; T._onHits = []; document.getElementById('area-save-back')?.remove();
         state.party = JSON.parse(keepP); state.combatants = JSON.parse(keepC); state.activeCombatantId = keepA; save(); }
     }
+    // -- Round 262: a frightened creature can't willingly move closer to what frightened it — a player's drag is refused, the DM warned --
+    if (!PLAYER){
+      const keepC = JSON.stringify(state.combatants), keepA = state.activeCombatantId, keepP = JSON.stringify(state.party);
+      const T = panelDefs.turnview, C = panelDefs.combat, keepD = window.sktD; let keepMap = null;
+      try {
+        for (let k = 0; k < 100 && !(typeof _5eLoaded !== 'undefined' && _5eLoaded); k++) await sleep(100);
+        const find = (n, src) => _5eData.find(r => r.cat === 'monster' && r.name === n && r._source === src);
+        state.party.push({ id: 'r262z', name: 'Zo', hp: 40, hpMax: 40, ac: 15, rules: '2024', level: 6, sheet: { saves: { wis: 0 } } });
+        state.combatants = [{ id: 'r262z', name: 'Zo', isPC: true, hp: 40, hpMax: 40, ac: 15, initiative: 20, conditions: [] }];
+        C.addMonster(find('Mummy', 'MM')); await sleep(20);
+        const get = id => state.combatants.find(c => c.id === id), muId = state.combatants[1].id;
+        save();
+        // The mummy's Dreadful Glare: Zo fails — frightened, of the mummy.
+        state.activeCombatantId = muId; T._armed = 'r262z'; window.sktD = n => 1; T._pending = null;
+        T._rollSave(T._attacksFor(get(muId)).findIndex(a => a.name === 'Dreadful Glare'), false);
+        if (T._pending) T._commit(T._pending, null);
+        ok('fear: the Dreadful Glare frightens Zo — of the mummy', (get('r262z').conditions || []).includes('Frightened') && get('r262z').frightenedBy && get('r262z').frightenedBy.id === muId, JSON.stringify([get('r262z').conditions, get('r262z').frightenedBy]));
+        openPanel('battlemap'); await sleep(400);
+        const B = panelDefs.battlemap; keepMap = localStorage.getItem('skt-battlemap-v1');
+        sktEnsureCombatTokens(true); await sleep(100);
+        const zt = sktTokenForCombatant(B._tokens, get('r262z')), mt = sktTokenForCombatant(B._tokens, get(muId));
+        Object.assign(zt, { x: 300, y: 100 }); Object.assign(mt, { x: 100, y: 100 });
+        const from = { x: 300, y: 100 }, closer = { x: 200, y: 100 }, away = { x: 400, y: 100 };
+        ok('fear: the DM can move Zo closer — warned, not stopped', B._fearBlocks(zt, closer, from) === false);
+        document.body.classList.add('player-mode');
+        const refused = B._fearBlocks(zt, closer, from), awayOk = B._fearBlocks(zt, away, from) === false;
+        document.body.classList.remove('player-mode');
+        ok('fear: Zo’s player can’t drag her closer — away, yes', refused === true && awayOk, JSON.stringify([refused, awayOk]));
+        get('r262z').conditions = [];
+        document.body.classList.add('player-mode');
+        const free = B._fearBlocks(zt, closer, from) === false;
+        document.body.classList.remove('player-mode');
+        ok('fear: no longer frightened — closer is fine', free);
+      } catch(e){ document.body.classList.remove('player-mode'); ok('round 262 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
+      finally { window.sktD = keepD; T._pending = null;
+        state.party = JSON.parse(keepP); state.combatants = JSON.parse(keepC); state.activeCombatantId = keepA; save();
+        try { if (keepMap != null) panelDefs.battlemap.applyMapState(JSON.parse(keepMap), { source: 'test' }); sktEnsureCombatTokens(true); } catch(e){} }
+    }
     // -- Class features: represented, not just text ------------------------
     {
       try {

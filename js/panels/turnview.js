@@ -2410,7 +2410,7 @@ registerPanel('turnview', {
         // (a Life Drain's lowered maximum, and a condition's timer)
         hpMax:c.hpMax, hpMaxNormal:c.hpMaxNormal, hpMaxNote:c.hpMaxNote,
         condTimers: c.condTimers ? JSON.parse(JSON.stringify(c.condTimers)) : undefined,
-        legendaryUsed:c.legendaryUsed, lrUsed:c.lrUsed, concentration:c.concentration, vex:c.vex ? {...c.vex} : undefined, sapped:c.sapped ? {...c.sapped} : undefined, slowed:c.slowed ? {...c.slowed} : undefined, charmedBy:c.charmedBy ? {...c.charmedBy} : undefined, extraDmgTurn:c.extraDmgTurn, onceTurn:c.onceTurn ? {...c.onceTurn} : undefined,
+        legendaryUsed:c.legendaryUsed, lrUsed:c.lrUsed, concentration:c.concentration, vex:c.vex ? {...c.vex} : undefined, sapped:c.sapped ? {...c.sapped} : undefined, slowed:c.slowed ? {...c.slowed} : undefined, charmedBy:c.charmedBy ? {...c.charmedBy} : undefined, frightenedBy:c.frightenedBy ? {...c.frightenedBy} : undefined, extraDmgTurn:c.extraDmgTurn, onceTurn:c.onceTurn ? {...c.onceTurn} : undefined,
         deathSaves: c.deathSaves ? {...c.deathSaves} : c.deathSaves,
         rechargeSpent: (c.rechargeSpent || []).slice(),
         usesSpent: c.usesSpent ? {...c.usesSpent} : undefined, usesRound: c.usesRound ? {...c.usesRound} : undefined, slotsUsed: c.slotsUsed ? {...c.slotsUsed} : undefined,
@@ -3315,6 +3315,7 @@ registerPanel('turnview', {
       // creature's attacks on anyone else are at disadvantage.
       if (add.includes('Grappled')) t.grappledBy = { id: x.srcId, name: x.srcName, escape: x.escape || null, also: x.also || null };
       if (add.includes('Charmed') && x.srcId) t.charmedBy = { id: x.srcId, name: x.srcName };
+      if (add.includes('Frightened') && x.srcId) t.frightenedBy = { id: x.srcId, name: x.srcName };
       // Its duration and its repeat save, on the tracker's own condition
       // timer: the save comes up at the end of each of the target's turns.
       const C = panelDefs.combat, ti = state.combatants.indexOf(t);

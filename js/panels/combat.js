@@ -2689,6 +2689,8 @@ registerPanel('combat',{
     else state.combatants[i] = { ...c, conditions: [...(c.conditions || []), x.cond] };
     // Who charmed it: "can't attack the charmer or target it with harmful abilities".
     if (low === 'charmed' && src) state.combatants[i] = { ...state.combatants[i], charmedBy: { id: src.id, name: src.name } };
+    // …and what frightened it: it can't willingly move closer.
+    if (low === 'frightened' && src) state.combatants[i] = { ...state.combatants[i], frightenedBy: { id: src.id, name: src.name } };
     return 'applied';
   },
 

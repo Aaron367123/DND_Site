@@ -1494,6 +1494,21 @@ registerPanel('battlemap',{
   // it, by name otherwise — the same two-step the areas menu uses, because a
   // token dropped by hand and a combatant typed in by hand only ever agree
   // on the name.
+  // Frightened: "can't willingly move closer to the source of its fear". A
+  // player's drag closer is refused (→ true); the DM's is allowed, with a
+  // warning — the DM may be setting things right.
+  _fearBlocks(t, to, from){
+    const c = this._combatantFor(t);
+    const by = c && c.frightenedBy;
+    if (!by || !(c.conditions || []).some(k => String(k).toLowerCase() === 'frightened') || !to || !from) return false;
+    const st = sktTokenForCombatant(this._tokens || [], { id: by.id, name: by.name });
+    if (!st || st.x == null || st === t) return false;
+    const before = Math.hypot(from.x - st.x, from.y - st.y), after = Math.hypot(to.x - st.x, to.y - st.y);
+    if (after >= before - 1) return false;
+    const player = document.body.classList.contains('player-mode');
+    if (typeof showToast === 'function') showToast(c.name + ' is frightened of ' + by.name + (player ? ' — it can’t move closer' : ' — it can’t willingly move closer (moved anyway)'), { alert: true });
+    return player;
+  },
   _combatantFor(t){
     if (!t || typeof state === 'undefined' || !Array.isArray(state.combatants)) return null;
     if (t.cid != null){
@@ -5554,6 +5569,7 @@ registerPanel('battlemap',{
             // right/bottom edge jumped inward by an extra full natural-cell.
             const half = size * this._tokenUnitScreen() / 2;
             const land = this._landing(t, Math.max(half, Math.min(stageW - half, nx)), Math.max(half, Math.min(stageH - half, ny)), _oaFrom, !!(ev && ev.altKey) && !document.body.classList.contains('player-mode'));
+            if (this._fearBlocks(t, land, _oaFrom)){ land.x = _oaFrom.x; land.y = _oaFrom.y; land.moved = false; }
             t.x = land.x; t.y = land.y;
             if (land.moved) this._landingNote();
             this._saveMap();
@@ -5668,6 +5684,7 @@ registerPanel('battlemap',{
             // includes _bgMapScale via _csScreen() — don't apply it twice.
             const half = size * this._tokenUnitScreen() / 2;
             const land = this._landing(t, Math.max(half, Math.min(stageW - half, nx)), Math.max(half, Math.min(stageH - half, ny)), _oaFrom, false);
+            if (this._fearBlocks(t, land, _oaFrom)){ land.x = _oaFrom.x; land.y = _oaFrom.y; land.moved = false; }
             t.x = land.x; t.y = land.y;
             if (land.moved) this._landingNote();
             this._saveMap();
