@@ -17493,7 +17493,7 @@ for (const cls of Object.keys(rule)) for (let L = 1; L <= 20; L++) for (const sc
     // -- Round 263: petrified resists all damage; a character at 0 HP is unconscious — attacked with advantage, a hit a crit, two failures --
     if (!PLAYER){
       const keepC = JSON.stringify(state.combatants), keepA = state.activeCombatantId, keepP = JSON.stringify(state.party);
-      const T = panelDefs.turnview, C = panelDefs.combat, keepD = window.sktD;
+      const T = panelDefs.turnview, C = panelDefs.combat, keepD = window.sktD, keepTok = T._tokenFor;
       try {
         for (let k = 0; k < 100 && !(typeof _5eLoaded !== 'undefined' && _5eLoaded); k++) await sleep(100);
         const find = (n, src) => _5eData.find(r => r.cat === 'monster' && r.name === n && r._source === src);
@@ -17518,6 +17518,8 @@ for (const cls of Object.keys(rule)) for (let L = 1; L <= 20; L++) for (const sc
         ok('petrified: a character takes 5 of 10 slashing', get('r263z').hp === 35, JSON.stringify(get('r263z').hp));
         get('r263z').conditions = [];
         // Down at 0 HP: unconscious, as the rules have it, without the tag.
+        // (the ogre beside her on the map: a full suite has tokens elsewhere)
+        T._tokenFor = c => ({ x: c.isPC ? 100 : 150, y: 100, size: 1 });
         get('r263z').hp = 0; get('r263z').deathSaves = { success: 0, fail: 0 };
         state.party.find(p => p.id === 'r263z').hp = 0;
         const cm = T._condMods(og(), get('r263z'));
@@ -17530,7 +17532,7 @@ for (const cls of Object.keys(rule)) for (let L = 1; L <= 20; L++) for (const sc
         get('r263z').dead = true;
         ok('down: dead is not unconscious', !T._hasCond(get('r263z'), 'unconscious'));
       } catch(e){ ok('round 263 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
-      finally { window.sktD = keepD; T._pending = null;
+      finally { window.sktD = keepD; T._pending = null; T._tokenFor = keepTok;
         state.party = JSON.parse(keepP); state.combatants = JSON.parse(keepC); state.activeCombatantId = keepA; save(); }
     }
     // -- Class features: represented, not just text ------------------------
