@@ -11054,6 +11054,8 @@
         const mi = document.querySelector('.cs-exmenu [data-cs="cards"]');
         ok('cards: the sheet\u2019s Export menu offers spell and item cards', !!mi);
         mi.click(); await sleep(400);
+        // (a busy machine can take longer to build it: wait for its rows, up to 5 s)
+        for (let k = 0; k < 50 && !(document.getElementById('cpc-pick') && document.querySelectorAll('#cpc-pick .cpc-row').length); k++) await sleep(100);
         const m = document.getElementById('cpc-pick');
         const rows = m ? [...m.querySelectorAll('.cpc-row span')].map(x => x.textContent) : [];
         ok('cards: the picker lists the spells and the magic items, not the rope', ['Fire Bolt', 'Magic Missile', 'Web', 'Fireball', 'Wand of Magic Missiles', 'Cloak of Protection'].every(n => rows.includes(n)) && !rows.some(n => /Rope/.test(n)), rows.join(', '));
