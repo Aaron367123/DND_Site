@@ -17356,6 +17356,9 @@ for (const cls of Object.keys(rule)) for (let L = 1; L <= 20; L++) for (const sc
         sktEnsureCombatTokens(true); await sleep(100);
         const cs = B._csScreen(), cell = (col, row, size) => ({ x: (col + (size || 1) / 2) * cs, y: (row + (size || 1) / 2) * cs });
         const tok = id => sktTokenForCombatant(B._tokens, get(id));
+        // Only this fight's tokens on the board (the map is restored after): earlier rounds leave theirs about.
+        const mine = new Set([tok('r259w'), tok(gbId), tok(hgId)]);
+        B._tokens.forEach(t => { if (!mine.has(t)){ t.x = null; t.y = null; } });
         // Will at (2,2), the goblin beside him at (3,2), the giant far off.
         Object.assign(tok('r259w'), cell(2, 2)); Object.assign(tok(gbId), cell(3, 2)); Object.assign(tok(hgId), cell(10, 10, 3));
         B._saveMap(); B._renderTokens(); T._mapCache = null;
