@@ -67,6 +67,16 @@ registerPanel('turnview', {
 
   mount(body){
     this._body = body;
+    // The panel's width, kept by an observer: reading clientWidth during a
+    // render forced a full layout each time (~24 ms a render in a big fight).
+    this._bodyW = null;
+    try {
+      if (this._ro) this._ro.disconnect();
+      if (typeof ResizeObserver === 'function'){
+        this._ro = new ResizeObserver(es => { const e = es[es.length - 1]; if (e) this._bodyW = e.contentRect.width; });
+        this._ro.observe(body);
+      }
+    } catch(e){}
     this._render();
     // Same-browser DM tab + player tab. Firebase covers separate devices;
     // this covers the second window on one laptop, where nothing goes over
@@ -1080,8 +1090,15 @@ registerPanel('turnview', {
     // on every render would undo a DM who had scrolled up to read something.
     if (this._freshSkeleton || this._lastLogHtml !== this._painted['.tv-log']){
       this._lastLogHtml = this._painted['.tv-log'];
-      const tail = b.querySelector('.tv-tail'), lg = b.querySelector('.tv-log');
-      if (tail && lg) tail.scrollTop = lg.offsetTop - tail.offsetTop;
+      // On the next frame, once for however many renders a hit makes: reading
+      // offsetTop here forced a layout every render.
+      if (!this._scrollQueued){
+        this._scrollQueued = true;
+        const go = () => { this._scrollQueued = false; const bb = this._body; if (!bb) return;
+          const tail = bb.querySelector('.tv-tail'), lg = bb.querySelector('.tv-log');
+          if (tail && lg) tail.scrollTop = lg.offsetTop - tail.offsetTop; };
+        if (typeof requestAnimationFrame === 'function') requestAnimationFrame(go); else go();
+      }
     }
     this._freshSkeleton = false;
     return wrote;
@@ -2037,6 +2054,7 @@ registerPanel('turnview', {
   // The same width the one-column layout switches at (the tvroot container
   // query in main.css): the window's, not the screen's.
   _canExpandMap(){
+    if (this._bodyW != null && this._bodyW > 0) return this._bodyW > 640;
     const r = this._body && this._body.querySelector('.tv-root');
     return r ? r.clientWidth > 640 : !matchMedia('(max-width: 760px)').matches;
   },
@@ -2079,7 +2097,11 @@ registerPanel('turnview', {
     // centring the swapped box inside the outer one lands it square.
     const deg = src.rotation || 0;
     const quarter = deg === 90 || deg === 270;
-    const boxW = m.clientWidth || 250, boxH = m.clientHeight || 172;
+    // The box's size, measured once per width and enlarged-or-not (each read
+    // forced a layout mid-render).
+    const key = (this._bodyW || 0) + ':' + (this._mapBig ? 1 : 0);
+    if (!this._mapBox || this._mapBox.key !== key || !this._mapBox.w){ this._mapBox = { key, w: m.clientWidth, h: m.clientHeight }; }
+    const boxW = this._mapBox.w || 250, boxH = this._mapBox.h || 172;
     const W = quarter ? boxH : boxW, H = quarter ? boxW : boxH;
     // OVERDRAW. The layer is drawn larger than the window onto it, so a pan
     // slides pre-drawn map into view instead of blank edges — that is what

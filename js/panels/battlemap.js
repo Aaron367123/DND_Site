@@ -580,9 +580,25 @@ registerPanel('battlemap',{
       + '#' + (state.party || []).map(p => p.id + ':' + face(p)).join('|');
     if (sig === this._woundSig) return;
     this._woundSig = sig;
+    // Only hit points moved (the same creatures, alive or dead as before, the
+    // same faces): the wound tint and the tooltip, in place. Rebuilding every
+    // token for one point of damage cost ~35 ms a hit in a big fight.
+    const struct = (state.combatants || []).map(c => c.id + ':' + (c.dead ? 1 : 0)).join('|')
+      + '#' + (state.party || []).map(p => p.id + ':' + face(p)).join('|');
+    const els = this._body.querySelectorAll('.map-token');
+    if (struct === this._structSig && els.length){
+      els.forEach(el => {
+        const t = (this._tokens || []).find(x => x && x.id === el.dataset.tid); if (!t) return;
+        el.classList.remove('wound-low', 'wound-half');
+        const w = this._woundOf(t); if (w) el.classList.add(w);
+        el.title = this._tokenTitle(t) + (t.hidden ? ' · hidden from players' : '');
+      });
+      return;
+    }
+    this._structSig = struct;
     this._renderTokens();
   },
-  _woundSig: null,
+  _woundSig: null, _structSig: null,
 
   _notifyMapChanged(){
     if (typeof panelDefs === 'undefined') return;

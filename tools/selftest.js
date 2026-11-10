@@ -17535,6 +17535,41 @@ for (const cls of Object.keys(rule)) for (let L = 1; L <= 20; L++) for (const sc
       finally { window.sktD = keepD; T._pending = null; T._tokenFor = keepTok;
         state.party = JSON.parse(keepP); state.combatants = JSON.parse(keepC); state.activeCombatantId = keepA; save(); }
     }
+    // -- Round 264: faster hits in a big fight, the same picture — a wound tints its token in place; a death still redraws; the log still scrolls to the newest line --
+    if (!PLAYER){
+      const keepC = JSON.stringify(state.combatants), keepA = state.activeCombatantId, keepP = JSON.stringify(state.party);
+      const T = panelDefs.turnview, C = panelDefs.combat, keepD = window.sktD;
+      try {
+        for (let k = 0; k < 100 && !(typeof _5eLoaded !== 'undefined' && _5eLoaded); k++) await sleep(100);
+        const find = (n, src) => _5eData.find(r => r.cat === 'monster' && r.name === n && r._source === src);
+        openPanel('battlemap'); await sleep(400);
+        const B = panelDefs.battlemap;
+        C.addMonster(find('Ogre', 'MM')); await sleep(20);
+        const og = state.combatants[state.combatants.length - 1];
+        og.hp = og.hpMax = 60; save(); sktEnsureCombatTokens(true); await sleep(100);
+        const el = () => { const t = sktTokenForCombatant(B._tokens, og); return t ? document.querySelector('.map-token[data-tid="' + CSS.escape(String(t.id)) + '"]') : null; };
+        ok('fast hits: the ogre has a token on the map', !!el());
+        const node0 = el(); let full = 0; const keepRT = B._renderTokens; B._renderTokens = function(...a){ full++; return keepRT.apply(this, a); };
+        const idx = () => state.combatants.indexOf(og);
+        C._applyHpDelta(idx(), -32, 'slashing'); await sleep(20);   // 28 of 60 — under half
+        ok('fast hits: a wound under half tints the token — the same node, no full redraw', !!el() && el() === node0 && el().classList.contains('wound-half') && full === 0 && /28\/60 HP/.test(el().title), JSON.stringify([el() && el().className, full, el() && el().title]));
+        C._applyHpDelta(idx(), -16, 'slashing'); await sleep(20);   // 12 of 60 — a quarter or less
+        ok('fast hits: …a quarter or less — wound-low', el().classList.contains('wound-low') && !el().classList.contains('wound-half') && full === 0, el() && el().className);
+        C._applyHpDelta(idx(), -50, 'slashing'); await sleep(50); sktEnsureCombatTokens(); await sleep(50);
+        ok('fast hits: dead — redrawn, as dead', full > 0 && !!el() && el().classList.contains('dead'), JSON.stringify([full, el() && el().className]));
+        B._renderTokens = keepRT;
+        // The Turn View log: after a hit, scrolled to show it (on the next frame).
+        if (!T._body){ openPanel('turnview'); await sleep(200); }
+        const pc = state.combatants.find(c => c.isPC);
+        state.activeCombatantId = og.id; og.dead = false; og.hp = 60;
+        for (let i = 0; i < 6; i++){ window.sktD = n => 10; T._pending = null; T._rollAttack(0, { attacker: og, target: pc, mode: 0 }); if (T._pending) T._commit(T._pending, null); pc.hp = pc.hpMax; }
+        await sleep(80);
+        const tail = T._body.querySelector('.tv-tail'), lg = T._body.querySelector('.tv-log');
+        ok('fast hits: the Turn View’s log is scrolled into view after the hits', !!tail && !!lg && Math.abs(tail.scrollTop - (lg.offsetTop - tail.offsetTop)) <= 2, JSON.stringify([tail && tail.scrollTop, lg && tail && lg.offsetTop - tail.offsetTop]));
+      } catch(e){ ok('round 264 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
+      finally { window.sktD = keepD; T._pending = null;
+        state.party = JSON.parse(keepP); state.combatants = JSON.parse(keepC); state.activeCombatantId = keepA; save(); try { sktEnsureCombatTokens(true); } catch(e){} }
+    }
     // -- Class features: represented, not just text ------------------------
     {
       try {
