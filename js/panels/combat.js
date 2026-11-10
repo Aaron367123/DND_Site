@@ -1655,6 +1655,9 @@ registerPanel('combat',{
     c.actionUsed = false;
     c.bonusUsed = false;
     c.dodging = false;
+    // A Dash is for the turn it was taken in. (The feet walked are kept on the
+    // token, keyed by turn, so they start over by themselves.)
+    c.dashes = 0;
     // A Help given last turn lapses now, used or not.
     c.helping = null;
     // Normally already cleared by _endTurnEconomy when this creature's

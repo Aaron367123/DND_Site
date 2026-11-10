@@ -125,7 +125,7 @@ registerPanel('turnview', {
       + (state.combatants || []).map(c =>
           [c.id, c.name, c.hp, c.hpMax, c.ac, c.initiative, c.isPC ? 1 : 0,
            c.reactionUsed ? 1 : 0, c.actionUsed ? 1 : 0, c.bonusUsed ? 1 : 0,
-           c.dodging ? 1 : 0, c.disengaged ? 1 : 0, c.legendaryUsed || 0, c.hidden ? 1 : 0,
+           c.dodging ? 1 : 0, c.disengaged ? 1 : 0, c.legendaryUsed || 0, c.hidden ? 1 : 0, c.dashes || 0,
            c.helping ? c.helping.target : '',
            c.lair ? 1 : 0, c.lairUsed ? c.lairUsed.round + ':' + c.lairUsed.i : '',
            (c.conditions || []).join(',')].join('~')
@@ -2428,7 +2428,7 @@ registerPanel('turnview', {
       round: state.combatRound, active: state.activeCombatantId,
       combat: this._order().map(c => ({
         id:c.id, hp:c.hp, dead:c.dead, stable:c.stable, reactionUsed:c.reactionUsed,
-        actionUsed:c.actionUsed, bonusUsed:c.bonusUsed, dodging:c.dodging,
+        actionUsed:c.actionUsed, bonusUsed:c.bonusUsed, dodging:c.dodging, dashes:c.dashes || 0,
         // (a Help used by the roll being undone, and a hiding creature's
         // cover blown by it, come back with it)
         disengaged:c.disengaged, helping:c.helping ? {...c.helping} : null, hidden:c.hidden ? {...c.hidden} : null,
@@ -3081,6 +3081,7 @@ registerPanel('turnview', {
     const acts = ['Dash', 'Disengage', 'Dodge', 'Help', 'Hide', 'Ready'].concat(this._hasCond(c, 'grappled') ? ['Escape'] : []);
     const status = [c.dodging ? 'Dodging' : '', c.disengaged ? 'Disengaged' : '', c.helping ? 'Helping against ' + esc(c.helping.name) : '',
       c.hidden ? 'Hidden' + (c.hidden.total != null ? ' (Stealth ' + c.hidden.total + ')' : '') : '',
+      (mi => mi && (mi.budget != null || mi.moved) ? '<span class="tv-econ-move' + (mi.budget != null && mi.moved > mi.budget ? ' over' : '') + '" title="Moved this turn on the map, of its Speed' + (c.dashes ? ' (with ' + (c.dashes > 1 ? c.dashes + ' Dashes' : 'a Dash') + ')' : '') + '">Moved ' + mi.moved + (mi.budget != null ? ' / ' + mi.budget : '') + ' ft</span>' : '')(this._moveNow(c)),
       this._hasCond(c, 'grappled') && c.grappledBy ? 'Grappled by ' + esc(c.grappledBy.name) + (c.grappledBy.escape ? ' (escape DC ' + c.grappledBy.escape + ')' : '') : ''].filter(Boolean);
     return `<div class="tv-econ-bar">
       ${pip('actionUsed', 'Action', 'This turn&rsquo;s action')}
@@ -3114,13 +3115,37 @@ registerPanel('turnview', {
         <button class="btn small" data-tv="addextra" data-i="${i}" title="Add ${esc(x.name)} to the fight, right after ${esc(p.name)} — its hit points stay in step with the sheet">Add to the fight</button></span>`).join('')
       + '</div>';
   },
+  // The creature whose turn it is: what it has moved on the map this turn,
+  // and how far it may go. Null for anyone else, or with no token.
+  _moveNow(c){
+    if (!c || c.id !== state.activeCombatantId || typeof sktTurnMoved !== 'function') return null;
+    const tok = this._tokenFor(c); if (!tok) return null;
+    const B = this._bm();
+    const sp = B && typeof B._tokenSpeed === 'function' ? B._tokenSpeed(tok) : null;
+    return { moved: sktTurnMoved(tok), budget: sktMoveBudget(sp, c) };
+  },
+  // A move landed on the map: the count on the economy bar, in place.
+  _syncMoved(){
+    const el = this._body && this._body.querySelector('.tv-econ-move');
+    const c = this._active(); const mi = this._moveNow(c);
+    if (!el || !mi){ if (mi && !el) this._render(); return; }
+    el.textContent = 'Moved ' + mi.moved + (mi.budget != null ? ' / ' + mi.budget : '') + ' ft';
+    el.classList.toggle('over', mi.budget != null && mi.moved > mi.budget);
+  },
   _takeStandardAction(name){
     const c = this._active(); if (!c) return;
     if (name === 'Hide') return this._hide(c);
     if (name === 'Escape') return this._escape(c);
     this._snapshot(`${c.name} · ${name}`);
     const asBonus = this._spendStd(c, name);
-    if (name === 'Dodge'){
+    if (name === 'Dash'){
+      // "Extra movement for the current turn … equal to your Speed": the
+      // map's ruler counts against the doubled figure from here on.
+      c.dashes = (c.dashes || 0) + 1;
+      const mi = this._moveNow(c);
+      this._setResult(`<strong>${esc(c.name)}</strong> takes the <strong>Dash</strong> action —
+        extra movement equal to its Speed this turn${mi && mi.budget != null ? `: <strong>${mi.budget} ft</strong> in all${mi.moved ? `, ${mi.moved} ft used` : ''}` : ''}.`, true);
+    } else if (name === 'Dodge'){
       c.dodging = true;
       this._setResult(`<strong>${esc(c.name)}</strong> takes the <strong>Dodge</strong> action —
         attacks against them have disadvantage until the start of their next turn.`, true);
@@ -4571,9 +4596,17 @@ registerPanel('turnview', {
       // copy and the save that followed sent the creature's OLD position.
       // Measured: a player's move landing while the DM dragged the ogre here
       // lost the DM's move outright.
+      // The feet walked, on the turn's count — the battle map's own measure
+      // when it is set up (it knows a hex grid), else the squares here.
+      if (d.from && typeof sktNoteMove === 'function' && (tok.x !== d.from.x || tok.y !== d.from.y)){
+        const cs = this._cs() || 50;
+        const ft = B && B._body && typeof B._feetBetweenPts === 'function' ? B._feetBetweenPts(d.from.x, d.from.y, tok.x, tok.y)
+          : sktGridFeet((tok.x - d.from.x) / cs, (tok.y - d.from.y) / cs, this._diagRule(), this._ftPerCell());
+        sktNoteMove(this._map().tokens, tok, ft);
+      }
       if (B && B._body){
         const live = (B._tokens || []).find(x => x && x.id === tok.id);
-        if (live && live !== tok){ live.x = tok.x; live.y = tok.y; }
+        if (live && live !== tok){ live.x = tok.x; live.y = tok.y; live.mv = tok.mv; }
         B._renderTokens?.(); B._saveMap?.();
       }
       else {
@@ -4585,7 +4618,7 @@ registerPanel('turnview', {
           const dd = raw ? JSON.parse(raw) : null;
           if (dd && Array.isArray(dd.tokens)){
             const t2 = dd.tokens.find(x => x && x.id === tok.id);
-            if (t2){ t2.x = tok.x; t2.y = tok.y;
+            if (t2){ t2.x = tok.x; t2.y = tok.y; if (tok.mv) t2.mv = tok.mv;
                      localStorage.setItem('skt-battlemap-v1', JSON.stringify(dd)); }
           }
         } catch(err){ console.warn('[SKT] token move', err); }

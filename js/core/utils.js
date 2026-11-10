@@ -2813,6 +2813,40 @@ function sktTokenForCombatant(tokens, c){
       || null;
 }
 
+// ─── Movement this turn ──────────────────────────────────────────────────────
+// "You can move a distance up to your Speed" on your turn, and the Dash action
+// adds that much again. What the creature has moved so far is kept on its map
+// token, keyed by round and turn, so a move from any surface counts — the DM's
+// map, the Turn View's, a player's phone — and a new turn starts at nothing
+// without anyone resetting it.
+function sktMoveKey(){
+  return (typeof state !== 'undefined' && state && state.activeCombatantId) ? (state.combatRound || 1) + ':' + state.activeCombatantId : null;
+}
+// The creature whose turn it is, when `tok` is its token; else null.
+function sktMoverOf(tokens, tok){
+  if (!sktMoveKey() || !tok) return null;
+  const c = (state.combatants || []).find(x => x && x.id === state.activeCombatantId);
+  const mine = c && sktTokenForCombatant(tokens, c);
+  // (by id too: a sync mid-drag can swap the array for a copy)
+  return mine && (mine === tok || (mine.id != null && mine.id === tok.id)) ? c : null;
+}
+function sktTurnMoved(tok){
+  const k = sktMoveKey();
+  return k && tok && tok.mv && tok.mv.k === k ? (+tok.mv.ft || 0) : 0;
+}
+// A move of `ft` feet by token `tok`: counted when it is the turn of the
+// creature it stands for. → the creature, or null when it wasn't counted.
+function sktNoteMove(tokens, tok, ft){
+  const c = sktMoverOf(tokens, tok);
+  if (!c || !(ft > 0)) return null;
+  tok.mv = { k: sktMoveKey(), ft: sktTurnMoved(tok) + Math.round(ft) };
+  return c;
+}
+// How far it may go this turn: its Speed, once more for each Dash.
+function sktMoveBudget(speed, c){
+  return speed == null ? null : speed * (1 + Math.max(0, +(c && c.dashes) || 0));
+}
+
 // ─── Dice ────────────────────────────────────────────────────────────────────
 // One home for rolling. There were two byte-identical copies of the
 // expression parser (turnview._roll and attacks._roll) and thirty hand-written

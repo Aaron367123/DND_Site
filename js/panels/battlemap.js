@@ -1957,10 +1957,28 @@ registerPanel('battlemap',{
     if (typeof SKT_SPEED_ZERO !== 'undefined' && SKT_SPEED_ZERO.concat(ed === '2014' ? ['stunned'] : []).some(z => conds.some(x => x === z || x.startsWith(z + ' ')))) return 0;
     return Math.max(0, v - (c && c.slowed ? 10 : 0));
   },
+  // On its own turn, a creature's move this turn and how far it may go: its
+  // Speed, doubled by a Dash. Null for anyone else's token, or outside a fight.
+  _moveInfo(t){
+    const c = typeof sktMoverOf === 'function' ? sktMoverOf(this._tokens, t) : null;
+    if (!c) return null;
+    return { c, moved: sktTurnMoved(t), budget: sktMoveBudget(this._tokenSpeed(t), c) };
+  },
+  // The ruler on a token being dragged: this drag, and on its turn the whole
+  // turn's movement against what it has.
+  _measureMove(t, x0, y0, x1, y1){
+    const mi = this._moveInfo(t);
+    return this._measureShow(x0, y0, x1, y1, mi ? mi.budget : this._tokenSpeed(t), mi ? mi.moved : 0);
+  },
+  // A drop: the feet walked go on the turn's count.
+  _noteTurnMove(t, from){
+    if (!from || (t.x === from.x && t.y === from.y) || typeof sktNoteMove !== 'function') return;
+    if (sktNoteMove(this._tokens, t, this._feetBetweenPts(from.x, from.y, t.x, t.y))) panelDefs.turnview?._syncMoved?.();
+  },
   // The measuring line: dashed, from (x0,y0) to (x1,y1) in stage pixels, the
   // distance on a pill at the far end. Sized in screen pixels, so it reads
   // the same at any zoom. `speed` adds "of N ft" and turns red past it.
-  _measureShow(x0, y0, x1, y1, speed){
+  _measureShow(x0, y0, x1, y1, speed, moved){
     const stage = this._body && this._body.querySelector('#map-stage'); if (!stage) return;
     let m = stage.querySelector('.bm-measure');
     if (!m){ m = document.createElement('div'); m.className = 'bm-measure'; m.innerHTML = '<svg><line class="bm-measure-line"/><circle class="bm-measure-a"/><circle class="bm-measure-b"/></svg><span class="bm-measure-l"></span>'; stage.appendChild(m); }
@@ -1973,11 +1991,14 @@ registerPanel('battlemap',{
     ln.setAttribute('stroke-width', 2.5 * k); ln.setAttribute('stroke-dasharray', (8 * k) + ' ' + (5 * k));
     [['.bm-measure-a', x0, y0], ['.bm-measure-b', x1, y1]].forEach(([sel, x, y]) => { const c = m.querySelector(sel); c.setAttribute('cx', x); c.setAttribute('cy', y); c.setAttribute('r', 4 * k); });
     const ft = this._feetBetweenPts(x0, y0, x1, y1);
-    const over = speed != null && ft > speed;
+    // `moved`: already walked this turn, so the limit is on the sum.
+    const before = moved > 0 ? moved : 0;
+    const over = speed != null && ft + before > speed;
     const l = m.querySelector('.bm-measure-l');
     const unit = (this._ftPerCell || 5) >= 5280 ? ' mi' : ' ft';
     const show = n => unit === ' mi' ? +(n / 5280).toFixed(1) : n;
-    l.textContent = show(ft) + (speed != null ? ' / ' + show(speed) : '') + unit;
+    l.textContent = before ? show(ft) + unit + ' · ' + show(ft + before) + (speed != null ? ' / ' + show(speed) : '') + unit + ' this turn'
+      : show(ft) + (speed != null ? ' / ' + show(speed) : '') + unit;
     l.classList.toggle('over', !!over);
     l.style.left = x1 + 'px'; l.style.top = y1 + 'px'; l.style.fontSize = (13 * k).toFixed(2) + 'px';
     l.style.transform = 'translate(' + (14 * k) + 'px, ' + (-30 * k) + 'px)';
@@ -5573,7 +5594,7 @@ registerPanel('battlemap',{
           curPy = this._drag.startPy + dy;
           el.style.left=curPx+'px';
           el.style.top=curPy+'px';
-          this._measureShow(this._drag.startPx, this._drag.startPy, curPx, curPy, this._tokenSpeed(t));
+          this._measureMove(t, this._drag.startPx, this._drag.startPy, curPx, curPy);
           this._broadcastTokenTick(t.id, curPx, curPy);
         };
 
@@ -5599,6 +5620,7 @@ registerPanel('battlemap',{
             if (this._fearBlocks(t, land, _oaFrom)){ land.x = _oaFrom.x; land.y = _oaFrom.y; land.moved = false; }
             t.x = land.x; t.y = land.y;
             if (land.moved) this._landingNote();
+            this._noteTurnMove(t, _oaFrom);
             this._saveMap();
             this._renderTokens();
             // Opportunity attacks. The prompt lives in the Turn View — it owns
@@ -5683,7 +5705,7 @@ registerPanel('battlemap',{
           curPy = this._drag.startPy + dy;
           el.style.left = curPx+'px';
           el.style.top  = curPy+'px';
-          this._measureShow(this._drag.startPx, this._drag.startPy, curPx, curPy, this._tokenSpeed(t));
+          this._measureMove(t, this._drag.startPx, this._drag.startPy, curPx, curPy);
           this._broadcastTokenTick(t.id, curPx, curPy);
         };
         const onEnd = ev => {
@@ -5714,6 +5736,7 @@ registerPanel('battlemap',{
             if (this._fearBlocks(t, land, _oaFrom)){ land.x = _oaFrom.x; land.y = _oaFrom.y; land.moved = false; }
             t.x = land.x; t.y = land.y;
             if (land.moved) this._landingNote();
+            this._noteTurnMove(t, _oaFrom);
             this._saveMap();
             this._renderTokens();
             // Opportunity attacks. The prompt lives in the Turn View — it owns

@@ -17589,6 +17589,92 @@ for (const cls of Object.keys(rule)) for (let L = 1; L <= 20; L++) for (const sc
         B._drawGridNow = keep;
       } catch(e){ ok('round 265 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
     }
+    // -- Round 266: movement this turn — the map's ruler counts what a creature has walked, a Dash doubles it, a new turn starts over --
+    if (!PLAYER){
+      const keepC = JSON.stringify(state.combatants), keepA = state.activeCombatantId, keepP = JSON.stringify(state.party), keepR = state.combatRound;
+      const T = panelDefs.turnview, C = panelDefs.combat; let keepMap = null;
+      try {
+        for (let k = 0; k < 100 && !(typeof _5eLoaded !== 'undefined' && _5eLoaded); k++) await sleep(100);
+        const find = (n, src) => _5eData.find(r => r.cat === 'monster' && r.name === n && r._source === src);
+        state.party.push({ id: 'r266z', name: 'Zo', hp: 40, hpMax: 40, ac: 15, spd: 30, rules: '2024', level: 6, sheet: {} });
+        state.combatants = [{ id: 'r266z', name: 'Zo', isPC: true, hp: 40, hpMax: 40, ac: 15, initiative: 20, conditions: [] }];
+        C.addMonster(find('Ogre', 'MM')); await sleep(20);
+        const get = id => state.combatants.find(c => c.id === id), ogId = state.combatants[1].id, og = () => get(ogId);
+        state.combatRound = 1; state.activeCombatantId = ogId; save();
+        openPanel('turnview'); await sleep(200);
+        openPanel('battlemap'); await sleep(400);
+        const B = panelDefs.battlemap; keepMap = localStorage.getItem('skt-battlemap-v1');
+        sktEnsureCombatTokens(true); await sleep(100);
+        const zt = sktTokenForCombatant(B._tokens, get('r266z')), mt = sktTokenForCombatant(B._tokens, og());
+        Object.assign(zt, { x: 600, y: 400 }); Object.assign(mt, { x: 200, y: 200 }); delete zt.mv; delete mt.mv;
+        B._renderTokens(); await sleep(20);
+        // A real drag of the ogre's token, as the mouse does it.
+        const drag = async (tok, dx, dy, peek) => {
+          const el = B._body.querySelector('.map-token[data-tid="' + tok.id + '"]');
+          const r = el.getBoundingClientRect(), z = B._screenScale() || 1;
+          const x0 = r.left + r.width / 2, y0 = r.top + r.height / 2;
+          el.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, cancelable: true, button: 0, clientX: x0, clientY: y0 }));
+          document.dispatchEvent(new MouseEvent('mousemove', { bubbles: true, clientX: x0 + dx * z, clientY: y0 + dy * z }));
+          const label = (B._body.querySelector('.bm-measure-l') || {}).textContent || '';
+          const over = !!B._body.querySelector('.bm-measure-l.over');
+          document.dispatchEvent(new MouseEvent('mouseup', { bubbles: true, clientX: x0 + dx * z, clientY: y0 + dy * z }));
+          await sleep(20);
+          return { label, over };
+        };
+        let from = { x: mt.x, y: mt.y };
+        const d1 = await drag(mt, 0, 100);
+        const f1 = B._feetBetweenPts(from.x, from.y, mt.x, mt.y);
+        ok('move: the ogre walks — its turn’s count is the feet walked', f1 > 0 && sktTurnMoved(mt) === f1, JSON.stringify([f1, mt.mv, d1]));
+        ok('move: the first drag reads as the speed alone (nothing walked before)', / \/ 40 ft$/.test(d1.label) && !/this turn/.test(d1.label), d1.label);
+        from = { x: mt.x, y: mt.y };
+        const d2 = await drag(mt, 0, 100);
+        const f2 = B._feetBetweenPts(from.x, from.y, mt.x, mt.y);
+        ok('move: a second drag reads the whole turn against its 40 ft', d2.label.includes('· ' + (f1 + f2) + ' / 40 ft this turn') && sktTurnMoved(mt) === f1 + f2, JSON.stringify([d2.label, f1, f2]));
+        // The Turn View shows the count.
+        T._render(); await sleep(20);
+        const chip = () => (T._body && T._body.querySelector('.tv-econ-move') || {}).textContent || '';
+        ok('move: the Turn View says how far it has gone', chip() === 'Moved ' + (f1 + f2) + ' / 40 ft', chip());
+        // Someone else's token, moved on the ogre's turn: not the ogre's movement, not Zo's either.
+        const zf = { x: zt.x, y: zt.y };
+        await drag(zt, 100, 0);
+        ok('move: Zo moved on the ogre’s turn — not counted', sktTurnMoved(zt) === 0 && sktTurnMoved(mt) === f1 + f2 && (zt.x !== zf.x || zt.y !== zf.y), JSON.stringify([zt.mv, zf, zt.x]));
+        // Past its 40 ft: red.
+        const d3 = await drag(mt, 0, -300);
+        const f3 = sktTurnMoved(mt);
+        ok('move: past 40 ft — the ruler goes red', d3.over && f3 > 40 && d3.label.includes('· ' + f3 + ' / 40 ft this turn'), JSON.stringify([d3, f3]));
+        ok('move: …and so does the count', !!(T._body && T._body.querySelector('.tv-econ-move.over')), chip());
+        T._render(); await sleep(10);
+        ok('move: …drawn fresh, too', !!(T._body && T._body.querySelector('.tv-econ-move.over')), chip());
+        // Dash: its speed again.
+        T._takeStandardAction('Dash');
+        ok('move: a Dash — 80 ft in all, no longer over', og().dashes === 1 && T._moveNow(og()).budget === 80 && /80 ft/.test(T._result) && chip() === 'Moved ' + f3 + ' / 80 ft' && !T._body.querySelector('.tv-econ-move.over'), JSON.stringify([og().dashes, T._result, chip()]));
+        // Undo puts the Dash back.
+        sktUndo(); await sleep(20);
+        ok('move: undoing the Dash takes it back', !og().dashes, JSON.stringify(og().dashes));
+        T._takeStandardAction('Dash');
+        // A new turn starts over: Zo's, then the ogre's next.
+        state.activeCombatantId = 'r266z'; C._refreshTurnEconomy('r266z');
+        ok('move: Zo’s turn — the ogre’s feet are not hers', sktTurnMoved(zt) === 0);
+        state.combatRound = 2; state.activeCombatantId = ogId; C._refreshTurnEconomy(ogId);
+        ok('move: the ogre’s next turn — back to nothing, and no Dash', sktTurnMoved(mt) === 0 && !og().dashes && T._moveNow(og()).budget === 40, JSON.stringify([mt.mv, og().dashes]));
+        // A grappled ogre: speed 0, and the chip says so.
+        og().conditions = ['Grappled']; T._render(); await sleep(10);
+        ok('move: grappled — 0 ft to walk', T._moveNow(og()).budget === 0 && chip() === 'Moved 0 / 0 ft', chip());
+        og().conditions = [];
+        // Sync: the count travels with the position. Two devices moving the same token
+        // keep one side's x, y AND feet — never one's place with the other's count.
+        if (typeof _mergeRecordStr === 'function'){
+          const base = { id: 't', x: 100, y: 100, mv: { k: '1:a', ft: 5 } };
+          const mine = { id: 't', x: 300, y: 100, mv: { k: '1:a', ft: 5 } };
+          const theirs = { id: 't', x: 100, y: 400, mv: { k: '1:a', ft: 30 } };
+          const out = JSON.parse(_mergeRecordStr(JSON.stringify(base), JSON.stringify(mine), JSON.stringify(theirs), _REC_TOKEN));
+          ok('move: a sync collision keeps one side’s place and its count together', out.x === 300 && out.y === 100 && out.mv.ft === 5, JSON.stringify(out));
+        } else ok('move: the sync merge is loaded', false);
+      } catch(e){ ok('round 266 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
+      finally { T._pending = null;
+        state.party = JSON.parse(keepP); state.combatants = JSON.parse(keepC); state.activeCombatantId = keepA; state.combatRound = keepR; save();
+        try { if (keepMap != null) panelDefs.battlemap.applyMapState(JSON.parse(keepMap), { source: 'test' }); sktEnsureCombatTokens(true); } catch(e){} }
+    }
     // -- Class features: represented, not just text ------------------------
     {
       try {
