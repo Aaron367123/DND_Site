@@ -1919,7 +1919,12 @@ registerPanel('battlemap',{
     const c = (state.combatants || []).find(x => x && x.id === t.cid);
     const m = c && c._slug && typeof _5eData !== 'undefined' ? _5eData.find(r => r && r.cat === 'monster' && r._slug === c._slug) : null;
     const v = m ? parseInt(String(m.speed || '').match(/\d+/) || '', 10) : NaN;
-    return v > 0 ? v : null;
+    if (!(v > 0)) return null;
+    // As it stands, like a character's: 0 grappled, restrained… (2014: stunned too), 10 less slowed.
+    const conds = ((c && c.conditions) || []).map(x => String(x).toLowerCase());
+    const ed = (state.settings && state.settings.builderEdition) || '2024';
+    if (typeof SKT_SPEED_ZERO !== 'undefined' && SKT_SPEED_ZERO.concat(ed === '2014' ? ['stunned'] : []).some(z => conds.some(x => x === z || x.startsWith(z + ' ')))) return 0;
+    return Math.max(0, v - (c && c.slowed ? 10 : 0));
   },
   // The measuring line: dashed, from (x0,y0) to (x1,y1) in stage pixels, the
   // distance on a pill at the far end. Sized in screen pixels, so it reads

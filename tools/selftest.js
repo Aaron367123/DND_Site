@@ -13264,6 +13264,8 @@ for (const cls of Object.keys(rule)) for (let L = 1; L <= 20; L++) for (const sc
         await openCharSheet('r166'); await sleep(300);
         document.querySelector('#cs-root [data-cs-tab="inventory"]').click(); await sleep(250);
         const row = id => (document.querySelector('#cs-root [data-loot="' + id + '"] .cs-wt') || {}).textContent || '';
+        // (the catalog's weights can land a moment later on a slow run: wait for them, up to 5 s)
+        for (let k = 0; k < 50 && !/lb/.test(row('r166a')); k++) await sleep(100);
         const carry = (document.querySelector('#cs-root .cs-carry b') || {}).textContent || '';
         const before = csItems(state.party.find(p => p.id === 'r166')).reduce((n, m, i, a) => n + csItemWeight(a, m), 0);
         ok('loot: claimed Half Plate typed without a weight shows its 40 lb, three handaxes 6 lb, a typed weight is kept', /40 lb/.test(row('r166a')) && /6 lb/.test(row('r166b')) && /7 lb/.test(row('r166c')), JSON.stringify([row('r166a'), row('r166b'), row('r166c')]));
@@ -17294,6 +17296,42 @@ for (const cls of Object.keys(rule)) for (let L = 1; L <= 20; L++) for (const sc
       finally { window.sktD = keepD; state.settings.builderEdition = keepEd;
         if (keepRR == null) localStorage.removeItem(SKT_RR_KEY); else localStorage.setItem(SKT_RR_KEY, keepRR);
         document.getElementById('rr-card')?.remove();
+        state.party = JSON.parse(keepP); state.combatants = JSON.parse(keepC); state.activeCombatantId = keepA; save(); }
+    }
+    // -- Round 258: Slow (a weapon mastery) takes 10 ft off the target's speed until the attacker's next turn; a monster's map speed counts its conditions --
+    if (!PLAYER){
+      const keepC = JSON.stringify(state.combatants), keepA = state.activeCombatantId, keepP = JSON.stringify(state.party);
+      const T = panelDefs.turnview, C = panelDefs.combat, B = panelDefs.battlemap, keepD = window.sktD;
+      try {
+        for (let k = 0; k < 100 && !(typeof _5eLoaded !== 'undefined' && _5eLoaded); k++) await sleep(100);
+        const find = (n, src) => _5eData.find(r => r.cat === 'monster' && r.name === n && r._source === src);
+        state.party.push({ id: 'r258w', name: 'Will', hp: 50, hpMax: 50, ac: 18, rules: '2024', level: 6, spd: 30,
+          sheet: { profBonus: 3, attacks: [{ name: 'Javelin', atkBonus: '+7', damage: '1d6+4 piercing', props: ['T'], mastery: 'Slow' }] } });
+        state.party.push({ id: 'r258a', name: 'Ann', hp: 40, hpMax: 40, ac: 15, rules: '2024', level: 6, spd: 30, sheet: {} });
+        state.combatants = [{ id: 'r258w', name: 'Will', isPC: true, hp: 50, hpMax: 50, ac: 18, initiative: 20, conditions: [] },
+                            { id: 'r258a', name: 'Ann', isPC: true, hp: 40, hpMax: 40, ac: 15, initiative: 19, conditions: [] }];
+        C.addMonster(find('Ogre', 'MM')); await sleep(20);
+        const get = id => state.combatants.find(c => c.id === id), ogId = state.combatants[2].id, og = () => get(ogId);
+        Object.assign(og(), { hp: 300, hpMax: 300, ac: 5 });
+        state.activeCombatantId = 'r258w'; save();
+        const spd = () => B._tokenSpeed({ cid: ogId, label: og().name });
+        ok('slow: the ogre walks 40 ft', spd() === 40, JSON.stringify(spd()));
+        window.sktD = n => (n === 20 ? 15 : 3); T._pending = null;
+        T._rollAttack(0, { attacker: get('r258w'), target: og(), mode: 0 });
+        ok('slow: Will’s javelin hits — the ogre slowed, 30 ft', og().slowed && og().slowed.by === 'r258w' && spd() === 30 && /Slow:/.test(T._result), JSON.stringify([og().slowed, spd()]));
+        C._refreshTurnEconomy('r258w');
+        ok('slow: …until Will’s next turn starts — 40 again', !og().slowed && spd() === 40);
+        ok('slow: a hit that deals no damage — not slowed', T._masteryOnHit({ attackerId: 'r258w', mastery: 'Slow', dmg: 0, hit: true }, og()) === '' && !og().slowed);
+        // A monster's map speed counts its conditions, as a character's does.
+        og().conditions = ['Grappled'];
+        ok('monster speed: grappled — 0 ft', spd() === 0, JSON.stringify(spd()));
+        og().conditions = [];
+        // A character slowed: their speed says so.
+        get('r258a').slowed = { by: ogId };
+        const sn = sktSpeedNow(state.party.find(p => p.id === 'r258a'));
+        ok('slow: a slowed character — 20 ft, “Slowed”', sn.ft === 20 && sn.why === 'Slowed', JSON.stringify(sn));
+      } catch(e){ ok('round 258 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
+      finally { window.sktD = keepD; T._pending = null; T._lastPcHit = null;
         state.party = JSON.parse(keepP); state.combatants = JSON.parse(keepC); state.activeCombatantId = keepA; save(); }
     }
     // -- Class features: represented, not just text ------------------------

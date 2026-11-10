@@ -2401,7 +2401,7 @@ registerPanel('turnview', {
         // (a Life Drain's lowered maximum, and a condition's timer)
         hpMax:c.hpMax, hpMaxNormal:c.hpMaxNormal, hpMaxNote:c.hpMaxNote,
         condTimers: c.condTimers ? JSON.parse(JSON.stringify(c.condTimers)) : undefined,
-        legendaryUsed:c.legendaryUsed, lrUsed:c.lrUsed, concentration:c.concentration, vex:c.vex ? {...c.vex} : undefined, sapped:c.sapped ? {...c.sapped} : undefined, extraDmgTurn:c.extraDmgTurn, onceTurn:c.onceTurn ? {...c.onceTurn} : undefined,
+        legendaryUsed:c.legendaryUsed, lrUsed:c.lrUsed, concentration:c.concentration, vex:c.vex ? {...c.vex} : undefined, sapped:c.sapped ? {...c.sapped} : undefined, slowed:c.slowed ? {...c.slowed} : undefined, extraDmgTurn:c.extraDmgTurn, onceTurn:c.onceTurn ? {...c.onceTurn} : undefined,
         deathSaves: c.deathSaves ? {...c.deathSaves} : c.deathSaves,
         rechargeSpent: (c.rechargeSpent || []).slice(),
         usesSpent: c.usesSpent ? {...c.usesSpent} : undefined, usesRound: c.usesRound ? {...c.usesRound} : undefined, slotsUsed: c.slotsUsed ? {...c.slotsUsed} : undefined,
@@ -3452,7 +3452,7 @@ registerPanel('turnview', {
       this._queueOnHit({ onHit: { cond: 'Prone', dc, ability: 'Con' }, target: t, attacker: c.name, attackerId: c.id, label: o.label + ' (Topple)' });
       return 'Topple: DC ' + dc + ' CON or prone';
     }
-    if (k === 'slow') return 'Slow: ' + t.name + '’s speed −10 ft until the start of your next turn';
+    if (k === 'slow'){ if (!(o.dmg > 0)) return ''; t.slowed = { by: c.id }; return 'Slow: ' + t.name + '’s speed −10 ft until the start of your next turn'; }
     if (k === 'push') return 'Push: you can push ' + t.name + ' 10 ft away (Large or smaller)';
     if (k === 'cleave') return 'Cleave: one more attack against a creature within 5 ft of ' + t.name + ' (once a turn)';
     return '';

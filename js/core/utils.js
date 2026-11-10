@@ -2340,9 +2340,11 @@ function sktSpeedNow(pc, mode){
   const conds = [...new Set([...(pc.conditions || []), ...((co && co.conditions) || [])])].map(c => String(c).toLowerCase());
   const held = SKT_SPEED_ZERO.concat(ed === '2014' ? ['stunned'] : []).find(c => conds.some(x => x === c || x.startsWith(c + ' ')));
   if (held) return { ft: 0, base, why: held[0].toUpperCase() + held.slice(1) };
-  if (!exh) return { ft: base, base, why: '' };
-  const ft = ed === '2024' ? Math.max(0, base - 5 * exh) : exh >= 5 ? 0 : exh >= 2 ? Math.floor(base / 2) : base;
-  return { ft, base, why: ft !== base ? 'Exhaustion' : '' };
+  // Slow (a weapon mastery): 10 ft less until the start of the attacker's next turn.
+  const slow = co && co.slowed ? 10 : 0;
+  if (!exh) return { ft: Math.max(0, base - slow), base, why: slow ? 'Slowed' : '' };
+  const ft = Math.max(0, (ed === '2024' ? Math.max(0, base - 5 * exh) : exh >= 5 ? 0 : exh >= 2 ? Math.floor(base / 2) : base) - slow);
+  return { ft, base, why: ft !== base ? (slow ? 'Exhaustion, slowed' : 'Exhaustion') : '' };
 }
 function sktResLabel(pc, name){
   const n = String(name == null ? '' : name);
