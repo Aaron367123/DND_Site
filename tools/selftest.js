@@ -18544,6 +18544,51 @@ for (const cls of Object.keys(rule)) for (let L = 1; L <= 20; L++) for (const sc
       finally { window.sktD = keepD; window.showConfirm = keepAsk; window.sktStatesSyncAll = keepSync; T._pending = null;
         state.party = JSON.parse(keepP); state.combatants = JSON.parse(keepC); state.activeCombatantId = keepA; state.combatRound = keepR; save(); }
     }
+    // -- Round 280: Hand of Healing heals the picked creature (Martial Arts die + WIS), spends the action and a Focus Point; Physician's Touch ends paralysis first --
+    if (!PLAYER){
+      const keepC = JSON.stringify(state.combatants), keepA = state.activeCombatantId, keepP = JSON.stringify(state.party), keepR = state.combatRound;
+      const T = panelDefs.turnview, C = panelDefs.combat, keepD = window.sktD, keepAsk = window.showConfirm, keepSync = window.sktStatesSyncAll;
+      try {
+        window.sktStatesSyncAll = () => {};          // test characters with no real build behind them
+        state.party.push({ id: 'r280c', name: 'Cre', hp: 30, hpMax: 40, ac: 16, spd: 40, rules: '2024', level: 6, build: { edition: '2024' },
+          abilities: { str: 9, dex: 17, con: 14, int: 10, wis: 14, cha: 10 },
+          resources: [{ name: 'Focus Points', current: 6, max: 6 }],
+          sheet: { size: 'Medium', profBonus: 3, classLevels: [{ cls: 'monk', level: 6 }], featureList: [{ name: 'Physician’s Touch', from: 'class' }], attacks: [],
+            activations: [
+              { name: 'Unarmed Strike (Martial Arts)', action: 'Bonus Action', feature: 'Martial Arts', dice: '1d10+3', desc: 'An Unarmed Strike as a Bonus Action.' },
+              { name: 'Hand of Healing', action: 'Magic', resource: 'Focus Points', amount: 1, feature: 'Hand of Healing', desc: 'As a Magic action, you can expend 1 Focus Point to touch a creature and restore a number of Hit Points equal to a roll of your Martial Arts die plus your Wisdom modifier.' } ] } });
+        state.party.push({ id: 'r280z', name: 'Zo', hp: 10, hpMax: 40, ac: 15, spd: 30, rules: '2024', level: 6, sheet: {} });
+        state.combatants = [{ id: 'r280c', name: 'Cre', isPC: true, hp: 30, hpMax: 40, ac: 16, initiative: 20, conditions: [] },
+                            { id: 'r280z', name: 'Zo', isPC: true, hp: 10, hpMax: 40, ac: 15, initiative: 18, conditions: ['Poisoned', 'Paralyzed'] }];
+        state.combatRound = 1; state.activeCombatantId = 'r280c'; save();
+        openPanel('turnview'); await sleep(200);
+        const get = id => state.combatants.find(c => c.id === id), cre = () => get('r280c'), zo = () => get('r280z');
+        const focus = () => state.party.find(p => p.id === 'r280c').resources[0].current;
+        const hoh = () => T._activationsFor(cre()).find(a => a.name === 'Hand of Healing');
+        let answer = 5, asked = ''; window.showConfirm = async (msg) => { asked = msg; return answer; };
+        // On Zo, picked on the right: a 5 on the d10, + 2 — 7. Paralyzed ends (Physician's Touch); poisoned stays.
+        T._armed = 'r280z';
+        await T._useActivation('r280c', hoh().i);
+        ok('hand of healing: on Zo — asked for its Martial Arts die (the sheet’s d10), 5 + 2 = 7 hit points', zo().hp === 17 && /1d10/.test(asked) && /Zo/.test(asked) && /regains <strong>7<\/strong>/.test(T._result), JSON.stringify([zo().hp, asked, T._result]));
+        ok('hand of healing: …Physician’s Touch ends her paralysis, not the poison', !(zo().conditions || []).some(x => /paralyzed/i.test(x)) && (zo().conditions || []).includes('Poisoned') && /no longer paralyzed/.test(T._result), JSON.stringify(zo().conditions));
+        ok('hand of healing: …the Magic action and a Focus Point spent', cre().actionUsed === true && focus() === 5, JSON.stringify([cre().actionUsed, focus()]));
+        // Nobody picked: the monk heals itself; rolled here.
+        cre().actionUsed = false; T._armed = null; answer = null; window.sktD = d => 4;
+        await T._useActivation('r280c', hoh().i);
+        ok('hand of healing: nobody picked — the monk, rolled here: 4 + 2', cre().hp === 36, JSON.stringify([cre().hp, T._result]));
+        // Without Physician's Touch, no cure.
+        state.party.find(p => p.id === 'r280c').sheet.featureList = [];
+        cre().actionUsed = false; T._armed = 'r280z'; zo().conditions = ['Stunned']; answer = 1;
+        await T._useActivation('r280c', hoh().i);
+        ok('hand of healing: without Physician’s Touch — healed, still stunned', zo().hp === 20 && (zo().conditions || []).includes('Stunned'), JSON.stringify([zo().hp, zo().conditions]));
+        // Cancelled: nothing.
+        cre().actionUsed = false; answer = false;
+        await T._useActivation('r280c', hoh().i);
+        ok('hand of healing: cancelled — nothing spent', zo().hp === 20 && !cre().actionUsed && focus() === 3, JSON.stringify([zo().hp, focus()]));
+      } catch(e){ ok('round 280 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
+      finally { window.sktD = keepD; window.showConfirm = keepAsk; window.sktStatesSyncAll = keepSync; T._pending = null; T._armed = null;
+        state.party = JSON.parse(keepP); state.combatants = JSON.parse(keepC); state.activeCombatantId = keepA; state.combatRound = keepR; save(); }
+    }
     // -- Class features: represented, not just text ------------------------
     {
       try {

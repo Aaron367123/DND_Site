@@ -484,7 +484,8 @@ registerPanel('turnview', {
     const s = String(a && a.action || '').toLowerCase();
     if (s === 'reaction') return 'reactionUsed';
     if (s === 'bonus action') return 'bonusUsed';
-    if (s === 'action' || s === 'magic action') return 'actionUsed';
+    // ("Magic": the sheet's word for a Magic action, Hand of Healing's)
+    if (s === 'action' || s === 'magic action' || s === 'magic') return 'actionUsed';
     return null;
   },
   _actProblem(c, a){
@@ -549,7 +550,29 @@ registerPanel('turnview', {
         if (typeof v === 'number') n = v;
       }
       const r = n != null ? { total: n, detail: sw[1] + ' ' + n + ' (theirs)' } : (typeof sktRollDice === 'function' ? sktRollDice(sw[1]) : { total: this._d(+sw[1].split('d')[1] || 10), detail: '' });
-      heal = { amt: r.total + (+sw[2] || 0), detail: (r.detail || (sw[1] + ' ' + r.total)) + ' + ' + sw[2] };
+      heal = { amt: r.total + (+sw[2] || 0), detail: (r.detail || (sw[1] + ' ' + r.total)) + ' + ' + sw[2], tgt: who };
+    }
+    // Hand of Healing (a Warrior of Mercy): the creature picked on the right,
+    // or the monk — its Martial Arts die + Wisdom modifier. Physician's Touch
+    // also ends one of blinded, deafened, paralyzed, poisoned or stunned.
+    if (/^Hand of Healing$/i.test(a.name)){
+      const p = this._partyOf(who), sh = (p && p.sheet) || {};
+      const ma = (sh.activations || []).find(x => /^Unarmed Strike \(Martial Arts\)/.test(x.name));
+      const lvl = ((sh.classLevels || []).find(x => x.cls === 'monk') || {}).level || (p && p.level) || 1;
+      const die = ((ma && /^\d*d\d+/.exec(String(ma.dice || ''))) || [])[0]
+        || (this._edOf(who) === '2014' ? ['1d4', '1d6', '1d8', '1d10'] : ['1d6', '1d8', '1d10', '1d12'])[lvl >= 17 ? 3 : lvl >= 11 ? 2 : lvl >= 5 ? 1 : 0];
+      const wis = Math.floor((((p && p.abilities) || {}).wis || 10) / 2) - 5;
+      const tgt = this._order().find(x => x.id === this._armed && !x.dead) || who;
+      let n = typeof typed === 'number' ? typed : null;
+      if (n == null && typed !== 'roll' && typeof showConfirm === 'function'){
+        const v = await showConfirm(who.name + ' uses ' + a.name + ' on ' + tgt.name + ': ' + die + (wis ? (wis > 0 ? ' + ' : ' − ') + Math.abs(wis) : '') + ' hit points.', { title: a.name, confirmLabel: 'Heal',
+          input: { label: 'Their ' + die + ' roll (blank: roll it here)', min: 1, max: 100 } });
+        if (v === false) return;
+        if (typeof v === 'number') n = v;
+      }
+      const r = n != null ? { total: n, detail: die + ' ' + n + ' (theirs)' } : sktRollDice(die);
+      heal = { amt: Math.max(0, r.total + wis), detail: (r.detail || die + ' ' + r.total) + (wis ? (wis > 0 ? ' + ' : ' − ') + Math.abs(wis) : ''), tgt,
+        cure: (sh.featureList || []).some(f => f && /^Physician.s Touch$/.test(f.name) && !f.info) };
     }
     let spent = '';
     if (a.pool){
@@ -592,11 +615,15 @@ registerPanel('turnview', {
       if (this._edOf(who) !== '2014') extra += ' (not the Magic action)';
     }
     if (heal){
-      const C = panelDefs.combat, i = state.combatants.findIndex(x => x.id === who.id);
-      const before = who.hp || 0;
+      const C = panelDefs.combat, tg = heal.tgt || who, i = state.combatants.findIndex(x => x.id === tg.id);
+      const before = (state.combatants[i] || tg).hp || 0;
       if (C && i >= 0 && typeof C._applyHpDelta === 'function') C._applyHpDelta(i, heal.amt, null);
-      const now = state.combatants[i] || who;
-      extra = ' — regains <strong>' + Math.max(0, (now.hp || 0) - before) + '</strong> hit points <span class="dim">(' + esc(heal.detail) + ')</span>';
+      let now = state.combatants[i] || tg;
+      extra = ' — ' + (tg.id === who.id ? '' : '<strong>' + esc(tg.name) + '</strong> ') + 'regains <strong>' + Math.max(0, (now.hp || 0) - before) + '</strong> hit points <span class="dim">(' + esc(heal.detail) + ')</span>';
+      if (heal.cure && C && i >= 0){
+        const cond = ['paralyzed', 'stunned', 'blinded', 'poisoned', 'deafened'].map(k => (now.conditions || []).find(x => String(x).toLowerCase() === k)).find(Boolean);
+        if (cond){ C._removeCond(i, cond); extra += ' and is no longer ' + esc(String(cond).toLowerCase()) + ' (Physician’s Touch)'; }
+      }
     }
     const line = `${a.name}${a.action ? ' (' + a.action + ')' : ''}${spent}`;
     this._log.unshift(`<strong>${esc(who.name)}</strong> — ${esc(line)}${heal ? ' · +' + heal.amt + ' HP' : ''}`);
