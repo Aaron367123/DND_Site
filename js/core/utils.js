@@ -2873,7 +2873,9 @@ function sktMoveCost(c){
     const p = c && c.isPC ? (state.party || []).find(x => x && x.id === c.id) : null;
     const ed = (p && ((p.build && p.build.edition) || p.rules)) || (state.settings && state.settings.builderEdition) || '2024';
     const me = sktSizeRank(c);
-    const heavy = held.filter(o => { const r = sktSizeRank(o); return !(me - r >= 2 || (ed !== '2014' && r === 0)); });
+    // Grappler (2024), Fast Wrestler: no extra cost for one its size or smaller.
+    const wrestler = ed !== '2014' && !!p && (((p.sheet || {}).featureList) || []).some(f => f && f.name === 'Grappler' && !f.info);
+    const heavy = held.filter(o => { const r = sktSizeRank(o); return !(me - r >= 2 || (ed !== '2014' && r === 0) || (wrestler && r <= me)); });
     why.push('dragging ' + held.map(o => o.name).join(', '));
     if (heavy.length) mult++;
   }

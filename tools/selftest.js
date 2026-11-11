@@ -18288,6 +18288,70 @@ for (const cls of Object.keys(rule)) for (let L = 1; L <= 20; L++) for (const sc
       finally { window.sktD = keepD; window.showConfirm = keepAsk; T._pending = null; T._tokenFor = keepTok; T._armed = null;
         state.party = JSON.parse(keepP); state.combatants = JSON.parse(keepC); state.activeCombatantId = keepA; state.combatRound = keepR; save(); }
     }
+    // -- Round 275: a Soulknife's second psychic blade is a Bonus Action; Grappler — Punch and Grab, advantage on the one it holds, Fast Wrestler --
+    if (!PLAYER){
+      const keepC = JSON.stringify(state.combatants), keepA = state.activeCombatantId, keepP = JSON.stringify(state.party), keepR = state.combatRound;
+      const T = panelDefs.turnview, C = panelDefs.combat, keepD = window.sktD, keepTok = T._tokenFor, keepAsk = window.showConfirm;
+      try {
+        for (let k = 0; k < 100 && !(typeof _5eLoaded !== 'undefined' && _5eLoaded); k++) await sleep(100);
+        const find = (n, src) => _5eData.find(r => r.cat === 'monster' && r.name === n && r._source === src);
+        state.party.push({ id: 'r275z', name: 'Zo', hp: 40, hpMax: 40, ac: 15, spd: 30, rules: '2024', level: 6,
+          abilities: { str: 10, dex: 18, con: 14, int: 10, wis: 10, cha: 10 },
+          sheet: { size: 'Medium', profBonus: 3, featureList: [{ name: 'Psychic Blades' }], attacks: [
+            { name: 'Psychic Blades', atkBonus: '+7', damage: '1d6+4 psychic', props: ['F', 'T'], range: '60' },
+            { name: 'Psychic Blades (bonus action)', atkBonus: '+7', damage: '1d4+4 psychic', props: ['F', 'T'], range: '60' },
+          ] } });
+        state.party.push({ id: 'r275u', name: 'Ulf', hp: 60, hpMax: 60, ac: 14, spd: 40, rules: '2024', level: 6,
+          abilities: { str: 18, dex: 12, con: 16, int: 8, wis: 10, cha: 10 },
+          sheet: { size: 'Medium', profBonus: 3, featureList: [{ name: 'Grappler', from: 'feat' }], attacks: [
+            { name: 'Unarmed Strike', atkBonus: '+7', damage: '1d4+4 bludgeoning', str: true },
+          ] } });
+        state.combatants = [{ id: 'r275z', name: 'Zo', isPC: true, hp: 40, hpMax: 40, ac: 15, initiative: 20, conditions: [] },
+                            { id: 'r275u', name: 'Ulf', isPC: true, hp: 60, hpMax: 60, ac: 14, initiative: 18, conditions: [] }];
+        C.addMonster(find('Ogre', 'MM')); C.addMonster(find('Goblin', 'MM')); await sleep(20);
+        const get = id => state.combatants.find(c => c.id === id), ogId = state.combatants[2].id, gbId = state.combatants[3].id;
+        const zo = () => get('r275z'), ulf = () => get('r275u'), og = () => get(ogId);
+        state.combatRound = 1; state.activeCombatantId = 'r275z'; save();
+        openPanel('turnview'); await sleep(200);
+        T._tokenFor = () => null; T._actAs = null; window.showConfirm = async () => false;
+        window.sktD = d => d === 20 ? 2 : 1;
+        const swing = (who, name, tgt) => { const at = T._attacksFor(who); T._pending = null; T._rollAttack(at.findIndex(a => a.name === name), { attacker: who, target: tgt || og(), mode: 0 }); if (T._pending) T._commit(T._pending, null); };
+        // The Soulknife: the first blade is the Action, the second the Bonus Action.
+        swing(zo(), 'Psychic Blades');
+        ok('blades: the first — the Action', zo().actionUsed === true && !zo().bonusUsed);
+        swing(zo(), 'Psychic Blades (bonus action)');
+        ok('blades: the second — its Bonus Action, said so', zo().bonusUsed === true && /its Bonus Action/.test(T._result) && !/after an attack/.test(T._result), T._result);
+        zo().actionUsed = false; zo().bonusUsed = false;
+        swing(zo(), 'Psychic Blades (bonus action)');
+        ok('blades: the second before the first — still the Bonus Action, and it says what it follows', zo().bonusUsed === true && !zo().actionUsed && /after an attack with the first/.test(T._result), T._result);
+        // Grappler: Ulf's Unarmed Strike hits the ogre — Punch and Grab offered.
+        state.activeCombatantId = 'r275u'; C._refreshTurnEconomy('r275u');
+        window.sktD = d => d === 20 ? 15 : 2;
+        swing(ulf(), 'Unarmed Strike');
+        const grab = () => T._lastPcHit ? T._pcExtraOptions(T._lastPcHit).find(o => o.key === 'grab') : null;
+        ok('grappler: an Unarmed Strike hit — Punch and Grab offered', !!grab() && grab().ok, JSON.stringify(T._lastPcHit && T._pcExtraOptions(T._lastPcHit).map(o => o.key)));
+        window.sktD = d => d === 20 ? 3 : 1;          // the ogre's save: 3 + 4 = 7 vs DC 8 + 4 + 3 = 15
+        T._usePcExtra('grab'); await sleep(30);
+        ok('grappler: …the ogre fails its save — grappled by Ulf', (og().conditions || []).includes('Grappled') && og().grappledBy && og().grappledBy.id === 'r275u', JSON.stringify([og().conditions, og().grappledBy, T._result]));
+        ok('grappler: …once a turn — not offered again', (() => { window.sktD = d => d === 20 ? 15 : 2; og().conditions = []; og().grappledBy = null; swing(ulf(), 'Unarmed Strike'); return !grab(); })(), JSON.stringify(T._lastPcHit && T._pcExtraOptions(T._lastPcHit).map(o => o.key)));
+        // Advantage on the one it holds — and not on another.
+        og().conditions = ['Grappled']; og().grappledBy = { id: 'r275u', name: 'Ulf', escape: 15 };
+        ok('grappler: advantage on attacks against the ogre it holds', T._condMods(ulf(), og()).adv.some(x => /Grappler/.test(x)), JSON.stringify(T._condMods(ulf(), og())));
+        ok('grappler: …not against the goblin', !T._condMods(ulf(), get(gbId)).adv.some(x => /Grappler/.test(x)));
+        get(gbId).conditions = ['Grappled']; get(gbId).grappledBy = { id: 'r275z', name: 'Zo' };
+        ok('grappler: …nor for Zo, holding the goblin without the feat', !T._condMods(zo(), get(gbId)).adv.some(x => /Grappler/.test(x)), JSON.stringify(T._condMods(zo(), get(gbId))));
+        get(gbId).conditions = []; get(gbId).grappledBy = null;
+        // Fast Wrestler: dragging the goblin (smaller) or Zo (his size) costs nothing extra; the Large ogre does.
+        ok('grappler: dragging the Large ogre — each foot costs two', sktMoveCost(ulf()).mult === 2, JSON.stringify(sktMoveCost(ulf())));
+        og().conditions = []; og().grappledBy = null;
+        zo().conditions = ['Grappled']; zo().grappledBy = { id: 'r275u', name: 'Ulf' };
+        ok('grappler: Fast Wrestler — dragging Zo, his size, costs nothing extra', sktMoveCost(ulf()).mult === 1, JSON.stringify(sktMoveCost(ulf())));
+        state.party.find(p => p.id === 'r275u').sheet.featureList = [];
+        ok('grappler: …without the feat, it does', sktMoveCost(ulf()).mult === 2);
+      } catch(e){ ok('round 275 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
+      finally { window.sktD = keepD; window.showConfirm = keepAsk; T._pending = null; T._tokenFor = keepTok; T._armed = null;
+        state.party = JSON.parse(keepP); state.combatants = JSON.parse(keepC); state.activeCombatantId = keepA; state.combatRound = keepR; save(); }
+    }
     // -- Class features: represented, not just text ------------------------
     {
       try {

@@ -854,6 +854,9 @@ registerPanel('turnview', {
     // 2024 Grappled: "disadvantage on attack rolls against any target other
     // than the grappler" — known when the grapple came from a hit here, and
     // over when the grappler is gone or can't act.
+    // Grappler: advantage on attacks against the creature it is grappling.
+    if (attacker && attacker.isPC && target && target.grappledBy && target.grappledBy.id === attacker.id && this._hasCond(target, 'grappled')
+        && (((this._partyOf(attacker) || {}).sheet || {}).featureList || []).some(f => f && f.name === 'Grappler' && !f.info)) adv.push('grappling it (Grappler)');
     const gb = attacker && attacker.grappledBy;
     if (gb && target && this._hasCond(attacker, 'grappled') && gb.id !== target.id && this._edOf(attacker) !== '2014'){
       const g = this._order().find(o => o.id === gb.id);
@@ -1280,6 +1283,9 @@ registerPanel('turnview', {
           props: Array.isArray(a.props) ? a.props.slice() : null,
           // The other light weapon's attack: a Bonus Action (two-weapon fighting).
           offhand: !!a.offhand,
+          // An attack the sheet names a Bonus Action (a Soulknife's second
+          // psychic blade).
+          bonusAction: /\(bonus action\)\s*$/i.test(String(a.name || '')),
         };
         row.ranged = this._pcRanged(row, a);
         // Crossbow Expert: no disadvantage for being close (2014: any ranged
@@ -2951,13 +2957,13 @@ registerPanel('turnview', {
     // Two-weapon fighting: the other light weapon's attack is the Bonus
     // Action — or, with its Nick mastery (2024), part of the Attack action,
     // once a turn. It follows an Attack action with a light weapon.
-    if (a.offhand && !o.queued){
-      const nick = /^nick$/i.test(String(a.mastery || '')) && (c.onceTurn || {}).Nick !== this._turnKey();
+    if ((a.offhand || a.bonusAction) && !o.queued){
+      const nick = a.offhand && /^nick$/i.test(String(a.mastery || '')) && (c.onceTurn || {}).Nick !== this._turnKey();
       const after = c.actionUsed;
       if (nick){ c.onceTurn = Object.assign({}, c.onceTurn, { Nick: this._turnKey() }); this._spend(c, 'actionUsed'); }
       else this._spend(c, 'bonusUsed');
-      hitNote = (hitNote ? hitNote + ' · ' : '') + (nick ? 'Nick: part of the Attack action' : 'off-hand: its Bonus Action')
-        + (after ? '' : ' (after the Attack action with a light weapon)');
+      hitNote = (hitNote ? hitNote + ' · ' : '') + (nick ? 'Nick: part of the Attack action' : a.offhand ? 'off-hand: its Bonus Action' : 'its Bonus Action')
+        + (after ? '' : a.offhand ? ' (after the Attack action with a light weapon)' : ' (after an attack with the first)');
     }
     else if (!o.queued || (this._queue && this._queue.i === 0 && !this._queue.legendary)) this._spend(c, 'actionUsed');
     const bonus = a.pc ? a.bonus : (parseInt(String(a.toHit || '').replace(/[^\d+-]/g, ''), 10) || 0);
@@ -3624,6 +3630,11 @@ registerPanel('turnview', {
         why: near ? 'attack ' + t2.name + ' with the ' + h.label + ' — its damage without your ability modifier'
           : t2 ? t2.name + ' is ' + ft + ' ft from ' + t.name + ' — Cleave needs one within 5 ft' : 'arm a second creature within 5 ft of ' + t.name + ' on the right' });
     }
+    // Grappler (2024), Punch and Grab: an Unarmed Strike that hits as part of
+    // the Attack action can grapple as well as deal its damage — once a turn.
+    if (unarmed && ed !== '2014' && feat('Grappler') && !once('Punch and Grab') && !(t.grappledBy && t.grappledBy.id === c.id && this._hasCond(t, 'grappled')))
+      out.push({ key: 'grab', label: 'Punch and Grab', dice: '', grab: true, once: true, ok: true,
+        why: 'grapple ' + t.name + ' too — its Strength or Dexterity save, as a grapple' });
     const savage = (sh.featureList || []).some(f => f && f.name === 'Savage Attacker' && !f.info) || (p.feats || []).some(f => /^Savage Attacker$/i.test(String(f && f.name || f)));
     if (savage && h.wDice && h.wSum != null && !once('Savage Attacker') && !(ed === '2014' && h.ranged))
       out.push({ key: 'savage', label: 'Savage Attacker', dice: '', savage: true, type: h.type, once: true, ok: true,
@@ -3818,6 +3829,11 @@ registerPanel('turnview', {
       h.used.push(key);
       const txt = `<strong>${esc(c.name)}</strong> — Push: <strong>${esc(t.name)}</strong> ${ft ? 'moved ' + ft + ' ft away' : 'couldn’t be moved (no room)'}`;
       this._setResult(txt, true); this._log.unshift(txt); this._render();
+      return;
+    }
+    if (o.grab){
+      h.used.push(key); c.onceTurn = Object.assign({}, c.onceTurn, { 'Punch and Grab': this._turnKey() });
+      this._armed = t.id; this._grapple(c, 'grapple');
       return;
     }
     if (o.cleave){
