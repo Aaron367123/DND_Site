@@ -1976,6 +1976,8 @@ registerPanel('battlemap',{
   _noteTurnMove(t, from){
     if (!from || (t.x === from.x && t.y === from.y)) return;
     if (typeof sktDragHeld === 'function') sktDragHeld(this._tokens, t, t.x - from.x, t.y - from.y);
+    // A held creature moved out of its grappler's reach is free.
+    if (!document.body.classList.contains('player-mode') && panelDefs.combat?._releaseGrapples?.()){ panelDefs.combat._render?.(); panelDefs.turnview?._render?.(); }
     if (typeof sktNoteMove !== 'function') return;
     if (sktNoteMove(this._tokens, t, this._feetBetweenPts(from.x, from.y, t.x, t.y))) panelDefs.turnview?._syncMoved?.();
   },

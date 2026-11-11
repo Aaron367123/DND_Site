@@ -18156,6 +18156,89 @@ for (const cls of Object.keys(rule)) for (let L = 1; L <= 20; L++) for (const sc
       finally { window.sktD = keepD; window.showConfirm = keepAsk; T._pending = null; T._tokenFor = keepTok; T._armed = null; T._stdOpen = false;
         state.party = JSON.parse(keepP); state.combatants = JSON.parse(keepC); state.activeCombatantId = keepA; state.combatRound = keepR; save(); }
     }
+    // -- Round 273: a grapple ends when the held creature is moved out of the grappler's reach — not when the grappler drags it, nor for a grab made with the map not kept up --
+    if (!PLAYER){
+      const keepC = JSON.stringify(state.combatants), keepA = state.activeCombatantId, keepP = JSON.stringify(state.party), keepR = state.combatRound;
+      const T = panelDefs.turnview, C = panelDefs.combat; let keepMap = null;
+      try {
+        for (let k = 0; k < 100 && !(typeof _5eLoaded !== 'undefined' && _5eLoaded); k++) await sleep(100);
+        const find = (n, src) => _5eData.find(r => r.cat === 'monster' && r.name === n && r._source === src);
+        state.party.push({ id: 'r273z', name: 'Zo', hp: 40, hpMax: 40, ac: 15, spd: 30, rules: '2024', level: 6, sheet: { size: 'Medium' } });
+        state.combatants = [{ id: 'r273z', name: 'Zo', isPC: true, hp: 40, hpMax: 40, ac: 15, initiative: 20, conditions: [] }];
+        C.addMonster(find('Ogre', 'MM')); await sleep(20);
+        const get = id => state.combatants.find(c => c.id === id), ogId = state.combatants[1].id, og = () => get(ogId), zo = () => get('r273z');
+        const hold = () => { const z = zo(); z.conditions = ['Grappled']; z.grappledBy = { id: ogId, name: 'Ogre', escape: 14 }; };
+        const held = () => (zo().conditions || []).includes('Grappled') && !!zo().grappledBy;
+        state.combatRound = 1; state.activeCombatantId = ogId; save();
+        openPanel('turnview'); await sleep(200);
+        openPanel('battlemap'); await sleep(400);
+        const B = panelDefs.battlemap; keepMap = localStorage.getItem('skt-battlemap-v1');
+        sktEnsureCombatTokens(true); await sleep(100);
+        let zt = sktTokenForCombatant(B._tokens, zo()), mt = sktTokenForCombatant(B._tokens, og());
+        { const mine = new Set([zt, mt]); B._tokens.forEach(t => { if (!mine.has(t)){ t.x = null; t.y = null; } }); }
+        const cs = B._csScreen(), cell = (col, row, size) => ({ x: (col + (size || 1) / 2) * cs, y: (row + (size || 1) / 2) * cs });
+        Object.assign(mt, cell(2, 2, 2)); Object.assign(zt, cell(4, 2)); [zt, mt].forEach(t => delete t.mv);
+        B._saveMap(); B._renderTokens(); T._mapCache = null; await sleep(20);
+        const drag = async (tok, dx, dy) => {
+          const el = B._body.querySelector('.map-token[data-tid="' + tok.id + '"]');
+          const r = el.getBoundingClientRect(), z = B._screenScale() || 1;
+          const x0 = r.left + r.width / 2, y0 = r.top + r.height / 2;
+          el.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, cancelable: true, button: 0, clientX: x0, clientY: y0 }));
+          document.dispatchEvent(new MouseEvent('mousemove', { bubbles: true, clientX: x0 + dx * z, clientY: y0 + dy * z }));
+          document.dispatchEvent(new MouseEvent('mouseup', { bubbles: true, clientX: x0 + dx * z, clientY: y0 + dy * z }));
+          await sleep(30);
+        };
+        // Held, side by side.
+        hold(); C._render(); await sleep(10);
+        ok('grapple reach: held beside the ogre — still held, and where it was held from noted', held() && zo().grappledBy.ft0 === 5, JSON.stringify(zo().grappledBy));
+        // The ogre walks off dragging her: still held.
+        const my0 = mt.y, zy0 = zt.y;
+        await drag(mt, 0, 2 * cs); C._render(); await sleep(10);
+        ok('grapple reach: the ogre drags her — still held', held() && mt.y !== my0 && Math.abs((zt.y - zy0) - (mt.y - my0)) < 0.01, JSON.stringify([zt.y, zy0, mt.y, my0, zo().grappledBy]));
+        // She is carried off by hand, three squares: out of its 5 ft reach — free.
+        // With only the map open, and just after another device's update swapped
+        // the map's tokens for a fresh copy: the drop itself ends it.
+        closePanel('turnview'); closePanel('combat'); await sleep(50);
+        B._tokens = JSON.parse(JSON.stringify(B._tokens)); B._renderTokens(); await sleep(10);
+        const zt2 = sktTokenForCombatant(B._tokens, zo());
+        await drag(zt2, 3 * cs, 0);
+        ok('grapple reach: moved three squares away — free at once', !held() && !(zo().conditions || []).includes('Grappled'), JSON.stringify([zo().conditions, zo().grappledBy]));
+        openPanel('turnview'); await sleep(100);
+        const last = (state.combatLog || []).slice(-1)[0] || {};
+        ok('grapple reach: …and the log says why', /Zo is no longer grappled — out of Ogre’s reach \(\d+ ft\)/.test(last.text || ''), last.text);
+        // A hill giant's 10 ft reach: one square off, still held; two, free.
+        {
+          C.addMonster(find('Hill Giant', 'MM')); await sleep(20);
+          const hg = state.combatants[state.combatants.length - 1];
+          sktEnsureCombatTokens(true); await sleep(50);
+          const ht = sktTokenForCombatant(B._tokens, hg), z3 = sktTokenForCombatant(B._tokens, zo());
+          Object.assign(mt, { x: null, y: null }); Object.assign(ht, cell(10, 10, 3)); Object.assign(z3, cell(13, 10));
+          B._saveMap(); B._renderTokens(); T._mapCache = null;
+          zo().conditions = ['Grappled']; zo().grappledBy = { id: hg.id, name: hg.name, escape: 17 }; C._render(); await sleep(10);
+          ok('grapple reach: the hill giant holds her beside it', held() && zo().grappledBy.ft0 === 5, JSON.stringify(zo().grappledBy));
+          await drag(z3, cs, 0); C._render(); await sleep(10);
+          ok('grapple reach: one square off — inside its 10 ft reach, still held', held(), JSON.stringify([T._ftBetween(hg, zo()), T._reachOf(hg)]));
+          await drag(z3, cs, 0); C._render(); await sleep(10);
+          ok('grapple reach: two squares off — free', !held(), JSON.stringify([T._ftBetween(hg, zo())]));
+          Object.assign(ht, { x: null, y: null });
+        }
+        zt = sktTokenForCombatant(B._tokens, zo()); mt = sktTokenForCombatant(B._tokens, og());
+        // A grab made while the tokens stood 25 ft apart (the map not kept up): kept, until she's moved further.
+        Object.assign(mt, cell(2, 2, 2)); Object.assign(zt, cell(8, 2)); B._saveMap(); B._renderTokens(); T._mapCache = null;
+        hold(); C._render(); await sleep(10);
+        ok('grapple reach: grabbed with the tokens 25 ft apart — kept', held() && zo().grappledBy.ft0 === 25, JSON.stringify(zo().grappledBy));
+        await drag(zt, 0, cs); C._render(); await sleep(10);
+        ok('grapple reach: …moved no further off — still kept', held(), JSON.stringify([zo().grappledBy, T._ftBetween(og(), zo())]));
+        await drag(zt, 2 * cs, 0); C._render(); await sleep(10);
+        ok('grapple reach: …moved further — free', !held(), JSON.stringify([zo().conditions, T._ftBetween(og(), zo())]));
+        // No tokens: nothing measured, nothing ended.
+        Object.assign(zt, { x: null, y: null }); T._mapCache = null; hold(); C._render(); await sleep(10);
+        ok('grapple reach: off the map — held as before', held() && zo().grappledBy.ft0 == null, JSON.stringify(zo().grappledBy));
+      } catch(e){ ok('round 273 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
+      finally { T._pending = null;
+        state.party = JSON.parse(keepP); state.combatants = JSON.parse(keepC); state.activeCombatantId = keepA; state.combatRound = keepR; save();
+        try { if (keepMap != null) panelDefs.battlemap.applyMapState(JSON.parse(keepMap), { source: 'test' }); sktEnsureCombatTokens(true); } catch(e){} }
+    }
     // -- Class features: represented, not just text ------------------------
     {
       try {

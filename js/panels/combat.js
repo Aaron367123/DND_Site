@@ -561,14 +561,29 @@ registerPanel('combat',{
     if (document.body.classList.contains('player-mode')) return false;   // the DM's to change
     const INC = ['incapacitated', 'paralyzed', 'petrified', 'stunned', 'unconscious'];
     const lc = a => (a || []).map(x => String(x).toLowerCase());
-    let changed = false;
+    let changed = false, noted = false;
     (state.combatants || []).forEach((c, i) => {
       const gb = c && c.grappledBy; if (!gb) return;
       const conds = c.conditions || [], held = lc(conds).includes('grappled');
       const g = state.combatants.find(o => o.id === gb.id);
-      const why = !held ? '' : !g ? gb.name + ' is gone' : (g.hp || 0) <= 0 ? gb.name + ' is down'
+      let why = !held ? '' : !g ? gb.name + ' is gone' : (g.hp || 0) <= 0 ? gb.name + ' is down'
         : lc(g.conditions).some(x => INC.includes(x)) ? gb.name + ' can’t hold on' : null;
-      if (why === null) return;
+      // …or it was moved out of the grappler's reach (shoved, teleported, or
+      // carried off by hand). The grappler dragging it keeps them together.
+      // Measured against where it was held from too: a grapple that landed
+      // with the tokens 20 ft apart (the map not kept up) isn't undone by it.
+      if (why === null){
+        const T = panelDefs.turnview;
+        if (T && typeof T._ftBetween === 'function'){
+          T._mapCache = null;
+          const ft = T._ftBetween(g, c), reach = T._reachOf(g);
+          if (ft != null){
+            if (gb.ft0 == null){ gb.ft0 = ft; noted = true; }
+            else if (ft > Math.max(reach, gb.ft0)) why = 'out of ' + gb.name + '’s reach (' + ft + ' ft)';
+          }
+        }
+        if (why === null) return;
+      }
       const drop = ['grappled'].concat(gb.also ? [String(gb.also).toLowerCase()] : []);
       const timers = Object.assign({}, c.condTimers);
       conds.forEach(x => { if (drop.includes(String(x).toLowerCase())) delete timers[x]; });
@@ -578,7 +593,7 @@ registerPanel('combat',{
       this._log(c.name + (held ? ' is no longer grappled — ' + why : ' — the grapple is over') + (gb.also ? ' (and no longer ' + String(gb.also).toLowerCase() + ')' : ''));
       if (c.isPC) setTimeout(() => panelDefs.party?._render?.(), 0);
     });
-    if (changed) save();
+    if (changed || noted) save();
     return changed;
   },
 
