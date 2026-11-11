@@ -3814,10 +3814,12 @@
         openPanel('turnview'); await sleep(500);
         const b = TV._body;
         ok('turnview: no chips for the reactions everyone has', !/Opportunity Attack/.test(b.querySelector('.tv-headwrap').textContent));
-        ok('turnview: the six standard actions wait behind one button',
+        ok('turnview: the standard actions wait behind one button',
            !b.querySelector('[data-tv="stdact"]') && !!b.querySelector('[data-tv="stdopen"]'));
         b.querySelector('[data-tv="stdopen"]').click(); await sleep(60);
-        ok('turnview: and are there when asked for', b.querySelectorAll('[data-tv="stdact"]').length === 6);
+        ok('turnview: and are there when asked for — the six, Grapple and the two Shoves',
+           [...b.querySelectorAll('[data-tv="stdact"]')].map(x => x.dataset.a).join() === 'Dash,Disengage,Dodge,Help,Hide,Ready,Grapple,Shove prone,Shove away',
+           [...b.querySelectorAll('[data-tv="stdact"]')].map(x => x.dataset.a).join());
         ok('turnview: "rolled it yourself" is one small button for a creature with attacks',
            !b.querySelector('[data-tvman="dmg"]') && !!b.querySelector('.tv-manual-open'));
         b.querySelector('.tv-manual-open').click(); await sleep(60);
