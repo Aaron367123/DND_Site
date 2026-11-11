@@ -18071,6 +18071,89 @@ for (const cls of Object.keys(rule)) for (let L = 1; L <= 20; L++) for (const sc
         state.party = JSON.parse(keepP); state.combatants = JSON.parse(keepC); state.activeCombatantId = keepA; state.combatRound = keepR; save();
         try { if (keepMap != null) panelDefs.battlemap.applyMapState(JSON.parse(keepMap), { source: 'test' }); sktEnsureCombatTokens(true); } catch(e){} }
     }
+    // -- Round 272: Grapple and Shove — 2024 a Str/Dex save vs 8 + Str + PB, 2014 an Athletics contest; size, reach, immunity; grappled with an escape DC, prone, or pushed --
+    if (!PLAYER){
+      const keepC = JSON.stringify(state.combatants), keepA = state.activeCombatantId, keepP = JSON.stringify(state.party), keepR = state.combatRound;
+      const T = panelDefs.turnview, C = panelDefs.combat, keepD = window.sktD, keepTok = T._tokenFor, keepAsk = window.showConfirm;
+      try {
+        for (let k = 0; k < 100 && !(typeof _5eLoaded !== 'undefined' && _5eLoaded); k++) await sleep(100);
+        const find = (n, src) => _5eData.find(r => r.cat === 'monster' && r.name === n && r._source === src);
+        state.party.push({ id: 'r272z', name: 'Zo', hp: 40, hpMax: 40, ac: 15, spd: 30, rules: '2024', level: 6,
+          abilities: { str: 16, dex: 12, con: 14, int: 10, wis: 10, cha: 10 }, sheet: { size: 'Medium', profBonus: 3, featureList: [] } });
+        state.combatants = [{ id: 'r272z', name: 'Zo', isPC: true, hp: 40, hpMax: 40, ac: 15, initiative: 20, conditions: [] }];
+        ['Ogre', 'Goblin', 'Hill Giant', 'Air Elemental'].forEach(n => C.addMonster(find(n, 'MM'))); await sleep(20);
+        const get = id => state.combatants.find(c => c.id === id), ids = state.combatants.map(c => c.id);
+        const [, ogId, gbId, hgId, aeId] = ids, og = () => get(ogId), zo = () => get('r272z'), gb = () => get(gbId);
+        const zp = () => state.party.find(p => p.id === 'r272z');
+        state.combatRound = 1; state.activeCombatantId = 'r272z'; save();
+        openPanel('turnview'); await sleep(200);
+        T._tokenFor = () => null; T._actAs = null;
+        // A prompt here is a test failure, not a wait: it answers Cancel.
+        let asked = 0; window.showConfirm = async () => { asked++; return false; };
+        let nat = 5; window.sktD = d => d === 20 ? nat : 1;
+        // The buttons.
+        T._stdOpen = true; T._render(); await sleep(10);
+        ok('grapple: Grapple and both Shoves are among the other actions', ['Grapple', 'Shove prone', 'Shove away'].every(a => T._body.querySelector('[data-tv="stdact"][data-a="' + a + '"]')));
+        // 2024: the ogre saves STR (+4, its better) against 8 + 3 + 3 = 14. A 5 makes 9 — grappled.
+        T._armed = ogId;
+        T._body.querySelector('[data-tv="stdact"][data-a="Grapple"]').click(); await sleep(20);
+        ok('grapple: 2024 — the ogre’s STR save 9 vs DC 14 — grappled by Zo, escape DC 14', (og().conditions || []).includes('Grappled') && og().grappledBy && og().grappledBy.id === 'r272z' && og().grappledBy.escape === 14
+           && /STR save/.test(T._result) && /DC 14/.test(T._result), JSON.stringify([og().conditions, og().grappledBy, T._result]));
+        ok('grapple: …her action spent, and logged', zo().actionUsed === true && T._log.some(l => /Grapple/.test(l) && /Ogre/.test(l)));
+        ok('grapple: …and she drags it now', typeof sktMoveCost === 'function' && sktMoveCost(zo()).mult === 2);
+        sktUndo(); await sleep(10);
+        ok('grapple: undo — free again, the action back', !(og().conditions || []).includes('Grappled') && !og().grappledBy && !zo().actionUsed, JSON.stringify([og().conditions, og().grappledBy]));
+        // A 15 makes 19: it holds its ground.
+        nat = 15; await T._grapple(zo(), 'grapple');
+        ok('grapple: 19 vs 14 — not grappled', !(og().conditions || []).includes('Grappled') && /slips the grip/.test(T._result), T._result);
+        zo().actionUsed = false;
+        // A 10 makes 14 — meeting the DC is a save.
+        nat = 10; await T._grapple(zo(), 'grapple');
+        ok('grapple: 14 vs DC 14 — saved, not grappled', !(og().conditions || []).includes('Grappled'), T._result);
+        zo().actionUsed = false; nat = 5;
+        // Too big: a Huge hill giant is two sizes larger than Zo.
+        T._armed = hgId; await T._grapple(zo(), 'grapple');
+        ok('grapple: a Huge giant — too big, nothing spent', !(get(hgId).conditions || []).includes('Grappled') && /too big/.test(T._result) && !zo().actionUsed, T._result);
+        // Out of reach on the map.
+        const toks = { r272z: { x: 100, y: 100, size: 1 }, [ogId]: { x: 500, y: 100, size: 2 } };
+        T._tokenFor = c => c && toks[c.id] || null;
+        T._armed = ogId; await T._grapple(zo(), 'grapple');
+        ok('grapple: the ogre across the room — out of reach, nothing spent', /out of/.test(T._result) && /reach/.test(T._result) && !zo().actionUsed && !(og().conditions || []).includes('Grappled'), T._result);
+        T._tokenFor = () => null;
+        // Immune: an air elemental can't be grappled.
+        T._armed = aeId; await T._grapple(zo(), 'grapple');
+        ok('grapple: an air elemental — immune', !(get(aeId).conditions || []).includes('Grappled') && /immune/.test(T._result), T._result);
+        zo().actionUsed = false;
+        // Shove: the goblin saves DEX (+2) — 7 vs 14, knocked prone.
+        T._armed = gbId; await T._grapple(zo(), 'prone');
+        ok('shove: the goblin’s DEX save 7 vs 14 — prone', (gb().conditions || []).includes('Prone') && /DEX save/.test(T._result) && /prone/.test(T._result), JSON.stringify([gb().conditions, T._result]));
+        gb().conditions = []; zo().actionUsed = false;
+        // Shove away, no map: the DM moves the token.
+        await T._grapple(zo(), 'push');
+        ok('shove: away — pushed 5 ft (no tokens: move it yourself)', /pushed 5 ft away/.test(T._result) && !(gb().conditions || []).includes('Prone'), T._result);
+        zo().actionUsed = false;
+        // A character's save is the player's: the ogre grapples Zo, she typed 13 against its 14.
+        T._armed = 'r272z';
+        await T._grapple(og(), 'grapple', { d: 16 });
+        ok('grapple: …her typed 16 beats the ogre’s 14 — free', !(zo().conditions || []).includes('Grappled') && /16/.test(T._result), T._result);
+        og().actionUsed = false;
+        await T._grapple(og(), 'grapple', { d: 13 });
+        ok('grapple: the ogre grapples Zo — her typed 13 vs DC 14 (8 + 4 + 2): grappled', (zo().conditions || []).includes('Grappled') && zo().grappledBy && zo().grappledBy.id === ogId && /DC 14/.test(T._result), JSON.stringify([zo().conditions, T._result]));
+        zo().conditions = []; zo().grappledBy = null;
+        // 2014: an Athletics contest; a tie leaves things as they were, and there's no escape DC.
+        zp().rules = '2014';
+        T._armed = ogId; og().actionUsed = false;
+        await T._grapple(zo(), 'grapple', { a: 15, d: 12 });
+        ok('grapple: 2014 — Athletics 15 vs 12 — grappled, no escape DC (escaping is a contest)', (og().conditions || []).includes('Grappled') && og().grappledBy && og().grappledBy.escape === null && /Athletics/.test(T._result), JSON.stringify([og().grappledBy, T._result]));
+        og().conditions = []; og().grappledBy = null; zo().actionUsed = false;
+        await T._grapple(zo(), 'grapple', { a: 12, d: 12 });
+        ok('grapple: 2014 — a tie, as it was', !(og().conditions || []).includes('Grappled') && /a tie/.test(T._result), T._result);
+        zp().rules = '2024';
+        ok('grapple: no prompt came up with the totals given', asked === 0, asked);
+      } catch(e){ ok('round 272 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
+      finally { window.sktD = keepD; window.showConfirm = keepAsk; T._pending = null; T._tokenFor = keepTok; T._armed = null; T._stdOpen = false;
+        state.party = JSON.parse(keepP); state.combatants = JSON.parse(keepC); state.activeCombatantId = keepA; state.combatRound = keepR; save(); }
+    }
     // -- Class features: represented, not just text ------------------------
     {
       try {

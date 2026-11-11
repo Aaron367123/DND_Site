@@ -3147,7 +3147,7 @@ registerPanel('turnview', {
     // movement budget, a visibility model or a chosen target that nothing
     // here tracks, so they are recorded and adjudicated — same rule as the
     // reactions with no mechanics.
-    const acts = ['Dash', 'Disengage', 'Dodge', 'Help', 'Hide', 'Ready'].concat(this._hasCond(c, 'grappled') ? ['Escape'] : []);
+    const acts = ['Dash', 'Disengage', 'Dodge', 'Help', 'Hide', 'Ready', 'Grapple', 'Shove prone', 'Shove away'].concat(this._hasCond(c, 'grappled') ? ['Escape'] : []);
     const status = [c.dodging ? 'Dodging' : '', c.readied ? 'Readied' + (c.readied.target ? ' against ' + esc(c.readied.target.name) : '') : '', c.disengaged ? 'Disengaged' : '', c.helping ? 'Helping against ' + esc(c.helping.name) : '',
       c.hidden ? 'Hidden' + (c.hidden.total != null ? ' (Stealth ' + c.hidden.total + ')' : '') : '',
       (mi => mi && (mi.budget != null || mi.moved) ? '<span class="tv-econ-move' + (mi.budget != null && mi.moved > mi.budget ? ' over' : '') + '" title="Moved this turn on the map, of its Speed' + (c.dashes ? ' (with ' + (c.dashes > 1 ? c.dashes + ' Dashes' : 'a Dash') + ')' : '') + '">Moved ' + mi.moved + (mi.budget != null ? ' / ' + mi.budget : '') + ' ft</span>' : '')(this._moveNow(c)),
@@ -3169,6 +3169,8 @@ registerPanel('turnview', {
                   : a === 'Help' ? 'Pick the enemy on the right first: the next attack roll an ally makes against it has advantage, until the start of this creature\'s next turn — applied automatically'
                   : a === 'Hide' ? 'A Stealth check (DC 15; in the 2014 rules, the enemies\' best passive Perception). Hidden, its attacks have advantage and attacks against it disadvantage, until it attacks or is found — applied automatically'
                   : a === 'Escape' ? 'An Athletics or Acrobatics check against the grapple’s escape DC (in the 2014 rules, with none written, a contest with the grappler’s Athletics). Made, the grapple ends — applied automatically'
+                  : a === 'Grapple' ? 'Pick the creature on the right first: one of its attacks. 2024 — it makes a Strength or Dexterity save (its better) against 8 + Strength modifier + proficiency bonus; 2014 — Athletics against its Athletics or Acrobatics. Lost, it is grappled by this creature — applied automatically'
+                  : a === 'Shove prone' || a === 'Shove away' ? 'Pick the creature on the right first: one of its attacks, the same contest as a grapple. Lost, it is ' + (a === 'Shove prone' ? 'knocked prone' : 'pushed 5 ft away (its token moved on the map)') + ' — applied automatically'
                   : a === 'Ready' ? 'Hold the action for a trigger (aimed at the creature picked on the right, if any): on anyone&rsquo;s turn, Take it spends the reaction and rolls it here. Lapses at the start of its next turn'
                   : 'Take the ' + a + ' action: spends the action and logs it'}"
           >${a}</button>`).join('')}
@@ -3254,6 +3256,9 @@ registerPanel('turnview', {
     const c = this._active(); if (!c) return;
     if (name === 'Hide') return this._hide(c);
     if (name === 'Escape') return this._escape(c);
+    if (name === 'Grapple') return this._grapple(c, 'grapple');
+    if (name === 'Shove prone') return this._grapple(c, 'prone');
+    if (name === 'Shove away') return this._grapple(c, 'push');
     this._snapshot(`${c.name} · ${name}`);
     const asBonus = this._spendStd(c, name);
     if (name === 'Dash'){
@@ -3905,6 +3910,87 @@ registerPanel('turnview', {
     return { total: nat + bonus + (fx.bonus || 0),
       detail: 'd20 ' + (b == null ? a : a + '/' + b) + ' ' + sg(bonus) + (fx.bonus ? ' ' + sg(fx.bonus) : '')
         + (mode ? ' (' + (mode > 0 ? 'advantage: ' + fx.adv.join(', ') : 'disadvantage: ' + fx.dis.join(', ')) + ')' : '') };
+  },
+
+  // Grapple and Shove: one of the attacks of the Attack action (2024: an
+  // Unarmed Strike's options). The target can be no more than one size larger
+  // than the attacker, and within its reach. 2024 — it makes a Strength or
+  // Dexterity save (its choice: the better) against 8 + the attacker's
+  // Strength modifier + proficiency bonus; 2014 — the attacker's Athletics
+  // against its Athletics or Acrobatics, and a tie leaves things as they
+  // were. Lost: grappled by the attacker (2024: escape DC the same), knocked
+  // prone, or pushed 5 ft away. A character's roll is the player's, typed in,
+  // or rolled here. `typed`: { a, d } totals, or { roll: true }.
+  async _grapple(c, kind, typed){
+    if (!c) return false;
+    const t = this._order().find(x => x.id === this._armed);
+    const verb = kind === 'grapple' ? 'grapple' : 'shove';
+    const no = msg => { this._setResult(msg, true); this._render(); return false; };
+    if (!t || t.id === c.id) return no('<span class="dim">Pick the creature to ' + verb + ' on the right first.</span>');
+    if (typeof sktSizeRank === 'function' && sktSizeRank(t) - sktSizeRank(c) > 1)
+      return no(`<strong>${esc(t.name)}</strong> is too big for ${esc(c.name)} to ${verb} &mdash; more than one size larger.`);
+    const ft = this._ftBetween(c, t), reach = this._reachOf(c);
+    if (ft != null && ft > reach) return no(`<strong>${esc(t.name)}</strong> is ${ft} ft away &mdash; out of ${esc(c.name)}&rsquo;s reach (${reach} ft).`);
+    if (kind === 'grapple' && t.grappledBy && t.grappledBy.id === c.id && this._hasCond(t, 'grappled'))
+      return no(`${esc(c.name)} already has hold of <strong>${esc(t.name)}</strong>.`);
+    if (this._charmBlocks(c, t)) return false;
+    const C = panelDefs.combat, ed = this._edOf(c), roll = !!(typed && typed.roll);
+    const sg = n => (n < 0 ? '−' : '+') + Math.abs(n);
+    const what = kind === 'grapple' ? 'grapple' : kind === 'prone' ? 'shove prone' : 'shove away';
+    const ask = async (who, msg, label) => {
+      if (roll || !who.isPC || typeof showConfirm !== 'function') return null;
+      const v = await showConfirm(msg, { title: kind === 'grapple' ? 'Grapple' : 'Shove', confirmLabel: 'Go', input: { label, min: -10, max: 60 } });
+      return v === false ? false : typeof v === 'number' ? v : null;
+    };
+    let win, line, escape = null;
+    if (ed === '2014'){
+      const ab = this._skillBonus(c, 'athletics', 'str');
+      const tAth = this._skillBonus(t, 'athletics', 'str'), tAcr = this._skillBonus(t, 'acrobatics', 'dex');
+      const tSk = tAcr > tAth ? 'Acrobatics' : 'Athletics', tb = Math.max(tAth, tAcr);
+      let a = typed && typeof typed.a === 'number' ? typed.a : null, d = typed && typeof typed.d === 'number' ? typed.d : null, ad = '', dd = '';
+      if (a == null){ const v = await ask(c, c.name + ' tries to ' + what + ' ' + t.name + ': an Athletics check.', 'Their Athletics total (blank: roll ' + sg(ab) + ')'); if (v === false) return false; a = v; }
+      if (d == null){ const v = await ask(t, t.name + ' resists ' + c.name + '’s ' + verb + ': Athletics or Acrobatics.', 'Their ' + tSk + ' total (blank: roll ' + sg(tb) + ')'); if (v === false) return false; d = v; }
+      if (a == null){ const r = this._rollCheck(c, 'athletics', ab); a = r.total; ad = r.detail; }
+      if (d == null){ const r = this._rollCheck(t, tSk.toLowerCase(), tb); d = r.total; dd = r.detail; }
+      win = a > d;
+      line = `Athletics <strong>${a}</strong>${ad ? ` <span class="dim">(${esc(ad)})</span>` : ''} vs ${esc(t.name)}&rsquo;s ${tSk} <strong>${d}</strong>${dd ? ` <span class="dim">(${esc(dd)})</span>` : ''}${a === d ? ' &mdash; a tie leaves things as they were' : ''}`;
+    } else {
+      const md = n => Math.floor(((+n || 10) - 10) / 2);
+      let str, pb;
+      if (c.isPC){ const p = this._partyOf(c) || {}; str = md((p.abilities || {}).str); pb = +((p.sheet || {}).profBonus) || this._pb(p.level || 1); }
+      else { const e = this._entryOf(c) || {}, raw = e._raw || {}; str = md(raw.strength); pb = +raw.proficiency_bonus || (typeof sktPbForCR === 'function' ? sktPbForCR(raw.challenge_rating != null ? raw.challenge_rating : e._cr) : 2); }
+      const dc = 8 + str + pb; escape = dc;
+      const sb = C.saveBonus(t, 'str'), db = C.saveBonus(t, 'dex'), sab = db > sb ? 'DEX' : 'STR';
+      let total = typed && typeof typed.d === 'number' ? typed.d : null, detail = '', auto = '';
+      if (total == null){ const v = await ask(t, c.name + ' tries to ' + what + ' ' + t.name + ': a Strength or Dexterity save, DC ' + dc + '.', 'Their save total (blank: roll ' + sab + ' ' + sg(Math.max(sb, db)) + ')'); if (v === false) return false; total = v; }
+      if (total == null){ const r = C.rollSave(t, sab, dc, {}); auto = r.auto || ''; total = r.total; detail = r.detail; }
+      win = auto ? true : total < dc;
+      line = `${esc(t.name)}&rsquo;s ${sab} save ${auto ? esc(detail) : `<strong>${total}</strong>${detail ? ` <span class="dim">(${esc(detail)})</span>` : ''}`} vs DC ${dc}`;
+    }
+    this._snapshot(`${c.name} · ${kind === 'grapple' ? 'Grapple' : 'Shove'} → ${t.name}`);
+    this._spend(c, 'actionUsed');
+    let out = '';
+    if (win){
+      if (kind === 'push'){
+        const B = this._bm(), tt = this._tokenFor(t), ct = this._tokenFor(c);
+        const moved = B && B._body && tt && ct && typeof B.pushToken === 'function' ? B.pushToken(tt.id, { x: ct.x, y: ct.y }, 5) : 0;
+        out = moved ? 'pushed ' + moved + ' ft away' : 'pushed 5 ft away (move its token)';
+      } else {
+        const cond = kind === 'grapple' ? 'Grappled' : 'Prone';
+        const got = C._inflictCond(t, { cond }, null, null, c);
+        const now = state.combatants.find(x => x.id === t.id);
+        if (got === 'immune') out = 'immune to being ' + cond.toLowerCase();
+        else {
+          if (cond === 'Grappled' && now) now.grappledBy = { id: c.id, name: c.name, escape };
+          out = got === 'had' && cond === 'Prone' ? 'already prone' : cond === 'Grappled' ? 'grappled' + (escape ? ' (escape DC ' + escape + ')' : '') : 'knocked prone';
+        }
+      }
+    }
+    const txt = `<strong>${esc(c.name)}</strong> tries to ${what.replace('shove', 'shove <strong>' + esc(t.name) + '</strong>').replace('grapple', 'grapple <strong>' + esc(t.name) + '</strong>')} &mdash; ${line} &mdash; ${win ? out : kind === 'grapple' ? 'it slips the grip' : 'it holds its ground'}.`;
+    this._setResult(txt, true);
+    this._log.unshift(`<strong>${esc(c.name)}</strong> &mdash; ${kind === 'grapple' ? 'Grapple' : 'Shove'} ${esc(t.name)}: ${win ? esc(out.replace(/ \(.*\)$/, '')) : 'failed'}`);
+    save(); C._render?.(); if (t.isPC || c.isPC) panelDefs.party?._render?.(); this._render();
+    return win;
   },
 
   // Escaping a grapple: the action, and an Athletics or Acrobatics check
