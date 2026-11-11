@@ -18352,6 +18352,49 @@ for (const cls of Object.keys(rule)) for (let L = 1; L <= 20; L++) for (const sc
       finally { window.sktD = keepD; window.showConfirm = keepAsk; T._pending = null; T._tokenFor = keepTok; T._armed = null;
         state.party = JSON.parse(keepP); state.combatants = JSON.parse(keepC); state.activeCombatantId = keepA; state.combatRound = keepR; save(); }
     }
+    // -- Round 276: Action Surge gives the Action back; Second Wind heals 1d10 + level (the player's roll, or rolled here) --
+    if (!PLAYER){
+      const keepC = JSON.stringify(state.combatants), keepA = state.activeCombatantId, keepP = JSON.stringify(state.party), keepR = state.combatRound;
+      const T = panelDefs.turnview, C = panelDefs.combat, keepD = window.sktD, keepAsk = window.showConfirm;
+      try {
+        state.party.push({ id: 'r276w', name: 'Wil', hp: 20, hpMax: 52, ac: 18, spd: 30, rules: '2024', level: 6, build: { edition: '2024' },
+          resources: [{ name: 'Second Wind', current: 3, max: 3 }, { name: 'Action Surge', current: 1, max: 1 }],
+          sheet: { size: 'Medium', profBonus: 3, featureList: [], attacks: [], activations: [
+            { name: 'Second Wind', action: 'Bonus Action', resource: 'Second Wind', amount: 1, feature: 'Second Wind', desc: 'Regain 1d10 + 6 hit points.' },
+            { name: 'Action Surge', action: 'Free', resource: 'Action Surge', amount: 1, feature: 'Action Surge', desc: 'Take one additional action on your turn.' },
+          ] } });
+        state.combatants = [{ id: 'r276w', name: 'Wil', isPC: true, hp: 20, hpMax: 52, ac: 18, initiative: 20, conditions: [] }];
+        state.combatRound = 1; state.activeCombatantId = 'r276w'; save();
+        openPanel('turnview'); await sleep(200);
+        const wil = () => state.combatants.find(c => c.id === 'r276w'), pc = () => state.party.find(p => p.id === 'r276w');
+        const act = n => T._activationsFor(wil()).find(a => a.name === n);
+        let asks = 0, answer = null; window.showConfirm = async () => { asks++; return answer; };
+        window.sktD = d => d === 10 ? 4 : 1;
+        // Action Surge after the Attack action: the Action is back.
+        wil().actionUsed = true;
+        await T._useActivation('r276w', act('Action Surge').i);
+        ok('surge: Action Surge — the Action is ready again, the use spent, said so', !wil().actionUsed && pc().resources.find(r => r.name === 'Action Surge').current === 0 && /ready again/.test(T._result) && /not the Magic action/.test(T._result), JSON.stringify([wil().actionUsed, T._result]));
+        // Second Wind, the player's own roll typed in: 7 + 6.
+        answer = 7;
+        await T._useActivation('r276w', act('Second Wind').i);
+        ok('second wind: their 7 + 6 — 13 hit points back, the Bonus Action spent, a use gone', wil().hp === 33 && wil().bonusUsed === true && pc().resources.find(r => r.name === 'Second Wind').current === 2 && /regains <strong>13<\/strong>/.test(T._result), JSON.stringify([wil().hp, wil().bonusUsed, T._result]));
+        ok('second wind: …the player was asked', asks === 1, asks);
+        // Rolled here: blank — the d10 shows 4, + 6.
+        wil().bonusUsed = false; answer = null;
+        await T._useActivation('r276w', act('Second Wind').i);
+        ok('second wind: rolled here — 4 + 6', wil().hp === 43, JSON.stringify([wil().hp, T._result]));
+        // Cancelled: nothing spent, nothing healed.
+        wil().bonusUsed = false; answer = false;
+        await T._useActivation('r276w', act('Second Wind').i);
+        ok('second wind: cancelled — nothing spent', wil().hp === 43 && !wil().bonusUsed && pc().resources.find(r => r.name === 'Second Wind').current === 1, JSON.stringify([wil().hp, pc().resources]));
+        // Not past the maximum.
+        answer = 10;
+        await T._useActivation('r276w', act('Second Wind').i);
+        ok('second wind: 16 at 43 of 52 — up to 52, says 9', wil().hp === 52 && /regains <strong>9<\/strong>/.test(T._result), JSON.stringify([wil().hp, T._result]));
+      } catch(e){ ok('round 276 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
+      finally { window.sktD = keepD; window.showConfirm = keepAsk; T._pending = null;
+        state.party = JSON.parse(keepP); state.combatants = JSON.parse(keepC); state.activeCombatantId = keepA; state.combatRound = keepR; save(); }
+    }
     // -- Class features: represented, not just text ------------------------
     {
       try {

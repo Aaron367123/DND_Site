@@ -500,7 +500,7 @@ registerPanel('turnview', {
     if (a.pool && a.pool.current < (a.amount || 1)) return 'no ' + a.res.toLowerCase() + ' left';
     return null;
   },
-  _useActivation(id, idx){
+  async _useActivation(id, idx, typed){
     const who = this._order().find(c => c.id === id); if (!who) return;
     const a = this._activationsFor(who).find(x => x.i === +idx); if (!a) return;
     const problem = this._actProblem(who, a);
@@ -515,6 +515,21 @@ registerPanel('turnview', {
       sktAskBardic({ from: bardRec.id, after: () => this._render() });
       return;
     }
+    // Second Wind: "regain 1d10 + your fighter level hit points" — the
+    // player's roll, typed in, or rolled here; the heal is applied.
+    const sw = /^Regain (\d*d\d+) \+ (\d+) hit points\.?$/i.exec(String(a.desc || ''));
+    let heal = null;
+    if (sw){
+      let n = typeof typed === 'number' ? typed : null;
+      if (n == null && typed !== 'roll' && typeof showConfirm === 'function'){
+        const v = await showConfirm(who.name + ' uses ' + a.name + ': ' + sw[1] + ' + ' + sw[2] + ' hit points.', { title: a.name, confirmLabel: 'Heal',
+          input: { label: 'Their ' + sw[1] + ' roll (blank: roll it here)', min: 1, max: 100 } });
+        if (v === false) return;
+        if (typeof v === 'number') n = v;
+      }
+      const r = n != null ? { total: n, detail: sw[1] + ' ' + n + ' (theirs)' } : (typeof sktRollDice === 'function' ? sktRollDice(sw[1]) : { total: this._d(+sw[1].split('d')[1] || 10), detail: '' });
+      heal = { amt: r.total + (+sw[2] || 0), detail: (r.detail || (sw[1] + ' ' + r.total)) + ' + ' + sw[2] };
+    }
     let spent = '';
     if (a.pool){
       a.pool.current = Math.max(0, a.pool.current - (a.amount || 1));
@@ -524,9 +539,24 @@ registerPanel('turnview', {
     const flag = this._actFlag(a);
     this._snapshot(`${who.name} · ${a.name}`);
     if (flag) who[flag] = true;
+    // Action Surge: one more action this turn (2024: not the Magic action).
+    let extra = '';
+    if (a.name === 'Action Surge'){
+      const had = !!who.actionUsed;
+      who.actionUsed = false;
+      extra = had ? ' — its Action is ready again' : ' — one more action this turn';
+      if (this._edOf(who) !== '2014') extra += ' (not the Magic action)';
+    }
+    if (heal){
+      const C = panelDefs.combat, i = state.combatants.findIndex(x => x.id === who.id);
+      const before = who.hp || 0;
+      if (C && i >= 0 && typeof C._applyHpDelta === 'function') C._applyHpDelta(i, heal.amt, null);
+      const now = state.combatants[i] || who;
+      extra = ' — regains <strong>' + Math.max(0, (now.hp || 0) - before) + '</strong> hit points <span class="dim">(' + esc(heal.detail) + ')</span>';
+    }
     const line = `${a.name}${a.action ? ' (' + a.action + ')' : ''}${spent}`;
-    this._log.unshift(`<strong>${esc(who.name)}</strong> — ${esc(line)}`);
-    this._setResult(`<strong>${esc(who.name)}</strong> uses <strong>${esc(a.name)}</strong>${esc(spent)}.`, true);
+    this._log.unshift(`<strong>${esc(who.name)}</strong> — ${esc(line)}${heal ? ' · +' + heal.amt + ' HP' : ''}`);
+    this._setResult(`<strong>${esc(who.name)}</strong> uses <strong>${esc(a.name)}</strong>${esc(spent)}${extra}.`, true);
     save(); panelDefs.combat?._render?.(); this._render();
   },
   // Collapse state for the features row. A view preference, so localStorage
