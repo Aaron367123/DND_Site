@@ -18363,6 +18363,8 @@ for (const cls of Object.keys(rule)) for (let L = 1; L <= 20; L++) for (const sc
             { name: 'Second Wind', action: 'Bonus Action', resource: 'Second Wind', amount: 1, feature: 'Second Wind', desc: 'Regain 1d10 + 6 hit points.' },
             { name: 'Action Surge', action: 'Free', resource: 'Action Surge', amount: 1, feature: 'Action Surge', desc: 'Take one additional action on your turn.' },
           ] } });
+        // Worked out already, under these rules: save() would otherwise work him out again from his (empty) build.
+        { const w = state.party.find(p => p.id === 'r276w'); w.rulesRev = SKT_RULES_REV; w.sheet.stateSig = sktStateSig(w); }
         state.combatants = [{ id: 'r276w', name: 'Wil', isPC: true, hp: 20, hpMax: 52, ac: 18, initiative: 20, conditions: [] }];
         state.combatRound = 1; state.activeCombatantId = 'r276w'; save();
         openPanel('turnview'); await sleep(200);
