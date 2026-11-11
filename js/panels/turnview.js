@@ -566,6 +566,25 @@ registerPanel('turnview', {
       who.aimed = { k: sktMoveKey() || '', used: false };
       extra = ' — advantage on its next attack this turn; its Speed is 0 until the turn ends';
     }
+    // A feature that casts a spell (Hunter's Mark through Favored Enemy):
+    // concentrating on it, as using it from the sheet does — so the mark's
+    // extra die is offered after a hit.
+    if (a.castSpell){
+      const p = this._partyOf(who);
+      let conc = null;
+      for (const ed of [this._edOf(who), '2024', '2014']){
+        const R = typeof _sktRulesReady !== 'undefined' && _sktRulesReady[ed];
+        const sp = R && typeof sktRulesSpell === 'function' ? sktRulesSpell(R, a.castSpell) : null;
+        if (sp){ conc = !!sp.concentration || [].concat(sp.duration || []).some(d => d && d.concentration); break; }
+      }
+      if (conc == null) conc = /^(Hunter.s Mark|Hex)$/i.test(a.castSpell);
+      if (p && conc){
+        if (p.concentration && p.concentration !== a.castSpell) extra += ' — ' + esc(p.concentration) + ' ends';
+        p.concentration = a.castSpell;
+        extra += ' — concentrating on ' + esc(a.castSpell);
+        panelDefs.party?._render?.();
+      }
+    }
     if (a.name === 'Action Surge'){
       const had = !!who.actionUsed;
       who.actionUsed = false;

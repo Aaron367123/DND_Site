@@ -18493,6 +18493,57 @@ for (const cls of Object.keys(rule)) for (let L = 1; L <= 20; L++) for (const sc
       finally { window.sktD = keepD; window.showConfirm = keepAsk; T._pending = null; T._tokenFor = keepTok;
         state.party = JSON.parse(keepP); state.combatants = JSON.parse(keepC); state.activeCombatantId = keepA; state.combatRound = keepR; save(); }
     }
+    // -- Round 279: a feature that casts a concentration spell (Hunter's Mark via Favored Enemy) concentrates on it from the Turn View; the mark's die is then offered --
+    if (!PLAYER){
+      const keepC = JSON.stringify(state.combatants), keepA = state.activeCombatantId, keepP = JSON.stringify(state.party), keepR = state.combatRound;
+      const T = panelDefs.turnview, C = panelDefs.combat, keepD = window.sktD, keepAsk = window.showConfirm, keepSync = window.sktStatesSyncAll;
+      try {
+        for (let k = 0; k < 100 && !(typeof _5eLoaded !== 'undefined' && _5eLoaded); k++) await sleep(100);
+        const find = (n, src) => _5eData.find(r => r.cat === 'monster' && r.name === n && r._source === src);
+        state.party.push({ id: 'r279k', name: 'Kae', hp: 50, hpMax: 50, ac: 15, spd: 30, rules: '2024', level: 6, build: { edition: '2024' },
+          concentration: 'Bless',
+          resources: [{ name: 'Favored Enemy', current: 2, max: 2 }],
+          sheet: { size: 'Medium', profBonus: 3, featureList: [], attacks: [{ name: 'Longbow', atkBonus: '+9', damage: '1d8+4 piercing', props: ['A', 'H', '2H'], range: '150/600' }],
+            activations: [
+              { name: "Hunter's Mark (Favored Enemy)", action: 'Bonus Action', resource: 'Favored Enemy', amount: 1, feature: 'Favored Enemy', castSpell: "Hunter's Mark", desc: "Cast Hunter's Mark without expending a spell slot." },
+              { name: 'Misty Step (Fey Step)', action: 'Bonus Action', feature: 'Fey Step', castSpell: 'Misty Step', desc: 'Cast Misty Step.' },
+              { name: 'Faerie Fire (Drow Magic)', action: 'Action', feature: 'Drow Magic', castSpell: 'Faerie Fire', desc: 'Cast Faerie Fire.' } ] } });
+        if (typeof sktRulesLoad === 'function') await sktRulesLoad('2024');
+        // Kae has no real build to work out again from: hold the rebuild a save() does while this round runs.
+        window.sktStatesSyncAll = () => {};
+        { const w = state.party.find(p => p.id === 'r279k'); w.rulesRev = SKT_RULES_REV; w.sheet.stateSig = sktStateSig(w); }
+        state.combatants = [{ id: 'r279k', name: 'Kae', isPC: true, hp: 50, hpMax: 50, ac: 15, initiative: 20, conditions: [] }];
+        C.addMonster(find('Ogre', 'MM')); await sleep(20);
+        const get = id => state.combatants.find(c => c.id === id), ogId = state.combatants[1].id, kae = () => get('r279k'), pc = () => state.party.find(p => p.id === 'r279k');
+        state.combatRound = 1; state.activeCombatantId = 'r279k'; save();
+        openPanel('turnview'); await sleep(200);
+        window.showConfirm = async () => false;
+        const act = n => T._activationsFor(kae()).find(a => a.name === n);
+        // Before: a hit offers no Hunter's Mark.
+        window.sktD = d => d === 20 ? 15 : 3;
+        const shoot = () => { T._pending = null; T._rollAttack(0, { attacker: kae(), target: get(ogId), mode: 0 }); if (T._pending) T._commit(T._pending, null); };
+        const hm = () => T._lastPcHit && T._pcExtraOptions(T._lastPcHit).some(o => o.key === 'hm');
+        shoot();
+        ok('cast: before the mark — a hit offers no Hunter’s Mark die', !hm());
+        kae().actionUsed = false;
+        await T._useActivation('r279k', act("Hunter's Mark (Favored Enemy)").i);
+        ok('cast: Favored Enemy — concentrating on Hunter’s Mark, Bless ends, a use and the Bonus Action spent',
+           pc().concentration === "Hunter's Mark" && /Bless ends/.test(T._result) && /concentrating on Hunter/.test(T._result) && pc().resources[0].current === 1 && kae().bonusUsed === true,
+           JSON.stringify([pc().concentration, T._result, pc().resources[0], kae().bonusUsed]));
+        shoot();
+        ok('cast: …and the next hit offers its d6', hm(), JSON.stringify(T._lastPcHit && T._pcExtraOptions(T._lastPcHit).map(o => o.key)));
+        // A spell with no concentration leaves it alone.
+        kae().bonusUsed = false;
+        await T._useActivation('r279k', act('Misty Step (Fey Step)').i);
+        ok('cast: Misty Step — no concentration, Hunter’s Mark still held', pc().concentration === "Hunter's Mark" && !/concentrating/.test(T._result), JSON.stringify([pc().concentration, T._result]));
+        // Read from the spell itself: Faerie Fire is held by concentration.
+        kae().actionUsed = false;
+        await T._useActivation('r279k', act('Faerie Fire (Drow Magic)').i);
+        ok('cast: Faerie Fire — the spell says concentration: now that, the mark ends', pc().concentration === 'Faerie Fire' && /Hunter.+ ends/.test(T._result), JSON.stringify([pc().concentration, T._result]));
+      } catch(e){ ok('round 279 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
+      finally { window.sktD = keepD; window.showConfirm = keepAsk; window.sktStatesSyncAll = keepSync; T._pending = null;
+        state.party = JSON.parse(keepP); state.combatants = JSON.parse(keepC); state.activeCombatantId = keepA; state.combatRound = keepR; save(); }
+    }
     // -- Class features: represented, not just text ------------------------
     {
       try {
