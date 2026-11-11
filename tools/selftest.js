@@ -18397,6 +18397,56 @@ for (const cls of Object.keys(rule)) for (let L = 1; L <= 20; L++) for (const sc
       finally { window.sktD = keepD; window.showConfirm = keepAsk; T._pending = null;
         state.party = JSON.parse(keepP); state.combatants = JSON.parse(keepC); state.activeCombatantId = keepA; state.combatRound = keepR; save(); }
     }
+    // -- Round 277: a dragonborn's Breath Weapon opens the area save, filled in; the use and the action spent on Apply; 2024 — in place of an attack --
+    if (!PLAYER){
+      const keepC = JSON.stringify(state.combatants), keepA = state.activeCombatantId, keepP = JSON.stringify(state.party), keepR = state.combatRound;
+      const T = panelDefs.turnview, C = panelDefs.combat, keepD = window.sktD, keepAsk = window.showConfirm;
+      try {
+        for (let k = 0; k < 100 && !(typeof _5eLoaded !== 'undefined' && _5eLoaded); k++) await sleep(100);
+        const find = (n, src) => _5eData.find(r => r.cat === 'monster' && r.name === n && r._source === src);
+        const bw24 = 'In place of one attack of the Attack action, exhale a 15-foot cone or 30-foot line (5 feet wide): each creature in it makes a DC 13 Dexterity saving throw, taking 2d10 acid damage on a failure, half as much on a success. (Black ancestry.)';
+        state.party.push({ id: 'r277c', name: 'Cre', hp: 40, hpMax: 40, ac: 16, spd: 40, rules: '2024', level: 6, build: { edition: '2024' },
+          resources: [{ name: 'Breath Weapon', current: 3, max: 3 }],
+          sheet: { size: 'Medium', profBonus: 3, featureList: [], attacks: [], activations: [
+            { name: 'Breath Weapon', action: 'Action', resource: 'Breath Weapon', amount: 1, feature: 'Breath Weapon', dice: '2d10', desc: bw24 } ] } });
+        { const w = state.party.find(p => p.id === 'r277c'); w.rulesRev = SKT_RULES_REV; w.sheet.stateSig = sktStateSig(w); }
+        state.combatants = [{ id: 'r277c', name: 'Cre', isPC: true, hp: 40, hpMax: 40, ac: 16, initiative: 20, conditions: [] }];
+        C.addMonster(find('Goblin', 'MM')); C.addMonster(find('Ogre', 'MM')); await sleep(20);
+        const get = id => state.combatants.find(c => c.id === id), gbId = state.combatants[1].id;
+        const cre = () => get('r277c'), pool = () => state.party.find(p => p.id === 'r277c').resources[0].current;
+        state.combatRound = 1; state.activeCombatantId = 'r277c'; save();
+        openPanel('turnview'); await sleep(200);
+        window.showConfirm = async () => false;
+        const bw = () => T._activationsFor(cre()).find(a => a.name === 'Breath Weapon');
+        const dlg = () => document.getElementById('area-save-back');
+        T._armed = gbId;
+        await T._useActivation('r277c', bw().i); await sleep(30);
+        ok('breath: the area save opens, filled in — DEX, DC 13, 2d10 acid, the goblin ticked, Cre not in it',
+           !!dlg() && dlg().querySelector('#as-ab').value === 'DEX' && dlg().querySelector('#as-dc').value === '13' && dlg().querySelector('#as-dmg').value === '2d10 acid'
+           && !!dlg().querySelector('#as-targets input[value="' + gbId + '"]:checked') && !dlg().querySelector('#as-targets input[value="r277c"]') && /Breath Weapon/.test(dlg().textContent),
+           dlg() && JSON.stringify([dlg().querySelector('#as-ab').value, dlg().querySelector('#as-dc').value, dlg().querySelector('#as-dmg').value]));
+        ok('breath: …nothing spent yet', pool() === 3 && !cre().actionUsed, JSON.stringify([pool(), cre().actionUsed]));
+        dlg().querySelector('[data-as="cancel"]').click(); await sleep(20);
+        ok('breath: cancelled — nothing spent', pool() === 3 && !cre().actionUsed && !dlg());
+        // Again, rolled and applied: the goblin's DEX save fails (1 + 2 < 13), it takes 2d10.
+        window.sktD = d => 1;
+        await T._useActivation('r277c', bw().i); await sleep(30);
+        const hp0 = get(gbId).hp;
+        dlg().querySelector('[data-as="roll"]').click(); await sleep(20);
+        dlg().querySelector('[data-as="apply"]').click(); await sleep(50);
+        ok('breath: applied — the goblin takes 2 acid, a use and the action spent', get(gbId).hp === hp0 - 2 && pool() === 2 && cre().actionUsed === true && !dlg(), JSON.stringify([hp0, get(gbId).hp, pool(), cre().actionUsed]));
+        // 2024: in place of an attack — after the Action went on attacks, still allowed.
+        await T._useActivation('r277c', bw().i); await sleep(30);
+        ok('breath: 2024 — after attacking, still there to use (it replaces an attack)', !!dlg(), T._result);
+        dlg() && dlg().querySelector('[data-as="cancel"]').click(); await sleep(20);
+        // 2014's is its own action: not after the action is spent.
+        state.party.find(p => p.id === 'r277c').sheet.activations[0].desc = bw24.replace(/^In place of one attack of the Attack action, exhale/, 'Exhale');
+        await T._useActivation('r277c', bw().i); await sleep(30);
+        ok('breath: its own action — not once the action is spent', !dlg() && /action already used/.test(T._result), T._result);
+      } catch(e){ ok('round 277 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
+      finally { window.sktD = keepD; window.showConfirm = keepAsk; T._pending = null; T._armed = null; document.getElementById('area-save-back')?.remove();
+        state.party = JSON.parse(keepP); state.combatants = JSON.parse(keepC); state.activeCombatantId = keepA; state.combatRound = keepR; save(); }
+    }
     // -- Class features: represented, not just text ------------------------
     {
       try {

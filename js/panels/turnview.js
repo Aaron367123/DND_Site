@@ -489,7 +489,10 @@ registerPanel('turnview', {
   },
   _actProblem(c, a){
     const flag = this._actFlag(a);
-    if (flag && c[flag]){
+    // "In place of one attack of the Attack action" (2024 Breath Weapon): it
+    // comes after the Action is already being spent on attacks.
+    const inAttack = flag === 'actionUsed' && /^In place of one attack of the Attack action/i.test(String(a.desc || ''));
+    if (flag && c[flag] && !inAttack){
       return flag === 'reactionUsed' ? 'already reacted'
            : flag === 'bonusUsed'    ? 'bonus action already used'
            : 'action already used';
@@ -513,6 +516,18 @@ registerPanel('turnview', {
     const bardRec = (a.name === 'Bardic Inspiration' && who.isPC) ? this._partyOf(who) : null;
     if (bardRec && typeof sktAskBardic === 'function'){
       sktAskBardic({ from: bardRec.id, after: () => this._render() });
+      return;
+    }
+    // An area the creatures in it save against (a dragonborn's Breath
+    // Weapon): the area-save dialog, filled in. Its use and the action are
+    // spent when the damage is applied — cancelled, nothing is.
+    const ar = /makes a DC (\d+) (Strength|Dexterity|Constitution|Intelligence|Wisdom|Charisma) saving throw, taking (\d*d\d+)(?: ([a-z]+))? damage on a failure, half as much on a success/i.exec(String(a.desc || ''));
+    const C0 = panelDefs.combat;
+    if (ar && typed !== 'applied' && C0 && typeof C0.openAreaSave === 'function'){
+      C0.openAreaSave({ name: who.name + ' · ' + a.name, ab: ar[2].slice(0, 3).toUpperCase(), dc: +ar[1],
+        parts: [{ dice: ar[3], type: String(ar[4] || '').toLowerCase() }], half: true, exclude: who.id,
+        targets: this._armed && this._armed !== who.id ? [this._armed] : [], src: { id: who.id, name: who.name },
+        onApplied: () => this._useActivation(id, idx, 'applied') });
       return;
     }
     // Second Wind: "regain 1d10 + your fighter level hit points" — the
