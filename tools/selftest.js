@@ -18447,6 +18447,52 @@ for (const cls of Object.keys(rule)) for (let L = 1; L <= 20; L++) for (const sc
       finally { window.sktD = keepD; window.showConfirm = keepAsk; T._pending = null; T._armed = null; document.getElementById('area-save-back')?.remove();
         state.party = JSON.parse(keepP); state.combatants = JSON.parse(keepC); state.activeCombatantId = keepA; state.combatRound = keepR; save(); }
     }
+    // -- Round 278: Steady Aim — not after moving; advantage on the next attack this turn only; Speed 0 for the rest of the turn --
+    if (!PLAYER){
+      const keepC = JSON.stringify(state.combatants), keepA = state.activeCombatantId, keepP = JSON.stringify(state.party), keepR = state.combatRound;
+      const T = panelDefs.turnview, C = panelDefs.combat, keepD = window.sktD, keepAsk = window.showConfirm, keepTok = T._tokenFor;
+      try {
+        for (let k = 0; k < 100 && !(typeof _5eLoaded !== 'undefined' && _5eLoaded); k++) await sleep(100);
+        const find = (n, src) => _5eData.find(r => r.cat === 'monster' && r.name === n && r._source === src);
+        state.party.push({ id: 'r278z', name: 'Zo', hp: 40, hpMax: 40, ac: 15, spd: 30, rules: '2024', level: 6, build: { edition: '2024' },
+          abilities: { str: 10, dex: 18, con: 14, int: 10, wis: 10, cha: 10 },
+          sheet: { size: 'Medium', profBonus: 3, featureList: [], attacks: [{ name: 'Shortbow', atkBonus: '+7', damage: '1d6+4 piercing', props: ['A', '2H'], range: '80/320' }],
+            activations: [{ name: 'Steady Aim', action: 'Bonus Action', feature: 'Steady Aim', desc: 'Advantage on your next attack this turn, if you haven’t moved; your speed is 0 until the end of the turn.' }] } });
+        { const w = state.party.find(p => p.id === 'r278z'); w.rulesRev = SKT_RULES_REV; w.sheet.stateSig = sktStateSig(w); }
+        state.combatants = [{ id: 'r278z', name: 'Zo', isPC: true, hp: 40, hpMax: 40, ac: 15, initiative: 20, conditions: [] }];
+        C.addMonster(find('Ogre', 'MM')); await sleep(20);
+        const get = id => state.combatants.find(c => c.id === id), ogId = state.combatants[1].id, zo = () => get('r278z');
+        state.combatRound = 1; state.activeCombatantId = 'r278z'; save();
+        openPanel('turnview'); await sleep(200);
+        window.showConfirm = async () => false;
+        const tok = { x: 100, y: 100, size: 1, cid: 'r278z', isPC: true, label: 'Zo' };
+        T._tokenFor = c => c && c.id === 'r278z' ? tok : null;
+        const aim = () => T._activationsFor(zo()).find(a => a.name === 'Steady Aim');
+        // Moved 10 ft already: no.
+        tok.mv = { k: sktMoveKey(), ft: 10 };
+        await T._useActivation('r278z', aim().i);
+        ok('aim: after moving 10 ft — refused, the Bonus Action kept', !zo().bonusUsed && !zo().aimed && /has moved this turn/.test(T._result), T._result);
+        delete tok.mv;
+        await T._useActivation('r278z', aim().i);
+        ok('aim: standing still — the Bonus Action spent, aimed, said so', zo().bonusUsed === true && zo().aimed && /advantage on its next attack/.test(T._result), T._result);
+        ok('aim: …its Speed is 0 now', T._moveNow(zo()).budget === 0, JSON.stringify(T._moveNow(zo())));
+        // The bow: rolled with advantage, Steady Aim named; the next one without.
+        let rolls = 0; window.sktD = d => (d === 20 ? (rolls++, 2) : 1);
+        const shoot = () => { rolls = 0; T._pending = null; T._rollAttack(0, { attacker: zo(), target: get(ogId), mode: 0 }); if (T._pending) T._commit(T._pending, null); return rolls; };
+        ok('aim: the next attack — two d20s, Steady Aim', shoot() === 2 && /Steady Aim/.test(T._result), T._result);
+        ok('aim: the one after — one d20', shoot() === 1 && !/Steady Aim/.test(T._result), T._result);
+        ok('aim: …and still Speed 0 this turn', T._moveNow(zo()).budget === 0);
+        // Undo the aim: Speed back.
+        zo().aimed = null;
+        ok('aim: without it, Speed 30', T._moveNow(zo()).budget === 30, JSON.stringify(T._moveNow(zo())));
+        // Next turn: it's gone.
+        zo().aimed = { k: sktMoveKey(), used: false };
+        state.activeCombatantId = ogId; C._refreshTurnEconomy(ogId); state.combatRound = 2; state.activeCombatantId = 'r278z'; C._refreshTurnEconomy('r278z');
+        ok('aim: next turn — no aim, Speed back', !zo().aimed && T._moveNow(zo()).budget === 30, JSON.stringify([zo().aimed, T._moveNow(zo())]));
+      } catch(e){ ok('round 278 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
+      finally { window.sktD = keepD; window.showConfirm = keepAsk; T._pending = null; T._tokenFor = keepTok;
+        state.party = JSON.parse(keepP); state.combatants = JSON.parse(keepC); state.activeCombatantId = keepA; state.combatRound = keepR; save(); }
+    }
     // -- Class features: represented, not just text ------------------------
     {
       try {

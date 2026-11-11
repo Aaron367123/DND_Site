@@ -530,6 +530,12 @@ registerPanel('turnview', {
         onApplied: () => this._useActivation(id, idx, 'applied') });
       return;
     }
+    // Steady Aim: "if you haven't moved during this turn" — advantage on the
+    // next attack this turn, and Speed 0 until the turn ends.
+    if (a.name === 'Steady Aim' && typed !== 'applied'){
+      const mi = this._moveNow(who);
+      if (mi && mi.moved > 0){ this._setResult(`<span class="dim">${esc(who.name)} can't — it has moved this turn (${mi.moved} ft).</span>`, true); this._render(); return; }
+    }
     // Second Wind: "regain 1d10 + your fighter level hit points" — the
     // player's roll, typed in, or rolled here; the heal is applied.
     const sw = /^Regain (\d*d\d+) \+ (\d+) hit points\.?$/i.exec(String(a.desc || ''));
@@ -556,6 +562,10 @@ registerPanel('turnview', {
     if (flag) who[flag] = true;
     // Action Surge: one more action this turn (2024: not the Magic action).
     let extra = '';
+    if (a.name === 'Steady Aim' && typeof sktMoveKey === 'function'){
+      who.aimed = { k: sktMoveKey() || '', used: false };
+      extra = ' — advantage on its next attack this turn; its Speed is 0 until the turn ends';
+    }
     if (a.name === 'Action Surge'){
       const had = !!who.actionUsed;
       who.actionUsed = false;
@@ -2538,7 +2548,7 @@ registerPanel('turnview', {
       round: state.combatRound, active: state.activeCombatantId,
       combat: this._order().map(c => ({
         id:c.id, hp:c.hp, dead:c.dead, stable:c.stable, reactionUsed:c.reactionUsed,
-        actionUsed:c.actionUsed, bonusUsed:c.bonusUsed, dodging:c.dodging, dashes:c.dashes || 0, stood:c.stood || 0, readied:c.readied ? {...c.readied} : null,
+        actionUsed:c.actionUsed, bonusUsed:c.bonusUsed, dodging:c.dodging, dashes:c.dashes || 0, stood:c.stood || 0, aimed:c.aimed ? {...c.aimed} : null, readied:c.readied ? {...c.readied} : null,
         // (a Help used by the roll being undone, and a hiding creature's
         // cover blown by it, come back with it)
         disengaged:c.disengaged, helping:c.helping ? {...c.helping} : null, hidden:c.hidden ? {...c.hidden} : null,
@@ -2946,6 +2956,8 @@ registerPanel('turnview', {
     // attack on that creature has advantage), Sap (this attacker's next attack
     // has disadvantage). Each is used by the attack that reads it.
     if (c.vex && c.vex.tgt === t.id){ advWhy.push('Vex'); c.vex = undefined; }
+    // Steady Aim: the next attack this turn.
+    if (c.aimed && !c.aimed.used && typeof sktMoveKey === 'function' && c.aimed.k === sktMoveKey()){ advWhy.push('Steady Aim'); c.aimed = Object.assign({}, c.aimed, { used: true }); }
     if (c.sapped){ disWhy.push('sapped'); c.sapped = undefined; }
     if (a.ranged && !a.closeOk){ const foe = this._rangedThreat(c); if (foe) disWhy.push('ranged, ' + foe.name + ' within 5 ft'); }
     // Blood Frenzy (a sahuagin, a quipper): "advantage on melee attack rolls

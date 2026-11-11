@@ -2892,6 +2892,8 @@ function sktDragHeld(tokens, tok, dx, dy){
 }
 // How far it may go this turn: its Speed, once more for each Dash.
 function sktMoveBudget(speed, c){
+  // Steady Aim: Speed 0 until the end of the turn it was used in.
+  if (speed != null && c && c.aimed && c.aimed.k && c.aimed.k === sktMoveKey()) return 0;
   return speed == null ? null : speed * (1 + Math.max(0, +(c && c.dashes) || 0));
 }
 
