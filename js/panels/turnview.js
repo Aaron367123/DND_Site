@@ -608,6 +608,18 @@ registerPanel('turnview', {
         panelDefs.party?._render?.();
       }
     }
+    // A bonus action that is a standard one (Patient Defense: "Disengage and
+    // Dodge."; Step of the Wind: "Disengage and Dash."): what those do here.
+    // 2014's "Disengage or Dash" is the Dash, said so.
+    const std = /^(?:Take the )?((?:Disengage|Dodge|Dash)(?: (?:and|or) (?:Disengage|Dodge|Dash))?)\b/.exec(String(a.desc || ''));
+    if (std && /^(Patient Defense|Step of the Wind)$/.test(a.name)){
+      const or = / or /.test(std[1]), did = [];
+      const got = or ? ['Dash'] : std[1].split(' and ');
+      if (got.includes('Dodge')){ who.dodging = true; did.push('dodging'); }
+      if (got.includes('Disengage')){ who.disengaged = true; did.push('disengaged'); }
+      if (got.includes('Dash')){ who.dashes = (who.dashes || 0) + 1; did.push('dashing'); }
+      extra += ' — ' + did.join(' and ') + (or ? ' (or Disengage instead: the DM’s call)' : '');
+    }
     if (a.name === 'Action Surge'){
       const had = !!who.actionUsed;
       who.actionUsed = false;
@@ -3485,6 +3497,9 @@ registerPanel('turnview', {
     if (c.isPC){
       const fl = (((this._partyOf(c) || {}).sheet) || {}).featureList || [];
       if (fl.some(f => f.name === 'Cunning Action' && !f.info)) ['Dash', 'Disengage', 'Hide'].forEach(n => out.add(n));
+      // A 2024 monk's Focus: Patient Defense and Step of the Wind without a
+      // Focus Point are Disengage and Dash as a Bonus Action.
+      if (this._edOf(c) !== '2014' && fl.some(f => /^Monk.s Focus$/.test(f.name) && !f.info)) ['Dash', 'Disengage'].forEach(n => out.add(n));
       return [...out];
     }
     const raw = (this._entryOf(c) || {})._raw;

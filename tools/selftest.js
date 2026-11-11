@@ -18589,6 +18589,45 @@ for (const cls of Object.keys(rule)) for (let L = 1; L <= 20; L++) for (const sc
       finally { window.sktD = keepD; window.showConfirm = keepAsk; window.sktStatesSyncAll = keepSync; T._pending = null; T._armed = null;
         state.party = JSON.parse(keepP); state.combatants = JSON.parse(keepC); state.activeCombatantId = keepA; state.combatRound = keepR; save(); }
     }
+    // -- Round 281: a monk's Patient Defense and Step of the Wind do what they say (Dodge, Disengage, Dash); 2024 — Disengage or Dash as a Bonus Action without Focus --
+    if (!PLAYER){
+      const keepC = JSON.stringify(state.combatants), keepA = state.activeCombatantId, keepP = JSON.stringify(state.party), keepR = state.combatRound;
+      const T = panelDefs.turnview, C = panelDefs.combat, keepAsk = window.showConfirm, keepSync = window.sktStatesSyncAll;
+      try {
+        window.sktStatesSyncAll = () => {};
+        state.party.push({ id: 'r281c', name: 'Cre', hp: 40, hpMax: 40, ac: 16, spd: 40, rules: '2024', level: 6, build: { edition: '2024' },
+          resources: [{ name: 'Focus Points', current: 6, max: 6 }],
+          sheet: { size: 'Medium', profBonus: 3, classLevels: [{ cls: 'monk', level: 6 }], featureList: [{ name: 'Monk’s Focus', from: 'class' }], attacks: [],
+            activations: [
+              { name: 'Patient Defense', action: 'Bonus Action', resource: 'Focus Points', amount: 1, feature: 'Focus', desc: 'Disengage and Dodge.' },
+              { name: 'Step of the Wind', action: 'Bonus Action', resource: 'Focus Points', amount: 1, feature: 'Focus', desc: 'Disengage and Dash; your jump distance doubles.' } ] } });
+        state.combatants = [{ id: 'r281c', name: 'Cre', isPC: true, hp: 40, hpMax: 40, ac: 16, initiative: 20, conditions: [] }];
+        state.combatRound = 1; state.activeCombatantId = 'r281c'; save();
+        openPanel('turnview'); await sleep(200);
+        window.showConfirm = async () => false;
+        const cre = () => state.combatants.find(c => c.id === 'r281c'), pc = () => state.party.find(p => p.id === 'r281c');
+        const focus = () => pc().resources[0].current, act = n => T._activationsFor(cre()).find(a => a.name === n);
+        await T._useActivation('r281c', act('Patient Defense').i);
+        ok('monk: Patient Defense — dodging and disengaged, the Bonus Action and a Focus Point spent', cre().dodging === true && cre().disengaged === true && cre().bonusUsed === true && focus() === 5 && /dodging and disengaged/.test(T._result), JSON.stringify([cre().dodging, cre().disengaged, focus(), T._result]));
+        cre().bonusUsed = false; cre().dodging = false; cre().disengaged = false;
+        await T._useActivation('r281c', act('Step of the Wind').i);
+        ok('monk: Step of the Wind — disengaged and dashing (a Dash counted)', cre().disengaged === true && cre().dashes === 1 && !cre().dodging && /disengaged and dashing/.test(T._result), JSON.stringify([cre().disengaged, cre().dashes, T._result]));
+        // 2024, without Focus: after its action, Dash as a Bonus Action.
+        cre().bonusUsed = false; cre().dashes = 0; cre().actionUsed = true;
+        ok('monk: 2024 — Disengage and Dash on the Bonus Action list', T._bonusStd(cre()).includes('Dash') && T._bonusStd(cre()).includes('Disengage'), JSON.stringify(T._bonusStd(cre())));
+        T._takeStandardAction('Dash');
+        ok('monk: …a Dash after its action — the Bonus Action, no Focus spent', cre().bonusUsed === true && cre().dashes === 1 && focus() === 4, JSON.stringify([cre().bonusUsed, cre().dashes, focus()]));
+        // 2014: "Disengage or Dash" — the Dash, and the choice said.
+        pc().rules = '2014'; pc().build.edition = '2014';
+        pc().sheet.activations[1].desc = 'Disengage or Dash; your jump distance doubles for the turn.';
+        cre().bonusUsed = false; cre().dashes = 0; cre().disengaged = false;
+        await T._useActivation('r281c', act('Step of the Wind').i);
+        ok('monk: 2014 — Disengage or Dash: the Dash, and it says so', cre().dashes === 1 && !cre().disengaged && /or Disengage instead/.test(T._result), JSON.stringify([cre().dashes, cre().disengaged, T._result]));
+        ok('monk: 2014 — no free Disengage or Dash', !T._bonusStd(cre()).length, JSON.stringify(T._bonusStd(cre())));
+      } catch(e){ ok('round 281 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
+      finally { window.showConfirm = keepAsk; window.sktStatesSyncAll = keepSync; T._pending = null;
+        state.party = JSON.parse(keepP); state.combatants = JSON.parse(keepC); state.activeCombatantId = keepA; state.combatRound = keepR; save(); }
+    }
     // -- Class features: represented, not just text ------------------------
     {
       try {
