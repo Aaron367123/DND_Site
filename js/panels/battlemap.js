@@ -1946,7 +1946,15 @@ registerPanel('battlemap',{
     if (!t) return null;
     const pc = (state.party || []).find(p => p && (p.id === t.cid || (t.isPC && p.name === t.label)));
     // As it stands: a grappled or exhausted character's, which can be 0.
-    if (pc){ const v = +(pc.speeds && pc.speeds.walk) || +pc.spd; if (!(v > 0)) return null; return typeof sktSpeedNow === 'function' ? sktSpeedNow(Object.assign({}, pc, { spd: v })).ft : v; }
+    if (pc){
+      const v = +(pc.speeds && pc.speeds.walk) || +pc.spd; if (!(v > 0)) return null;
+      const now = typeof sktSpeedNow === 'function' ? sktSpeedNow(Object.assign({}, pc, { spd: v })).ft : v;
+      // A Gloom Stalker's Dread Ambusher: 10 ft more on its first turn of a
+      // fight ("at the start of your first turn of each combat").
+      const leap = now > 0 && (state.combatRound || 0) === 1 && state.activeCombatantId === pc.id
+        && (((pc.sheet || {}).featureList) || []).some(f => f && f.name === 'Dread Ambusher' && !f.info);
+      return leap ? now + 10 : now;
+    }
     const c = (state.combatants || []).find(x => x && x.id === t.cid);
     const m = c && c._slug && typeof _5eData !== 'undefined' ? _5eData.find(r => r && r.cat === 'monster' && r._slug === c._slug) : null;
     const v = m ? parseInt(String(m.speed || '').match(/\d+/) || '', 10) : NaN;

@@ -538,8 +538,12 @@ registerPanel('turnview', {
       if (mi && mi.moved > 0){ this._setResult(`<span class="dim">${esc(who.name)} can't — it has moved this turn (${mi.moved} ft).</span>`, true); this._render(); return; }
     }
     // Second Wind: "regain 1d10 + your fighter level hit points" — the
-    // player's roll, typed in, or rolled here; the heal is applied.
-    const sw = /^Regain (\d*d\d+) \+ (\d+) hit points\.?$/i.exec(String(a.desc || ''));
+    // player's roll, typed in, or rolled here; the heal is applied. Uncanny
+    // Metabolism: "When you roll initiative, regain all Focus Points and d8 +
+    // 6 hit points" — the pool filled too.
+    const sw0 = /^(?:When you [^,]+, )?regain (?:all ([^,]+?) and )?(\d*d\d+) \+ (\d+) hit points\.?$/i.exec(String(a.desc || ''));
+    const sw = sw0 && [sw0[0], sw0[2].replace(/^d/, '1d'), sw0[3]];
+    const refill = sw0 && sw0[1] ? this._pool(who, sw0[1].trim()) : null;
     let heal = null;
     if (sw){
       let n = typeof typed === 'number' ? typed : null;
@@ -551,6 +555,7 @@ registerPanel('turnview', {
       }
       const r = n != null ? { total: n, detail: sw[1] + ' ' + n + ' (theirs)' } : (typeof sktRollDice === 'function' ? sktRollDice(sw[1]) : { total: this._d(+sw[1].split('d')[1] || 10), detail: '' });
       heal = { amt: r.total + (+sw[2] || 0), detail: (r.detail || (sw[1] + ' ' + r.total)) + ' + ' + sw[2], tgt: who };
+      if (refill){ refill.current = refill.max; heal.refill = refill.name; }
     }
     // Hand of Healing (a Warrior of Mercy): the creature picked on the right,
     // or the monk — its Martial Arts die + Wisdom modifier. Physician's Touch
@@ -631,7 +636,8 @@ registerPanel('turnview', {
       const before = (state.combatants[i] || tg).hp || 0;
       if (C && i >= 0 && typeof C._applyHpDelta === 'function') C._applyHpDelta(i, heal.amt, null);
       let now = state.combatants[i] || tg;
-      extra = ' — ' + (tg.id === who.id ? '' : '<strong>' + esc(tg.name) + '</strong> ') + 'regains <strong>' + Math.max(0, (now.hp || 0) - before) + '</strong> hit points <span class="dim">(' + esc(heal.detail) + ')</span>';
+      extra = ' — ' + (tg.id === who.id ? '' : '<strong>' + esc(tg.name) + '</strong> ') + 'regains <strong>' + Math.max(0, (now.hp || 0) - before) + '</strong> hit points <span class="dim">(' + esc(heal.detail) + ')</span>'
+        + (heal.refill ? ' and all its ' + esc(heal.refill) : '');
       if (heal.cure && C && i >= 0){
         const cond = ['paralyzed', 'stunned', 'blinded', 'poisoned', 'deafened'].map(k => (now.conditions || []).find(x => String(x).toLowerCase() === k)).find(Boolean);
         if (cond){ C._removeCond(i, cond); extra += ' and is no longer ' + esc(String(cond).toLowerCase()) + ' (Physician’s Touch)'; }

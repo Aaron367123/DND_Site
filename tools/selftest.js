@@ -18628,6 +18628,47 @@ for (const cls of Object.keys(rule)) for (let L = 1; L <= 20; L++) for (const sc
       finally { window.showConfirm = keepAsk; window.sktStatesSyncAll = keepSync; T._pending = null;
         state.party = JSON.parse(keepP); state.combatants = JSON.parse(keepC); state.activeCombatantId = keepA; state.combatRound = keepR; save(); }
     }
+    // -- Round 282: Uncanny Metabolism heals and refills Focus; a Gloom Stalker's Dread Ambusher adds 10 ft on its first turn --
+    if (!PLAYER){
+      const keepC = JSON.stringify(state.combatants), keepA = state.activeCombatantId, keepP = JSON.stringify(state.party), keepR = state.combatRound;
+      const T = panelDefs.turnview, C = panelDefs.combat, B = panelDefs.battlemap, keepD = window.sktD, keepAsk = window.showConfirm, keepSync = window.sktStatesSyncAll;
+      try {
+        window.sktStatesSyncAll = () => {};
+        state.party.push({ id: 'r282c', name: 'Cre', hp: 20, hpMax: 40, ac: 16, spd: 40, rules: '2024', level: 6, build: { edition: '2024' },
+          resources: [{ name: 'Focus Points', current: 1, max: 6 }, { name: 'Uncanny Metabolism', current: 1, max: 1 }],
+          sheet: { size: 'Medium', profBonus: 3, featureList: [], attacks: [], activations: [
+            { name: 'Uncanny Metabolism', action: 'Free', resource: 'Uncanny Metabolism', amount: 1, feature: 'Uncanny Metabolism', desc: 'When you roll initiative, regain all Focus Points and d8 + 6 hit points.' } ] } });
+        state.party.push({ id: 'r282k', name: 'Kae', hp: 50, hpMax: 50, ac: 15, spd: 30, rules: '2024', level: 6,
+          sheet: { size: 'Medium', featureList: [{ name: 'Dread Ambusher', from: 'subclass' }] } });
+        state.combatants = [{ id: 'r282c', name: 'Cre', isPC: true, hp: 20, hpMax: 40, ac: 16, initiative: 20, conditions: [] },
+                            { id: 'r282k', name: 'Kae', isPC: true, hp: 50, hpMax: 50, ac: 15, initiative: 18, conditions: [] }];
+        state.combatRound = 1; state.activeCombatantId = 'r282c'; save();
+        openPanel('turnview'); await sleep(200);
+        const cre = () => state.combatants.find(c => c.id === 'r282c'), pc = () => state.party.find(p => p.id === 'r282c');
+        let asked = '', answer = 3; window.showConfirm = async m => { asked = m; return answer; };
+        const um = () => T._activationsFor(cre()).find(a => a.name === 'Uncanny Metabolism');
+        await T._useActivation('r282c', um().i);
+        ok('metabolism: their 3 on the d8 + 6 — 9 back, every Focus Point back, its own use spent',
+           cre().hp === 29 && pc().resources[0].current === 6 && pc().resources[1].current === 0 && /1d8/.test(asked) && /all its Focus Points/.test(T._result),
+           JSON.stringify([cre().hp, pc().resources, asked, T._result]));
+        // Cancelled: nothing filled.
+        pc().resources[0].current = 2; pc().resources[1].current = 1; answer = false;
+        await T._useActivation('r282c', um().i);
+        ok('metabolism: cancelled — Focus as it was, the use kept', pc().resources[0].current === 2 && pc().resources[1].current === 1 && cre().hp === 29, JSON.stringify(pc().resources));
+        // Dread Ambusher: 40 ft on Kae's first turn, 30 after; not on someone else's turn.
+        const kt = { cid: 'r282k', isPC: true, label: 'Kae' };
+        state.activeCombatantId = 'r282k';
+        ok('ambusher: Kae’s first turn — 30 + 10', B._tokenSpeed(kt) === 40, B._tokenSpeed(kt));
+        state.combatRound = 2;
+        ok('ambusher: his next turn — 30', B._tokenSpeed(kt) === 30, B._tokenSpeed(kt));
+        state.combatRound = 1; state.activeCombatantId = 'r282c';
+        ok('ambusher: round 1, someone else’s turn — 30', B._tokenSpeed(kt) === 30);
+        state.activeCombatantId = 'r282k'; state.party.find(p => p.id === 'r282k').sheet.featureList = [];
+        ok('ambusher: without the feature — 30', B._tokenSpeed(kt) === 30);
+      } catch(e){ ok('round 282 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
+      finally { window.sktD = keepD; window.showConfirm = keepAsk; window.sktStatesSyncAll = keepSync; T._pending = null;
+        state.party = JSON.parse(keepP); state.combatants = JSON.parse(keepC); state.activeCombatantId = keepA; state.combatRound = keepR; save(); }
+    }
     // -- Class features: represented, not just text ------------------------
     {
       try {
