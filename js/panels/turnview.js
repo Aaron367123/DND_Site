@@ -1278,6 +1278,8 @@ registerPanel('turnview', {
           magical: !!(a.magic || a.spell),
           // (its properties, where the sheet has them: Sneak Attack wants finesse or range)
           props: Array.isArray(a.props) ? a.props.slice() : null,
+          // The other light weapon's attack: a Bonus Action (two-weapon fighting).
+          offhand: !!a.offhand,
         };
         row.ranged = this._pcRanged(row, a);
         // Crossbow Expert: no disadvantage for being close (2014: any ranged
@@ -2946,7 +2948,18 @@ registerPanel('turnview', {
     if (a.recharge) this._markRechargeSpent(c, a.name);
     this._markUsed(c, a);
     // A multiattack is one action for the whole sequence, not one per swing.
-    if (!o.queued || (this._queue && this._queue.i === 0 && !this._queue.legendary)) this._spend(c, 'actionUsed');
+    // Two-weapon fighting: the other light weapon's attack is the Bonus
+    // Action — or, with its Nick mastery (2024), part of the Attack action,
+    // once a turn. It follows an Attack action with a light weapon.
+    if (a.offhand && !o.queued){
+      const nick = /^nick$/i.test(String(a.mastery || '')) && (c.onceTurn || {}).Nick !== this._turnKey();
+      const after = c.actionUsed;
+      if (nick){ c.onceTurn = Object.assign({}, c.onceTurn, { Nick: this._turnKey() }); this._spend(c, 'actionUsed'); }
+      else this._spend(c, 'bonusUsed');
+      hitNote = (hitNote ? hitNote + ' · ' : '') + (nick ? 'Nick: part of the Attack action' : 'off-hand: its Bonus Action')
+        + (after ? '' : ' (after the Attack action with a light weapon)');
+    }
+    else if (!o.queued || (this._queue && this._queue.i === 0 && !this._queue.legendary)) this._spend(c, 'actionUsed');
     const bonus = a.pc ? a.bonus : (parseInt(String(a.toHit || '').replace(/[^\d+-]/g, ''), 10) || 0);
     // Dice a state adds to the roll (Bless's d4).
     const extra = (pcSheet.rollDice || []).filter(x => (x.on || []).some(k => atkTags.includes(k))).map(x => ({ label: x.label, n: this._d(x.die) }));

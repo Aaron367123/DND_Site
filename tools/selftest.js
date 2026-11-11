@@ -18239,6 +18239,55 @@ for (const cls of Object.keys(rule)) for (let L = 1; L <= 20; L++) for (const sc
         state.party = JSON.parse(keepP); state.combatants = JSON.parse(keepC); state.activeCombatantId = keepA; state.combatRound = keepR; save();
         try { if (keepMap != null) panelDefs.battlemap.applyMapState(JSON.parse(keepMap), { source: 'test' }); sktEnsureCombatTokens(true); } catch(e){} }
     }
+    // -- Round 274: two-weapon fighting — the off-hand attack spends the Bonus Action, not the Action; with Nick, it is part of the Attack action once a turn --
+    if (!PLAYER){
+      const keepC = JSON.stringify(state.combatants), keepA = state.activeCombatantId, keepP = JSON.stringify(state.party), keepR = state.combatRound;
+      const T = panelDefs.turnview, C = panelDefs.combat, keepD = window.sktD, keepTok = T._tokenFor, keepAsk = window.showConfirm;
+      try {
+        for (let k = 0; k < 100 && !(typeof _5eLoaded !== 'undefined' && _5eLoaded); k++) await sleep(100);
+        const find = (n, src) => _5eData.find(r => r.cat === 'monster' && r.name === n && r._source === src);
+        state.party.push({ id: 'r274z', name: 'Zo', hp: 40, hpMax: 40, ac: 15, spd: 30, rules: '2024', level: 6,
+          abilities: { str: 10, dex: 16, con: 14, int: 10, wis: 10, cha: 10 },
+          sheet: { size: 'Medium', profBonus: 3, featureList: [], attacks: [
+            { name: 'Shortsword', atkBonus: '+6', damage: '1d6+3 piercing', props: ['F', 'L'], mastery: 'Vex' },
+            { name: 'Shortsword (off-hand)', atkBonus: '+6', damage: '1d6 piercing', props: ['F', 'L'], mastery: 'Vex', offhand: true },
+            { name: 'Dagger (off-hand)', atkBonus: '+6', damage: '1d4 piercing', props: ['F', 'L', 'T'], mastery: 'Nick', offhand: true },
+          ] } });
+        state.combatants = [{ id: 'r274z', name: 'Zo', isPC: true, hp: 40, hpMax: 40, ac: 15, initiative: 20, conditions: [] }];
+        C.addMonster(find('Ogre', 'MM')); await sleep(20);
+        const get = id => state.combatants.find(c => c.id === id), ogId = state.combatants[1].id, zo = () => get('r274z');
+        state.combatRound = 1; state.activeCombatantId = 'r274z'; save();
+        openPanel('turnview'); await sleep(200);
+        T._tokenFor = () => null; T._actAs = null; window.showConfirm = async () => false;
+        window.sktD = d => d === 20 ? 2 : 1;          // misses: nothing else to answer
+        const at = T._attacksFor(zo()), idx = n => at.findIndex(a => a.name === n);
+        const swing = name => { T._pending = null; T._rollAttack(idx(name), { attacker: zo(), target: get(ogId), mode: 0 }); if (T._pending) T._commit(T._pending, null); };
+        ok('twf: the off-hand attacks are marked', at[idx('Shortsword (off-hand)')].offhand === true && !at[idx('Shortsword')].offhand, JSON.stringify(at.map(a => [a.name, a.offhand])));
+        // The Attack action with the shortsword, then the off-hand one: the Bonus Action.
+        swing('Shortsword');
+        ok('twf: the main-hand attack — the Action', zo().actionUsed === true && !zo().bonusUsed);
+        swing('Shortsword (off-hand)');
+        ok('twf: the off-hand attack — its Bonus Action, said so', zo().bonusUsed === true && /off-hand: its Bonus Action/.test(T._result) && !/after the Attack action/.test(T._result), T._result);
+        // Undo gives the Bonus Action back.
+        sktUndo(); await sleep(10);
+        ok('twf: undo — the Bonus Action back, the Action still spent', !zo().bonusUsed && zo().actionUsed === true, JSON.stringify([zo().actionUsed, zo().bonusUsed]));
+        // Nick: the dagger's extra attack is part of the Attack action — the Bonus Action stays free.
+        swing('Dagger (off-hand)');
+        ok('twf: Nick — part of the Attack action, the Bonus Action free', !zo().bonusUsed && zo().actionUsed === true && /Nick: part of the Attack action/.test(T._result), JSON.stringify([zo().bonusUsed, T._result]));
+        // Once a turn: a second Nick attack is the Bonus Action.
+        swing('Dagger (off-hand)');
+        ok('twf: Nick a second time this turn — the Bonus Action', zo().bonusUsed === true && /off-hand: its Bonus Action/.test(T._result), T._result);
+        // Next turn, Nick again; and an off-hand attack before any Attack action says what it needs.
+        zo().actionUsed = false; zo().bonusUsed = false; state.combatRound = 2;
+        swing('Shortsword (off-hand)');
+        ok('twf: the off-hand attack first — the Bonus Action, and it says it follows the Attack action', zo().bonusUsed === true && !zo().actionUsed && /after the Attack action/.test(T._result), JSON.stringify([zo().actionUsed, T._result]));
+        zo().bonusUsed = false; zo().actionUsed = true;
+        swing('Dagger (off-hand)');
+        ok('twf: a new turn — Nick again', !zo().bonusUsed && /Nick/.test(T._result), T._result);
+      } catch(e){ ok('round 274 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
+      finally { window.sktD = keepD; window.showConfirm = keepAsk; T._pending = null; T._tokenFor = keepTok; T._armed = null;
+        state.party = JSON.parse(keepP); state.combatants = JSON.parse(keepC); state.activeCombatantId = keepA; state.combatRound = keepR; save(); }
+    }
     // -- Class features: represented, not just text ------------------------
     {
       try {
