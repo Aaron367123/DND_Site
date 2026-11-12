@@ -1126,6 +1126,10 @@ registerPanel('turnview', {
       if (this._incap(c) || this._surprisedNow(c)) return;
       if (o.attackerId && c.id === o.attackerId) return;    // not the one swinging
       const isTarget = c.id === o.target.id;
+      // Answering for someone else is coming to their aid: their side only.
+      // Zindle's Silvery Barbs was asked for on his own party's hits — a
+      // prompt on his phone every time Zoey stabbed something.
+      if (!isTarget && this._sideOf(c) !== this._sideOf(o.target)) return;
       this._reactionsFor(c).forEach(r => {
         // Only things with mechanics or an explicit hit trigger. Opportunity
         // Attack shouldn't appear every time someone is punched.
@@ -4458,6 +4462,8 @@ registerPanel('turnview', {
       <span class="tv-multi-tag">Death saves</span>
       <span class="tv-ds"><span class="tv-ds-l">✓</span>${row('success')}</span>
       <span class="tv-ds"><span class="tv-ds-l">✗</span>${row('fail')}</span>
+      <input class="tv-in tv-ds-die" data-tvds="die" type="number" min="1" max="20" placeholder="d20?"
+             title="The d20 they rolled at the table — blank: roll it here" aria-label="Death save die rolled at the table">
       <button class="btn primary" data-tv="dsroll">${ICO('i-dice')}Roll</button>
       <button class="btn" data-tv="ds" data-kind="success" title="Record a success without rolling">+ ✓</button>
       <button class="btn" data-tv="ds" data-kind="fail" title="Record a failure without rolling">+ ✗</button>
@@ -4470,9 +4476,14 @@ registerPanel('turnview', {
     // A PC with advantage on death saves (Durable, Survivor) rolls twice.
     const pc = this._partyOf(c);
     const by = (((pc || {}).sheet || {}).rollAdv || []).filter(x => (x.on || []).includes('death')).map(x => x.label);
-    const d1 = this._d(20), d2 = by.length ? this._d(20) : null;
+    // The die they rolled at the table, typed in: that is the roll (a 20 and
+    // a 1 mean what they always do). Blank: rolled here.
+    const box = this._body && this._body.querySelector('[data-tvds="die"]');
+    const typed = box && box.value !== '' ? Math.round(+box.value) : null;
+    const theirs = typed >= 1 && typed <= 20;
+    const d1 = theirs ? typed : this._d(20), d2 = !theirs && by.length ? this._d(20) : null;
     const nat = d2 == null ? d1 : Math.max(d1, d2);
-    const advNote = d2 == null ? '' : ` (advantage, ${by.join(', ')}: ${d1} / ${d2})`;
+    const advNote = (d2 == null ? '' : ` (advantage, ${by.join(', ')}: ${d1} / ${d2})`) + (theirs ? ' (rolled at the table)' : '');
     const C = panelDefs.combat;
     if (nat === 20){
       // Back on their feet at 1 HP, saves cleared — the one result that isn't

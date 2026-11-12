@@ -19511,6 +19511,64 @@ for (const cls of Object.keys(rule)) for (let L = 1; L <= 20; L++) for (const sc
       finally { if (TV) TV._pending = null; state.combatants = JSON.parse(keepC); state.activeCombatantId = keepA; state.prompt = JSON.parse(keepPr); save(); TV && TV._body && TV._render(); }
     }
 
+    // -- Round 307: a reaction made for someone else comes to their aid — asked when an enemy hits a friend, never when a friend hits an enemy --
+    if (!PLAYER){
+      const keepP = JSON.stringify(state.party), keepC = JSON.stringify(state.combatants), keepA = state.activeCombatantId; const TV = panelDefs.turnview;
+      const keepRx = TV._reactionsFor;
+      try {
+        state.party.push({ id: 'r307a', name: 'Ann', hp: 30, hpMax: 30, ac: 14, level: 5, sheet: {} });
+        state.party.push({ id: 'r307p', name: 'Pat', hp: 30, hpMax: 30, ac: 14, level: 5, sheet: {} });
+        state.combatants = [
+          { id: 'r307a', name: 'Ann', isPC: true, hp: 30, hpMax: 30, ac: 14, initiative: 20, conditions: [] },
+          { id: 'r307p', name: 'Pat', isPC: true, hp: 30, hpMax: 30, ac: 14, initiative: 18, conditions: [] },
+          { id: 'r307o', name: 'Orc', isPC: false, hp: 15, hpMax: 15, ac: 13, initiative: 12, initBonus: 0, conditions: [] },
+          { id: 'r307g', name: 'Goblin Guard', isPC: false, hp: 15, hpMax: 15, ac: 13, initiative: 10, initBonus: 0, conditions: [] },
+          { id: 'r307w', name: 'Wolf', isPC: false, ally: true, hp: 11, hpMax: 11, ac: 13, initiative: 9, initBonus: 0, conditions: [] },
+        ];
+        state.activeCombatantId = 'r307a'; save();
+        // Pat can Silvery Barbs a hit on anyone; the goblin guards its friends; the wolf (fighting for the party) too.
+        TV._reactionsFor = c => c.id === 'r307p' ? [{ name: 'Silvery Barbs', when: 'tohit', reroll: true, scope: 'both', range: 60, from: 'spell' }]
+          : c.id === 'r307g' || c.id === 'r307w' ? [{ name: 'Guard', when: 'tohit', ac: 2, scope: 'ally', range: 30, from: 'trait' }] : [];
+        const who = (atk, tgt) => TV._gatherReactions({ attackerId: atk, attacker: atk, label: 'x', target: state.combatants.find(c => c.id === tgt), hit: true, total: 15, dmg: 5, type: 'slashing' })
+          .map(r => r.who.name).sort().join(',');
+        ok('reactions: Ann hits the orc — the goblin may guard it; Pat is not asked to spoil Ann’s hit', who('r307a', 'r307o') === 'Goblin Guard', who('r307a', 'r307o'));
+        ok('reactions: the orc hits Ann — Pat’s Silvery Barbs and the wolf; not the goblin', who('r307o', 'r307a') === 'Pat,Wolf', who('r307o', 'r307a'));
+        ok('reactions: the orc hits Pat — Pat, for herself, and the wolf', who('r307o', 'r307p') === 'Pat,Wolf', who('r307o', 'r307p'));
+        ok('reactions: the wolf hits the orc — the goblin', who('r307w', 'r307o') === 'Goblin Guard', who('r307w', 'r307o'));
+      } catch(e){ ok('round 307 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
+      finally { TV._reactionsFor = keepRx; state.party = JSON.parse(keepP); state.combatants = JSON.parse(keepC); state.activeCombatantId = keepA; save(); TV && TV._body && TV._render(); }
+    }
+
+    // -- Round 308: a death save takes the d20 rolled at the table — a 1 is two failures, a 20 brings them back; blank still rolls here --
+    if (!PLAYER){
+      const keepP = JSON.stringify(state.party), keepC = JSON.stringify(state.combatants), keepA = state.activeCombatantId; const TV = panelDefs.turnview; const keepD = TV._d;
+      try {
+        state.party.push({ id: 'r308a', name: 'Ann', hp: 0, hpMax: 30, ac: 14, level: 5, sheet: {} });
+        state.combatants = [
+          { id: 'r308a', name: 'Ann', isPC: true, hp: 0, hpMax: 30, ac: 14, initiative: 20, conditions: [], deathSaves: null },
+          { id: 'r308o', name: 'Orc', isPC: false, hp: 15, hpMax: 15, ac: 13, initiative: 12, initBonus: 0, conditions: [] },
+        ];
+        state.activeCombatantId = 'r308a'; save();
+        openPanel('turnview'); await sleep(300); TV._render(); await sleep(40);
+        TV._d = () => 15;   // a die rolled here would be a success
+        const ann = () => state.combatants.find(c => c.id === 'r308a');
+        const box = () => TV._body.querySelector('[data-tvds="die"]');
+        ok('death save: a box for the d20 rolled at the table', !!box());
+        box().value = '1'; TV._body.querySelector('[data-tv="dsroll"]').click(); await sleep(60);
+        ok('death save: their 1 — two failures, said so', JSON.stringify(ann().deathSaves) === '{"success":0,"fail":2}' && /natural 1 — two failures.*rolled at the table/.test(TV._body.querySelector('.tv-result').textContent),
+           JSON.stringify(ann().deathSaves) + ' ' + TV._body.querySelector('.tv-result').textContent.slice(0, 90));
+        ok('death save: the box is emptied after', box() && box().value === '', box() && box().value);
+        box().value = '0'; TV._body.querySelector('[data-tv="dsroll"]').click(); await sleep(60);
+        ok('death save: a 0 is no d20 — rolled here (15, a success)', JSON.stringify(ann().deathSaves) === '{"success":1,"fail":2}', JSON.stringify(ann().deathSaves));
+        ann().deathSaves = { success: 0, fail: 2 }; save(); TV._render(); await sleep(30);
+        TV._body.querySelector('[data-tv="dsroll"]').click(); await sleep(60);
+        ok('death save: blank — rolled here (15, a success)', JSON.stringify(ann().deathSaves) === '{"success":1,"fail":2}', JSON.stringify(ann().deathSaves));
+        box().value = '20'; TV._body.querySelector('[data-tv="dsroll"]').click(); await sleep(60);
+        ok('death save: their 20 — up at 1 HP', ann().hp === 1 && !ann().deathSaves, ann().hp + ' ' + JSON.stringify(ann().deathSaves));
+      } catch(e){ ok('round 308 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
+      finally { TV._d = keepD; state.party = JSON.parse(keepP); state.combatants = JSON.parse(keepC); state.activeCombatantId = keepA; save(); TV && TV._body && TV._render(); }
+    }
+
     // -- Class features: represented, not just text ------------------------
     {
       try {
