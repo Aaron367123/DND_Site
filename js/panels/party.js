@@ -2566,7 +2566,7 @@ registerPanel('party',{
     const c = state.party[i]; if (!c || !c.hitDice || c.hitDice.current <= 0) return;
     const conMod = (c.abilities && typeof c.abilities.con === 'number') ? Math.floor((c.abilities.con-10)/2) : 0;
     const sides = parseInt(String(c.hitDice.dieType||'d8').replace('d','')) || 8;
-    showConfirm(`Spend 1 ${c.hitDice.dieType||'d8'} hit die? It heals the ${c.hitDice.dieType||'d8'} + ${conMod>=0?'+':''}${conMod} (CON). Rolled it at the table? Type the number on the die; leave it empty to roll here.`,
+    showConfirm(`Spend 1 ${c.hitDice.dieType||'d8'} hit die? It heals the ${c.hitDice.dieType||'d8'} ${conMod<0?'−':'+'} ${Math.abs(conMod)} (CON). Rolled it at the table? Type the number on the die; leave it empty to roll here.`,
       {title:'Spend hit die', confirmLabel:'Heal', input:{ label:'The ' + (c.hitDice.dieType||'d8') + ' rolled', min:1, max:sides }}).then(ok => {
         if (!ok) return;
         const r = this._rollHitDie(i, typeof ok === 'number' ? ok : null);

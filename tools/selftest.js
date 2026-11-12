@@ -19142,6 +19142,36 @@ for (const cls of Object.keys(rule)) for (let L = 1; L <= 20; L++) for (const sc
       finally { window.sktD = keepD; window.showModal = keepModal; T._tokenFor = keepTok; T._pending = null; document.querySelectorAll('.ctx-menu').forEach(e => e.remove());
         state.combatants = JSON.parse(keepC); state.activeCombatantId = keepA; state.party = JSON.parse(keepP); state.settings = JSON.parse(keepS); save(); C._render(); }
     }
+    // -- Round 296: Party Tracker — the hit-die prompt reads "d8 + 2", and an empty badge line takes no room in one column --
+    if (!PLAYER){
+      const keepP = JSON.stringify(state.party), keepAsk = window.showConfirm; const P = panelDefs.party; let win = null, keepW = '';
+      try {
+        openPanel('party'); await sleep(250);
+        // The hit die prompt.
+        const i = state.party.findIndex(p => p && p.hitDice && (+p.hitDice.current || 0) > 0);
+        if (i < 0) ok('hit die prompt: a character with hit dice to spend', false, 'none in the fixture');
+        else {
+          state.party[i].abilities = Object.assign({}, state.party[i].abilities, { con: 14 }); state.party[i].hp = 1; save(); P._render(); await sleep(30);
+          let said = ''; window.showConfirm = async m => { said = String(m); return false; };
+          P._body.querySelector('.char-card[data-cidx="' + i + '"] [data-act="hd-spend"]').click(); await sleep(60);
+          ok('hit die prompt: "+ 2 (CON)", not "+ +2"', /\+ 2 \(CON\)/.test(said) && !/\+ \+/.test(said), said.slice(0, 90));
+          state.party[i].abilities = Object.assign({}, state.party[i].abilities, { con: 8 }); save(); P._render(); await sleep(30);
+          P._body.querySelector('.char-card[data-cidx="' + i + '"] [data-act="hd-spend"]').click(); await sleep(60);
+          ok('hit die prompt: a negative CON reads "− 1"', /− 1 \(CON\)/.test(said), said.slice(0, 90));
+        }
+        // The badge line: kept in a row of cards, gone in one column.
+        state.party.forEach(p => { p.inspiration = false; p.bardicInspiration = false; p.rage = false; p.concentration = null; });
+        state.party[0].inspiration = true; save(); P._render(); await sleep(30);
+        win = P._body.closest('.window'); keepW = win.style.width;
+        const emptyH = () => { const e = P._body.querySelector('.char-card > .char-status-badges.empty'); return e ? e.getBoundingClientRect().height : -1; };
+        win.style.width = '720px'; await sleep(120);
+        ok('badge line: three columns — the empty line keeps its place (hit points level across the row)', emptyH() > 10, emptyH());
+        win.style.width = '320px'; await sleep(120);
+        ok('badge line: one column — the empty line takes no room', emptyH() === 0, emptyH());
+        ok('badge line: …a card with a badge still shows it', P._body.querySelector('.char-card[data-cidx="0"] .char-status-badges .status-badge.insp').getBoundingClientRect().height > 0);
+      } catch(e){ ok('round 296 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
+      finally { window.showConfirm = keepAsk; if (win) win.style.width = keepW; state.party = JSON.parse(keepP); save(); P._render(); }
+    }
     // -- Class features: represented, not just text ------------------------
     {
       try {

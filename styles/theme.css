@@ -680,6 +680,11 @@ body.tools-in-dock .panel-dock .in-more { display: none !important; }
 /* The badge line is always there, so every card's hit points start level. */
 .char-card > .char-status-badges { min-height: 22px; align-items: center; margin: 0; padding-top: 0; }
 .party-grid.compact .char-status-badges.empty { display: none; }
+/* …but in one column there's no row to keep level with, and on a phone the
+   empty line was a gap above every hit-point box. Under two default cards'
+   width the empty one goes. */
+.party-grid { container-type: inline-size; }
+@container (max-width: 449px) { .char-card > .char-status-badges.empty { display: none; } }
 /* Line icons where the emoji were. */
 .char-status-badges .status-badge .ico, .hd-label .ico, .insp-give-btn .ico, .hd-row .btn .ico,
 .status-pill .ico, .form-pill .ico, .char-downed-badge .ico, .status-ctrl .ico { width: 13px; height: 13px; flex: 0 0 auto; vertical-align: -2px; }
