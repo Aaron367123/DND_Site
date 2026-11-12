@@ -19569,6 +19569,55 @@ for (const cls of Object.keys(rule)) for (let L = 1; L <= 20; L++) for (const sc
       finally { TV._d = keepD; state.party = JSON.parse(keepP); state.combatants = JSON.parse(keepC); state.activeCombatantId = keepA; save(); TV && TV._body && TV._render(); }
     }
 
+    // -- Round 309: Rage from the Turn View rages (not just spends a use); a built character's raging attack carries its Rage damage once, not twice --
+    if (!PLAYER){
+      const keepP = JSON.stringify(state.party), keepC = JSON.stringify(state.combatants), keepA = state.activeCombatantId; const TV = panelDefs.turnview; const keepD = TV._d;
+      const keepActs = sktActivationsOf;
+      try {
+        const barb = (id, name, extra) => Object.assign({ id, name, cls: 'barbarian', level: 6, rules: '2024', hp: 60, hpMax: 60, ac: 15,
+          sheet: { classLevels: [{ cls: 'barbarian', level: 6 }], attacks: [{ name: 'Club', atkBonus: '+6', damage: '5 bludgeoning', str: true }] } }, extra || {});
+        // Built and raging: its sheet's Rage is on, and the Club's 5 already has the +2 in it.
+        state.party.push(barb('r309b', 'Brak', { rage: true }));
+        state.party[state.party.length - 1].sheet.states = [{ key: 'Rage', label: 'Rage', on: true, resource: 'Rage' }];
+        // Off a PDF, raging: nothing on the sheet knows — the +2 is added to the roll.
+        state.party.push(barb('r309p', 'Pip', { rage: true }));
+        // Not raging yet, with Rage to use.
+        state.party.push(barb('r309u', 'Ugg', { resources: [{ name: 'Rage', current: 3, max: 3 }] }));
+        state.party[state.party.length - 1].sheet.activations = [{ name: 'Rage', action: 'Bonus Action', resource: 'Rage', amount: 1, desc: 'Enter a rage.' }];
+        sktActivationsOf = pc => pc && pc.id === 'r309u' ? pc.sheet.activations : keepActs(pc);
+        const pc = id => ({ id, name: state.party.find(p => p.id === id).name, isPC: true, hp: 60, hpMax: 60, ac: 15, initiative: 20, conditions: [] });
+        state.combatants = [pc('r309b'), pc('r309p'), pc('r309u'),
+          { id: 'r309o', name: 'Ogre', isPC: false, hp: 100, hpMax: 100, ac: 5, initiative: 8, initBonus: 0, conditions: [] }];
+        state.activeCombatantId = 'r309b'; save();
+        openPanel('turnview'); await sleep(300); TV._render(); await sleep(40);
+        TV._d = n => n === 20 ? 15 : 1;
+        const ogre = () => state.combatants.find(c => c.id === 'r309o');
+        const hitFor = async id => {
+          const c = state.combatants.find(x => x.id === id), hp0 = ogre().hp;
+          state.activeCombatantId = id; c.actionUsed = false; save(); TV._render(); await sleep(30);
+          TV._rollAttack(0, { attacker: c, target: ogre() }); await sleep(80);
+          const t = [...TV._body.querySelectorAll('.tv-pendingwrap button')].find(b => /^Take/.test(b.textContent.trim())); if (t){ t.click(); await sleep(60); }
+          return hp0 - ogre().hp;
+        };
+        ok('rage: built, raging — the Club’s 5 (Rage in it already), not 7', sktRageBonus(state.party.find(p => p.id === 'r309b'), state.party.find(p => p.id === 'r309b').sheet.attacks[0]) === 0);
+        { const q = JSON.parse(JSON.stringify(state.party.find(x => x.id === 'r309b'))); q.sheet.states[0].on = false;
+          ok('rage: a sheet whose Rage effect is off (not yet in its attacks) — the +2 is added', sktRageBonus(q, q.sheet.attacks[0]) === 2, String(sktRageBonus(q, q.sheet.attacks[0]))); }
+        const b = await hitFor('r309b');
+        ok('rage: …and the Turn View hits for 5', b === 5, String(b));
+        const p = await hitFor('r309p');
+        ok('rage: off a PDF, raging — 5 + 2 rage = 7', p === 7, String(p));
+        // Ugg rages from the Turn View.
+        state.activeCombatantId = 'r309u'; save(); TV._render(); await sleep(30);
+        const ugg = () => state.party.find(x => x.id === 'r309u');
+        const act = () => TV._activationsFor(state.combatants.find(c => c.id === 'r309u')).find(a => a.name === 'Rage');
+        await TV._useActivation('r309u', act().i); await sleep(60);
+        ok('rage: used from the Turn View — Ugg is raging, a Rage spent', ugg().rage === true && ugg().resources[0].current === 2, JSON.stringify([ugg().rage, ugg().resources[0].current]));
+        state.combatants.find(c => c.id === 'r309u').bonusUsed = false;
+        ok('rage: …and can’t rage again on top of it', TV._actProblem(state.combatants.find(c => c.id === 'r309u'), act()) === 'already raging', TV._actProblem(state.combatants.find(c => c.id === 'r309u'), act()));
+      } catch(e){ ok('round 309 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
+      finally { sktActivationsOf = keepActs; TV._d = keepD; state.party = JSON.parse(keepP); state.combatants = JSON.parse(keepC); state.activeCombatantId = keepA; save(); TV && TV._body && TV._render(); }
+    }
+
     // -- Class features: represented, not just text ------------------------
     {
       try {

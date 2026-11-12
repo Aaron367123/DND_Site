@@ -505,6 +505,7 @@ registerPanel('turnview', {
     // does not treat one as one: refusing something the character really has
     // because nobody typed the pool in would be worse than allowing it.
     if (a.pool && a.pool.current < (a.amount || 1)) return 'no ' + a.res.toLowerCase() + ' left';
+    if (/^Rage$/i.test(a.name) && c.isPC && (this._partyOf(c) || {}).rage) return 'already raging';
     return null;
   },
   async _useActivation(id, idx, typed){
@@ -591,6 +592,14 @@ registerPanel('turnview', {
     const flag = this._actFlag(a);
     this._snapshot(`${who.name} · ${a.name}`);
     if (flag) who[flag] = true;
+    // Rage: the party card's own switch, as the sheet's is — its damage and
+    // its resistances read that. Only the use was spent here before, so a
+    // raging barbarian hit for 8 where it was 10 and took a full 15.
+    let raged = false;
+    if (/^Rage$/i.test(a.name) && who.isPC){
+      const P = panelDefs.party, rec = this._partyOf(who), pi = rec ? state.party.indexOf(rec) : -1;
+      if (P && typeof P._setRage === 'function' && pi >= 0){ P._setRage(pi, true, { paid: true }); raged = true; }
+    }
     // Action Surge: one more action this turn (2024: not the Magic action).
     let extra = '';
     if (a.name === 'Steady Aim' && typeof sktMoveKey === 'function'){
@@ -646,6 +655,7 @@ registerPanel('turnview', {
         if (cond){ C._removeCond(i, cond); extra += ' and is no longer ' + esc(String(cond).toLowerCase()) + ' (Physician’s Touch)'; }
       }
     }
+    if (raged) extra += ' — raging';
     const line = `${a.name}${a.action ? ' (' + a.action + ')' : ''}${spent}`;
     this._log.unshift(`<strong>${esc(who.name)}</strong> — ${esc(line)}${heal ? ' · +' + heal.amt + ' HP' : ''}`);
     this._setResult(`<strong>${esc(who.name)}</strong> uses <strong>${esc(a.name)}</strong>${esc(spent)}${extra}.`, true);

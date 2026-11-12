@@ -791,6 +791,10 @@ function sktDamageRoll(expr, crit, opts){
 // 2024: a weapon or an Unarmed Strike). 0 when it doesn't apply.
 function sktRageBonus(pc, a){
   if (!pc || !pc.rage || !a || a.spell || !a.str) return 0;
+  // A built character's sheet turns its Rage on with them, and the attacks it
+  // computes then carry the damage already ("1d12+5"): added again here, a
+  // raging greataxe hit for +4.
+  if (((pc.sheet || {}).states || []).some(s => s && s.key === 'Rage' && s.on)) return 0;
   const ed = (pc.build && pc.build.edition) || pc.rules || '2024';
   if (ed === '2014' && (a.props || []).includes('A')) return 0;
   const cl = ((pc.sheet || {}).classLevels || []).find(x => x && x.cls === 'barbarian');
