@@ -975,6 +975,9 @@ body.player-mode .window-actions [data-wact="lock"]{display:none}
 .card-stat .lab{font-size:var(--fs-sm);color:var(--text-muted);line-height:1;flex-shrink:0}
 /* Room for three digits beside a temp-HP badge (it squeezed 61 to a sliver). */
 .card-stat[title="HP"] input{min-width:3ch}
+/* …and two for AC and initiative, so that badge can't squeeze them instead
+   (19 read as "1" beside a +12 at 300px). */
+.card-stat input[data-cf="ac"], .card-stat input[data-cf="initiative"]{min-width:2.5ch}
 .card-stat .hp-temp-badge{flex-shrink:0}
 .card-stat input{
   background:transparent;border:1px solid transparent;text-align:center;padding:0;
@@ -2179,6 +2182,14 @@ body.player-mode .combat-hide-banner{padding:8px 10px;font-size:var(--fs-sm);col
    legendary actions and death saves still show, full width, when present. */
 .combatant-list.compact{gap:4px; padding:6px}
 .combatant-list.compact .combatant-card{padding:4px 6px 4px 9px; gap:5px; grid-template-columns:12px 1fr auto}
+/* A narrow window (it can go down to 240px): the portrait goes, as in compact
+   mode, so the stats fit the card — below about 265px of list they ran past
+   its edge, or clipped AC and initiative to one digit. */
+.combatant-list{container-type:inline-size}
+@container (max-width: 265px){
+  .combatant-card:not(.group) .card-avatar{display:none}
+  .combatant-card:not(.group){grid-template-columns:12px 1fr auto}
+}
 .combatant-list.compact .card-avatar{display:none}
 .combatant-list.compact .combat-status-row{display:none}
 .combatant-list.compact .card-body{display:grid; grid-template-columns:auto minmax(0,1fr) auto;

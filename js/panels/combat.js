@@ -1500,8 +1500,12 @@ registerPanel('combat',{
       {id:'ac',    label:'AC',         type:'number', value:12,  min:1},
       {id:'init',  label:'Initiative', type:'number', value:0},
     ],'Add to combat').then(r=>{
-      if(!r||!r.name)return;
-      state.combatants.push({id:uid(),name:r.name,isPC:false,cls:'enemy',hp:r.hp,hpMax:r.hp,ac:r.ac,initBonus:0,initiative:r.init,conditions:[]});
+      if(!r||!String(r.name||'').trim())return;
+      // As typed, these went in raw: HP −5 made a maximum of −5, a blank
+      // initiative a string the sort and the turn order compared as text.
+      const n = (v, d) => { const x = parseInt(v, 10); return isNaN(x) ? d : x; };
+      const hp = Math.max(1, n(r.hp, 1)), ac = n(r.ac, 0) > 0 ? n(r.ac, 0) : 10;
+      state.combatants.push({id:uid(),name:String(r.name).trim(),isPC:false,cls:'enemy',hp,hpMax:hp,ac,initBonus:0,initiative:n(r.init, 0),conditions:[]});
       if(!state.combatRound) state.combatRound=1;
       save();this._render();
     });

@@ -19055,6 +19055,39 @@ for (const cls of Object.keys(rule)) for (let L = 1; L <= 20; L++) for (const sc
       } catch(e){ ok('round 293 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
       finally { state.combatants = JSON.parse(keepC); state.activeCombatantId = keepA; state.combatRound = keepR; state.settings = JSON.parse(keepS); save(); C._render(); }
     }
+    // -- Round 294: a creature added by hand gets sane numbers; a narrow tracker keeps AC and initiative readable --
+    if (!PLAYER){
+      const keepC = JSON.stringify(state.combatants), keepA = state.activeCombatantId, keepModal = window.showModal;
+      const C = panelDefs.combat; let win = null, keepW = '';
+      try {
+        openPanel('combat'); await sleep(200);
+        // Added by hand: HP −5, AC 0, initiative blank.
+        window.showModal = async () => ({ name: '  Bandit  ', hp: -5, ac: 0, init: '' });
+        C._addPrompt(); await sleep(40);
+        const bd = state.combatants.find(c => c.name === 'Bandit');
+        ok('add by hand: HP at least 1, max the same, AC 10 for 0, initiative 0 for blank, the name trimmed', !!bd && bd.hp === 1 && bd.hpMax === 1 && bd.ac === 10 && bd.initiative === 0, JSON.stringify(bd));
+        window.showModal = async () => ({ name: 'Thug', hp: '32', ac: '11', init: '14' });
+        C._addPrompt(); await sleep(40);
+        const th = state.combatants.find(c => c.name === 'Thug');
+        ok('add by hand: numbers typed — kept, as numbers', !!th && th.hp === 32 && th.hpMax === 32 && th.ac === 11 && th.initiative === 14, JSON.stringify(th));
+        window.showModal = async () => ({ name: '   ', hp: 5, ac: 12, init: 3 });
+        const n0 = state.combatants.length; C._addPrompt(); await sleep(40);
+        ok('add by hand: a blank name adds nothing', state.combatants.length === n0);
+        // A narrow tracker: two-digit AC and initiative stay readable.
+        state.combatants.forEach(c => { c.ac = 19; c.initiative = 21; }); state.combatants[0].tempHp = 12; save(); C._render(); await sleep(30);
+        win = C._body.closest('.window'); keepW = win.style.width;
+        for (const w of [240, 260, 280, 300, 320]){
+          win.style.width = w + 'px'; await sleep(120);
+          const clipped = [...C._body.querySelectorAll('.combatant-card:not(.group) .card-stat input')].filter(i => i.scrollWidth > i.clientWidth);
+          ok('narrow tracker: ' + w + 'px wide — no AC or initiative clipped', clipped.length === 0, clipped.slice(0, 3).map(i => i.dataset.cf + ' ' + i.clientWidth + '/' + i.scrollWidth).join(' '));
+          const spill = [...C._body.querySelectorAll('.combatant-card:not(.group)')].filter(cd => { const cr = cd.getBoundingClientRect(); return [...cd.querySelectorAll('.card-stat, .hp-dmg-bar')].some(e => e.getBoundingClientRect().right > cr.right + 1); }).length;
+          ok('narrow tracker: ' + w + 'px wide — nothing runs past a card’s edge', spill === 0 && C._body.scrollWidth <= C._body.clientWidth + 1, JSON.stringify([spill, C._body.scrollWidth, C._body.clientWidth]));
+        }
+        win.style.width = '320px'; await sleep(100);
+        ok('narrow tracker: at 320px the portraits are there', !!C._body.querySelector('.combatant-card:not(.group) .card-avatar') && C._body.querySelector('.combatant-card:not(.group) .card-avatar').getBoundingClientRect().width > 0);
+      } catch(e){ ok('round 294 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
+      finally { window.showModal = keepModal; if (win) win.style.width = keepW; state.combatants = JSON.parse(keepC); state.activeCombatantId = keepA; save(); C._render(); }
+    }
     // -- Class features: represented, not just text ------------------------
     {
       try {
