@@ -208,6 +208,27 @@ const window = {};
       return lat(await W(dm, "return !!(window.__ans && window.__ans.pcId === 'zoey')"));
     });
 
+    // ── What a phone sends the DM's Turn View: a damage roll, a save spell ───
+    const fight = "if (!state.combatants.some(c=>!c.isPC)){ const g = _5eData.find(r=>r.cat==='monster' && r.name==='Goblin'); panelDefs.combat.addMonster(g); } state.party.forEach((p,i)=>{ if (!state.combatants.some(c=>c.id===p.id)) panelDefs.combat._addPartyToCombat(i); }); state.combatRound = state.combatRound || 1; state.activeCombatantId = state.activeCombatantId || state.combatants[0].id; save(); openPanel('turnview'); await new Promise(r=>setTimeout(r,500)); return 1";
+    await step('phone rolls damage → DM Turn View offers Apply; Apply hits the goblin → phone sees it', async () => {
+      await dm.ev(fight);
+      await pl.ev("const p = state.party.find(p=>p.id==='zoey'); sktKeepRoll(p, '9 piercing', { kind: 'dmg', label: 'E2E Shortsword damage', total: 9, type: 'piercing' }); return 1");
+      const t = await W(dm, "const b = document.querySelector('.tv-dmgroll'); return !!(b && /E2E Shortsword damage/.test(b.textContent) && /Zoey/.test(b.textContent))");
+      if (t == null) return { ok: false, why: 'the roll never reached the DM’s Turn View' };
+      const g = await dm.ev("const T = panelDefs.turnview, g = state.combatants.find(c=>!c.isPC); T._armed = g.id; T._render(); document.querySelector('.tv-dmgroll [data-tv=\"dmgapply\"]').click(); await new Promise(r=>setTimeout(r,200)); if (T._pending) T._commit(T._pending, null); return { id: g.id, hp: (state.combatants.find(c=>c.id===g.id)||{}).hp }");
+      const t2 = await W(pl, "return (state.combatants.find(c=>c.id==='" + g.id + "')||{}).hp === " + g.hp);
+      return t2 == null ? { ok: false, why: 'the phone never saw the goblin at ' + g.hp } : { ok: true, lat: t };
+    });
+    await step('phone casts a save spell → DM Turn View offers the saves; Dismiss → phone’s request cleared', async () => {
+      await dm.ev(fight);
+      await pl.ev("const p = state.party.find(p=>p.id==='zoey'); p.castReq = [{ id: 'e2e_cast', spell: 'Fireball', lvl: 3, ab: 'DEX', dc: 15, dice: '8d6', type: 'fire', half: true, at: Date.now() }]; save(); return 1");
+      const t = await W(dm, "const b = document.querySelector('.tv-castreq'); return !!(b && /Fireball/.test(b.textContent) && /DEX save DC 15/.test(b.textContent))");
+      if (t == null) return { ok: false, why: 'the cast never reached the DM’s Turn View' };
+      await dm.ev("document.querySelector('.tv-castreq [data-tv=\"castdrop\"]').click(); return 1");
+      const t2 = await W(pl, "return !((state.party.find(p=>p.id==='zoey')||{}).castReq||[]).length");
+      return t2 == null ? { ok: false, why: 'the phone still holds the request' } : { ok: true, lat: t };
+    });
+
     // ── Shared windows, loot, notes, time, weather, settings, books ─────────
     await step('DM shares Loot, adds an item → phone has the tab and the item', async () => {
       await dm.ev("if (!state.sharedPanels.includes('loot')) state.sharedPanels.push('loot'); saveSharedPanels(); const L = JSON.parse(localStorage.getItem('skt-loot-v1')||'{}'); const items = Array.isArray(L) ? L : (L.items || []); const it = { id: 'loot_stress', name: 'Stress Gem', qty: 1, value: 50 }; if (Array.isArray(L)) { L.push(it); localStorage.setItem('skt-loot-v1', JSON.stringify(L)); } else { L.items = items.concat([it]); localStorage.setItem('skt-loot-v1', JSON.stringify(L)); } return 1");
