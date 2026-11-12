@@ -19088,6 +19088,60 @@ for (const cls of Object.keys(rule)) for (let L = 1; L <= 20; L++) for (const sc
       } catch(e){ ok('round 294 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
       finally { window.showModal = keepModal; if (win) win.style.width = keepW; state.combatants = JSON.parse(keepC); state.activeCombatantId = keepA; save(); C._render(); }
     }
+    // -- Round 295: exhaustion has a level — a character's on their sheet, a monster's on its rolls and speed; 6 is death --
+    if (!PLAYER){
+      const keepC = JSON.stringify(state.combatants), keepA = state.activeCombatantId, keepP = JSON.stringify(state.party), keepS = JSON.stringify(state.settings || {});
+      const C = panelDefs.combat, T = panelDefs.turnview, B = panelDefs.battlemap, keepD = window.sktD, keepModal = window.showModal, keepTok = T._tokenFor;
+      try {
+        for (let k = 0; k < 100 && !(typeof _5eLoaded !== 'undefined' && _5eLoaded); k++) await sleep(100);
+        const find = n => _5eData.find(r => r.cat === 'monster' && r.name === n && r._source === 'MM');
+        state.settings.builderEdition = '2024';
+        state.party.push({ id: 'r295z', name: 'Zo', hp: 40, hpMax: 40, ac: 15, spd: 30, rules: '2024', level: 6, exhaustion: 0, sheet: {} });
+        state.combatants = [{ id: 'r295z', name: 'Zo', isPC: true, hp: 40, hpMax: 40, ac: 15, initiative: 20, conditions: ['Exhaustion'] }];
+        C.addMonster(find('Ogre')); await sleep(20);
+        const og = () => state.combatants[1], ogId = og().id;
+        state.activeCombatantId = ogId; save();
+        openPanel('combat'); await sleep(150); C._render(); await sleep(20);
+        // The menu: one "Exhaustion…" entry, no bare toggle.
+        const cd = C._body.querySelector('.combatant-card[data-idx="1"]');
+        cd.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true, clientX: 120, clientY: 300 })); await sleep(120);
+        const labels = [...document.querySelectorAll('.ctx-menu .ctx-item, .ctx-menu button')].map(x => x.textContent.trim());
+        ok('exhaustion: the card menu sets a level, and has no bare Exhaustion toggle', labels.some(l => /Exhaustion…/.test(l)) && !labels.includes('Exhaustion'), labels.filter(l => /xhaust/.test(l)).join(' | '));
+        const it = [...document.querySelectorAll('.ctx-menu .ctx-item, .ctx-menu button')].find(x => /Exhaustion…/.test(x.textContent.trim()));
+        window.showModal = async () => ({ lvl: 2 }); it.click(); await sleep(60);
+        ok('exhaustion: the ogre at level 2 — kept on it, a chip on its card', og().exhaustion === 2 && /Exhaustion 2/.test(C._body.querySelector('.combatant-card[data-idx="1"]').textContent), JSON.stringify(og().exhaustion));
+        // 2024: −2 a level on its saves, attacks and checks; −5 ft a level of speed.
+        window.sktD = () => 10;
+        const sv = C.rollSave(og(), 'STR', 99, {});
+        ok('exhaustion: 2024 — its save, −4', sv.total === 10 + C.saveBonus(og(), 'str') - 4 && /exhaustion/.test(sv.detail), JSON.stringify(sv));
+        T._tokenFor = () => null; openPanel('turnview'); await sleep(150);
+        T._pending = null; T._rollAttack(0, { attacker: og(), target: state.combatants[0], mode: 0 }); if (T._pending) T._commit(T._pending, null);
+        ok('exhaustion: 2024 — its attack, −4, said so', /exhaustion −?-?4/.test(T._result) || /exhaustion -4/.test(T._result), T._result);
+        const ck = T._rollCheck(og(), 'athletics', 6);
+        ok('exhaustion: 2024 — its check, −4', ck.total === 10 + 6 - 4, JSON.stringify(ck));
+        ok('exhaustion: 2024 — its speed, 40 − 10', B._tokenSpeed({ cid: ogId }) === 30, B._tokenSpeed({ cid: ogId }));
+        // 2014, level 3: disadvantage on saves (and checks); speed halved.
+        state.settings.builderEdition = '2014'; C._setExhaustion(1, 3);
+        let n = 0; window.sktD = () => (n++ % 2 ? 4 : 15);
+        const sv14 = C.rollSave(og(), 'STR', 99, {});
+        ok('exhaustion: 2014 level 3 — its save at disadvantage', sv14.nat === 4 && /disadvantage/.test(sv14.detail), JSON.stringify(sv14));
+        ok('exhaustion: 2014 level 3 — its speed halved', B._tokenSpeed({ cid: ogId }) === 20, B._tokenSpeed({ cid: ogId }));
+        state.settings.builderEdition = '2024';
+        // Level 6: it dies.
+        C._setExhaustion(1, 6);
+        ok('exhaustion: level 6 — the ogre dies', og().dead === true && og().hp === 0);
+        // A character's level goes on their sheet; an old bare label goes.
+        C._setExhaustion(0, 3);
+        ok('exhaustion: Zo — level 3 on her sheet, not on the tracker, the old label gone', state.party.find(p => p.id === 'r295z').exhaustion === 3 && state.combatants[0].exhaustion === undefined && !(state.combatants[0].conditions || []).includes('Exhaustion'),
+           JSON.stringify([state.party.find(p => p.id === 'r295z').exhaustion, state.combatants[0].conditions]));
+        C._render(); await sleep(20);
+        ok('exhaustion: …her card shows it', /Exhaustion 3/.test(C._body.querySelector('.combatant-card[data-idx="0"]').textContent));
+        C._setExhaustion(0, 0); C._render(); await sleep(20);
+        ok('exhaustion: back to 0 — no chip', !/Exhaustion \d/.test(C._body.querySelector('.combatant-card[data-idx="0"]').textContent));
+      } catch(e){ ok('round 295 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
+      finally { window.sktD = keepD; window.showModal = keepModal; T._tokenFor = keepTok; T._pending = null; document.querySelectorAll('.ctx-menu').forEach(e => e.remove());
+        state.combatants = JSON.parse(keepC); state.activeCombatantId = keepA; state.party = JSON.parse(keepP); state.settings = JSON.parse(keepS); save(); C._render(); }
+    }
     // -- Class features: represented, not just text ------------------------
     {
       try {

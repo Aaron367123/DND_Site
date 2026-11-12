@@ -3050,6 +3050,8 @@ registerPanel('turnview', {
         exhBonus = fx.bonus || 0;
         if ((fx.dis || []).includes('exhaustion')) disWhy.push('exhaustion');
       }
+    } else if (!c.isPC && typeof sktMonsterExh === 'function'){
+      const ex = sktMonsterExh(c, 'attack'); exhBonus = ex.bonus; if (ex.dis) disWhy.push('exhaustion');
     }
     const pcSheet = a.pc ? ((this._partyOf(c) || {}).sheet || {}) : {};
     const atkTags = ['attack', a.spell ? 'attack:spell' : a.str ? 'attack:str' : ''];
@@ -4139,8 +4141,9 @@ registerPanel('turnview', {
   _rollCheck(c, skill, bonus){
     const p = c.isPC ? this._partyOf(c) : null;
     const sg = n => (n < 0 ? '−' : '+') + Math.abs(n);
+    const ex = !p && typeof sktMonsterExh === 'function' ? sktMonsterExh(c, 'check') : { bonus: 0, dis: false };
     const fx = p && typeof csRollEffects === 'function' ? csRollEffects(p, 'check:' + skill)
-      : { adv: [], dis: ['poisoned', 'frightened'].filter(n => this._hasCond(c, n)), bonus: 0 };
+      : { adv: [], dis: ['poisoned', 'frightened'].filter(n => this._hasCond(c, n)).concat(ex.dis ? ['exhaustion'] : []), bonus: ex.bonus };
     const mode = fx.adv.length && !fx.dis.length ? 1 : fx.dis.length && !fx.adv.length ? -1 : 0;
     const a = this._d(20), b = mode ? this._d(20) : null;
     const nat = b == null ? a : mode > 0 ? Math.max(a, b) : Math.min(a, b);

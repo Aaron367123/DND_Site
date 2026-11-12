@@ -1963,7 +1963,11 @@ registerPanel('battlemap',{
     const conds = ((c && c.conditions) || []).map(x => String(x).toLowerCase());
     const ed = (state.settings && state.settings.builderEdition) || '2024';
     if (typeof SKT_SPEED_ZERO !== 'undefined' && SKT_SPEED_ZERO.concat(ed === '2014' ? ['stunned'] : []).some(z => conds.some(x => x === z || x.startsWith(z + ' ')))) return 0;
-    return Math.max(0, v - (c && c.slowed ? 10 : 0));
+    // Its exhaustion: 2024, 5 ft less a level; 2014, halved from level 2, 0 at 5.
+    const ex = typeof sktMonsterExh === 'function' ? sktMonsterExh(c, 'speed') : { lvl: 0 };
+    let sp = Math.max(0, v - (c && c.slowed ? 10 : 0));
+    if (ex.lvl){ sp = ed === '2014' ? (ex.lvl >= 5 ? 0 : ex.lvl >= 2 ? Math.floor(sp / 2) : sp) : Math.max(0, sp - 5 * ex.lvl); }
+    return sp;
   },
   // On its own turn, a creature's move this turn and how far it may go: its
   // Speed, doubled by a Dash. Null for anyone else's token, or outside a fight.

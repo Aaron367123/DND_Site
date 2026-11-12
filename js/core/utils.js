@@ -2826,6 +2826,16 @@ function sktSpellSaveCond(s){
   if (cond && d && d.concentration) cond.concSpell = s.name;
   return cond;
 }
+// A monster's exhaustion (a character's is on its sheet, csRollEffects):
+// 2024, −2 a level on every d20 test; 2014, disadvantage on ability checks
+// from level 1 and on attacks and saves from level 3. → { lvl, bonus, dis }
+function sktMonsterExh(c, kind){
+  const lvl = c && !c.isPC ? Math.max(0, Math.min(6, +c.exhaustion || 0)) : 0;
+  if (!lvl) return { lvl: 0, bonus: 0, dis: false };
+  const ed = (typeof state !== 'undefined' && state.settings && state.settings.builderEdition) || '2024';
+  if (ed === '2014') return { lvl, bonus: 0, dis: kind === 'check' ? lvl >= 1 : lvl >= 3 };
+  return { lvl, bonus: -2 * lvl, dis: false };
+}
 // The creature whose turn it is, when `tok` is its token; else null.
 function sktMoverOf(tokens, tok){
   if (!sktMoveKey() || !tok) return null;

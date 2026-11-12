@@ -1014,6 +1014,7 @@ registerPanel('combat',{
         ${c.surprised ? `<div class="conditions"><span class="condition-tag timed" title="Surprised — ${(state.settings && state.settings.builderEdition) === '2014' ? 'no move, action or reaction on its first turn' : 'initiative at disadvantage'}; ends after its first turn">Surprised</span></div>` : ''}
         ${c.conditions&&c.conditions.length?`<div class="conditions">${c.conditions.map(cd=>{ const tl = this._condTimerText(c, cd);
           return `<span class="condition-tag${tl ? ' timed' : ''}" data-act="rmcond" data-idx="${i}" data-cond="${esc(cd)}" title="${tl ? esc(tl) + ' — ' : ''}click to remove">${esc(cd)}${tl ? ' <i class="cond-timer">⏱' + esc(this._condTimerShort(c, cd)) + '</i>' : ''} ×</span>`; }).join('')}</div>`:''}
+        ${(lv => lv ? `<div class="conditions"><span class="condition-tag" title="Exhaustion level ${lv} — right-click the card to change it">Exhaustion ${lv}</span></div>` : '')(this._exhLevel(c))}
         ${(!isPC && (c.legendaryMax || c.legendaryMax === 0)) ? this._renderLegendary(i, c) : ''}
         ${(!isPC && c.lrMax) ? this._renderLegendaryResist(i, c) : ''}
         ${(!isPC && c.lair) ? '<div class="lair-row" title="Fighting in its lair: a lair action on initiative 20 each round (losing ties)">🏰 In its lair</div>' : ''}
@@ -1329,9 +1330,13 @@ registerPanel('combat',{
           }});
         }
         items.push({ label:'⏱ Condition with a duration…', onClick:()=>{ const i = resolve(); if (i >= 0) this._promptTimedCondition(i); }});
+        // Exhaustion has levels, and a character's lives on their sheet: a
+        // bare "Exhaustion" label here changed nothing anywhere.
+        { const lvl = this._exhLevel(c);
+          items.push({ label:'😩 Exhaustion…' + (lvl ? ' (level ' + lvl + ')' : ''), onClick:()=>{ const i = resolve(); if (i >= 0) this._promptExhaustion(i); }}); }
         items.push({ label:'─────', disabled:true });
         SEARCH_DATA
-          .filter(d=>d.cat==='condition')
+          .filter(d=>d.cat==='condition' && d.name !== 'Exhaustion')
           .forEach(d => items.push({label:d.name, checked:have.has(d.name), onClick:()=>{
             const i = resolve(); if (i < 0) return;
             this._toggleCondAtIdx(i, d.name);
@@ -2610,6 +2615,7 @@ registerPanel('combat',{
       if (ab === 'str' || ab === 'dex') auto = ['paralyzed', 'stunned', 'unconscious', 'petrified'].find(has) || '';
       if (ab === 'dex' && has('restrained')) dis.push('restrained');
       if (opts && opts.spell && this._hasTrait(c, /^Magic Resistance\b/i)) adv.push('Magic Resistance');
+      if (typeof sktMonsterExh === 'function'){ const ex = sktMonsterExh(c, 'save'); extra += ex.bonus; if (ex.dis) dis.push('exhaustion'); }
     }
     if (auto) return { total: null, nat: null, passed: false, auto, detail: auto + ' — fails automatically' };
     const mode = adv.length && !dis.length ? 1 : dis.length && !adv.length ? -1 : 0;
@@ -2788,6 +2794,45 @@ registerPanel('combat',{
     const e = c && !c.isPC ? this.statBlockFor(c) : null;
     const raw = e && (e._raw || e);
     return !!(raw && [].concat(raw.special_abilities || [], raw.trait || []).some(t => t && re.test(String(t.name || ''))));
+  },
+
+  // ─── Exhaustion, 0–6 ─────────────────────────────────────────────────────────
+  // A character's level is the one on their sheet (rolls and speed already
+  // read it there); a monster's is kept on the combatant.
+  _exhLevel(c){
+    if (!c) return 0;
+    const p = c.isPC ? (state.party || []).find(x => x.id === c.id) : null;
+    return Math.max(0, Math.min(6, +((p || c).exhaustion) || 0));
+  },
+  _promptExhaustion(i){
+    const c = state.combatants[i]; if (!c) return;
+    const cid = c.id;
+    showModal('Exhaustion — ' + c.name, [
+      {id:'lvl', label:'Level (0 to 6; 6 is death)', type:'number', value: this._exhLevel(c), min:0},
+    ], 'Set').then(r => {
+      if (!r) return;
+      const n = Math.max(0, Math.min(6, parseInt(r.lvl, 10) || 0));
+      const j = state.combatants.findIndex(x => x.id === cid); if (j >= 0) this._setExhaustion(j, n);
+    });
+  },
+  _setExhaustion(i, n){
+    const c = state.combatants[i]; if (!c) return;
+    // (an older bare "Exhaustion" label goes: the level says it now)
+    const conds = (c.conditions || []).filter(x => x !== 'Exhaustion');
+    if (c.isPC){
+      const pi = state.party.findIndex(p => p.id === c.id);
+      if (pi >= 0) state.party[pi] = { ...state.party[pi], exhaustion: n };
+      state.combatants[i] = { ...c, conditions: conds };
+      panelDefs.party?._render?.();
+    } else {
+      const next = { ...c, conditions: conds, exhaustion: n || undefined };
+      // "If your Exhaustion level is 6, you die."
+      if (n >= 6){ next.hp = 0; next.dead = true; }
+      state.combatants[i] = next;
+    }
+    this._log(c.name + ' — exhaustion ' + n + (n >= 6 ? ': dies' : ''));
+    if (n >= 6 && typeof showToast === 'function') showToast('💀 ' + c.name + ' — exhaustion 6: dies', { alert: true });
+    save(); this._render(); panelDefs.turnview?._render?.();
   },
 
   // ─── Lowered maximum HP, from the combat card ───────────────────────────────
