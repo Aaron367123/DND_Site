@@ -2733,6 +2733,22 @@ registerPanel('party',{
         card.classList.add('dragging');
       });
       card.addEventListener('dragend', ()=>card.classList.remove('dragging'));
+      // Right-click anywhere on the card — or a long-press on a touchscreen —
+      // opens its ⋯ menu where the pointer is. It opened the workspace's own
+      // menu (the list of windows). Fields keep the browser's menu (copy,
+      // paste), and the inspiration pill keeps its reasons menu below.
+      const openCardMenu = (x, y, ev) => {
+        if (ev && ev.target && ev.target.closest && ev.target.closest('input, textarea, select, [data-act="insp"]')) return;
+        const btn = card.querySelector('[data-act="actions-menu"]'); if (!btn) return;
+        btn._menuAt = { left: x, top: y, right: x, bottom: y - 4 };
+        try { btn.click(); } finally { btn._menuAt = null; }
+      };
+      card.addEventListener('contextmenu', e => {
+        if (e.target.closest('input, textarea, select')) return;
+        e.preventDefault(); e.stopPropagation();
+        openCardMenu(e.clientX, e.clientY);
+      });
+      if (typeof addLongPress === 'function') addLongPress(card, openCardMenu);
       // Right-click (or long-press on mobile) the Heroic Inspiration row to award via a pre-set reason.
       const inspRow = card.querySelector('[data-act="insp"]');
       const openInspMenu = (x, y) => {
@@ -2988,7 +3004,8 @@ registerPanel('party',{
           const idx = state.party.findIndex(p => p.id === cid);
           return idx < 0 ? null : { idx, c: state.party[idx] };
         };
-        const rect = el.getBoundingClientRect();
+        // (a right-click on the card opens it where the pointer is: _menuAt)
+        const rect = el._menuAt || el.getBoundingClientRect();
         const items = [];
         const cls = String(c.cls || c.sheet?.class || '').toLowerCase();
         const isBarb  = /\bbarbarian\b/.test(cls);

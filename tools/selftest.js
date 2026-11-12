@@ -19238,6 +19238,47 @@ for (const cls of Object.keys(rule)) for (let L = 1; L <= 20; L++) for (const sc
       } catch(e){ ok('round 298 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
       finally { window.showModal = keepModal; document.querySelectorAll('.ctx-menu').forEach(e => e.remove()); state.party = JSON.parse(keepP); state.combatants = JSON.parse(keepC); save(); P._render(); }
     }
+    // -- Round 299: right-click a party card — that character's ⋯ menu, at the pointer; fields keep the browser's menu, the inspiration pill its own --
+    if (!PLAYER){
+      const keepP = JSON.stringify(state.party); const P = panelDefs.party;
+      try {
+        openPanel('party'); await sleep(250);
+        state.party.push({ id: 'r299a', name: 'Ann', hp: 30, hpMax: 30, ac: 14, spd: 30, rules: '2024', level: 5, inspiration: true, sheet: {} });
+        save(); P._render(); await sleep(40);
+        const card = () => P._body.querySelector('.char-card[data-cidx="' + state.party.findIndex(p => p.id === 'r299a') + '"]');
+        const menu = () => document.querySelector('.ctx-menu');
+        const items = () => [...document.querySelectorAll('.ctx-menu .ctx-item, .ctx-menu button')].map(x => x.textContent.trim());
+        const clear = () => document.querySelectorAll('.ctx-menu').forEach(e => e.remove());
+        // On the card's body (its HP block).
+        const hb = card().querySelector('.char-hp-block'), r = hb.getBoundingClientRect(), x = Math.round(r.left + 20), y = Math.round(r.top + 10);
+        const ev = new MouseEvent('contextmenu', { bubbles: true, cancelable: true, clientX: x, clientY: y });
+        hb.dispatchEvent(ev); await sleep(120);
+        ok('card menu: right-click — Ann’s ⋯ menu, not the workspace’s', !!menu() && items().some(t => /Character sheet/.test(t)) && items().some(t => /Remove from party/.test(t)) && !items().some(t => /Combat Tracker|Smart arrange/.test(t)) && ev.defaultPrevented,
+           items().slice(0, 6).join(' | '));
+        const mr = menu() && menu().getBoundingClientRect();
+        ok('card menu: …where the pointer is (moved up only to stay on screen)', !!mr && Math.abs(mr.left - x) < 40 && mr.top <= y + 40 && mr.bottom >= y - 40, JSON.stringify([mr && Math.round(mr.left), mr && Math.round(mr.top), mr && Math.round(mr.bottom), x, y]));
+        clear();
+        // On a field: the browser's own menu (copy, paste) — nothing of ours.
+        const inp = card().querySelector('input[type="number"]');
+        const ev2 = new MouseEvent('contextmenu', { bubbles: true, cancelable: true, clientX: 10, clientY: 10 });
+        inp.dispatchEvent(ev2); await sleep(80);
+        ok('card menu: right-click a number box — left to the browser', !ev2.defaultPrevented && !menu(), JSON.stringify([ev2.defaultPrevented, !!menu()]));
+        clear();
+        // On the inspiration pill: its own reasons menu.
+        const ins = card().querySelector('[data-act="insp"]');
+        ins.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true, clientX: 30, clientY: 30 })); await sleep(120);
+        ok('card menu: right-click the inspiration pill — its reasons menu, not the ⋯ one', !!menu() && !items().some(t => /Remove from party/.test(t)), items().slice(0, 4).join(' | '));
+        clear();
+        // A long-press on a touchscreen.
+        const t = new Touch({ identifier: 1, target: hb, clientX: x, clientY: y });
+        hb.dispatchEvent(new TouchEvent('touchstart', { bubbles: true, touches: [t], targetTouches: [t], changedTouches: [t] }));
+        await sleep(650);
+        hb.dispatchEvent(new TouchEvent('touchend', { bubbles: true, touches: [], targetTouches: [], changedTouches: [t] }));
+        ok('card menu: a long-press — the same menu', !!menu() && items().some(t => /Character sheet/.test(t)), items().slice(0, 3).join(' | '));
+        clear();
+      } catch(e){ ok('round 299 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
+      finally { document.querySelectorAll('.ctx-menu').forEach(e => e.remove()); state.party = JSON.parse(keepP); save(); P._render(); }
+    }
     // -- Class features: represented, not just text ------------------------
     {
       try {
