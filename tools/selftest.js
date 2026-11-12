@@ -19203,6 +19203,41 @@ for (const cls of Object.keys(rule)) for (let L = 1; L <= 20; L++) for (const sc
       } catch(e){ ok('round 297 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
       finally { state.party = JSON.parse(keepP); state.settings = JSON.parse(keepS); save(); P._render(); P._body && P._body.style.removeProperty('--party-card-w'); }
     }
+    // -- Round 298: Party Tracker — a character's conditions and exhaustion show on their card; added and removed from it --
+    if (!PLAYER){
+      const keepP = JSON.stringify(state.party), keepC = JSON.stringify(state.combatants), keepModal = window.showModal; const P = panelDefs.party;
+      try {
+        openPanel('party'); await sleep(250);
+        state.party.push({ id: 'r298a', name: 'Ann', hp: 30, hpMax: 30, ac: 14, spd: 30, rules: '2024', level: 5, conditions: ['Frightened'], exhaustion: 2, sheet: {} });
+        state.party.push({ id: 'r298b', name: 'Bo', hp: 30, hpMax: 30, ac: 14, spd: 30, rules: '2024', level: 5, sheet: {} });
+        state.combatants = [{ id: 'r298b', name: 'Bo', isPC: true, hp: 30, hpMax: 30, ac: 14, initiative: 10, conditions: ['Poisoned', 'Prone'] }];
+        save(); P._render(); await sleep(40);
+        const card = id => P._body.querySelector('.char-card[data-cidx="' + state.party.findIndex(p => p.id === id) + '"]');
+        const badges = id => [...card(id).querySelectorAll('.status-badge.cond, .status-badge.exh')].map(b => b.textContent.trim()).join(',');
+        ok('party conditions: Ann, out of the fight — Frightened and Exhaustion 2 on her card', badges('r298a') === 'Frightened,Exhaustion 2', badges('r298a'));
+        ok('party conditions: Bo, in the fight — the fight’s Poisoned and Prone', badges('r298b') === 'Poisoned,Prone', badges('r298b'));
+        // A click takes one off.
+        card('r298b').querySelector('.status-badge.cond[data-cond="Prone"]').click(); await sleep(40);
+        ok('party conditions: click Prone — gone from the fight and the card', !(state.combatants[0].conditions || []).includes('Prone') && badges('r298b') === 'Poisoned', JSON.stringify([state.combatants[0].conditions, badges('r298b')]));
+        card('r298a').querySelector('.status-badge.cond[data-cond="Frightened"]').click(); await sleep(40);
+        ok('party conditions: click Frightened — gone from Ann', !((state.party.find(p => p.id === 'r298a').conditions) || []).includes('Frightened'), JSON.stringify(state.party.find(p => p.id === 'r298a').conditions));
+        // The ⋯ menu: Conditions… puts one on.
+        const menu = async id => { card(id).querySelector('[data-act="actions-menu"]').click(); await sleep(120); return [...document.querySelectorAll('.ctx-menu .ctx-item, .ctx-menu button')]; };
+        let its = await menu('r298a');
+        ok('party conditions: the ⋯ menu has Conditions… and Exhaustion', its.some(x => /Conditions…/.test(x.textContent)) && its.some(x => /Exhaustion/.test(x.textContent)), its.map(x => x.textContent.trim()).filter(t => /ondit|xhaust/.test(t)).join(' | '));
+        its.find(x => /Conditions…/.test(x.textContent)).click(); await sleep(150);
+        const pois = [...document.querySelectorAll('.ctx-menu .ctx-item, .ctx-menu button')].find(x => x.textContent.trim() === 'Poisoned');
+        ok('party conditions: …opens the list (no bare Exhaustion in it)', !!pois && ![...document.querySelectorAll('.ctx-menu .ctx-item, .ctx-menu button')].some(x => x.textContent.trim() === 'Exhaustion'));
+        pois && pois.click(); await sleep(60);
+        ok('party conditions: Poisoned put on Ann — on her card', (state.party.find(p => p.id === 'r298a').conditions || []).includes('Poisoned') && /Poisoned/.test(badges('r298a')), badges('r298a'));
+        document.querySelectorAll('.ctx-menu').forEach(e => e.remove());
+        // Exhaustion… sets the level.
+        window.showModal = async () => ({ lvl: 4 });
+        its = await menu('r298a'); its.find(x => /Exhaustion/.test(x.textContent)).click(); await sleep(80);
+        ok('party conditions: Exhaustion… — level 4, on the card', state.party.find(p => p.id === 'r298a').exhaustion === 4 && /Exhaustion 4/.test(badges('r298a')), badges('r298a'));
+      } catch(e){ ok('round 298 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
+      finally { window.showModal = keepModal; document.querySelectorAll('.ctx-menu').forEach(e => e.remove()); state.party = JSON.parse(keepP); state.combatants = JSON.parse(keepC); save(); P._render(); }
+    }
     // -- Class features: represented, not just text ------------------------
     {
       try {

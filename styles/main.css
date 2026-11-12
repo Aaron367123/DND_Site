@@ -1830,6 +1830,8 @@ body.player-mode .combat-hide-banner{padding:8px 10px;font-size:var(--fs-sm);col
   color:color-mix(in srgb, #6b9e6b 55%, var(--text))}
 .char-status-badges .status-badge.insp{background:rgba(232,199,95,.22);border-color:rgba(232,199,95,.55);
   color:color-mix(in srgb, #e8c75f 55%, var(--text))}
+.char-status-badges .status-badge.cond{background:rgba(194,84,80,.16);border-color:rgba(194,84,80,.45)}
+.char-status-badges .status-badge.exh{background:rgba(201,160,80,.18);border-color:rgba(201,160,80,.5);cursor:default}
 .char-status-badges .status-badge.bardic{background:rgba(192,143,222,.22);border-color:rgba(192,143,222,.55);
   color:color-mix(in srgb, #c08fde 55%, var(--text))}
 

@@ -896,6 +896,19 @@ registerPanel('party',{
   // member). Adding always writes to the combat slot when one exists so the
   // combat tracker chip stays canonical; otherwise it stores on the party
   // member and gets carried over the next time they join combat.
+  // The condition list for a character — checked entries are on them, a
+  // click takes one off or puts it on. (Exhaustion has levels: the sheet's
+  // stepper and the ⋯ menu's Exhaustion set those.)
+  _openCondMenu(i, x, y){
+    const c = state.party[i]; if (!c) return;
+    const conds = (typeof SEARCH_DATA !== 'undefined') ? SEARCH_DATA.filter(d => d.cat === 'condition' && d.name !== 'Exhaustion') : [];
+    if (!conds.length){ showToast('Condition list not loaded yet'); return; }
+    const cid = c.id;
+    const co = state.combatants.find(x => x.id === c.id);
+    const have = new Set([...(c.conditions||[]), ...(co?.conditions||[])]);
+    showContextMenu(x, y, conds.map(d => ({ label: d.name, checked: have.has(d.name),
+      onClick: () => { const j = state.party.findIndex(p => p.id === cid); if (j >= 0) this._toggleCondition(j, d.name); } })));
+  },
   _toggleCondition(i, name){
     const c = state.party[i]; if (!c) return;
     const co = state.combatants.find(x => x.id === c.id);
@@ -1407,6 +1420,20 @@ registerPanel('party',{
       // class has nothing to do with it.
       const bd = typeof c.bardicInspiration === 'string' ? c.bardicInspiration : this._bardicDie(c);
       badges.push(`<span class="status-badge bardic" data-act="bardic-insp" data-idx="${i}" title="Bardic Inspiration${bd?' '+bd:''}${c.bardicFrom ? ' from ' + esc(c.bardicFrom) : ''} — click when it is used">${ICO('i-music')} Bardic${bd?' '+bd:''}</span>`);
+    }
+    // Conditions — the fight's copy while the character is in one, the party
+    // record's otherwise — and the exhaustion level. The card showed neither,
+    // so a glance at the party didn't say who was poisoned, prone or tired.
+    // A click takes a condition off, as on the Combat Tracker's card.
+    {
+      const co = (state.combatants || []).find(x => x && x.id === c.id);
+      const seen = new Set();
+      [...((co && co.conditions) || []), ...(c.conditions || [])].forEach(n => {
+        if (!n || seen.has(n) || n === 'Exhaustion') return; seen.add(n);
+        badges.push(`<span class="status-badge cond" data-act="cond-remove" data-idx="${i}" data-cond="${esc(n)}" title="${esc(n)} — click to remove">${esc(n)}</span>`);
+      });
+      const exh = Math.max(0, Math.min(6, +c.exhaustion || 0));
+      if (exh) badges.push(`<span class="status-badge exh" title="Exhaustion level ${exh} — change it on the sheet or with Exhaustion in the ⋯ menu">Exhaustion ${exh}</span>`);
     }
     return `<div class="char-status-badges${badges.length || extra ? '' : ' empty'}">${badges.join('')}${extra || ''}</div>`;
   },
@@ -3069,6 +3096,22 @@ registerPanel('party',{
             },
           });
         }
+        // Conditions and exhaustion, from the card itself.
+        items.push({
+          label: '⚠ Conditions…',
+          onClick: () => { const r = resolve(); if (r) setTimeout(() => this._openCondMenu(r.idx, rect.left, rect.bottom + 4), 0); },
+        });
+        items.push({
+          label: '😩 Exhaustion' + ((+c.exhaustion || 0) ? ' (level ' + (+c.exhaustion) + ')' : '') + '…',
+          onClick: () => {
+            const r = resolve(); if (!r) return;
+            showModal('Exhaustion — ' + r.c.name, [{ id: 'lvl', label: 'Level (0 to 6; 6 is death)', type: 'number', value: +r.c.exhaustion || 0, min: 0 }], 'Set').then(v => {
+              if (!v) return; const q = resolve(); if (!q) return;
+              state.party[q.idx] = { ...q.c, exhaustion: Math.max(0, Math.min(6, parseInt(v.lvl, 10) || 0)) };
+              save(); this._render(); panelDefs.combat?._render?.();
+            });
+          },
+        });
         // Lowered maximum HP (Life Drain, Harm…), until a long rest.
         items.push({
           label: '🩸 Reduce max HP…',
@@ -3245,22 +3288,8 @@ registerPanel('party',{
       // "+ Cond" pill — open the same condition list the combat tracker uses.
       // SEARCH_DATA is the data-loader's flat catalog with cat:'condition'.
       else if(act==='cond-add'){
-        const c = state.party[i]; if (!c) return;
-        const conds = (typeof SEARCH_DATA !== 'undefined')
-          ? SEARCH_DATA.filter(d => d.cat === 'condition')
-          : [];
-        if (!conds.length){ showToast('Condition list not loaded yet'); return; }
         const rect = el.getBoundingClientRect();
-        // Show as a context menu — checked entries are already on the PC so
-        // clicking unchecks them, otherwise it adds.
-        const co = state.combatants.find(x => x.id === c.id);
-        const have = new Set([...(c.conditions||[]), ...(co?.conditions||[])]);
-        const items = conds.map(d => ({
-          label: d.name,
-          checked: have.has(d.name),
-          onClick: () => this._toggleCondition(i, d.name),
-        }));
-        showContextMenu(rect.left, rect.bottom + 4, items);
+        this._openCondMenu(i, rect.left, rect.bottom + 4);
       }
       // (Inventory tab removed.)
       else if(act==='xp-levelup'){
