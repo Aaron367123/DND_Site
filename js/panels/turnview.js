@@ -1233,12 +1233,16 @@ registerPanel('turnview', {
     const order = this._order();
     const activeId = state.activeCombatantId;
     if (this._editInit){
+      // A character's bonus is the party card's (and the sheet's) — the copy
+      // taken when they joined the fight goes stale when it's changed after.
+      const ib = c => { const p = c.isPC ? (state.party || []).find(x => x.id === c.id) : null;
+        return p && typeof p.init === 'number' ? p.init : (+c.initBonus || 0); };
       return order.map(c => `
         <span class="tv-pip edit ${c.id === activeId ? 'cur' : ''}">
           <input class="tv-init-in" type="number" data-tvinit="${esc(c.id)}" value="${c.initiative ?? 0}"
                  aria-label="${esc(c.name)} initiative">
           <span><span class="tv-pip-name">${esc(c.name)}</span><br>
-          <span class="tv-pip-hp">${(c.initBonus || 0) >= 0 ? '+' : ''}${c.initBonus || 0} init</span></span>
+          <span class="tv-pip-hp">${ib(c) >= 0 ? '+' : ''}${ib(c)} init</span></span>
           <button class="tv-pip-x" data-tv="rm" data-id="${esc(c.id)}"
                   title="Remove ${esc(c.name)} from the fight" aria-label="Remove ${esc(c.name)}">&times;</button>
         </span>`).join('');

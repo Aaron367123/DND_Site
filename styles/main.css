@@ -1782,7 +1782,7 @@ body.player-mode .combat-hide-banner{padding:8px 10px;font-size:var(--fs-sm);col
 .cond-chip{font-size:var(--fs-xs);background:rgba(194,84,80,.18);border:1px solid rgba(194,84,80,.45);color:#e0a8a6;padding:1px 7px;border-radius:var(--r-lg);line-height:1.4;letter-spacing:.02em}
 /* Stats row */
 .char-stats-row{display:grid;grid-template-columns:repeat(3,1fr);gap:4px}
-.char-stats-row.four{grid-template-columns:repeat(4,1fr)}
+.char-stats-row.four{grid-template-columns:repeat(auto-fit,minmax(40px,1fr))}
 /* Passive Perception: read-only, a tap lists all three passives. */
 .char-stat.passive{font:inherit;color:inherit;cursor:pointer;display:block;width:100%}
 .char-stat.passive .v{display:block;font-weight:600;font-size:var(--fs-md);line-height:1.5}

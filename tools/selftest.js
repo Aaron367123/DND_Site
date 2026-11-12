@@ -19359,6 +19359,25 @@ for (const cls of Object.keys(rule)) for (let L = 1; L <= 20; L++) for (const sc
       } catch(e){ ok('round 301 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
       finally { document.querySelectorAll('.ctx-menu').forEach(e => e.remove()); state.party = JSON.parse(keepP); state.combatants = JSON.parse(keepC); save(); P._render(); }
     }
+    // -- Round 302: the Turn View's initiative editor shows a character's bonus as the party card has it now, not the copy taken when they joined --
+    if (!PLAYER){
+      const keepP = JSON.stringify(state.party), keepC = JSON.stringify(state.combatants), keepA = state.activeCombatantId, keepR = state.combatRound; const TV = panelDefs.turnview;
+      try {
+        state.party.push({ id: 'r302a', name: 'Ann', hp: 30, hpMax: 30, ac: 14, spd: 30, rules: '2024', level: 5, init: 5, abilities: { dex: 14 }, sheet: {} });
+        state.combatants = [
+          { id: 'r302a', name: 'Ann', isPC: true, hp: 30, hpMax: 30, ac: 14, initiative: 12, initBonus: 2, conditions: [] },
+          { id: 'r302o', name: 'Orc', isPC: false, hp: 15, hpMax: 15, ac: 13, initiative: 8, initBonus: 1, conditions: [] },
+        ];
+        state.activeCombatantId = 'r302a'; state.combatRound = 1; save();
+        openPanel('turnview'); await sleep(300);
+        TV._editInit = true; TV._render(); await sleep(60);
+        const pip = name => [...TV._body.querySelectorAll('.tv-pip.edit')].find(p => (p.querySelector('.tv-pip-name') || {}).textContent === name);
+        const txt = name => { const p = pip(name); return p ? p.querySelector('.tv-pip-hp').textContent.trim() : '(none)'; };
+        ok('initiative editor: Ann’s bonus is her card’s +5, not the +2 copied when she joined', txt('Ann') === '+5 init', txt('Ann'));
+        ok('initiative editor: the orc’s is its own +1', txt('Orc') === '+1 init', txt('Orc'));
+      } catch(e){ ok('round 302 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
+      finally { if (TV) { TV._editInit = false; } state.party = JSON.parse(keepP); state.combatants = JSON.parse(keepC); state.activeCombatantId = keepA; state.combatRound = keepR; save(); TV && TV._body && TV._render(); }
+    }
     // -- Class features: represented, not just text ------------------------
     {
       try {
