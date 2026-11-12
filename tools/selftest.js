@@ -18874,6 +18874,30 @@ for (const cls of Object.keys(rule)) for (let L = 1; L <= 20; L++) for (const sc
       finally { window.showConfirm = keepAsk; window.sktStatesSyncAll = keepSync; T._tokenFor = keepTok; T._covers = {}; T._pending = null; T._armed = null;
         state.party = JSON.parse(keepP); state.combatants = JSON.parse(keepC); state.activeCombatantId = keepA; state.combatRound = keepR; save(); }
     }
+    // -- Round 287: the Turn View's map, enlarged and shrunk, is laid out for the box's FINAL size — not one read mid-transition --
+    if (!PLAYER){
+      const T = panelDefs.turnview, keepBig = T._mapBig;
+      try {
+        openPanel('turnview'); await sleep(400); T._mapBig = false; T._mapBox = null; T._render(); await sleep(300);
+        const m = () => T._body.querySelector('.tv-map'), rot = () => m() && m().querySelector('.tv-map-rot');
+        // The layer is the box plus half a box of overdraw each way: 2× its height, rounded as _placeTokens does.
+        const fits = () => { const b = m(), r = rot(); if (!b || !r) return 'no map'; const H = b.clientHeight, W = b.clientWidth;
+          const want = H + 2 * Math.round(H * 0.5), wantW = W + 2 * Math.round(W * 0.5);
+          return parseFloat(r.style.height) === want && parseFloat(r.style.width) === wantW ? true : JSON.stringify([W, H, r.style.width, r.style.height]); };
+        if (!m() || !rot()) ok('map size: the Turn View has its map', false, 'no .tv-map');
+        else {
+          ok('map size: small, laid out for its own box', fits() === true, fits());
+          const outside = T._body.querySelector('.tv-actor') || T._body;
+          const fire = type => m().dispatchEvent(new PointerEvent(type, { bubbles: false, relatedTarget: outside, clientX: 0, clientY: 0, pointerId: 1 }));
+          if (!T._canExpandMap()) ok('map size: the window is wide enough to enlarge', false, T._bodyW);
+          fire('pointerenter'); await sleep(700);
+          ok('map size: enlarged — laid out for the full enlarged box, not the half-grown one', m().classList.contains('big') && m().clientHeight > 300 && fits() === true, fits());
+          fire('pointerleave'); await sleep(700);
+          ok('map size: back small — laid out for the small box again (its tokens in view)', !m().classList.contains('big') && m().clientHeight < 250 && fits() === true, fits());
+        }
+      } catch(e){ ok('round 287 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
+      finally { T._mapBig = keepBig; T._mapBox = null; }
+    }
     // -- Class features: represented, not just text ------------------------
     {
       try {

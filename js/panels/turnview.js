@@ -2287,7 +2287,13 @@ registerPanel('turnview', {
     // The box's size, measured once per width and enlarged-or-not (each read
     // forced a layout mid-render).
     const key = (this._bodyW || 0) + ':' + (this._mapBig ? 1 : 0);
-    if (!this._mapBox || this._mapBox.key !== key || !this._mapBox.w){ this._mapBox = { key, w: m.clientWidth, h: m.clientHeight }; }
+    // …but never a size read while the box is still growing or shrinking: it
+    // was cached part-way (560×168 on the way to 560×392), so the enlarged map
+    // kept its art laid out for the small box and the bottom stayed empty, and
+    // back small its tokens sat below the edge, out of sight. A size read
+    // mid-transition is used once and measured again next time.
+    const moving = this._mapMoving(m);
+    if (moving || !this._mapBox || this._mapBox.key !== key || !this._mapBox.w){ this._mapBox = { key: moving ? null : key, w: m.clientWidth, h: m.clientHeight }; }
     const boxW = this._mapBox.w || 250, boxH = this._mapBox.h || 172;
     const W = quarter ? boxH : boxW, H = quarter ? boxW : boxH;
     // OVERDRAW. The layer is drawn larger than the window onto it, so a pan
@@ -5133,6 +5139,10 @@ registerPanel('turnview', {
     }
   },
 
+  // The map box mid-way through its 160ms grow or shrink.
+  _mapMoving(m){
+    return !!(m && typeof m.getAnimations === 'function' && m.getAnimations().some(a => a.transitionProperty === 'width' || a.transitionProperty === 'height'));
+  },
   _reflowMap(){
     const b = this._body; if (!b) return;
     const m = b.querySelector('.tv-map'); if (!m) return;
@@ -5147,8 +5157,14 @@ registerPanel('turnview', {
     // wide empty box. Place once immediately so the change is instant, then
     // again when the transition actually finishes.
     requestAnimationFrame(() => this._placeTokens());
+    // Width and height each end their own transition, at different times:
+    // listening for just the first one re-placed while the height was still
+    // on its way, and that stale size stuck. (Belt and braces now: with the
+    // mid-transition size no longer cached, the selftest can't make this or
+    // the 450ms fallback below fail on its own — measured, round 287.)
     const settle = e => {
       if (e.target !== m || (e.propertyName !== 'width' && e.propertyName !== 'height')) return;
+      if (this._mapMoving(m)) return;
       m.removeEventListener('transitionend', settle);
       this._placeTokens();
     };
@@ -5156,6 +5172,6 @@ registerPanel('turnview', {
     // A belt-and-braces re-place: transitionend never fires if the size did
     // not actually change (already at that width) or if the panel is hidden.
     clearTimeout(this._reflowT);
-    this._reflowT = setTimeout(() => this._placeTokens(), 220);
+    this._reflowT = setTimeout(() => this._placeTokens(), 450);
   },
 });
