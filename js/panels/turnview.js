@@ -129,7 +129,10 @@ registerPanel('turnview', {
            c.helping ? c.helping.target : '',
            c.lair ? 1 : 0, c.lairUsed ? c.lairUsed.round + ':' + c.lairUsed.i : '',
            (c.conditions || []).join(',')].join('~')
-        ).join('|');
+        ).join('|')
+      // What a character's phone sent the DM: a spell's saves to run, a damage
+      // roll to apply. They arrive on the party record, not the combat one.
+      + '#' + (state.party || []).map(p => p ? (p.castReq || []).map(r => r.id).join(',') + ':' + (((p.rolls || [])[0] || {}).at || 0) + ((p.rolls || [])[0] && (p.rolls[0].applied || p.rolls[0].dropped) ? 'x' : '') : '').join('|');
   },
   // The battle map moved. Cheap by design: _placeTokens is ~1.3ms and the
   // full _render would throw away the reaction bar, an open picker and any
@@ -1577,7 +1580,7 @@ registerPanel('turnview', {
     // the pips were only drawn for a creature with attacks to roll.
     // (Unless a legendary action off this turn is waiting for its targets.)
     if (!list.length && !this._queue){
-      return `<div class="tv-actions-wrap"><div class="tv-actions">${this._renderCastReqs()}${this._renderReadied(c)}${this._incapNote(c)}${this._renderEconomy(c)}${this._renderCompanions(c)}${this._renderClassRow(c)}${manual}</div></div>`;
+      return `<div class="tv-actions-wrap"><div class="tv-actions">${this._renderDmgRolls()}${this._renderCastReqs()}${this._renderReadied(c)}${this._incapNote(c)}${this._renderEconomy(c)}${this._renderCompanions(c)}${this._renderClassRow(c)}${manual}</div></div>`;
     }
     const manualSlot = this._manualOpen ? manual
       : `<button class="tv-manual-open" data-tv="manualopen">✎ Rolled it yourself?</button>`;
@@ -1677,7 +1680,7 @@ registerPanel('turnview', {
     // (the DM may have left a condition on by mistake).
     const incapNote = this._incapNote(c);
     return `<div class="tv-actions-wrap">
-      <div class="tv-actions">${this._renderCastReqs()}${this._renderReadied(c)}${incapNote}${this._renderEconomy(c)}${this._renderCompanions(c)}${this._renderClassRow(c)}${head}${this._renderBonusActions(c)}${advBar}${rows}</div>
+      <div class="tv-actions">${this._renderDmgRolls()}${this._renderCastReqs()}${this._renderReadied(c)}${incapNote}${this._renderEconomy(c)}${this._renderCompanions(c)}${this._renderClassRow(c)}${head}${this._renderBonusActions(c)}${advBar}${rows}</div>
       ${manualSlot}
     </div>`;
   },
@@ -3338,6 +3341,40 @@ registerPanel('turnview', {
     return (state.party || []).filter(p => p && Array.isArray(p.castReq) && p.castReq.length && this._order().some(c => c.id === p.id))
       .flatMap(p => p.castReq.map(r => ({ p, r })));
   },
+  // A damage roll a player made on their own phone, in the last ten
+  // minutes and not yet applied: one click puts it on the creature picked on
+  // the right, through the same path as a typed total (resistances,
+  // concentration, reactions). The latest per character.
+  _dmgRolls(){
+    const now = Date.now();
+    return (state.party || []).filter(p => p && this._order().some(c => c.id === p.id)).map(p => {
+      const r = (p.rolls || []).find(x => x && x.kind === 'damage' && x.from === 'player' && now - (x.at || 0) < 10 * 60 * 1000);
+      return r && !r.applied && !r.dropped ? { p, r } : null;
+    }).filter(Boolean);
+  },
+  _renderDmgRolls(){
+    const list = this._dmgRolls(); if (!list.length) return '';
+    const t = this._armed && this._order().find(x => x.id === this._armed);
+    return list.map(({ p, r }) => `<div class="tv-readied tv-dmgroll">🎲 <span><strong>${esc(p.name)}</strong> rolled <strong>${+r.total}</strong>${r.type ? ' ' + esc(r.type) : ''} damage${r.crit ? ' (crit)' : ''} <span class="dim">— ${esc(r.label)}</span></span>
+        <button class="btn small primary" data-tv="dmgapply" data-p="${esc(p.id)}" data-id="${esc(r.id || '')}"${t && t.id !== p.id ? '' : ' disabled title="Pick the creature it hit on the right"'}>${t && t.id !== p.id ? 'Apply to ' + esc(t.name) : 'Apply to…'}</button>
+        <button class="btn small" data-tv="dmgdrop" data-p="${esc(p.id)}" data-id="${esc(r.id || '')}" title="Not for this fight">Dismiss</button></div>`).join('');
+  },
+  _dmgRollAct(pid, rid, apply){
+    const p = (state.party || []).find(x => x.id === pid); if (!p) return;
+    const r = (p.rolls || []).find(x => x && x.kind === 'damage' && (x.id || '') === (rid || '')); if (!r || r.applied) return;
+    if (!apply){ r.dropped = true; save(); this._render(); return; }
+    const t = this._order().find(x => x.id === this._armed); const c = this._order().find(x => x.id === pid);
+    if (!t || !c || t.id === c.id) return;
+    // Magical when the sheet's weapon is, or a spell: past "nonmagical" resistance.
+    const sh = p.sheet || {}, base = String(r.label || '').replace(/\s*\((crit|two hands|level \d+)\)/gi, '').replace(/\s+damage$/i, '').trim();
+    const row = (sh.attacks || []).find(a => a && a.name === base);
+    const spell = (sh.spells || []).some(n => String(n && (n.name || n)).replace(/\s*[\[(].*$/, '').trim() === base);
+    this._snapshot(`${c.name} · ${r.label} → ${t.name}`);
+    r.applied = true;
+    this._resolve({ attackerId: c.id, attacker: c.name, label: r.label, target: t, total: null, crit: !!r.crit, hit: true,
+                    dmg: +r.total || 0, type: r.type || '', detail: 'their roll', magical: row ? !!(row.magic || row.spell) : spell });
+    save();
+  },
   _renderCastReqs(){
     const list = this._castReqs(); if (!list.length) return '';
     return list.map(({ p, r }) => `<div class="tv-readied tv-castreq">📜 <span><strong>${esc(p.name)}</strong> cast <strong>${esc(r.spell)}</strong>${r.lvl ? ' (level ' + r.lvl + ')' : ''} — ${esc(r.ab)} save DC ${+r.dc}${r.dice ? ', ' + esc(r.dice) + (r.type ? ' ' + esc(r.type) : '') + (r.half ? ', half on a save' : '') : ''}${r.cond && r.cond.cond ? ' — fails: ' + esc(String(r.cond.cond).toLowerCase()) : ''}</span>
@@ -4714,6 +4751,7 @@ registerPanel('turnview', {
       else if (act === 'pcmissx'){ this._lastPcMiss = null; this._render(); }
       else if (act === 'pcxx'){ this._lastPcHit = null; this._render(); }
       else if (act === 'standup'){ this._standUp(this._active()); }
+      else if (act === 'dmgapply' || act === 'dmgdrop'){ this._dmgRollAct(el.dataset.p, el.dataset.id, act === 'dmgapply'); }
       else if (act === 'castrun' || act === 'castdrop'){ this._castReqAct(el.dataset.p, el.dataset.id, act === 'castrun'); }
       else if (act === 'unhide'){ const c = this._active(); if (c && c.hidden){ c.hidden = null; this._log.unshift(`<strong>${esc(c.name)}</strong> is no longer hidden`); save(); this._render(); } }
       else if (act === 'bonusact'){ this._useBonusAction(+el.dataset.ai); }

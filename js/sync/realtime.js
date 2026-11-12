@@ -305,6 +305,9 @@ const _ENTITY_KEYS = {
     postApply(){
       loadDomain('party'); ['party', 'combat'].forEach(_reloadPanel);
       if (typeof panelDefs !== 'undefined' && panelDefs.battlemap && panelDefs.battlemap._syncFromCombat) panelDefs.battlemap._syncFromCombat();
+      // A phone's cast spell or damage roll comes on the party record: the
+      // Turn View redraws only if what it shows changed (its signature).
+      if (typeof panelDefs !== 'undefined' && panelDefs.turnview && panelDefs.turnview._syncFromCombat){ try { panelDefs.turnview._syncFromCombat(); } catch(e){ _diag('turnview', e); } }
       if (typeof paRender === 'function') paRender();
     },
   },

@@ -18775,6 +18775,60 @@ for (const cls of Object.keys(rule)) for (let L = 1; L <= 20; L++) for (const sc
       finally { window.showConfirm = keepAsk; window.sktD = keepD; T._pending = null; T._armed = null; document.getElementById('area-save-back')?.remove(); try { csClose(); } catch(e){}
         state.party = JSON.parse(keepP); state.combatants = JSON.parse(keepC); state.activeCombatantId = keepA; state.combatRound = keepR; save(); }
     }
+    // -- Round 285: a player's damage roll on their phone reaches the Turn View: Apply to the picked creature (resistances read: magical or not) --
+    if (!PLAYER){
+      const keepC = JSON.stringify(state.combatants), keepA = state.activeCombatantId, keepP = JSON.stringify(state.party), keepR = state.combatRound;
+      const T = panelDefs.turnview, C = panelDefs.combat, keepAsk = window.showConfirm, keepSync = window.sktStatesSyncAll;
+      try {
+        for (let k = 0; k < 100 && !(typeof _5eLoaded !== 'undefined' && _5eLoaded); k++) await sleep(100);
+        const find = (n, src) => _5eData.find(r => r.cat === 'monster' && r.name === n && r._source === src);
+        window.sktStatesSyncAll = () => {};
+        state.party.push({ id: 'r285z', name: 'Zo', hp: 40, hpMax: 40, ac: 15, spd: 30, rules: '2014', level: 6,
+          sheet: { attacks: [{ name: 'Shortsword', atkBonus: '+6', damage: '1d6+3 piercing', props: ['F', 'L'] }, { name: 'Moonblade', atkBonus: '+7', damage: '1d8+4 slashing', magic: true }], spells: [] } });
+        state.combatants = [{ id: 'r285z', name: 'Zo', isPC: true, hp: 40, hpMax: 40, ac: 15, initiative: 20, conditions: [] }];
+        C.addMonster(find('Ogre', 'MM')); C.addMonster(find('Werewolf', 'MM')); await sleep(20);
+        const get = id => state.combatants.find(c => c.id === id), ogId = state.combatants[1].id, wwId = state.combatants[2].id, pc = () => state.party.find(p => p.id === 'r285z');
+        state.combatRound = 1; state.activeCombatantId = 'r285z'; save();
+        window.showConfirm = async () => false;
+        openPanel('turnview'); await sleep(200); T._armed = null; T._render(); await sleep(10);
+        // The sheet keeps a damage roll's type, marked as damage.
+        sktKeepRoll(pc(), '9 piercing — 1d6 6 + 3', { kind: 'dmg', label: 'Shortsword damage', total: 9, type: 'piercing' });
+        const kept = pc().rolls[0];
+        ok('rolls: a damage roll is kept with its kind and type', kept.kind === 'damage' && kept.type === 'piercing' && !!kept.id, JSON.stringify(kept));
+        ok('rolls: …the DM’s own roll is not offered back', !T._body.querySelector('.tv-dmgroll'));
+        // The player's, arriving from their phone: the party record comes in from the sync.
+        const arr = JSON.parse(localStorage.getItem('skt-party-v1'));
+        arr.find(p => p.id === 'r285z').rolls = [{ label: 'Shortsword damage', total: 9, text: '9 piercing', at: Date.now(), from: 'player', kind: 'damage', type: 'piercing', id: 'r285a' }];
+        _remoteUpdate = true; try { localStorage.setItem('skt-party-v1', JSON.stringify(arr)); } finally { _remoteUpdate = false; }
+        _ENTITY_KEYS['skt-party-v1'].postApply(); await sleep(30);
+        const bar = () => T._body.querySelector('.tv-dmgroll'), btn = () => bar() && bar().querySelector('[data-tv="dmgapply"]');
+        ok('rolls: it arrives — the Turn View shows it at once', !!bar() && /Zo.*rolled.*9.*piercing/.test(bar().textContent), bar() && bar().textContent.replace(/\s+/g, ' '));
+        ok('rolls: …nobody picked — Apply waits for a target', btn() && btn().disabled);
+        T._armed = ogId; T._render(); await sleep(10);
+        ok('rolls: the ogre picked — Apply to Ogre', btn() && !btn().disabled && /Apply to Ogre/.test(btn().textContent));
+        const hp0 = get(ogId).hp;
+        btn().click(); await sleep(30); if (T._pending) T._commit(T._pending, null); await sleep(10);
+        ok('rolls: applied — the ogre takes 9, the bar gone', get(ogId).hp === hp0 - 9 && !bar(), JSON.stringify([hp0, get(ogId).hp]));
+        // Not twice.
+        T._dmgRollAct('r285z', 'r285a', true);
+        ok('rolls: …and only once', get(ogId).hp === hp0 - 9);
+        // A werewolf shrugs off a plain shortsword (2014: nonmagical piercing), not the Moonblade.
+        const roll = (label, total, type, id) => { pc().rolls = [{ label, total, text: '', at: Date.now(), from: 'player', kind: 'damage', type, id }].concat(pc().rolls); T._render(); };
+        T._armed = wwId; const ww0 = get(wwId).hp;
+        roll('Shortsword damage', 7, 'piercing', 'r285b'); btn().click(); await sleep(20); if (T._pending) T._commit(T._pending, null);
+        ok('rolls: a plain shortsword on the werewolf — nothing (immune to nonmagical piercing)', get(wwId).hp === ww0, JSON.stringify([ww0, get(wwId).hp]));
+        roll('Moonblade damage', 8, 'slashing', 'r285c'); btn().click(); await sleep(20); if (T._pending) T._commit(T._pending, null);
+        ok('rolls: the magic Moonblade — 8', get(wwId).hp === ww0 - 8, JSON.stringify([ww0, get(wwId).hp]));
+        // Dismissed, or ten minutes old: not offered.
+        roll('Shortsword damage', 5, 'piercing', 'r285d');
+        bar().querySelector('[data-tv="dmgdrop"]').click(); await sleep(10);
+        ok('rolls: dismissed — gone', !bar() && pc().rolls[0].dropped === true);
+        pc().rolls = [{ label: 'Shortsword damage', total: 5, text: '', at: Date.now() - 11 * 60 * 1000, from: 'player', kind: 'damage', type: 'piercing', id: 'r285e' }]; T._render();
+        ok('rolls: eleven minutes old — not offered', !bar());
+      } catch(e){ ok('round 285 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
+      finally { window.showConfirm = keepAsk; window.sktStatesSyncAll = keepSync; T._pending = null; T._armed = null;
+        state.party = JSON.parse(keepP); state.combatants = JSON.parse(keepC); state.activeCombatantId = keepA; state.combatRound = keepR; save(); }
+    }
     // -- Class features: represented, not just text ------------------------
     {
       try {

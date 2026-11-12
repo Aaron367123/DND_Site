@@ -786,7 +786,9 @@ function csLog(r){
 }
 function sktKeepRoll(pc, text, r){
   const from = document.body.classList.contains('player-mode') ? 'player' : 'dm';
-  pc.rolls = [{ label: r.label, total: r.total, text, at: Date.now(), from }].concat(pc.rolls || []).slice(0, 6);
+  // (a damage roll keeps its type: the DM's Turn View can apply it)
+  pc.rolls = [Object.assign({ label: r.label, total: r.total, text, at: Date.now(), from },
+    r.kind === 'dmg' ? { kind: 'damage', type: r.type || '', crit: !!r.crit, id: typeof uid === 'function' ? uid() : String(Date.now()) } : {})].concat(pc.rolls || []).slice(0, 6);
   save();
   // And the table's log (js/panels/game-log.js), where everyone sees it.
   if (typeof sktLogAdd === 'function'){
