@@ -19618,6 +19618,58 @@ for (const cls of Object.keys(rule)) for (let L = 1; L <= 20; L++) for (const sc
       finally { sktActivationsOf = keepActs; TV._d = keepD; state.party = JSON.parse(keepP); state.combatants = JSON.parse(keepC); state.activeCombatantId = keepA; save(); TV && TV._body && TV._render(); }
     }
 
+    // -- Round 310: Wild Shape from the Turn View opens the form picker; the form taken spends the use and the Bonus Action, closing it spends nothing --
+    if (!PLAYER){
+      const keepP = JSON.stringify(state.party), keepC = JSON.stringify(state.combatants), keepA = state.activeCombatantId; const TV = panelDefs.turnview, PW = panelDefs.party;
+      const keepActs = sktActivationsOf, keepEdit = PW._editWildShape;
+      try {
+        state.party.push({ id: 'r310d', name: 'Dru', cls: 'druid', level: 6, rules: '2024', hp: 40, hpMax: 40, ac: 14, abilities: { wis: 16 },
+          resources: [{ name: 'Wild Shape', current: 3, max: 3 }],
+          sheet: { classLevels: [{ cls: 'druid', level: 6 }], activations: [{ name: 'Wild Shape', action: 'Bonus Action', resource: 'Wild Shape', amount: 1, desc: 'Shape-shift into a beast.' }] } });
+        sktActivationsOf = pc => pc && pc.id === 'r310d' ? pc.sheet.activations : keepActs(pc);
+        state.combatants = [{ id: 'r310d', name: 'Dru', isPC: true, hp: 40, hpMax: 40, ac: 14, initiative: 20, conditions: [] },
+          { id: 'r310o', name: 'Orc', isPC: false, hp: 15, hpMax: 15, ac: 13, initiative: 8, initBonus: 0, conditions: [] }];
+        state.activeCombatantId = 'r310d'; save();
+        openPanel('turnview'); await sleep(300); TV._render(); await sleep(40);
+        const dru = () => state.party.find(p => p.id === 'r310d'), cmb = () => state.combatants.find(c => c.id === 'r310d');
+        const act = () => TV._activationsFor(cmb()).find(a => a.name === 'Wild Shape');
+        // The picker, closed without a form.
+        let opened = 0; PW._editWildShape = () => { opened++; };
+        await TV._useActivation('r310d', act().i); await sleep(40);
+        ok('wild shape: the Turn View opens the form picker', opened === 1, String(opened));
+        ok('wild shape: closed without a form — no use, no Bonus Action', dru().resources[0].current === 3 && !cmb().bonusUsed && !dru().wildshape, JSON.stringify([dru().resources[0].current, cmb().bonusUsed]));
+        // A wolf picked.
+        const wolf = { name: 'Wolf', _slug: 'r310-wolf', _source: 'XMM', _raw: { name: 'Wolf', type: 'beast', armor_class: 13, hit_points: 11, challenge_rating: '1/4' } };
+        PW._editWildShape = (i, onPick) => { opened++; PW._applyWildShape(i, wolf); onPick(wolf); };
+        await TV._useActivation('r310d', act().i); await sleep(60);
+        ok('wild shape: a wolf — in its shape, one use and the Bonus Action spent', dru().wildshape && dru().wildshape.name === 'Wolf' && dru().resources[0].current === 2 && cmb().bonusUsed === true,
+           JSON.stringify([dru().wildshape && dru().wildshape.name, dru().resources[0].current, cmb().bonusUsed]));
+        ok('wild shape: said so', /Dru<\/strong> takes the shape of <strong>Wolf/.test(TV._result || '') && /Wild Shape: Wolf · Wild Shape 2\/3/.test(TV._log[0] || ''), TV._log[0]);
+      } catch(e){ ok('round 310 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
+      finally { sktActivationsOf = keepActs; PW._editWildShape = keepEdit; state.party = JSON.parse(keepP); state.combatants = JSON.parse(keepC); state.activeCombatantId = keepA; save(); TV && TV._body && TV._render(); }
+    }
+
+    // -- Round 311: a character's feature that lets them take an action as a Bonus Action (a goblin's Nimble Escape) is honoured, as a monster's trait is --
+    if (!PLAYER){
+      const keepP = JSON.stringify(state.party), keepC = JSON.stringify(state.combatants), keepA = state.activeCombatantId; const TV = panelDefs.turnview;
+      try {
+        const nimble = { name: 'Nimble Escape', from: 'species', text: 'You can take the Disengage or Hide action as a bonus action on each of your turns.' };
+        state.party.push({ id: 'r311g', name: 'Gob', cls: 'fighter', level: 5, hp: 40, hpMax: 40, ac: 16, sheet: { featureList: [nimble] } });
+        state.party.push({ id: 'r311i', name: 'Ivo', cls: 'fighter', level: 5, hp: 40, hpMax: 40, ac: 16, sheet: { featureList: [Object.assign({}, nimble, { info: true })] } });
+        const pc = id => ({ id, name: id, isPC: true, hp: 40, hpMax: 40, ac: 16, initiative: 20, conditions: [], actionUsed: true, bonusUsed: false });
+        state.combatants = [pc('r311g'), pc('r311i'), { id: 'r311o', name: 'Orc', isPC: false, hp: 15, hpMax: 15, ac: 13, initiative: 8, initBonus: 0, conditions: [] }];
+        state.activeCombatantId = 'r311g'; save();
+        openPanel('turnview'); await sleep(300);
+        const gob = state.combatants[0], ivo = state.combatants[1];
+        ok('nimble escape: Disengage and Hide as a Bonus Action', JSON.stringify(TV._bonusStd(gob)) === '["Disengage","Hide"]', JSON.stringify(TV._bonusStd(gob)));
+        ok('nimble escape: after the Attack, Disengage spends the Bonus Action', TV._spendStd(gob, 'Disengage') === true && gob.bonusUsed === true, JSON.stringify([gob.bonusUsed]));
+        gob.bonusUsed = false;
+        ok('nimble escape: not Dash — that is the Action’s', TV._spendStd(gob, 'Dash') === false && !gob.bonusUsed);
+        ok('nimble escape: a feature kept only as information gives nothing', TV._bonusStd(ivo).length === 0, JSON.stringify(TV._bonusStd(ivo)));
+      } catch(e){ ok('round 311 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
+      finally { state.party = JSON.parse(keepP); state.combatants = JSON.parse(keepC); state.activeCombatantId = keepA; save(); TV && TV._body && TV._render(); }
+    }
+
     // -- Class features: represented, not just text ------------------------
     {
       try {

@@ -516,9 +516,25 @@ registerPanel('turnview', {
       this._setResult(`<span class="dim">${esc(who.name)} can't — ${esc(problem)}.</span>`, true);
       return;
     }
+    // Wild Shape: the party card's form picker, as the sheet's button opens.
+    // The form taken spends the use (party.js _applyWildShape) and then the
+    // Bonus Action; closed without one, nothing is. Only the use and the
+    // action were spent here before — and the druid stayed a druid.
+    const PW = panelDefs.party, wsRec = /^Wild Shape$/i.test(a.name) && who.isPC ? this._partyOf(who) : null;
+    if (wsRec && PW && typeof PW._editWildShape === 'function' && state.party.indexOf(wsRec) >= 0){
+      PW._editWildShape(state.party.indexOf(wsRec), d => {
+        const flag = this._actFlag(a);
+        if (flag) who[flag] = true;
+        const left = this._pool(who, 'Wild Shape');
+        this._log.unshift(`<strong>${esc(who.name)}</strong> — Wild Shape: ${esc(d && d.name || 'a beast')}${left ? ' · Wild Shape ' + left.current + '/' + left.max : ''}`);
+        this._setResult(`<strong>${esc(who.name)}</strong> takes the shape of <strong>${esc(d && d.name || 'a beast')}</strong>.`, true);
+        save(); panelDefs.combat?._render?.(); this._render();
+      });
+      return;
+    }
     // The combatant may carry a different id from its party record (added to
     // the fight by hand), so give from the party member it stands for.
-    const bardRec = (a.name === 'Bardic Inspiration' && who.isPC) ? this._partyOf(who) : null;
+    const bardRec =(a.name === 'Bardic Inspiration' && who.isPC) ? this._partyOf(who) : null;
     if (bardRec && typeof sktAskBardic === 'function'){
       sktAskBardic({ from: bardRec.id, after: () => this._render() });
       return;
@@ -3669,6 +3685,12 @@ registerPanel('turnview', {
       // A 2024 monk's Focus: Patient Defense and Step of the Wind without a
       // Focus Point are Disengage and Dash as a Bonus Action.
       if (this._edOf(c) !== '2014' && fl.some(f => /^Monk.s Focus$/.test(f.name) && !f.info)) ['Dash', 'Disengage'].forEach(n => out.add(n));
+      // Any feature that says so, as a monster's trait is read below: a
+      // goblin's Nimble Escape, "take the Disengage or Hide action as a bonus
+      // action" — William's Disengage spent nothing after his Attack.
+      fl.forEach(f => { if (!f || f.info) return;
+        const m = /\btake the ([^.]*?) action as a bonus action/i.exec(String(f.text || ''));
+        if (m) STD.filter(n => new RegExp('\\b' + n + '\\b').test(m[1])).forEach(n => out.add(n)); });
       return [...out];
     }
     const raw = (this._entryOf(c) || {})._raw;
