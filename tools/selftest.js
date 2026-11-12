@@ -18898,6 +18898,41 @@ for (const cls of Object.keys(rule)) for (let L = 1; L <= 20; L++) for (const sc
       } catch(e){ ok('round 287 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
       finally { T._mapBig = keepBig; T._mapBox = null; }
     }
+    // -- Round 288: the Combat Tracker keeps whoever's turn it is in view — on a new turn, never against the DM's own scroll --
+    if (!PLAYER){
+      const keepC = JSON.stringify(state.combatants), keepA = state.activeCombatantId, keepR = state.combatRound, keepS = JSON.stringify(state.settings || {});
+      const C = panelDefs.combat;
+      try {
+        for (let k = 0; k < 100 && !(typeof _5eLoaded !== 'undefined' && _5eLoaded); k++) await sleep(100);
+        const gob = _5eData.find(r => r.cat === 'monster' && r.name === 'Goblin' && r._source === 'MM'), og = _5eData.find(r => r.cat === 'monster' && r.name === 'Ogre' && r._source === 'MM');
+        state.combatants = [];
+        for (let k = 0; k < 6; k++) C.addMonster(og);
+        for (let k = 0; k < 6; k++) C.addMonster(gob);
+        state.settings.combatGroupSimilar = false; state.settings.combatCompact = false;
+        state.combatRound = 1; state.activeCombatantId = state.combatants[0].id; save();
+        openPanel('combat'); await sleep(300); C._render(); await sleep(50);
+        const b = C._body;
+        const inView = () => { const el = b.querySelector('.group-row.active') || b.querySelector('.combatant-card.active'); if (!el) return 'no active card';
+          const r = el.getBoundingClientRect(), s = b.getBoundingClientRect(); return r.top >= s.top - 1 && r.bottom <= s.bottom + 1 ? true : JSON.stringify([Math.round(r.top), Math.round(r.bottom), Math.round(s.top), Math.round(s.bottom), b.scrollTop]); };
+        ok('tracker scroll: a long fight overflows the window (the test means something)', b.scrollHeight > b.clientHeight + 100, b.scrollHeight + ' / ' + b.clientHeight);
+        // The turn passes to the tenth: it comes into view.
+        state.activeCombatantId = state.combatants[9].id; save(); C._render(); await sleep(30);
+        ok('tracker scroll: the turn passes to the tenth — its card scrolled into view', inView() === true, inView());
+        // The DM scrolls back up; anything that redraws the tracker on the same turn leaves the scroll alone.
+        b.scrollTop = 0; C._render(); await sleep(30);
+        ok('tracker scroll: same turn, redrawn — the DM’s scroll is left alone', b.scrollTop === 0, b.scrollTop);
+        // Next turn: the Next button.
+        b.querySelector('[data-act="next"]').click(); await sleep(60);
+        ok('tracker scroll: Next — the eleventh in view', state.activeCombatantId === state.combatants[10].id && inView() === true, inView());
+        // Back to the top of the order (a new round): scrolled up to it.
+        state.activeCombatantId = state.combatants[0].id; state.combatRound = 2; save(); C._render(); await sleep(30);
+        ok('tracker scroll: round 2, the first — scrolled back up to it', inView() === true, inView());
+        // Grouped: the active row of a grouped card.
+        state.settings.combatGroupSimilar = true; state.activeCombatantId = state.combatants[11].id; save(); C._render(); await sleep(30);
+        ok('tracker scroll: grouped cards — the active row in view', inView() === true, inView());
+      } catch(e){ ok('round 288 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
+      finally { state.combatants = JSON.parse(keepC); state.activeCombatantId = keepA; state.combatRound = keepR; state.settings = JSON.parse(keepS); save(); C._seenTurn = null; C._render(); }
+    }
     // -- Class features: represented, not just text ------------------------
     {
       try {

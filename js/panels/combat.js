@@ -646,6 +646,24 @@ registerPanel('combat',{
 
       <div class="combat-droptip" id="combat-droptip">Drop to add to combat</div>`;
     this._wire();
+    // Whoever's turn it is, in view: when the turn moved on to someone below
+    // the fold (or the window opened on a long fight), the DM had to scroll to
+    // find them. Only on a new turn, so it never fights the DM's own scroll.
+    const turnKey = state.activeCombatantId + '#' + (state.combatRound || 0);
+    if (inCombat && this._seenTurn !== turnKey){ this._seenTurn = turnKey; this._scrollActive(); }
+  },
+  // Scroll the tracker — never anything outside its window — so the active
+  // card (or a grouped card's active row) is fully on screen.
+  _scrollActive(){
+    const b = this._body; if (!b) return;
+    const el = b.querySelector('.group-row.active') || b.querySelector('.combatant-card.active'); if (!el) return;
+    let sc = el.parentElement;
+    while (sc && sc !== b && !(sc.scrollHeight > sc.clientHeight + 1 && /(auto|scroll)/.test(getComputedStyle(sc).overflowY))) sc = sc.parentElement;
+    if (!sc) return;
+    if (sc === b && !(b.scrollHeight > b.clientHeight + 1)) return;
+    const r = el.getBoundingClientRect(), s = sc.getBoundingClientRect(), pad = 8;
+    if (r.top < s.top + pad) sc.scrollTop -= (s.top + pad) - r.top;
+    else if (r.bottom > s.bottom - pad) sc.scrollTop += Math.min(r.bottom - (s.bottom - pad), r.top - (s.top + pad));
   },
 
   _renderCombatants(){
