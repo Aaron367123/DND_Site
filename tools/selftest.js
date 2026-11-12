@@ -21868,6 +21868,27 @@ for (const cls of Object.keys(rule)) for (let L = 1; L <= 20; L++) for (const sc
         state.party = JSON.parse(party0); if (state.party[0]) paSetPc(state.party[0].id); paTab = tab0; paRender(); await sleep(200);
       }
     }
+      // -- Round 291 (player): the phone's turn strip shows whoever's turn it is — scrolled to them on a new turn, left alone otherwise --
+      if (typeof paRenderTurn === 'function'){
+        const S0 = state.sharedPanels, A0 = state.activeCombatantId, C0 = JSON.stringify(state.combatants), R0 = state.combatRound;
+        try {
+          if (!(state.sharedPanels || []).includes('combat')) state.sharedPanels = [...(state.sharedPanels || []), 'combat'];
+          state.combatants = Array.from({ length: 12 }, (_, k) => ({ id: 'r291_' + k, name: 'Creature number ' + (k + 1), hp: 10, hpMax: 10, ac: 12, initiative: 20 - k, conditions: [] }));
+          state.combatRound = 1; state.activeCombatantId = 'r291_9'; paRender(); await sleep(40);
+          const strip = () => document.querySelector('#pa-turn .pa-strip'), cur = () => strip() && strip().querySelector('.pa-pip.cur');
+          const inView = () => { if (!strip() || !cur()) return 'no strip'; const s = strip().getBoundingClientRect(), r = cur().getBoundingClientRect();
+            return r.left >= s.left - 1 && r.right <= s.right + 1 ? true : JSON.stringify([Math.round(r.left), Math.round(r.right), Math.round(s.left), Math.round(s.right), strip().scrollLeft]); };
+          ok('player strip: twelve in the order — it overflows (the test means something)', strip() && strip().scrollWidth > strip().clientWidth + 100, strip() && strip().scrollWidth + '/' + strip().clientWidth);
+          ok('player strip: the tenth creature’s turn — its chip in view', inView() === true, inView());
+          strip().scrollLeft = 300; const x0 = strip().scrollLeft; paRender(); await sleep(20);
+          ok('player strip: same turn, redrawn — left where the player scrolled it', x0 > 0 && strip().scrollLeft === x0, JSON.stringify([x0, strip().scrollLeft]));
+          state.activeCombatantId = 'r291_11'; paRender(); await sleep(20);
+          ok('player strip: the next turn — the twelfth in view', inView() === true, inView());
+          state.activeCombatantId = 'r291_0'; state.combatRound = 2; paRender(); await sleep(20);
+          ok('player strip: round 2, the first — scrolled back to it', inView() === true, inView());
+        } catch(e){ ok('round 291 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
+        finally { state.sharedPanels = S0; state.activeCombatantId = A0; state.combatants = JSON.parse(C0); state.combatRound = R0; paRender(); }
+      }
   }
 
   // ══════════════════════════════════════════════════════════ mobile / phone

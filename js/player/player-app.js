@@ -724,6 +724,11 @@ function paRenderTurn(){
   }).join('');
   el.classList.toggle('mine', mine);
   paTurnAlert(cur, mine, until);
+  // The strip is rebuilt on every redraw, which put it back at the start: on
+  // a fight of ten, whoever's turn it was sat off to the right. On a new turn
+  // it scrolls to them; otherwise it stays where the player left it.
+  const strip0 = el.querySelector('.pa-strip'), keepX = strip0 ? strip0.scrollLeft : 0;
+  const turnK = (state.combatRound || 1) + ':' + (cur ? cur.id : '');
   el.innerHTML = `
     <div class="pa-turn-head">
       <span class="pa-round">Round ${state.combatRound || 1}</span>
@@ -733,6 +738,12 @@ function paRenderTurn(){
       ${until != null && until > 0 ? `<span class="pa-until">${until} turn${until === 1 ? '' : 's'} until you</span>` : ''}
     </div>
     <div class="pa-strip">${pips}</div>`;
+  const strip = el.querySelector('.pa-strip'), pip = strip && strip.querySelector('.pa-pip.cur');
+  if (!strip) return;
+  if (el._turnK !== turnK && pip){
+    el._turnK = turnK;
+    strip.scrollLeft += pip.getBoundingClientRect().left - strip.getBoundingClientRect().left - 12;
+  } else strip.scrollLeft = keepX;
 }
 
 // ─── "Your turn" / "you're up next" ──────────────────────────────────────────
