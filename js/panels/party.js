@@ -273,6 +273,8 @@ registerPanel('party',{
     const hp=this._hpBarStyle(c);
     const hpPct=hp.pct, hpColor=hp.color;
     const resources=c.resources||[];
+    const pas = !c.foe && typeof sktPassive === 'function' ? sktPassive(c, 'perception') : null;
+    const pasTip = pas ? this._passiveLines(c).join(' · ') : '';
 
     let resHtml='';
     if(resources.length){
@@ -474,10 +476,13 @@ registerPanel('party',{
       // ("10 + 2 DEX + 5 gear = 17") so the DM can see at a glance whether
       // a number looks right. Manual c.acSources entries override the
       // inferred breakdown for DMs who track gear explicitly.
-      +'<div class="char-stats-row">'
+      // …and passive Perception, read-only: a tap lists Investigation and
+      // Insight too (D&D Beyond keeps all three in front of the DM).
+      +'<div class="char-stats-row'+(pas ? ' four' : '')+'">'
         +'<div class="char-stat"><div class="l">'+ICO('i-shield')+' AC</div><input type="number" value="'+c.ac+'" data-field="ac" data-idx="'+i+'" title="'+esc(this._acBreakdown(c))+'"></div>'
         +'<div class="char-stat"><div class="l">'+ICO('i-bolt')+' Init</div><input type="number" value="'+c.init+'" data-field="init" data-idx="'+i+'" aria-label="'+esc(c.name)+' initiative bonus"></div>'
         +'<div class="char-stat"><div class="l">Spd</div><input type="number" value="'+c.spd+'" data-field="spd" data-idx="'+i+'" aria-label="'+esc(c.name)+' speed"></div>'
+        +(pas ? '<button class="char-stat passive'+(pas.adj > 0 ? ' up' : pas.adj < 0 ? ' down' : '')+'" data-act="passives" data-idx="'+i+'" title="'+esc(pasTip)+'" aria-label="'+esc(c.name + ' — ' + pasTip)+'"><div class="l">'+ICO('i-eye')+' PP</div><b class="v">'+pas.value+'</b></button>' : '')
       +'</div>'
       // Active-form row — class-aware buttons for rage (barbarian) and wild
       // shape (druid). Renders nothing for other classes. When active, the
@@ -489,12 +494,8 @@ registerPanel('party',{
       + this._wildshapeOverlay(c, i)
       // Their creatures (the sheet's Extras), so a griffon isn't forgotten.
       + this._extrasRow(c, i)
-      // Concentration / Exhaustion / Conditions removed from the party card
-      // to keep it focused on HP / stats / resources / inspiration. Those
-      // statuses still exist and still work — they're managed from the
-      // combat tracker's per-card status menu (the "+" pill on each combat
-      // card opens Set Conc / Mark Reaction / Add Buff). Concentration data
-      // still lives on c.concentration and damage triggers the save toast.
+      // (Conditions and exhaustion are badges at the top of the card; the ⋯
+      // menu puts them on.)
       // Hit dice — only shown when the character has hitDice info from PDF import.
       +this._hitDiceRow(c,i)
       // Resources
@@ -2139,6 +2140,14 @@ registerPanel('party',{
     // Why it rolled the way it did (Poisoned: disadvantage; exhaustion −4).
     if (r.why && typeof showToast === 'function') showToast('🎲 ' + c.name + ' — ' + (r.autoFail ? r.label + ': fails' : plain));
   },
+  // "Passive Perception 15", "…Investigation 12", "…Insight 13", each with
+  // why it's up or down when something on the character moves it.
+  _passiveLines(c){
+    return [['perception', 'Perception'], ['investigation', 'Investigation'], ['insight', 'Insight']].map(([k, n]) => {
+      const p = sktPassive(c, k); if (!p) return '';
+      return 'Passive ' + n + ' ' + p.value + (p.adj ? ' (' + (p.adj > 0 ? '+5 ' : '−5 ') + p.why + ')' : '');
+    }).filter(Boolean);
+  },
   _setLastRoll(c, result){
     if (!this._rollHistory) this._rollHistory = {};
     const list = this._rollHistory[c.id] || [];
@@ -3330,6 +3339,11 @@ registerPanel('party',{
       }
       // "+ Cond" pill — open the same condition list the combat tracker uses.
       // SEARCH_DATA is the data-loader's flat catalog with cat:'condition'.
+      else if(act==='passives'){
+        const c = state.party[i]; if (!c || typeof sktPassive !== 'function') return;
+        const rect = el.getBoundingClientRect();
+        showContextMenu(rect.left, rect.bottom + 4, this._passiveLines(c).map(t => ({ label: t, onClick: () => {} })));
+      }
       else if(act==='cond-add'){
         const rect = el.getBoundingClientRect();
         this._openCondMenu(i, rect.left, rect.bottom + 4);

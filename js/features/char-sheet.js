@@ -515,6 +515,20 @@ function csSkillVal(sh, k){
   const camel = k.replace(/_([a-z])/g, (m, c) => c.toUpperCase());
   return s[camel] != null ? s[camel] : null;
 }
+// A passive score: 10 + the skill as the sheet shows it (an imported
+// sheet's own Passive Perception box wins), +5 when what's on the character
+// gives that check advantage and -5 for disadvantage (Poisoned, Frightened,
+// 2014 exhaustion) — the rule for passive checks. null without the numbers.
+function sktPassive(pc, k){
+  if (!pc || !CS_SKILLS[k]) return null;
+  const sh = pc.sheet || {}, ab = pc.abilities || {};
+  const v = csSkillVal(sh, k);
+  if (v == null && typeof ab[CS_SKILLS[k][1]] !== 'number') return null;
+  const base = k === 'perception' && +sh.passivePerception ? +sh.passivePerception : 10 + (v != null ? +v || 0 : csMod(ab[CS_SKILLS[k][1]]));
+  const fx = csRollEffects(pc, 'check:' + k);
+  const adj = fx.adv.length && !fx.dis.length ? 5 : fx.dis.length && !fx.adv.length ? -5 : 0;
+  return { value: base + adj, base, adj, why: adj > 0 ? fx.adv.join(', ') : adj < 0 ? fx.dis.join(', ') : '' };
+}
 function _csConditions(pc){
   const co = (state.combatants || []).find(x => x.id === pc.id);
   return [...new Set([...(pc.conditions || []), ...((co && co.conditions) || [])])];

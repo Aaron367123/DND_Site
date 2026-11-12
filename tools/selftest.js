@@ -19328,6 +19328,37 @@ for (const cls of Object.keys(rule)) for (let L = 1; L <= 20; L++) for (const sc
       finally { sktSetRandom(Math.random); window.showModal = keepModal; window.showToast = keepToast; document.querySelectorAll('.ctx-menu').forEach(e => e.remove());
         if (P._rollHistory) delete P._rollHistory['r300a']; state.party = JSON.parse(keepP); state.combatants = JSON.parse(keepC); save(); P._render(); }
     }
+    // -- Round 301: the party card shows passive Perception; a tap lists Investigation and Insight; disadvantage takes 5 off --
+    if (!PLAYER){
+      const keepP = JSON.stringify(state.party), keepC = JSON.stringify(state.combatants); const P = panelDefs.party;
+      try {
+        openPanel('party'); await sleep(250);
+        state.combatants = [];
+        state.party.push({ id: 'r301a', name: 'Ann', hp: 30, hpMax: 30, ac: 14, spd: 30, rules: '2024', level: 5,
+          abilities: { str: 10, dex: 14, con: 12, int: 12, wis: 14, cha: 8 }, sheet: { skills: { perception: 5, investigation: 1, insight: 2 }, passivePerception: 16 } });
+        state.party.push({ id: 'r301b', name: 'Bo', hp: 30, hpMax: 30, ac: 14, spd: 30, rules: '2024', level: 5, abilities: { str: 10, dex: 10, con: 10, int: 10, wis: 12, cha: 10 }, sheet: {} });
+        state.party.push({ id: 'r301c', name: 'Cy', hp: 30, hpMax: 30, ac: 14, spd: 30, rules: '2024', level: 5, sheet: {} });
+        save(); P._render(); await sleep(40);
+        const card = id => P._body.querySelector('.char-card[data-cidx="' + state.party.findIndex(p => p.id === id) + '"]');
+        const pp = id => card(id).querySelector('.char-stat.passive');
+        ok('passives: Ann’s card — PP 16 (her sheet’s box, not 10 + 5), next to AC, Init and Spd', !!pp('r301a') && pp('r301a').querySelector('.v').textContent.trim() === '16' && pp('r301a').parentElement.classList.contains('four'),
+           pp('r301a') && pp('r301a').textContent.replace(/\s+/g, ' '));
+        ok('passives: …its tooltip has all three', /Passive Perception 16/.test(pp('r301a').title) && /Passive Investigation 11/.test(pp('r301a').title) && /Passive Insight 12/.test(pp('r301a').title), pp('r301a').title);
+        ok('passives: Bo, no skills on his sheet — 10 + WIS', !!pp('r301b') && pp('r301b').querySelector('.v').textContent.trim() === '11', pp('r301b') && pp('r301b').textContent.trim());
+        ok('passives: Cy, no numbers at all — no box, three columns', !pp('r301c') && !card('r301c').querySelector('.char-stats-row').classList.contains('four'));
+        const r = pp('r301a').getBoundingClientRect(), cr = card('r301a').getBoundingClientRect();
+        ok('passives: the box sits inside the card', r.width > 20 && r.left >= cr.left - 1 && r.right <= cr.right + 1, JSON.stringify([Math.round(r.left), Math.round(r.right), Math.round(cr.left), Math.round(cr.right)]));
+        // A tap lists them.
+        pp('r301a').click(); await sleep(120);
+        const lines = [...document.querySelectorAll('.ctx-menu .ctx-menu-item, .ctx-menu button')].map(x => x.textContent.trim());
+        ok('passives: a tap — Perception, Investigation, Insight', lines.join('|') === 'Passive Perception 16|Passive Investigation 11|Passive Insight 12', lines.join('|'));
+        document.querySelectorAll('.ctx-menu').forEach(e => e.remove());
+        // Poisoned: disadvantage on checks — 5 off a passive.
+        state.party[state.party.findIndex(p => p.id === 'r301a')].conditions = ['Poisoned']; save(); P._render(); await sleep(30);
+        ok('passives: Poisoned — PP 11, marked down, and says why', pp('r301a').querySelector('.v').textContent.trim() === '11' && pp('r301a').classList.contains('down') && /Passive Perception 11 \(−5 poisoned\)/.test(pp('r301a').title), pp('r301a').title);
+      } catch(e){ ok('round 301 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
+      finally { document.querySelectorAll('.ctx-menu').forEach(e => e.remove()); state.party = JSON.parse(keepP); state.combatants = JSON.parse(keepC); save(); P._render(); }
+    }
     // -- Class features: represented, not just text ------------------------
     {
       try {
