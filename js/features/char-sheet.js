@@ -788,7 +788,9 @@ function sktKeepRoll(pc, text, r){
   const from = document.body.classList.contains('player-mode') ? 'player' : 'dm';
   // (a damage roll keeps its type: the DM's Turn View can apply it)
   pc.rolls = [Object.assign({ label: r.label, total: r.total, text, at: Date.now(), from },
-    r.kind === 'dmg' ? { kind: 'damage', type: r.type || '', crit: !!r.crit, id: typeof uid === 'function' ? uid() : String(Date.now()) } : {})].concat(pc.rolls || []).slice(0, 6);
+    r.kind === 'dmg' ? { kind: 'damage', type: r.type || '', crit: !!r.crit, id: typeof uid === 'function' ? uid() : String(Date.now()) }
+    // (and an attack roll its die: the Turn View says hit or miss)
+    : /^attack/.test(r.kindTag || '') ? { kind: 'attack', natural: r.natural, crit: !!r.crit, fumble: !!r.fumble, id: typeof uid === 'function' ? uid() : String(Date.now()) } : {})].concat(pc.rolls || []).slice(0, 6);
   save();
   // And the table's log (js/panels/game-log.js), where everyone sees it.
   if (typeof sktLogAdd === 'function'){

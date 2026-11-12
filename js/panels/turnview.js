@@ -3348,20 +3348,37 @@ registerPanel('turnview', {
   _dmgRolls(){
     const now = Date.now();
     return (state.party || []).filter(p => p && this._order().some(c => c.id === p.id)).map(p => {
-      const r = (p.rolls || []).find(x => x && x.kind === 'damage' && x.from === 'player' && now - (x.at || 0) < 10 * 60 * 1000);
+      // Its latest: an attack waiting on its damage, or the damage itself.
+      const r = (p.rolls || []).find(x => x && (x.kind === 'damage' || x.kind === 'attack') && x.from === 'player' && now - (x.at || 0) < 10 * 60 * 1000);
       return r && !r.applied && !r.dropped ? { p, r } : null;
     }).filter(Boolean);
   },
   _renderDmgRolls(){
     const list = this._dmgRolls(); if (!list.length) return '';
     const t = this._armed && this._order().find(x => x.id === this._armed);
-    return list.map(({ p, r }) => `<div class="tv-readied tv-dmgroll">🎲 <span><strong>${esc(p.name)}</strong> rolled <strong>${+r.total}</strong>${r.type ? ' ' + esc(r.type) : ''} damage${r.crit ? ' (crit)' : ''} <span class="dim">— ${esc(r.label)}</span></span>
+    return list.map(({ p, r }) => r.kind === 'attack' ? this._renderAtkRoll(p, r, t) : `<div class="tv-readied tv-dmgroll">🎲 <span><strong>${esc(p.name)}</strong> rolled <strong>${+r.total}</strong>${r.type ? ' ' + esc(r.type) : ''} damage${r.crit ? ' (crit)' : ''} <span class="dim">— ${esc(r.label)}</span></span>
         <button class="btn small primary" data-tv="dmgapply" data-p="${esc(p.id)}" data-id="${esc(r.id || '')}"${t && t.id !== p.id ? '' : ' disabled title="Pick the creature it hit on the right"'}>${t && t.id !== p.id ? 'Apply to ' + esc(t.name) : 'Apply to…'}</button>
         <button class="btn small" data-tv="dmgdrop" data-p="${esc(p.id)}" data-id="${esc(r.id || '')}" title="Not for this fight">Dismiss</button></div>`).join('');
   },
+  // A player's attack roll against the creature picked on the right: hit or
+  // miss on its AC, with the cover the panel knows of (a natural 20 always
+  // hits and is a crit; a natural 1 always misses).
+  _renderAtkRoll(p, r, t){
+    const c = this._order().find(x => x.id === p.id);
+    let verdict = '<span class="dim">pick the creature it was aimed at, on the right</span>';
+    if (t && c && t.id !== c.id){
+      const cov = this._coverFor(c, t), ac = (t.ac || 10) + (cov.ac || 0);
+      const hit = !cov.total && (r.crit || (!r.fumble && (+r.total || 0) >= ac));
+      verdict = cov.total ? esc(t.name) + ' has total cover'
+        : (hit ? '<span class="hit">' + (r.crit ? 'critical hit' : 'hits') + '</span>' : '<span class="miss">misses</span>') + ' ' + esc(t.name)
+          + ' <span class="dim">(AC ' + ac + (cov.ac ? ', ' + this._coverNote(cov) : '') + (r.fumble ? ', natural 1' : r.crit ? ', natural 20' : '') + ')</span>';
+    }
+    return `<div class="tv-readied tv-atkroll">🎯 <span><strong>${esc(p.name)}</strong> rolled <strong>${+r.total}</strong> to hit <span class="dim">— ${esc(r.label)}</span>: ${verdict}</span>
+        <button class="btn small" data-tv="dmgdrop" data-p="${esc(p.id)}" data-id="${esc(r.id || '')}" title="Done with it">Dismiss</button></div>`;
+  },
   _dmgRollAct(pid, rid, apply){
     const p = (state.party || []).find(x => x.id === pid); if (!p) return;
-    const r = (p.rolls || []).find(x => x && x.kind === 'damage' && (x.id || '') === (rid || '')); if (!r || r.applied) return;
+    const r = (p.rolls || []).find(x => x && (x.kind === 'damage' || (!apply && x.kind === 'attack')) && (x.id || '') === (rid || '')); if (!r || r.applied) return;
     if (!apply){ r.dropped = true; save(); this._render(); return; }
     const t = this._order().find(x => x.id === this._armed); const c = this._order().find(x => x.id === pid);
     if (!t || !c || t.id === c.id) return;

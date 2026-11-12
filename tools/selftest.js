@@ -18829,6 +18829,51 @@ for (const cls of Object.keys(rule)) for (let L = 1; L <= 20; L++) for (const sc
       finally { window.showConfirm = keepAsk; window.sktStatesSyncAll = keepSync; T._pending = null; T._armed = null;
         state.party = JSON.parse(keepP); state.combatants = JSON.parse(keepC); state.activeCombatantId = keepA; state.combatRound = keepR; save(); }
     }
+    // -- Round 286: a player's attack roll reaches the Turn View: hit or miss on the picked creature's AC, cover counted; natural 20 and 1 --
+    if (!PLAYER){
+      const keepC = JSON.stringify(state.combatants), keepA = state.activeCombatantId, keepP = JSON.stringify(state.party), keepR = state.combatRound;
+      const T = panelDefs.turnview, C = panelDefs.combat, keepAsk = window.showConfirm, keepSync = window.sktStatesSyncAll, keepTok = T._tokenFor;
+      try {
+        for (let k = 0; k < 100 && !(typeof _5eLoaded !== 'undefined' && _5eLoaded); k++) await sleep(100);
+        const find = (n, src) => _5eData.find(r => r.cat === 'monster' && r.name === n && r._source === src);
+        window.sktStatesSyncAll = () => {}; window.showConfirm = async () => false;
+        state.party.push({ id: 'r286z', name: 'Zo', hp: 40, hpMax: 40, ac: 15, spd: 30, rules: '2024', level: 6, sheet: { attacks: [{ name: 'Shortbow', atkBonus: '+7', damage: '1d6+4 piercing' }] } });
+        state.combatants = [{ id: 'r286z', name: 'Zo', isPC: true, hp: 40, hpMax: 40, ac: 15, initiative: 20, conditions: [] }];
+        C.addMonster(find('Ogre', 'MM')); C.addMonster(find('Goblin', 'MM')); await sleep(20);
+        const ogId = state.combatants[1].id, gbId = state.combatants[2].id, pc = () => state.party.find(p => p.id === 'r286z');
+        state.combatRound = 1; state.activeCombatantId = 'r286z'; save();
+        openPanel('turnview'); await sleep(200);
+        T._tokenFor = () => null; T._covers = {};
+        // The sheet keeps an attack roll as an attack, with its die.
+        sktKeepRoll(pc(), '13', { kind: 'd20', kindTag: 'attack', label: 'Shortbow attack', total: 13, natural: 6, crit: false, fumble: false });
+        ok('attack roll: kept as an attack, its natural die with it', pc().rolls[0].kind === 'attack' && pc().rolls[0].natural === 6 && !!pc().rolls[0].id, JSON.stringify(pc().rolls[0]));
+        sktKeepRoll(pc(), '14', { kind: 'd20', kindTag: 'check:perception', label: 'Perception', total: 14, natural: 7 });
+        ok('attack roll: a Perception check isn’t', !pc().rolls[0].kind, JSON.stringify(pc().rolls[0]));
+        const roll = (total, natural, extra) => { pc().rolls = [Object.assign({ label: 'Shortbow attack', total, text: String(total), at: Date.now(), from: 'player', kind: 'attack', natural, crit: natural === 20, fumble: natural === 1, id: 'a' + total + natural }, extra || {})]; T._render(); };
+        const bar = () => T._body.querySelector('.tv-atkroll'), txt = () => (bar() ? bar().textContent.replace(/\s+/g, ' ') : '');
+        roll(13, 6); T._armed = null; T._render();
+        ok('attack roll: shown; nobody picked — asks for the target', /Zo rolled 13 to hit/.test(txt()) && /pick the creature/.test(txt()), txt());
+        T._armed = ogId; T._render();
+        ok('attack roll: 13 against the ogre’s AC 11 — hits', /hits Ogre/.test(txt()) && /AC 11/.test(txt()), txt());
+        T._covers[T._coverKey(state.combatants[0], state.combatants[1])] = 5; T._render();
+        ok('attack roll: behind ¾ cover — AC 16, a miss', /misses Ogre/.test(txt()) && /AC 16/.test(txt()), txt());
+        T._covers = {};
+        roll(15, 1); ok('attack roll: a natural 1 — a miss whatever the total, said so', /misses/.test(txt()) && /natural 1/.test(txt()), txt());
+        roll(11, 4); ok('attack roll: 11 against AC 11 — meets it, hits', /hits Ogre/.test(txt()), txt());
+        roll(9, 20); ok('attack roll: a natural 20 — a critical hit, whatever the total', /critical hit/.test(txt()), txt());
+        // Then the damage arrives: the damage bar takes over.
+        pc().rolls = [{ label: 'Shortbow damage (crit)', total: 14, text: '', at: Date.now(), from: 'player', kind: 'damage', type: 'piercing', crit: true, id: 'd1' }].concat(pc().rolls); T._render();
+        ok('attack roll: its damage comes — the Apply bar instead', !bar() && !!T._body.querySelector('.tv-dmgroll'));
+        // Dismiss an attack.
+        roll(15, 10); bar().querySelector('[data-tv="dmgdrop"]').click(); await sleep(10);
+        ok('attack roll: dismissed — gone', !bar() && pc().rolls[0].dropped === true);
+        // A later skill check doesn't hide a waiting damage roll.
+        pc().rolls = [{ label: 'Athletics', total: 12, text: '', at: Date.now(), from: 'player' }, { label: 'Shortbow damage', total: 6, text: '', at: Date.now() - 1000, from: 'player', kind: 'damage', type: 'piercing', id: 'd2' }]; T._render();
+        ok('attack roll: a check rolled after a damage roll — the damage still waits', !!T._body.querySelector('.tv-dmgroll'));
+      } catch(e){ ok('round 286 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
+      finally { window.showConfirm = keepAsk; window.sktStatesSyncAll = keepSync; T._tokenFor = keepTok; T._covers = {}; T._pending = null; T._armed = null;
+        state.party = JSON.parse(keepP); state.combatants = JSON.parse(keepC); state.activeCombatantId = keepA; state.combatRound = keepR; save(); }
+    }
     // -- Class features: represented, not just text ------------------------
     {
       try {
