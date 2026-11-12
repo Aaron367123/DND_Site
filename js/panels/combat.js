@@ -735,9 +735,12 @@ registerPanel('combat',{
     // Heal/damage + remove controls are DM-only — never expose them (or the
     // stat-block link) to players.
     const controls = isPlayerView ? '' :
-      `<button class="hp-dmg-btn heal" data-act="hp-heal" data-idx="${i}" title="Heal">+</button>
+      // Damage on the left, heal on the right — as on every other card and in
+      // the Party Tracker. This row had them the other way round, so a DM
+      // reaching for the left button healed the goblin instead.
+      `<button class="hp-dmg-btn dmg" data-act="hp-damage" data-idx="${i}" title="Damage">−</button>
       <input type="number" class="hp-dmg-amt" data-idx="${i}" value="${this._lastDmgAmount || 5}" min="0" max="999" title="Amount">
-      <button class="hp-dmg-btn dmg" data-act="hp-damage" data-idx="${i}" title="Damage">−</button>
+      <button class="hp-dmg-btn heal" data-act="hp-heal" data-idx="${i}" title="Heal">+</button>
       <button class="icon-btn danger" data-act="remove" data-idx="${i}" title="Remove">×</button>`;
     const nameAttrs = isPlayerView ? '' : ` data-act="open-bestiary" data-idx="${i}" title="Open stat block"`;
     return `<div class="group-row ${active?'active':''} ${dead?'dead':''}" data-idx="${i}">

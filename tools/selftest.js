@@ -18975,6 +18975,27 @@ for (const cls of Object.keys(rule)) for (let L = 1; L <= 20; L++) for (const sc
       } catch(e){ ok('round 290 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
       finally { state.activeCombatantId = keepA; save(); C._render(); }
     }
+    // -- Round 292: a grouped card's rows put damage left and heal right, as every other card does --
+    if (!PLAYER){
+      const keepC = JSON.stringify(state.combatants), keepA = state.activeCombatantId, keepS = JSON.stringify(state.settings || {});
+      const C = panelDefs.combat;
+      try {
+        for (let k = 0; k < 100 && !(typeof _5eLoaded !== 'undefined' && _5eLoaded); k++) await sleep(100);
+        const gob = _5eData.find(r => r.cat === 'monster' && r.name === 'Goblin' && r._source === 'MM'), og = _5eData.find(r => r.cat === 'monster' && r.name === 'Ogre' && r._source === 'MM');
+        state.combatants = []; C.addMonster(og); for (let k = 0; k < 3; k++) C.addMonster(gob);
+        state.settings.combatGroupSimilar = true; state.activeCombatantId = state.combatants[0].id; save();
+        openPanel('combat'); await sleep(200); C._render(); await sleep(30);
+        const order = el => [...el.querySelectorAll('[data-act="hp-damage"], [data-act="hp-heal"]')].map(x => x.dataset.act).join(',');
+        const card = C._body.querySelector('.combatant-card:not(.group)'), row = C._body.querySelector('.group-row');
+        ok('grouped rows: the ogre’s card — damage, then heal', order(card) === 'hp-damage,hp-heal', order(card));
+        ok('grouped rows: a goblin’s row — the same order', !!row && order(row) === order(card), row && order(row));
+        // The left button of a goblin's row hurts it.
+        const gi = +row.dataset.idx, hp0 = state.combatants[gi].hp;
+        row.querySelector('button.hp-dmg-btn').click(); await sleep(30);
+        ok('grouped rows: the left button — damage', state.combatants[gi].hp < hp0, JSON.stringify([hp0, state.combatants[gi].hp]));
+      } catch(e){ ok('round 292 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
+      finally { state.combatants = JSON.parse(keepC); state.activeCombatantId = keepA; state.settings = JSON.parse(keepS); save(); C._render(); }
+    }
     // -- Class features: represented, not just text ------------------------
     {
       try {
