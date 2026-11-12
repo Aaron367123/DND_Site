@@ -18933,6 +18933,32 @@ for (const cls of Object.keys(rule)) for (let L = 1; L <= 20; L++) for (const sc
       } catch(e){ ok('round 288 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
       finally { state.combatants = JSON.parse(keepC); state.activeCombatantId = keepA; state.combatRound = keepR; state.settings = JSON.parse(keepS); save(); C._seenTurn = null; C._render(); }
     }
+    // -- Round 289: a character at 0 HP is drawn dying, not dead — no strike-through until they've died; a monster at 0 is dead --
+    if (!PLAYER){
+      const keepC = JSON.stringify(state.combatants), keepA = state.activeCombatantId, keepP = JSON.stringify(state.party);
+      const C = panelDefs.combat;
+      try {
+        for (let k = 0; k < 100 && !(typeof _5eLoaded !== 'undefined' && _5eLoaded); k++) await sleep(100);
+        state.party.push({ id: 'r289z', name: 'Zo', hp: 0, hpMax: 40, ac: 15, spd: 30, rules: '2024', level: 6, sheet: {} });
+        state.combatants = [{ id: 'r289z', name: 'Zo', isPC: true, hp: 0, hpMax: 40, ac: 15, initiative: 20, conditions: ['Unconscious'], deathSaves: { success: 1, fail: 2 } }];
+        C.addMonster(_5eData.find(r => r.cat === 'monster' && r.name === 'Goblin' && r._source === 'MM')); await sleep(20);
+        state.combatants[1].hp = 0; state.activeCombatantId = 'r289z'; save();
+        openPanel('combat'); await sleep(200); C._render(); await sleep(30);
+        const card = i => C._body.querySelectorAll('.combatant-card')[i];
+        const struck = el => /line-through/.test(getComputedStyle(el.querySelector('.card-name, .card-name-input')).textDecorationLine);
+        ok('dying: Zo at 0 with two failures — drawn as down, not dead, her name not struck through', card(0).classList.contains('down') && !card(0).classList.contains('dead') && !struck(card(0)), card(0).className);
+        ok('dying: …her death saves are there', !!card(0).querySelector('.death-saves:not(.dead-banner)'));
+        ok('dying: the goblin at 0 — dead, struck through', card(1).classList.contains('dead') && struck(card(1)), card(1).className);
+        // A third failure: now she has died.
+        state.combatants[0].dead = true; state.combatants[0].deathSaves = null; save(); C._render(); await sleep(20);
+        ok('dying: three failures — dead, struck through, the Dead banner', card(0).classList.contains('dead') && struck(card(0)) && !!card(0).querySelector('.dead-banner'), card(0).className);
+        // Healed from dying: up and drawn as alive (through the in-place HP update).
+        state.combatants[0].dead = false; save(); C._render(); await sleep(20);
+        C._applyHpDelta(0, 5, null); await sleep(30);
+        ok('dying: healed to 5 — neither down nor dead', !card(0).classList.contains('down') && !card(0).classList.contains('dead') && state.combatants[0].hp === 5, card(0).className);
+      } catch(e){ ok('round 289 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
+      finally { state.combatants = JSON.parse(keepC); state.activeCombatantId = keepA; state.party = JSON.parse(keepP); save(); C._render(); }
+    }
     // -- Class features: represented, not just text ------------------------
     {
       try {

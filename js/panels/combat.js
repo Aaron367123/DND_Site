@@ -774,7 +774,7 @@ registerPanel('combat',{
     if (state.settings && state.settings.combatGroupSimilar) return false; // grouped rows differ
     const card = b.querySelector('.combatant-card[data-idx="'+i+'"]');
     if (!card) return false;
-    const wasDead = card.classList.contains('dead');
+    const wasDead = card.classList.contains('dead') || card.classList.contains('down');
     const isDead  = (c.hp||0) <= 0;
     if (wasDead !== isDead) return false;               // toggles death-save UI / .dead styling
     if (isDead) return false;                           // death-save pips are structural
@@ -829,7 +829,11 @@ registerPanel('combat',{
 
   _renderCard(c, i, isParty){
     const active = c.id === state.activeCombatantId;
-    const dead = c.hp <= 0;
+    // A monster at 0 is dead; a character at 0 is dying — unconscious, making
+    // death saves — and was drawn exactly like the dead: greyed, name struck
+    // through. Only a character who has died (c.dead) gets that now.
+    const down = c.hp <= 0;
+    const dead = c.isPC ? !!c.dead : down;
     const isPC = c.isPC;
     const portrait = c.portrait
       || (isPC ? (state.party.find(p=>p.id===c.id) ? sktPcIcon(state.party.find(p=>p.id===c.id)) : '⚔')
@@ -971,7 +975,7 @@ registerPanel('combat',{
     // get a neutral accent (no class) so the two are also visually distinct.
     const classColor = isPC && partyMatch ? this._pcClassColor(partyMatch) : '';
     const cardStyle = classColor ? ` style="--class-color:${classColor}"` : '';
-    return `<div class="combatant-card ${active?'active':''} ${dead?'dead':''} ${isPC?'pc':'npc'}" data-idx="${i}" draggable="true"${cardStyle}>
+    return `<div class="combatant-card ${active?'active':''} ${dead?'dead':down?'down':''} ${isPC?'pc':'npc'}" data-idx="${i}" draggable="true"${cardStyle}>
       ${isPC?'<div class="card-class-stripe"></div>':''}
       <div class="drag-handle" title="Drag to reorder">⋮⋮</div>
       <div class="card-avatar ${isPC?'pc':'npc'}" data-act="upload-portrait" data-idx="${i}" title="Click to upload portrait">${renderIcon(portrait, c.name)}</div>

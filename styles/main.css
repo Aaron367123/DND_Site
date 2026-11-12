@@ -907,6 +907,8 @@ body.player-mode .window-actions [data-wact="lock"]{display:none}
   50%   {box-shadow:0 0 0 1px var(--accent),0 0 18px rgba(212,165,116,.55)}
 }
 .combatant-card.dead{opacity:.62}
+/* a character at 0 HP: dying, not dead */
+.combatant-card.down .card-avatar{filter:grayscale(.5)}
 .combatant-card.dragging{opacity:.4}
 .combatant-card.drop-before{box-shadow:0 -2px 0 var(--accent) inset}
 .combatant-card.drop-after{box-shadow:0 2px 0 var(--accent) inset}
