@@ -2169,7 +2169,10 @@ function csSaveRequest(p, s, lvl){
   const dice = csSpellDamage(s, lvl) || '';
   return { id: typeof uid === 'function' ? uid() : String(Date.now()), spell: s.name, lvl: lvl || s.level,
     ab: String(ab).slice(0, 3).toUpperCase(), dc, dice, type: dice ? String([].concat(s.damageInflict || [])[0] || '') : '',
-    half: /half as much damage/i.test(JSON.stringify(s.entries || [])), at: Date.now() };
+    half: /half as much damage/i.test(JSON.stringify(s.entries || [])), at: Date.now(),
+    // what a failed save inflicts (Hold Person: paralyzed, a save at the end
+    // of each turn, held by concentration)
+    cond: typeof sktSpellSaveCond === 'function' ? sktSpellSaveCond(s) : null };
 }
 // A summoning spell cast during a fight offers its creature: which one (Find
 // Familiar's forms, Animate Dead's skeleton or zombie) and how many, then in

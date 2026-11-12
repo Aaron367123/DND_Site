@@ -18729,6 +18729,52 @@ for (const cls of Object.keys(rule)) for (let L = 1; L <= 20; L++) for (const sc
       finally { window.showConfirm = keepAsk; T._pending = null; T._armed = null; document.getElementById('area-save-back')?.remove(); try { csClose(); } catch(e){}
         state.party = JSON.parse(keepP); state.combatants = JSON.parse(keepC); state.activeCombatantId = keepA; state.combatRound = keepR; save(); }
     }
+    // -- Round 284: a character's Hold Person, run from the Turn View, paralyzes those who fail — held by the caster's concentration --
+    if (!PLAYER){
+      const keepC = JSON.stringify(state.combatants), keepA = state.activeCombatantId, keepP = JSON.stringify(state.party), keepR = state.combatRound;
+      const T = panelDefs.turnview, C = panelDefs.combat, keepAsk = window.showConfirm, keepD = window.sktD;
+      try {
+        for (let k = 0; k < 100 && !(typeof _5eLoaded !== 'undefined' && _5eLoaded); k++) await sleep(100);
+        const find = (n, src) => _5eData.find(r => r.cat === 'monster' && r.name === n && r._source === src);
+        const R = await sktRulesLoad('2014');
+        const b = Object.assign(sktBlankBuild('2014'), { name: 'Zin', species: 'Elf', subspecies: 'High', cls: 'Wizard', subclass: 'Evocation', level: 5, background: 'Sage',
+          abilities: { method: 'manual', base: { str: 8, dex: 14, con: 14, int: 16, wis: 12, cha: 10 } }, skills: ['arcana', 'investigation'],
+          cantrips: ['Fire Bolt', 'Mage Hand', 'Light'], spellbook: ['Magic Missile', 'Shield', 'Fireball', 'Hold Person', 'Sleep', 'Detect Magic'],
+          spells: ['Magic Missile', 'Shield', 'Fireball', 'Hold Person'], speciesChoice: { spells: ['Prestidigitation'] } });
+        const rec = sktComputeCharacter(b, R); rec.id = 'r284z'; state.party.push(rec);
+        state.combatants = [];
+        C.addMonster(find('Goblin', 'MM')); await sleep(20);
+        const gbId = state.combatants[0].id, me = () => state.party.find(p => p.id === 'r284z'), gb = () => state.combatants.find(c => c.id === gbId);
+        state.combatants.push({ id: 'r284z', name: 'Zin', isPC: true, hp: me().hp, hpMax: me().hpMax, ac: me().ac, initiative: 12, conditions: [] });
+        state.combatRound = 1; state.activeCombatantId = 'r284z'; save();
+        window.showConfirm = async () => false;
+        openCharSheet('r284z'); await sleep(400);
+        const root = () => document.getElementById('cs-root');
+        root().querySelector('[data-cs-tab="spells"]').click(); await sleep(40);
+        root().querySelector('[data-cs-cast="Hold Person:2"]').click(); await sleep(40);
+        const rq = (me().castReq || [])[0] || {};
+        ok('hold person: the request carries what a failed save does — paralyzed, held by Hold Person', rq.cond && rq.cond.cond === 'Paralyzed' && rq.cond.concSpell === 'Hold Person', JSON.stringify(rq.cond));
+        csClose(); await sleep(50);
+        openPanel('turnview'); await sleep(200); T._armed = gbId; T._render(); await sleep(20);
+        const bar = T._body.querySelector('.tv-castreq');
+        ok('hold person: the bar says what failing does', bar && /fails: paralyzed/.test(bar.textContent), bar && bar.textContent.replace(/\s+/g, ' '));
+        bar.querySelector('[data-tv="castrun"]').click(); await sleep(40);
+        const dlg = document.getElementById('area-save-back');
+        window.sktD = d => 1;
+        dlg.querySelector('[data-as="roll"]').click(); await sleep(20);
+        ok('hold person: the dialog says a failure paralyzes', /Paralyzed/i.test((dlg.querySelector('.as-cond') || {}).textContent || ''), dlg.querySelector('#as-result').textContent.slice(0, 200));
+        dlg.querySelector('[data-as="apply"]').click(); await sleep(50);
+        const tm = (gb().condTimers || {}).Paralyzed;
+        ok('hold person: the goblin fails — paralyzed, a WIS save at the end of its turns, held by Zin’s concentration',
+           (gb().conditions || []).includes('Paralyzed') && tm && tm.conc && tm.conc.id === 'r284z' && tm.conc.spell === 'Hold Person' && tm.save && tm.save.ab === 'wis',
+           JSON.stringify([gb().conditions, gb().condTimers]));
+        // Zin's concentration breaks: the goblin is free.
+        me().concentration = null; C._render(); await sleep(20);
+        ok('hold person: Zin’s concentration ends — so does the paralysis', !(gb().conditions || []).includes('Paralyzed'), JSON.stringify(gb().conditions));
+      } catch(e){ ok('round 284 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
+      finally { window.showConfirm = keepAsk; window.sktD = keepD; T._pending = null; T._armed = null; document.getElementById('area-save-back')?.remove(); try { csClose(); } catch(e){}
+        state.party = JSON.parse(keepP); state.combatants = JSON.parse(keepC); state.activeCombatantId = keepA; state.combatRound = keepR; save(); }
+    }
     // -- Class features: represented, not just text ------------------------
     {
       try {

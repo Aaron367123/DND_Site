@@ -1830,23 +1830,7 @@ function sktMonsterSpellRows(raw, R){
     }
     const dms = tags.map(x => x.d).slice(0, types.length);
     tags.forEach((x, i) => { if (x.type) types[i] = x.type; });
-    // What a failed save inflicts (Hold Person's paralysis), for the spell's
-    // duration when its text says "for the duration".
-    let cond = null;
-    if ((s.savingThrow || []).length && typeof sktSaveCondition === 'function'){
-      const plain = (s.entries || []).map(e => typeof e === 'string' ? e : JSON.stringify(e)).join(' ').replace(/\{@\w+ ([^}|]+)[^}]*\}/g, '$1');
-      // (from the sentence with the save: Web's comes after four about the webs)
-      const at = plain.search(/saving throw/i);
-      cond = sktSaveCondition(plain, at < 0 ? 0 : plain.lastIndexOf('.', at) + 1);
-      const d = (s.duration || [])[0];
-      if (cond && !cond.dur && d && d.type === 'timed' && d.duration){
-        const amt = +d.duration.amount || 1, u = d.duration.type;
-        const rounds = u === 'round' ? amt : u === 'minute' ? amt * 10 : 0;
-        if (rounds && rounds <= 100) cond.dur = { kind: 'rounds', left: rounds };
-      }
-      // Held by the caster's concentration: it ends when that does.
-      if (cond && d && d.concentration) cond.concSpell = s.name;
-    }
+    const cond = sktSpellSaveCond(s);
     if (!dms.length && !cond && s.name !== 'Magic Missile') return;
     const up = Math.max(0, castAt - lvl);
     const scl = /\{@scaledamage [^|]+\|[^|]+\|([^}|]+)/.exec(JSON.stringify(s.higher || s.entriesHigherLevel || []));
@@ -2821,6 +2805,26 @@ function sktTokenForCombatant(tokens, c){
 // without anyone resetting it.
 function sktMoveKey(){
   return (typeof state !== 'undefined' && state && state.activeCombatantId) ? (state.combatRound || 1) + ':' + state.activeCombatantId : null;
+}
+// What a spell's failed save inflicts (Hold Person's paralysis), for the
+// spell's duration when its text says "for the duration", held by the
+// caster's concentration when the spell is. Null for none. A monster's spell
+// and a character's cast read it the same way.
+function sktSpellSaveCond(s){
+  if (!s || !(s.savingThrow || []).length || typeof sktSaveCondition !== 'function') return null;
+  const plain = (s.entries || []).map(e => typeof e === 'string' ? e : JSON.stringify(e)).join(' ').replace(/\{@\w+ ([^}|]+)[^}]*\}/g, '$1');
+  // (from the sentence with the save: Web's comes after four about the webs)
+  const at = plain.search(/saving throw/i);
+  const cond = sktSaveCondition(plain, at < 0 ? 0 : plain.lastIndexOf('.', at) + 1);
+  const d = (s.duration || [])[0];
+  if (cond && !cond.dur && d && d.type === 'timed' && d.duration){
+    const amt = +d.duration.amount || 1, u = d.duration.type;
+    const rounds = u === 'round' ? amt : u === 'minute' ? amt * 10 : 0;
+    if (rounds && rounds <= 100) cond.dur = { kind: 'rounds', left: rounds };
+  }
+  // Held by the caster's concentration: it ends when that does.
+  if (cond && d && d.concentration) cond.concSpell = s.name;
+  return cond;
 }
 // The creature whose turn it is, when `tok` is its token; else null.
 function sktMoverOf(tokens, tok){

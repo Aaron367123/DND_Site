@@ -3340,7 +3340,7 @@ registerPanel('turnview', {
   },
   _renderCastReqs(){
     const list = this._castReqs(); if (!list.length) return '';
-    return list.map(({ p, r }) => `<div class="tv-readied tv-castreq">📜 <span><strong>${esc(p.name)}</strong> cast <strong>${esc(r.spell)}</strong>${r.lvl ? ' (level ' + r.lvl + ')' : ''} — ${esc(r.ab)} save DC ${+r.dc}${r.dice ? ', ' + esc(r.dice) + (r.type ? ' ' + esc(r.type) : '') + (r.half ? ', half on a save' : '') : ''}</span>
+    return list.map(({ p, r }) => `<div class="tv-readied tv-castreq">📜 <span><strong>${esc(p.name)}</strong> cast <strong>${esc(r.spell)}</strong>${r.lvl ? ' (level ' + r.lvl + ')' : ''} — ${esc(r.ab)} save DC ${+r.dc}${r.dice ? ', ' + esc(r.dice) + (r.type ? ' ' + esc(r.type) : '') + (r.half ? ', half on a save' : '') : ''}${r.cond && r.cond.cond ? ' — fails: ' + esc(String(r.cond.cond).toLowerCase()) : ''}</span>
         <button class="btn small primary" data-tv="castrun" data-p="${esc(p.id)}" data-id="${esc(r.id)}">Run the saves</button>
         <button class="btn small" data-tv="castdrop" data-p="${esc(p.id)}" data-id="${esc(r.id)}" title="Not needed">Dismiss</button></div>`).join('');
   },
@@ -3351,7 +3351,7 @@ registerPanel('turnview', {
     if (!run) return drop();
     const C = panelDefs.combat; if (!C || typeof C.openAreaSave !== 'function') return;
     const parts = r.dice ? String(r.dice).split(/\s*\+\s*(?=\d*d\d)/).map(d => ({ dice: d.replace(/\s+/g, ''), type: r.type || '' })) : [];
-    C.openAreaSave({ name: p.name + ' · ' + r.spell, ab: r.ab, dc: r.dc, parts, half: r.half !== false, exclude: p.id, spell: true,
+    C.openAreaSave({ name: p.name + ' · ' + r.spell, ab: r.ab, dc: r.dc, parts, half: r.half !== false, exclude: p.id, spell: true, cond: r.cond || null,
       targets: this._armed && this._armed !== p.id ? [this._armed] : [], src: { id: p.id, name: p.name },
       onApplied: () => { drop(); } });
   },
