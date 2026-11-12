@@ -694,18 +694,24 @@ function csRollEffects(pc, kind){
 }
 // A line for the next roll's card (a weapon's mastery), used once.
 function csTakeRollNote(){ const n = CS.rollNote; CS.rollNote = null; return n || ''; }
-function csRollD20(label, mod, ev, kind){
-  const pick = ev && ev.shiftKey ? 'adv' : ev && ev.altKey ? 'dis' : CS.mode;
-  const fx = kind ? csRollEffects(csPc() || {}, kind) : { adv: [], dis: [], bonus: 0, autoFail: '' };
+// One d20 roll for a character with what's on them counted — conditions,
+// exhaustion, Rage, Bless, Lucky, Reliable Talent — whoever rolls it: the
+// sheet, or the ⋯ Roll menu on the party card. pick is the advantage asked
+// for ('normal', 'adv', 'dis'); table, the number on a d20 rolled at the
+// table, which is kept as the roll (a 1 there is the player's to reroll for
+// Lucky).
+function sktRollD20For(pcNow, label, mod, kind, pick, table){
+  pcNow = pcNow || {};
+  const fromTable = table >= 1 && table <= 20;
+  const fx = kind ? csRollEffects(pcNow, kind) : { adv: [], dis: [], bonus: 0, autoFail: '' };
   const up = pick === 'adv' || fx.adv.length > 0, down = pick === 'dis' || fx.dis.length > 0;
   const mode = up && !down ? 'adv' : down && !up ? 'dis' : 'normal';
-  const pcNow = csPc() || {};
   const has = n => ((pcNow.sheet || {}).featureList || []).some(f => f.name === n && !f.info);
   // Halfling Lucky: a 1 on the d20 is rolled again (and the new roll kept).
   // (2024 halflings call it Luck.)
   const lucky = ((pcNow.sheet || {}).featureList || []).some(f => (f.name === 'Lucky' || f.name === 'Luck') && f.from === 'species');
   const die = () => { const x = csD(20); return lucky && x === 1 ? (fx._lucky = true, csD(20)) : x; };
-  const a = die(), b = mode === 'normal' ? null : die();
+  const a = fromTable ? Math.round(table) : die(), b = mode === 'normal' || fromTable ? null : die();
   let nat = b == null ? a : mode === 'adv' ? Math.max(a, b) : Math.min(a, b);
   // Reliable Talent: a proficient ability check treats a roll under 10 as 10.
   const skillKey = /^check:/.test(kind || '') ? kind.slice(6) : '';
@@ -717,15 +723,23 @@ function csRollD20(label, mod, ev, kind){
   const extraSum = extra.reduce((s, x) => s + x.n, 0);
   const why = [extra.map(x => x.label + ' d' + x.die + ': ' + x.n).join(', '), fx.adv.length ? 'advantage: ' + fx.adv.join(', ') : '', fx.dis.length ? 'disadvantage: ' + fx.dis.join(', ') : '', fx.bonus ? 'exhaustion ' + fx.bonus : '', fx.autoFail ? fx.autoFail + ' — automatic failure' : '',
                fx._lucky ? 'Lucky: rerolled a 1' : '',
-               /^save:/.test(kind || '') ? ((pcNow.sheet || {}).saveMods || []).filter(m => m.abs.includes('all') || m.abs.includes(kind.slice(5))).map(m => 'check: ' + m.text.replace(/^Advantage on /, 'advantage on ') + ' (' + m.src + ')').join('; ') : '', fx._reliable ? 'Reliable Talent: ' + fx._reliable + ' counts as 10' : '', csTakeRollNote()].filter(Boolean).join('; ');
+               /^save:/.test(kind || '') ? ((pcNow.sheet || {}).saveMods || []).filter(m => m.abs.includes('all') || m.abs.includes(kind.slice(5))).map(m => 'check: ' + m.text.replace(/^Advantage on /, 'advantage on ') + ' (' + m.src + ')').join('; ') : '', fx._reliable ? 'Reliable Talent: ' + fx._reliable + ' counts as 10' : ''].filter(Boolean).join('; ');
   const r = { kind: 'd20', label, mod: mod - fx.bonus, rolls: b == null ? [a] : [a, b], natural: nat, total: nat + mod + extraSum, mode, crit: nat === 20, fumble: nat === 1, why, autoFail: !!fx.autoFail, kindTag: kind || null };
+  if (fromTable) r.table = true;
+  return r;
+}
+function csRollD20(label, mod, ev, kind){
+  const pick = ev && ev.shiftKey ? 'adv' : ev && ev.altKey ? 'dis' : CS.mode;
+  const r = sktRollD20For(csPc(), label, mod, kind, pick);
+  const note = csTakeRollNote(); if (note) r.why = r.why ? r.why + '; ' + note : note;
+  const mode = r.mode;
   // A weapon attack is the Attack action (the player app's turn card).
   if (CS.embed && /^attack(:str)?$/.test(kind || '') && typeof paMarkEcon === 'function' && paMarkEcon('action')) save();
   csLog(r);
   // The party card's own strip shows the DM the same roll.
   const pc = csPc();
   try { if (panelDefs.party && panelDefs.party._setLastRoll && !document.body.classList.contains('player-mode'))
-          panelDefs.party._setLastRoll(pc, Object.assign({ kept: 0 }, r, { mode: mode === 'normal' ? 'normal' : mode })); } catch(e){}
+          panelDefs.party._setLastRoll(pc, Object.assign({ kept: r.rolls.length > 1 && (mode === 'adv' ? r.rolls[1] > r.rolls[0] : r.rolls[1] < r.rolls[0]) ? 1 : 0 }, r)); } catch(e){}
   return r;
 }
 // "2d6+1d4+3 slashing", "1d10+4 force ×2 beams": every term, crits double the dice.

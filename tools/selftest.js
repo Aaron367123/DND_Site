@@ -19279,6 +19279,55 @@ for (const cls of Object.keys(rule)) for (let L = 1; L <= 20; L++) for (const sc
       } catch(e){ ok('round 299 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
       finally { document.querySelectorAll('.ctx-menu').forEach(e => e.remove()); state.party = JSON.parse(keepP); save(); P._render(); }
     }
+    // -- Round 300: the party card's ⋯ Roll d20 — the sheet's rules (Restrained, exhaustion, Paralyzed), a die from the table, initiative into the fight --
+    if (!PLAYER){
+      const keepP = JSON.stringify(state.party), keepC = JSON.stringify(state.combatants), keepModal = window.showModal, keepToast = window.showToast; const P = panelDefs.party;
+      const toasts = [];
+      try {
+        openPanel('party'); await sleep(250);
+        window.showToast = m => { toasts.push(String(m)); };
+        state.party.push({ id: 'r300a', name: 'Ann', hp: 30, hpMax: 30, ac: 14, spd: 30, rules: '2024', level: 5, init: 3,
+          abilities: { str: 10, dex: 16, con: 14, int: 10, wis: 12, cha: 8 }, sheet: { saves: { str: 0, dex: 5, con: 2, int: 0, wis: 1, cha: -1 } },
+          conditions: ['Restrained'], exhaustion: 2 });
+        state.combatants = [{ id: 'r300a', name: 'Ann', isPC: true, hp: 30, hpMax: 30, ac: 14, initiative: 3, conditions: [] }];
+        save(); P._render(); await sleep(40);
+        const ann = () => state.party.find(p => p.id === 'r300a');
+        const card = () => P._body.querySelector('.char-card[data-cidx="' + state.party.findIndex(p => p.id === 'r300a') + '"]');
+        const items = () => [...document.querySelectorAll('.ctx-menu .ctx-menu-item, .ctx-menu button')];
+        const clear = () => document.querySelectorAll('.ctx-menu').forEach(e => e.remove());
+        const dice = vs => { let k = 0; sktSetRandom(() => ((vs[k++ % vs.length]) - 1) / 20 + 0.01); };
+        const rollMenu = async () => { clear(); card().querySelector('[data-act="actions-menu"]').click(); await sleep(120);
+          items().find(x => /Roll d20/.test(x.textContent)).click(); await sleep(150); return items(); };
+        const last = () => (P._rollHistory || {})['r300a'][0];
+        let its = await rollMenu();
+        const labels = its.map(x => x.textContent.trim());
+        ok('card roll: the menu — initiative and saves with their numbers, the table option, no stale Shift hint',
+           labels.some(t => /Initiative \(\+3\)$/.test(t)) && labels.includes('DEX save (+5)') && labels.some(t => /die from the table/.test(t)) && !labels.some(t => /Hold Shift/.test(t)), labels.join(' | '));
+        // DEX save while Restrained: disadvantage; exhaustion 2 (2024): −4.
+        dice([6, 16]);
+        its.find(x => x.textContent.trim() === 'DEX save (+5)').click(); await sleep(80);
+        ok('card roll: DEX save while Restrained and Exhausted 2 — two dice, the lower, +5 −4 = 7',
+           last().mode === 'dis' && last().rolls.join() === '6,16' && last().total === 7 && last().kept === 0, JSON.stringify(last()));
+        ok('card roll: …kept like a sheet roll — the Game Log and the player’s phone see it', (ann().rolls || [])[0] && ann().rolls[0].label === 'DEX save' && ann().rolls[0].total === 7 && ann().rolls[0].from === 'dm', JSON.stringify((ann().rolls || [])[0]));
+        ok('card roll: …and says why', toasts.some(t => /Ann/.test(t) && /restrained/.test(t) && /exhaustion -4/.test(t)), JSON.stringify(toasts.slice(-2)));
+        // Initiative, in the fight: it's her initiative there.
+        its = await rollMenu(); dice([10]);
+        its.find(x => /Initiative/.test(x.textContent)).click(); await sleep(80);
+        ok('card roll: Initiative — 10 +3 −4 = 9, and 9 in the Combat Tracker', last().total === 9 && state.combatants[0].initiative === 9, JSON.stringify([last().total, state.combatants[0].initiative]));
+        // A die rolled at the table, with advantage.
+        window.showModal = async () => ({ what: 'con', mode: 'adv', die: 17 });
+        its = await rollMenu(); dice([2]);
+        its.find(x => /die from the table/.test(x.textContent)).click(); await sleep(120);
+        ok('card roll: a 17 rolled at the table for a CON save — 17 +2 −4 = 15, the one die', last().total === 15 && last().rolls.join() === '17' && last().table === true, JSON.stringify(last()));
+        // Paralyzed: a STR save fails, and the strip says so.
+        state.party[state.party.findIndex(p => p.id === 'r300a')] = { ...ann(), conditions: ['Paralyzed'] }; save(); P._render(); await sleep(30);
+        its = await rollMenu(); dice([19]);
+        its.find(x => x.textContent.trim() === 'STR save (+0)').click(); await sleep(80);
+        ok('card roll: Paralyzed — a STR save fails, and the card says Fails', last().autoFail === true && /Fails/.test(card().querySelector('.roll-strip.current').textContent), card().querySelector('.roll-strip.current') && card().querySelector('.roll-strip.current').textContent.replace(/\s+/g, ' '));
+      } catch(e){ ok('round 300 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
+      finally { sktSetRandom(Math.random); window.showModal = keepModal; window.showToast = keepToast; document.querySelectorAll('.ctx-menu').forEach(e => e.remove());
+        if (P._rollHistory) delete P._rollHistory['r300a']; state.party = JSON.parse(keepP); state.combatants = JSON.parse(keepC); save(); P._render(); }
+    }
     // -- Class features: represented, not just text ------------------------
     {
       try {

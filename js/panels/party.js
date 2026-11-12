@@ -2065,7 +2065,8 @@ registerPanel('party',{
       const dice = r.rolls.map((x, di) =>
         `<span class="roll-die${di === r.kept ? ' kept' : ' dropped'}${x === 20 ? ' crit' : x === 1 ? ' fumble' : ''}">${x}</span>`
       ).join('');
-      const status = r.crit ? '<span class="roll-status crit">CRIT 20!</span>'
+      const status = r.autoFail ? '<span class="roll-status fumble">Fails</span>'
+                    : r.crit ? '<span class="roll-status crit">CRIT 20!</span>'
                     : r.fumble ? '<span class="roll-status fumble">Nat 1</span>'
                     : '';
       const dmgBlock = r.damage
@@ -2118,6 +2119,26 @@ registerPanel('party',{
     });
   },
 
+  // A roll from the card's ⋯ Roll menu: the sheet's own d20 (what's on the
+  // character counts — Poisoned, exhaustion, Rage, Bless), kept where the
+  // sheet keeps it (the Game Log, the player's phone). Initiative goes into
+  // the fight when they're in it.
+  _cardRoll(cid, x, pick, table){
+    const c = (state.party || []).find(p => p.id === cid); if (!c || !x) return;
+    const r = typeof sktRollD20For === 'function'
+      ? sktRollD20For(c, x.label, x.mod, x.kind, pick || 'normal', table)
+      : this._rollD20(x.mod, { mode: pick || 'normal', label: x.label });
+    const kept = r.rolls.length > 1 ? (r.mode === 'adv' ? (r.rolls[0] >= r.rolls[1] ? 0 : 1) : (r.rolls[0] <= r.rolls[1] ? 0 : 1)) : 0;
+    const plain = typeof csRollPlain === 'function' ? csRollPlain(r) : r.label + ': ' + r.total;
+    if (typeof sktKeepRoll === 'function') sktKeepRoll(c, plain.replace(/^[^:]*: /, ''), r);
+    if (x.kind === 'init'){
+      const co = (state.combatants || []).find(y => y && y.id === cid);
+      if (co){ co.initiative = r.total; save(); panelDefs.combat?._render?.(); }
+    }
+    this._setLastRoll(c, Object.assign({}, r, { kept }));
+    // Why it rolled the way it did (Poisoned: disadvantage; exhaustion −4).
+    if (r.why && typeof showToast === 'function') showToast('🎲 ' + c.name + ' — ' + (r.autoFail ? r.label + ': fails' : plain));
+  },
   _setLastRoll(c, result){
     if (!this._rollHistory) this._rollHistory = {};
     const list = this._rollHistory[c.id] || [];
@@ -3032,33 +3053,26 @@ registerPanel('party',{
           onClick: () => {
             const r0 = resolve(); if (!r0) return;
             const liveC = r0.c;
-            // Re-find the menu button position to anchor the roll submenu.
-            const card = this._body?.querySelector(`[data-cidx="${r0.idx}"]`);
-            const anchor = card?.querySelector('.char-action-btn.menu');
-            const rect = anchor ? anchor.getBoundingClientRect() : { left: 200, bottom: 200 };
             const rollItems = [];
-            rollItems.push({ label:'⚡ Initiative', onClick: () => {
-              const r = this._rollD20(liveC.init || 0, { mode:'normal', label: liveC.name + ' · Initiative' });
-              this._setLastRoll(liveC, r);
-              this._render();
-            }});
+            // What can be rolled from here: initiative and the six saves, at
+            // the numbers the sheet uses.
             const ab = liveC.abilities || {};
             const sh = liveC.sheet || {};
-            const saveDefs = [['str','STR'],['dex','DEX'],['con','CON'],['int','INT'],['wis','WIS'],['cha','CHA']];
+            const sg = v => (v >= 0 ? '+' : '') + v;
+            const rolls = [];
+            const ini = typeof liveC.init === 'number' ? liveC.init : typeof ab.dex === 'number' ? Math.floor((ab.dex - 10) / 2) : 0;
+            rolls.push({ key: 'init', label: 'Initiative', mod: ini, kind: 'init' });
             const saves = sh.saves || {};
-            const anySave = saveDefs.some(([k]) => saves[k] != null || typeof ab[k] === 'number');
-            if (anySave){
+            [['str','STR'],['dex','DEX'],['con','CON'],['int','INT'],['wis','WIS'],['cha','CHA']].forEach(([k, lbl]) => {
+              let v = saves[k];
+              if (v == null && typeof ab[k] === 'number') v = Math.floor((ab[k]-10)/2);
+              if (v == null) return;
+              rolls.push({ key: k, label: lbl + ' save', mod: +v || 0, kind: 'save:' + k });
+            });
+            rollItems.push({ label: '⚡ Initiative (' + sg(ini) + ')', onClick: () => this._cardRoll(cid, rolls[0]) });
+            if (rolls.length > 1){
               rollItems.push({ label: '─────', disabled: true });
-              saveDefs.forEach(([k, lbl]) => {
-                let v = saves[k];
-                if (v == null && typeof ab[k] === 'number') v = Math.floor((ab[k]-10)/2);
-                if (v == null) return;
-                rollItems.push({ label: `${lbl} save (${v>=0?'+':''}${v})`, onClick: () => {
-                  const r = this._rollD20(v, { mode:'normal', label: liveC.name + ' · ' + lbl + ' Save' });
-                  this._setLastRoll(liveC, r);
-                  this._render();
-                }});
-              });
+              rolls.slice(1).forEach(x => rollItems.push({ label: x.label + ' (' + sg(x.mod) + ')', onClick: () => this._cardRoll(cid, x) }));
             }
             if ((liveC.hp || 0) <= 0){
               rollItems.push({ label: '─────', disabled: true });
@@ -3068,8 +3082,20 @@ registerPanel('party',{
                 showToast(liveC.name + ' · death save ' + r.msg);
               }});
             }
+            // Advantage the DM gives, or the die a player rolled at the table.
             rollItems.push({ label: '─────', disabled: true });
-            rollItems.push({ label:'(Hold Shift = adv · Alt = dis when clicking sheet skills)', disabled:true });
+            rollItems.push({ label: '🎲 With advantage, or a die from the table…', onClick: () => {
+              showModal('Roll for ' + liveC.name, [
+                { id: 'what', label: 'Roll', type: 'select', value: 'init', options: rolls.map(x => ({ value: x.key, label: x.label + ' (' + sg(x.mod) + ')' })) },
+                { id: 'mode', label: 'Advantage', type: 'select', value: 'normal', options: [{ value: 'normal', label: 'Normal' }, { value: 'adv', label: 'Advantage' }, { value: 'dis', label: 'Disadvantage' }] },
+                { id: 'die', label: 'The d20 rolled at the table (blank: roll it here)', type: 'number', value: '', min: 1, max: 20 },
+              ], 'Roll').then(v => {
+                if (!v) return;
+                const x = rolls.find(y => y.key === v.what) || rolls[0];
+                const d = parseInt(v.die, 10);
+                this._cardRoll(cid, x, v.mode, d >= 1 && d <= 20 ? d : null);
+              });
+            }});
             showContextMenu(rect.left, rect.bottom + 4, rollItems);
           }
         });
