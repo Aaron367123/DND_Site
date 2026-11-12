@@ -19429,6 +19429,54 @@ for (const cls of Object.keys(rule)) for (let L = 1; L <= 20; L++) for (const sc
       finally { if (TV) { TV._queue = null; TV._initScrolled = null; } state.party = JSON.parse(keepP); state.combatants = JSON.parse(keepC); state.activeCombatantId = keepA; state.combatRound = keepR; save(); TV && TV._body && TV._render(); }
     }
 
+    // -- Round 304: Turn View — Flurry of Blows and Martial Arts' bonus strike run their unarmed strikes, as the Bonus Action, leaving the Action alone --
+    if (!PLAYER){
+      const keepP = JSON.stringify(state.party), keepC = JSON.stringify(state.combatants), keepA = state.activeCombatantId, keepR = state.combatRound; const TV = panelDefs.turnview;
+      // (a built character's sheet activations, as Creambak's are — without a whole build to compute)
+      const keepActs = sktActivationsOf; sktActivationsOf = pc => pc && pc.id === 'r304m' ? pc.sheet.activations : keepActs(pc);
+      try {
+        state.party.push({ id: 'r304m', name: 'Mo', race: 'Human', cls: 'monk', hp: 40, hpMax: 40, ac: 16, spd: 40, rules: '2024', level: 5, abilities: { dex: 16, wis: 14 },
+          resources: [{ name: 'Focus Points', current: 3, max: 3 }],
+          sheet: { attacksPerAction: 2, attacks: [ { name: 'Shortsword', atkBonus: '+6', damage: '1d6+3 piercing' }, { name: 'Unarmed Strike', atkBonus: '+6', damage: '1d8+3 bludgeoning' } ],
+            activations: [
+              { name: 'Unarmed Strike (Martial Arts)', action: 'Bonus Action', feature: 'Martial Arts', dice: '1d8+3', desc: 'Make one Unarmed Strike as a Bonus Action.' },
+              { name: 'Flurry of Blows', action: 'Bonus Action', resource: 'Focus Points', amount: 1, feature: 'Focus', desc: 'Make two unarmed strikes.' },
+              { name: 'Patient Defense', action: 'Bonus Action', feature: 'Focus', desc: 'Take the Disengage action.' } ] } });
+        state.combatants = [
+          { id: 'r304m', name: 'Mo', isPC: true, hp: 40, hpMax: 40, ac: 16, initiative: 20, conditions: [] },
+          { id: 'r304g', name: 'Goblin', isPC: false, hp: 50, hpMax: 50, ac: 30, initiative: 10, initBonus: 0, conditions: [] },
+        ];
+        state.activeCombatantId = 'r304m'; state.combatRound = 1; save();
+        openPanel('turnview'); await sleep(300); TV._queue = null; TV._render(); await sleep(40);
+        const mo = () => state.combatants.find(x => x.id === 'r304m');
+        const act = n => TV._activationsFor(mo()).find(a => a.name === n);
+        const head = () => { const m = TV._body.querySelector('.tv-multi.run'); return m ? m.textContent.replace(/\s+/g, ' ').trim() : ''; };
+        await TV._useActivation('r304m', act('Flurry of Blows').i); await sleep(60);
+        ok('flurry: used — two unarmed strikes to run', /^Flurry of Blows 1\/2 Unarmed Strike/.test(head()) && TV._queue && TV._queue.items.length === 2, head());
+        ok('flurry: a Focus Point and the Bonus Action spent, the Action not', ((state.party.find(p => p.id === 'r304m').resources || [])[0] || {}).current === 2 && mo().bonusUsed === true && !mo().actionUsed,
+           JSON.stringify([((state.party.find(p => p.id === 'r304m').resources || [])[0] || {}).current, mo().bonusUsed, mo().actionUsed]));
+        // The first strike at the goblin (AC 30: it misses, unless a 20).
+        TV._rollQueueStep('r304g'); await sleep(60);
+        ok('flurry: the first strike rolled — on to 2 of 2, the Action still free', /^Flurry of Blows 2\/2/.test(head()) && !mo().actionUsed,head() + ' | ' + mo().actionUsed + ' | ' + TV._log[0]);
+        TV._body.querySelector('[data-tv="qmiss"]').click(); await sleep(60);
+        ok('flurry: done, logged by name', !TV._queue && /Mo<\/strong> Flurry of Blows done/.test(TV._log[0] || ''), TV._log[0]);
+        // Martial Arts: one strike.
+        mo().bonusUsed = false; save();
+        await TV._useActivation('r304m', act('Unarmed Strike (Martial Arts)').i); await sleep(60);
+        ok('martial arts: one unarmed strike to run', TV._queue && TV._queue.items.length === 1 && TV._queue.bonus === true && /^Unarmed Strike \(Martial Arts\) 1\/1/.test(head()), head());
+        TV._body.querySelector('[data-tv="qstop"]').click(); await sleep(40);
+        // A bonus action that strikes nothing starts nothing.
+        mo().bonusUsed = false; save();
+        await TV._useActivation('r304m', act('Patient Defense').i); await sleep(60);
+        ok('patient defense: no strikes to run', !TV._queue, head());
+        // The Attack action's own run still spends the Action.
+        mo().actionUsed = false; save(); TV._render(); await sleep(30);
+        TV._body.querySelector('[data-tv="multi"]').click(); await sleep(40); TV._rollQueueStep('r304g'); await sleep(60);
+        ok('attack ×2 after it: the Action spent', mo().actionUsed === true, String(mo().actionUsed));
+      } catch(e){ ok('round 304 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
+      finally { sktActivationsOf = keepActs; if (TV) TV._queue = null; state.party = JSON.parse(keepP); state.combatants = JSON.parse(keepC); state.activeCombatantId = keepA; state.combatRound = keepR; save(); TV && TV._body && TV._render(); }
+    }
+
     // -- Class features: represented, not just text ------------------------
     {
       try {

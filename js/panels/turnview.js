@@ -649,6 +649,18 @@ registerPanel('turnview', {
     const line = `${a.name}${a.action ? ' (' + a.action + ')' : ''}${spent}`;
     this._log.unshift(`<strong>${esc(who.name)}</strong> — ${esc(line)}${heal ? ' · +' + heal.amt + ' HP' : ''}`);
     this._setResult(`<strong>${esc(who.name)}</strong> uses <strong>${esc(a.name)}</strong>${esc(spent)}${extra}.`, true);
+    // Flurry of Blows ("Make two unarmed strikes"), Martial Arts' bonus
+    // strike: those strikes, run as a Multiattack's are — a target for each.
+    // Its Bonus Action, so they leave the Action alone.
+    const ns = /^Make (one|two|three|four|\d+) unarmed strikes?\b/i.exec(String(a.desc || ''));
+    const list = ns && who.isPC ? this._attacksFor(who) : [];
+    const ua = list.findIndex(x => x && x.pc && /^Unarmed Strike\b/i.test(x.name) && x.dmgText);
+    if (ns && ua >= 0){
+      const n = ({ one: 1, two: 2, three: 3, four: 4 })[ns[1].toLowerCase()] || Math.min(10, +ns[1] || 1);
+      const items = []; for (let k = 0; k < n; k++) items.push({ ai: ua, name: list[ua].name });
+      this._queue = { srcId: who.id, name: who.name, items, i: 0, hits: 0, misses: 0, pc: true, bonus: flag === 'bonusUsed', label: a.name };
+      this._setResultAppend(` <span class="dim">${esc(a.name)} — <b>${esc(list[ua].name)}</b>: pick a target.</span>`);
+    }
     save(); panelDefs.combat?._render?.(); this._render();
   },
   // Collapse state for the features row. A view preference, so localStorage
@@ -1683,7 +1695,7 @@ registerPanel('turnview', {
       // (a legendary action's steps are the legendary creature's, not this one's)
       const qsrc = this._order().find(x => x.id === q.srcId) || c;
       head = `<div class="tv-multi run${q.legendary ? ' legend' : ''}">
-        <span class="tv-multi-tag">${q.lair ? 'Lair' : q.legendary ? 'Legendary' : q.pc ? 'Attack' : 'Multiattack'} ${q.i + 1}/${q.items.length}</span>
+        <span class="tv-multi-tag">${q.lair ? 'Lair' : q.legendary ? 'Legendary' : q.label ? esc(q.label) : q.pc ? 'Attack' : 'Multiattack'} ${q.i + 1}/${q.items.length}</span>
         <span class="tv-multi-text">${q.lair ? esc(q.name) + '’s lair: ' : q.legendary ? esc(q.name) + ' · ' + esc(q.legendary) + ': ' : ''}<b>${esc(it ? it.name : '')}</b> — pick a target on the right</span>
         ${it && it.save ? `<button class="btn" data-tv="qarea" title="Several targets: each rolls its own save, the damage is rolled once">Area…</button>` : ''}
         ${it && (it.choice || []).length > 1 ? `<span class="tv-multi-pick" title="${q.pc ? 'Any of their weapons' : 'The stat block lets this swing be any of these'}">${it.choice.map(ai => {
@@ -3142,7 +3154,7 @@ registerPanel('turnview', {
       hitNote = (hitNote ? hitNote + ' · ' : '') + (nick ? 'Nick: part of the Attack action' : a.offhand ? 'off-hand: its Bonus Action' : 'its Bonus Action')
         + (after ? '' : a.offhand ? ' (after the Attack action with a light weapon)' : ' (after an attack with the first)');
     }
-    else if (!o.queued || (this._queue && this._queue.i === 0 && !this._queue.legendary)) this._spend(c, 'actionUsed');
+    else if (!o.queued || (this._queue && this._queue.i === 0 && !this._queue.legendary && !this._queue.bonus)) this._spend(c, 'actionUsed');
     const bonus = a.pc ? a.bonus : (parseInt(String(a.toHit || '').replace(/[^\d+-]/g, ''), 10) || 0);
     // Dice a state adds to the roll (Bless's d4).
     const extra = (pcSheet.rollDice || []).filter(x => (x.on || []).some(k => atkTags.includes(k))).map(x => ({ label: x.label, n: this._d(x.die) }));
@@ -3260,7 +3272,7 @@ registerPanel('turnview', {
   },
   _finishMulti(stopped){
     const q = this._queue; if (!q) return;
-    this._log.unshift(`<strong>${esc(q.name)}</strong> ${q.legendary ? esc(q.legendary) + (q.lair ? ' (lair)' : ' (legendary)') : q.pc ? 'Attack action' : 'Multiattack'} ${stopped ? 'stopped' : 'done'}`
+    this._log.unshift(`<strong>${esc(q.name)}</strong> ${q.legendary ? esc(q.legendary) + (q.lair ? ' (lair)' : ' (legendary)') : q.label ? esc(q.label) : q.pc ? 'Attack action' : 'Multiattack'} ${stopped ? 'stopped' : 'done'}`
       + ` — ${q.hits} hit${q.hits === 1 ? '' : 's'}` + (q.misses ? `, ${q.misses} missed` : ''));
     this._queue = null;
     this._render();
@@ -3300,7 +3312,7 @@ registerPanel('turnview', {
     }
     if (a.recharge) this._markRechargeSpent(c, a.name);
     this._markUsed(c, a);
-    if (!this._queue || (this._queue.i === 0 && !this._queue.legendary)) this._spend(c, 'actionUsed');
+    if (!this._queue || (this._queue.i === 0 && !this._queue.legendary && !this._queue.bonus)) this._spend(c, 'actionUsed');
     const C = panelDefs.combat;
     // Cover from the creature to its target counts against a Dexterity save
     // (a ray, a line — it starts at the creature).
