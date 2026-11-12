@@ -19035,6 +19035,23 @@ for (const cls of Object.keys(rule)) for (let L = 1; L <= 20; L++) for (const sc
         state.combatants[3].hp = 7; state.combatants[3].dead = true; save();
         C._nextTurn(); C._nextTurn(); await sleep(10);
         ok('skip dead: a monster marked dead is passed as well', at() === 'r293a@3', at());
+        // A troll at 0 still has its turn: it regenerates — or, burned, dies for good.
+        for (let k = 0; k < 100 && !(typeof _5eLoaded !== 'undefined' && _5eLoaded); k++) await sleep(100);
+        state.combatants = [{ id: 'r293h', name: 'Hero', isPC: true, hp: 30, hpMax: 30, ac: 15, initiative: 20, conditions: [] }];
+        C.addMonster(_5eData.find(r => r.cat === 'monster' && r.name === 'Troll' && r._source === 'MM')); await sleep(20);
+        const troll = state.combatants[1]; troll.hp = 0; state.activeCombatantId = 'r293h'; state.combatRound = 1; save();
+        C._nextTurn(); await sleep(10);
+        ok('skip dead: a troll at 0 — its turn comes, and it gets back up', state.activeCombatantId === troll.id && troll.hp === 10, JSON.stringify([state.activeCombatantId === troll.id, troll.hp]));
+        troll.hp = 0; troll.regenHampered = true; C._nextTurn(); await sleep(10);
+        C._nextTurn(); await sleep(10);
+        ok('skip dead: burned at 0 — on its turn it dies, for good', state.activeCombatantId === troll.id && troll.dead === true && troll.hp === 0, JSON.stringify([troll.dead, troll.hp]));
+        C._nextTurn(); C._nextTurn(); await sleep(10);
+        ok('skip dead: …and from then on it has no turn, nor regenerates', state.activeCombatantId === 'r293h' && troll.hp === 0, JSON.stringify([state.activeCombatantId, troll.hp]));
+        // Healed back up by the DM: its turns again.
+        C._applyHpDelta(1, 20, null); await sleep(10);
+        ok('skip dead: healed to 20 — no longer dead', !troll.dead && state.combatants[1].hp === 20, JSON.stringify([state.combatants[1].dead, state.combatants[1].hp]));
+        C._nextTurn(); await sleep(10);
+        ok('skip dead: …and its turn comes again', state.activeCombatantId === state.combatants[1].id, state.activeCombatantId);
       } catch(e){ ok('round 293 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
       finally { state.combatants = JSON.parse(keepC); state.activeCombatantId = keepA; state.combatRound = keepR; state.settings = JSON.parse(keepS); save(); C._render(); }
     }

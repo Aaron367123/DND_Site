@@ -93,6 +93,9 @@ registerPanel('combat',{
         if (next.dead)       next.dead = undefined;
         state.combatants[i] = next;
       }
+      if (f === 'hp' && !state.combatants[i].isPC && val > 0 && state.combatants[i].dead){
+        const next = {...state.combatants[i]}; delete next.dead; state.combatants[i] = next;
+      }
       // Mirror to the party slot BEFORE saving so localStorage (and the
       // resulting Firebase push) captures both halves in one consistent
       // write — see the matching comment in party.js.
@@ -1770,6 +1773,8 @@ registerPanel('combat',{
     if (hampered && !amt){
       this._log(`${c.name}'s ${r.name} doesn't work this turn — it took ${by || 'the damage that stops it'}`);
       if (hp <= 0 && r.atZero){
+        // Dead for good: it doesn't get back up on a later turn.
+        c.dead = true;
         this._log(`${c.name} starts its turn at 0 hit points and doesn't regenerate: it dies`);
         if (typeof showToast === 'function') showToast(`💀 ${c.name} dies — it couldn't regenerate`, { alert: true });
       }
@@ -1885,8 +1890,16 @@ registerPanel('combat',{
   },
 
   // A creature with no turn to take: a monster (or any non-character) at
-  // 0 HP or marked dead. Characters at 0 make death saves on their turn.
-  _noTurn(c){ return !!c && !c.isPC && ((c.hp || 0) <= 0 || !!c.dead); },
+  // 0 HP or marked dead. Characters at 0 make death saves on their turn, and
+  // a troll at 0 still has one: it "dies only if it starts its turn with 0
+  // hit points and doesn't regenerate" (Regeneration that works at 0).
+  _noTurn(c){
+    if (!c || c.isPC) return false;
+    if (c.dead) return true;
+    if ((c.hp || 0) > 0) return false;
+    const r = this._regenFor(c);
+    return !(r && r.atZero && !r.needHp);
+  },
 
   // Step back one turn. Mirror of _nextTurn but in reverse. Crossing into
   // the previous round decrements the counter; doesn't undo buff/reaction/
@@ -2470,6 +2483,8 @@ registerPanel('combat',{
         if (c.stable)     delete c.stable;
         if (c.dead)       delete c.dead;
       }
+      // A monster brought back above 0 is back in the order too.
+      if (!c.isPC && c.hp > 0 && c.dead) delete c.dead;
       this._log(c.name + ' healed ' + (logHealParts.join(' + ') || '0') + ' HP');
     }
     save();
