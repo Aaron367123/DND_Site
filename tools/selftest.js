@@ -18996,6 +18996,48 @@ for (const cls of Object.keys(rule)) for (let L = 1; L <= 20; L++) for (const sc
       } catch(e){ ok('round 292 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
       finally { state.combatants = JSON.parse(keepC); state.activeCombatantId = keepA; state.settings = JSON.parse(keepS); save(); C._render(); }
     }
+    // -- Round 293: Next and Back pass over dead monsters; a character at 0 keeps their turn (death saves) --
+    if (!PLAYER){
+      const keepC = JSON.stringify(state.combatants), keepA = state.activeCombatantId, keepR = state.combatRound, keepS = JSON.stringify(state.settings || {});
+      const C = panelDefs.combat;
+      try {
+        state.settings.combatGroupSimilar = false;
+        state.combatants = [
+          { id: 'r293a', name: 'Goblin A', hp: 7, hpMax: 7, ac: 15, initiative: 20, conditions: [] },
+          { id: 'r293b', name: 'Ogre B', hp: 0, hpMax: 59, ac: 11, initiative: 18, conditions: [] },
+          { id: 'r293c', name: 'Zo', isPC: true, hp: 0, hpMax: 40, ac: 15, initiative: 15, conditions: ['Unconscious'], deathSaves: { success: 0, fail: 1 } },
+          { id: 'r293d', name: 'Goblin D', hp: 7, hpMax: 7, ac: 15, initiative: 10, conditions: [] },
+          { id: 'r293e', name: 'Ogre E', hp: 0, hpMax: 59, ac: 11, initiative: 5, conditions: [] },
+        ];
+        state.combatRound = 1; state.activeCombatantId = 'r293a'; save();
+        openPanel('combat'); await sleep(200); C._render(); await sleep(20);
+        const at = () => state.activeCombatantId + '@' + state.combatRound;
+        C._nextTurn(); await sleep(10);
+        ok('skip dead: from Goblin A — past the dead ogre to Zo (at 0, but dying: her turn)', at() === 'r293c@1', at());
+        C._nextTurn(); await sleep(10);
+        ok('skip dead: then Goblin D', at() === 'r293d@1', at());
+        C._nextTurn(); await sleep(10);
+        ok('skip dead: past the dead ogre at the end, round 2 begins with Goblin A', at() === 'r293a@2', at());
+        C._prevTurn(); await sleep(10);
+        ok('skip dead: Back — past the dead ogre, Goblin D, round 1', at() === 'r293d@1', at());
+        C._prevTurn(); C._prevTurn(); await sleep(10);
+        ok('skip dead: Back twice — Zo, then past the dead ogre to Goblin A', at() === 'r293a@1', at());
+        C._prevTurn(); await sleep(10);
+        ok('skip dead: Back at the first turn of round 1 — stays', at() === 'r293a@1', at());
+        // Zo dies: her turn goes too? No — a character keeps a place; the DM removes the dead.
+        // Only Goblin A standing: Next gives it the next round.
+        state.combatants[3].hp = 0; save();
+        C._nextTurn(); await sleep(10);
+        ok('skip dead: only Goblin A and Zo left — Zo', at() === 'r293c@1', at());
+        C._nextTurn(); await sleep(10);
+        ok('skip dead: …then round 2, Goblin A again', at() === 'r293a@2', at());
+        // A monster marked dead with HP left over (a removed-from-play marker) is passed too.
+        state.combatants[3].hp = 7; state.combatants[3].dead = true; save();
+        C._nextTurn(); C._nextTurn(); await sleep(10);
+        ok('skip dead: a monster marked dead is passed as well', at() === 'r293a@3', at());
+      } catch(e){ ok('round 293 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
+      finally { state.combatants = JSON.parse(keepC); state.activeCombatantId = keepA; state.combatRound = keepR; state.settings = JSON.parse(keepS); save(); C._render(); }
+    }
     // -- Class features: represented, not just text ------------------------
     {
       try {

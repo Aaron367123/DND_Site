@@ -1821,11 +1821,15 @@ registerPanel('combat',{
       this._regenerate(state.activeCombatantId);
     } else {
       const prevInit = +state.combatants[cur].initiative || 0;
-      let ni = cur + 1, wrapped = false;
-      if (ni >= state.combatants.length){
-        ni = 0; wrapped = true;
-        this._startRound((state.combatRound || 1) + 1);
-      }
+      // Past the dead: a monster at 0 HP has no turn to take (even a troll
+      // regenerates only with 1 HP or more), and the DM was clicking past
+      // every fallen one, every round. A character at 0 keeps theirs — it is
+      // their death save.
+      const n = state.combatants.length;
+      let ni = cur, wrapped = false, steps = 0;
+      do { ni++; if (ni >= n){ ni = 0; wrapped = true; } steps++; }
+      while (steps < n && ni !== cur && this._noTurn(state.combatants[ni]));
+      if (wrapped) this._startRound((state.combatRound || 1) + 1);
       state.activeCombatantId = state.combatants[ni].id;
       // Initiative count 20 falls between the last creature at 20 or above
       // and the first below it — or at the very top of a round in which
@@ -1880,6 +1884,10 @@ registerPanel('combat',{
     this._log(`${c.name} removed — turn passes to ${state.combatants[ni].name}`);
   },
 
+  // A creature with no turn to take: a monster (or any non-character) at
+  // 0 HP or marked dead. Characters at 0 make death saves on their turn.
+  _noTurn(c){ return !!c && !c.isPC && ((c.hp || 0) <= 0 || !!c.dead); },
+
   // Step back one turn. Mirror of _nextTurn but in reverse. Crossing into
   // the previous round decrements the counter; doesn't undo buff/reaction/
   // legendary side-effects (those are state mutations, not the timeline).
@@ -1895,12 +1903,17 @@ registerPanel('combat',{
       // backwards for no reason.
       state.activeCombatantId = state.combatants[state.combatants.length-1].id;
     } else {
-      let pi = cur - 1;
-      if (pi < 0){
-        if (round <= 1){ showToast('Already at start of round 1'); return; }
-        pi = state.combatants.length - 1;
-        round -= 1;
-      }
+      // Back past the dead too, as Next goes forward past them.
+      const n = state.combatants.length;
+      let pi = cur, steps = 0;
+      do {
+        pi--;
+        if (pi < 0){
+          if (round <= 1){ showToast('Already at start of round 1'); return; }
+          pi = n - 1; round -= 1;
+        }
+        steps++;
+      } while (steps < n && pi !== cur && this._noTurn(state.combatants[pi]));
       state.activeCombatantId = state.combatants[pi].id;
       state.combatRound = round;
     }
