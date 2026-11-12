@@ -1428,6 +1428,10 @@ registerPanel('turnview', {
         <div class="tv-actor-id">
           <div class="tv-actor-name">${esc(c.name)}</div>
           <div class="tv-actor-sub">${esc(sub)}</div>
+          ${p && typeof openCharSheet === 'function' ? `<div class="tv-sheetlinks">
+            <button class="btn small" data-tv="sheet" data-id="${esc(p.id)}" title="${esc(p.name)}'s character sheet">${ICO('i-scroll')}Sheet</button>
+            ${((p.sheet || {}).spells || []).length ? `<button class="btn small" data-tv="sheet" data-id="${esc(p.id)}" data-tab="spells" title="Cast from ${esc(p.name)}'s spells — a save spell comes back here to run, its damage to apply">Spells</button>` : ''}
+          </div>` : ''}
         </div>
         <div class="tv-vitals">
           <div class="tv-vital"><div class="l">${ws ? 'BEAST HP' : 'HP'}</div><div class="v">${
@@ -4871,6 +4875,9 @@ registerPanel('turnview', {
         if (cur){ cur[el.dataset.k] = !cur[el.dataset.k]; save(); panelDefs.combat?._render?.(); this._render(); }
       }
       else if (act === 'stdact'){ this._takeStandardAction(el.dataset.a); }
+      // A character's sheet, from their turn: their spells, everything else
+      // the panel doesn't draw. What they cast comes back here.
+      else if (act === 'sheet'){ if (typeof openCharSheet === 'function') openCharSheet(el.dataset.id, el.dataset.tab ? { tab: el.dataset.tab } : {}); }
       else if (act === 'cover'){
         const c = this._active(), t = this._armed && this._order().find(x => x.id === this._armed);
         if (c && t){ const k = this._coverKey(c, t), v = el.dataset.v;

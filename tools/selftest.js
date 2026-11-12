@@ -19670,6 +19670,32 @@ for (const cls of Object.keys(rule)) for (let L = 1; L <= 20; L++) for (const sc
       finally { state.party = JSON.parse(keepP); state.combatants = JSON.parse(keepC); state.activeCombatantId = keepA; save(); TV && TV._body && TV._render(); }
     }
 
+    // -- Round 312: a character's turn links to their sheet, and to its Spells tab when they have spells; a monster's has neither --
+    if (!PLAYER){
+      const keepP = JSON.stringify(state.party), keepC = JSON.stringify(state.combatants), keepA = state.activeCombatantId; const TV = panelDefs.turnview;
+      try {
+        state.party.push({ id: 'r312c', name: 'Cass', cls: 'wizard', level: 5, hp: 30, hpMax: 30, ac: 12, sheet: { spells: ['Fire Bolt', 'Shield'] } });
+        state.party.push({ id: 'r312f', name: 'Finn', cls: 'fighter', level: 5, hp: 40, hpMax: 40, ac: 16, sheet: {} });
+        const pc = id => ({ id, name: id, isPC: true, hp: 30, hpMax: 30, ac: 12, initiative: 20, conditions: [] });
+        state.combatants = [pc('r312c'), pc('r312f'), { id: 'r312o', name: 'Orc', isPC: false, hp: 15, hpMax: 15, ac: 13, initiative: 8, initBonus: 0, conditions: [] }];
+        state.activeCombatantId = 'r312c'; save();
+        openPanel('turnview'); await sleep(300); TV._render(); await sleep(40);
+        const links = () => [...TV._body.querySelectorAll('.tv-actor-head [data-tv="sheet"]')].map(b => b.textContent.trim() + (b.dataset.tab ? ':' + b.dataset.tab : ''));
+        ok('sheet links: a caster — Sheet and Spells', links().join('|') === 'Sheet|Spells:spells', links().join('|'));
+        TV._body.querySelector('.tv-actor-head [data-tv="sheet"][data-tab="spells"]').click(); await sleep(150);
+        ok('sheet links: Spells opens Cass’s sheet on its Spells tab', !!document.getElementById('cs-root') && CS && CS.id === 'r312c' && CS.tab === 'spells', JSON.stringify(CS && [CS.id, CS.tab]));
+        document.getElementById('cs-root')?.remove();
+        state.activeCombatantId = 'r312f'; save(); TV._render(); await sleep(40);
+        ok('sheet links: no spells — just Sheet', links().join('|') === 'Sheet', links().join('|'));
+        TV._body.querySelector('.tv-actor-head [data-tv="sheet"]').click(); await sleep(150);
+        ok('sheet links: Sheet opens Finn’s', !!document.getElementById('cs-root') && CS && CS.id === 'r312f', JSON.stringify(CS && CS.id));
+        document.getElementById('cs-root')?.remove();
+        state.activeCombatantId = 'r312o'; save(); TV._render(); await sleep(40);
+        ok('sheet links: a monster — none', links().length === 0, links().join('|'));
+      } catch(e){ ok('round 312 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
+      finally { document.getElementById('cs-root')?.remove(); state.party = JSON.parse(keepP); state.combatants = JSON.parse(keepC); state.activeCombatantId = keepA; save(); TV && TV._body && TV._render(); }
+    }
+
     // -- Class features: represented, not just text ------------------------
     {
       try {
