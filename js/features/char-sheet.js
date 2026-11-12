@@ -2145,6 +2145,10 @@ function csSpellsClick(e, t, d, pc){
         u.r.current = (+u.r.current || 0) - (u.a.amount || 1); used = u.a;
       }
       csCastEffects(p, name);
+      // A spell its targets save against, cast in a fight: the DM's Turn
+      // View offers the saves, filled in (csSaveRequest).
+      const rq = typeof csSaveRequest === 'function' ? csSaveRequest(p, s, /^\d+$/.test(how) && +how > 0 ? +how : (s && s.level)) : null;
+      if (rq) p.castReq = (p.castReq || []).slice(-2).concat([rq]);
       const t = s && [].concat(s.time || [])[0];
       if (CS.embed && t && how !== 'ritual' && typeof paMarkEcon === 'function' && typeof paActKind === 'function') paMarkEcon(paActKind(t.unit));
     });
@@ -2153,6 +2157,19 @@ function csSpellsClick(e, t, d, pc){
     return true;
   }
   return false;
+}
+// What the DM needs to run a cast spell's saves: the save, the caster's DC,
+// the damage at the slot it was cast with (and its type), and whether a
+// success halves it. Only a levelled spell, cast by someone in the fight.
+function csSaveRequest(p, s, lvl){
+  if (!p || !s || !(s.level > 0)) return null;
+  const ab = [].concat(s.savingThrow || [])[0]; if (!ab) return null;
+  const dc = parseInt((p.sheet || {}).spellSaveDc, 10); if (!(dc > 0)) return null;
+  if (!(typeof state !== 'undefined' && (state.combatants || []).some(c => c && c.id === p.id))) return null;
+  const dice = csSpellDamage(s, lvl) || '';
+  return { id: typeof uid === 'function' ? uid() : String(Date.now()), spell: s.name, lvl: lvl || s.level,
+    ab: String(ab).slice(0, 3).toUpperCase(), dc, dice, type: dice ? String([].concat(s.damageInflict || [])[0] || '') : '',
+    half: /half as much damage/i.test(JSON.stringify(s.entries || [])), at: Date.now() };
 }
 // A summoning spell cast during a fight offers its creature: which one (Find
 // Familiar's forms, Animate Dead's skeleton or zombie) and how many, then in

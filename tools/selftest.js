@@ -18669,6 +18669,66 @@ for (const cls of Object.keys(rule)) for (let L = 1; L <= 20; L++) for (const sc
       finally { window.sktD = keepD; window.showConfirm = keepAsk; window.sktStatesSyncAll = keepSync; T._pending = null;
         state.party = JSON.parse(keepP); state.combatants = JSON.parse(keepC); state.activeCombatantId = keepA; state.combatRound = keepR; save(); }
     }
+    // -- Round 283: a save spell cast on a character's sheet reaches the DM's Turn View: Run the saves opens them filled in (DEX DC, 8d6 fire, half) --
+    if (!PLAYER){
+      const keepC = JSON.stringify(state.combatants), keepA = state.activeCombatantId, keepP = JSON.stringify(state.party), keepR = state.combatRound;
+      const T = panelDefs.turnview, C = panelDefs.combat, keepAsk = window.showConfirm;
+      try {
+        for (let k = 0; k < 100 && !(typeof _5eLoaded !== 'undefined' && _5eLoaded); k++) await sleep(100);
+        const find = (n, src) => _5eData.find(r => r.cat === 'monster' && r.name === n && r._source === src);
+        const R = await sktRulesLoad('2014');
+        const b = Object.assign(sktBlankBuild('2014'), { name: 'Zin', species: 'Elf', subspecies: 'High', cls: 'Wizard', subclass: 'Evocation', level: 5, background: 'Sage',
+          abilities: { method: 'manual', base: { str: 8, dex: 14, con: 14, int: 16, wis: 12, cha: 10 } }, skills: ['arcana', 'investigation'],
+          cantrips: ['Fire Bolt', 'Mage Hand', 'Light'], spellbook: ['Magic Missile', 'Shield', 'Fireball', 'Hold Person', 'Sleep', 'Detect Magic'],
+          spells: ['Magic Missile', 'Shield', 'Fireball', 'Hold Person'], speciesChoice: { spells: ['Prestidigitation'] } });
+        const rec = sktComputeCharacter(b, R); rec.id = 'r283z'; state.party.push(rec);
+        state.combatants = [];
+        C.addMonster(find('Goblin', 'MM')); C.addMonster(find('Ogre', 'MM')); await sleep(20);
+        const gbId = state.combatants[0].id, me = () => state.party.find(p => p.id === 'r283z');
+        state.combatRound = 1; state.activeCombatantId = gbId; save();
+        window.showConfirm = async () => false;
+        openCharSheet('r283z'); await sleep(400);
+        const root = () => document.getElementById('cs-root');
+        const click = s => { const e = root().querySelector(s); if (!e) throw new Error('missing ' + s); e.click(); };
+        click('[data-cs-tab="spells"]'); await sleep(40);
+        // Not in the fight: nothing for the DM.
+        click('[data-cs-cast="Fireball:3"]'); await sleep(40);
+        ok('cast save: out of the fight — no request', !(me().castReq || []).length, JSON.stringify(me().castReq));
+        // In the fight.
+        state.combatants.push({ id: 'r283z', name: 'Zin', isPC: true, hp: me().hp, hpMax: me().hpMax, ac: me().ac, initiative: 12, conditions: [] }); save();
+        click('[data-cs-cast="Fireball:3"]'); await sleep(40);
+        const rq = (me().castReq || [])[0] || {};
+        ok('cast save: Fireball in the fight — DEX, its DC, 8d6 fire, half on a save', rq.spell === 'Fireball' && rq.ab === 'DEX' && rq.dc === +me().sheet.spellSaveDc && rq.dice === '8d6' && rq.type === 'fire' && rq.half === true, JSON.stringify(rq));
+        click('[data-cs-cast="Magic Missile:1"]'); await sleep(40);
+        ok('cast save: Magic Missile — no save, no request', (me().castReq || []).length === 1);
+        click('[data-cs-cast="Hold Person:2"]'); await sleep(40);
+        const hp = (me().castReq || [])[1] || {};
+        ok('cast save: Hold Person — WIS, no damage', hp.spell === 'Hold Person' && hp.ab === 'WIS' && !hp.dice, JSON.stringify(hp));
+        // At a higher slot, the damage grows.
+        const up = csSaveRequest(me(), sktRulesSpell(R, 'Fireball'), 5);
+        ok('cast save: cast at 5th level — 10d6', up && up.dice === '10d6', JSON.stringify(up));
+        csClose(); await sleep(50);
+        // The DM's Turn View.
+        openPanel('turnview'); await sleep(200); T._render(); await sleep(20);
+        const bars = () => [...T._body.querySelectorAll('.tv-castreq')];
+        ok('cast save: the Turn View shows both, with Run the saves', bars().length === 2 && /Zin.*cast.*Fireball/.test(bars()[0].textContent) && /DEX save DC/.test(bars()[0].textContent) && !!bars()[0].querySelector('[data-tv="castrun"]'),
+           bars().map(x => x.textContent.replace(/\s+/g, ' ')).join(' | '));
+        T._armed = gbId; T._render(); await sleep(10);
+        bars()[0].querySelector('[data-tv="castrun"]').click(); await sleep(40);
+        const dlg = () => document.getElementById('area-save-back');
+        ok('cast save: Run — the area save, filled in: DEX, the DC, 8d6 fire, the goblin ticked, Zin left out',
+           !!dlg() && dlg().querySelector('#as-ab').value === 'DEX' && dlg().querySelector('#as-dc').value === String(rq.dc) && dlg().querySelector('#as-dmg').value === '8d6 fire'
+           && !!dlg().querySelector('#as-targets input[value="' + gbId + '"]:checked') && !dlg().querySelector('#as-targets input[value="r283z"]') && dlg().querySelector('#as-spell').checked,
+           dlg() && JSON.stringify([dlg().querySelector('#as-ab').value, dlg().querySelector('#as-dc').value, dlg().querySelector('#as-dmg').value]));
+        dlg().querySelector('[data-as="roll"]').click(); await sleep(20);
+        dlg().querySelector('[data-as="apply"]').click(); await sleep(50);
+        ok('cast save: applied — that request is gone, Hold Person’s stays', (me().castReq || []).length === 1 && me().castReq[0].spell === 'Hold Person' && bars().length === 1, JSON.stringify(me().castReq));
+        bars()[0].querySelector('[data-tv="castdrop"]').click(); await sleep(20);
+        ok('cast save: Dismiss — gone', !(me().castReq || []).length && !bars().length);
+      } catch(e){ ok('round 283 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
+      finally { window.showConfirm = keepAsk; T._pending = null; T._armed = null; document.getElementById('area-save-back')?.remove(); try { csClose(); } catch(e){}
+        state.party = JSON.parse(keepP); state.combatants = JSON.parse(keepC); state.activeCombatantId = keepA; state.combatRound = keepR; save(); }
+    }
     // -- Class features: represented, not just text ------------------------
     {
       try {

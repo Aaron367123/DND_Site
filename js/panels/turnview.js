@@ -1577,7 +1577,7 @@ registerPanel('turnview', {
     // the pips were only drawn for a creature with attacks to roll.
     // (Unless a legendary action off this turn is waiting for its targets.)
     if (!list.length && !this._queue){
-      return `<div class="tv-actions-wrap"><div class="tv-actions">${this._renderReadied(c)}${this._incapNote(c)}${this._renderEconomy(c)}${this._renderCompanions(c)}${this._renderClassRow(c)}${manual}</div></div>`;
+      return `<div class="tv-actions-wrap"><div class="tv-actions">${this._renderCastReqs()}${this._renderReadied(c)}${this._incapNote(c)}${this._renderEconomy(c)}${this._renderCompanions(c)}${this._renderClassRow(c)}${manual}</div></div>`;
     }
     const manualSlot = this._manualOpen ? manual
       : `<button class="tv-manual-open" data-tv="manualopen">✎ Rolled it yourself?</button>`;
@@ -1677,7 +1677,7 @@ registerPanel('turnview', {
     // (the DM may have left a condition on by mistake).
     const incapNote = this._incapNote(c);
     return `<div class="tv-actions-wrap">
-      <div class="tv-actions">${this._renderReadied(c)}${incapNote}${this._renderEconomy(c)}${this._renderCompanions(c)}${this._renderClassRow(c)}${head}${this._renderBonusActions(c)}${advBar}${rows}</div>
+      <div class="tv-actions">${this._renderCastReqs()}${this._renderReadied(c)}${incapNote}${this._renderEconomy(c)}${this._renderCompanions(c)}${this._renderClassRow(c)}${head}${this._renderBonusActions(c)}${advBar}${rows}</div>
       ${manualSlot}
     </div>`;
   },
@@ -3331,6 +3331,30 @@ registerPanel('turnview', {
   },
   // Others holding a readied action, while `c` is up: each with Take it
   // (its reaction) and Let it go. Not one that can't take reactions now.
+  // A spell a character cast on their own sheet or phone that its targets
+  // save against (Fireball, Hold Person): the saves one click away, filled
+  // in — save, DC, damage at the slot. Stays until run or dismissed.
+  _castReqs(){
+    return (state.party || []).filter(p => p && Array.isArray(p.castReq) && p.castReq.length && this._order().some(c => c.id === p.id))
+      .flatMap(p => p.castReq.map(r => ({ p, r })));
+  },
+  _renderCastReqs(){
+    const list = this._castReqs(); if (!list.length) return '';
+    return list.map(({ p, r }) => `<div class="tv-readied tv-castreq">📜 <span><strong>${esc(p.name)}</strong> cast <strong>${esc(r.spell)}</strong>${r.lvl ? ' (level ' + r.lvl + ')' : ''} — ${esc(r.ab)} save DC ${+r.dc}${r.dice ? ', ' + esc(r.dice) + (r.type ? ' ' + esc(r.type) : '') + (r.half ? ', half on a save' : '') : ''}</span>
+        <button class="btn small primary" data-tv="castrun" data-p="${esc(p.id)}" data-id="${esc(r.id)}">Run the saves</button>
+        <button class="btn small" data-tv="castdrop" data-p="${esc(p.id)}" data-id="${esc(r.id)}" title="Not needed">Dismiss</button></div>`).join('');
+  },
+  _castReqAct(pid, rid, run){
+    const p = (state.party || []).find(x => x.id === pid); if (!p || !Array.isArray(p.castReq)) return;
+    const r = p.castReq.find(x => x.id === rid); if (!r) return;
+    const drop = () => { const q = (state.party || []).find(x => x.id === pid); if (q && Array.isArray(q.castReq)) q.castReq = q.castReq.filter(x => x.id !== rid); save(); this._render(); };
+    if (!run) return drop();
+    const C = panelDefs.combat; if (!C || typeof C.openAreaSave !== 'function') return;
+    const parts = r.dice ? String(r.dice).split(/\s*\+\s*(?=\d*d\d)/).map(d => ({ dice: d.replace(/\s+/g, ''), type: r.type || '' })) : [];
+    C.openAreaSave({ name: p.name + ' · ' + r.spell, ab: r.ab, dc: r.dc, parts, half: r.half !== false, exclude: p.id, spell: true,
+      targets: this._armed && this._armed !== p.id ? [this._armed] : [], src: { id: p.id, name: p.name },
+      onApplied: () => { drop(); } });
+  },
   _renderReadied(c){
     const held = this._order().filter(x => x.readied && (!c || x.id !== c.id) && !x.reactionUsed && (x.hp || 0) > 0 && !this._incap(x));
     if (!held.length) return '';
@@ -4690,6 +4714,7 @@ registerPanel('turnview', {
       else if (act === 'pcmissx'){ this._lastPcMiss = null; this._render(); }
       else if (act === 'pcxx'){ this._lastPcHit = null; this._render(); }
       else if (act === 'standup'){ this._standUp(this._active()); }
+      else if (act === 'castrun' || act === 'castdrop'){ this._castReqAct(el.dataset.p, el.dataset.id, act === 'castrun'); }
       else if (act === 'unhide'){ const c = this._active(); if (c && c.hidden){ c.hidden = null; this._log.unshift(`<strong>${esc(c.name)}</strong> is no longer hidden`); save(); this._render(); } }
       else if (act === 'bonusact'){ this._useBonusAction(+el.dataset.ai); }
       else if (act === 'undo'){ if (typeof sktUndo === 'function') sktUndo(); else this._undoLast(); }
