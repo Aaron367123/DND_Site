@@ -19477,6 +19477,40 @@ for (const cls of Object.keys(rule)) for (let L = 1; L <= 20; L++) for (const sc
       finally { sktActivationsOf = keepActs; if (TV) TV._queue = null; state.party = JSON.parse(keepP); state.combatants = JSON.parse(keepC); state.activeCombatantId = keepA; state.combatRound = keepR; save(); TV && TV._body && TV._render(); }
     }
 
+    // -- Round 305: the reaction prompt names every damage type ("7 piercing + 18 poison", not "25 piercing"); a monster that can be either size says so --
+    if (!PLAYER){
+      const keepC = JSON.stringify(state.combatants), keepA = state.activeCombatantId, keepPr = JSON.stringify(state.prompt || null); const TV = panelDefs.turnview;
+      try {
+        state.combatants = [
+          { id: 'r305s', name: 'Assassin', baseName: 'Assassin', _slug: 'assassin', _source: 'XMM', isPC: false, hp: 97, hpMax: 97, ac: 16, initiative: 20, initBonus: 0, conditions: [] },
+          { id: 'r305t', name: 'Tess', isPC: false, hp: 40, hpMax: 40, ac: 14, initiative: 10, initBonus: 0, conditions: [] },
+        ];
+        state.activeCombatantId = 'r305s'; save();
+        openPanel('turnview'); await sleep(300); TV._render(); await sleep(60);
+        const tgt = state.combatants[1];
+        const o = { attackerId: 'r305s', attacker: 'Assassin', label: 'Shortsword', target: tgt, total: 18, hit: true, dmg: 25, type: 'piercing',
+                    parts: [{ amt: 7, type: 'piercing' }, { amt: 18, type: 'poison' }], acBonus: 0 };
+        TV._pending = o; TV._render(); await sleep(40);
+        const note = () => (TV._body.querySelector('.tv-react-note') || {}).textContent || '';
+        ok('reaction prompt: every type — “Tess takes 7 piercing + 18 poison”', /^Tess takes 7 piercing \+ 18 poison/.test(note().trim()), note());
+        ok('reaction prompt: one type, said once — “12 slashing”', TV._dmgWords({ dmg: 12, type: 'slashing', parts: [{ amt: 12, type: 'slashing' }] }) === '12 slashing'
+           && TV._dmgWords({ dmg: 9, type: 'fire', parts: [{ amt: 9, type: 'fire' }, { amt: 0, type: 'poison' }] }) === '9 fire', TV._dmgWords({ dmg: 12, type: 'slashing', parts: [{ amt: 12, type: 'slashing' }] }));
+        // What the players' phones are sent says it too.
+        const keepG = TV._gatherReactions;
+        try {
+          TV._gatherReactions = () => [{ who: { isPC: true, id: 'r305p', name: 'Pat' }, r: { key: 'shield', name: 'Shield' }, ft: 0 }];
+          TV._publishPrompt(o);
+          ok('reaction prompt: the phones are sent “7 piercing + 18 poison”', state.prompt && state.prompt.dmgText === '7 piercing + 18 poison', JSON.stringify(state.prompt && state.prompt.dmgText));
+        } finally { TV._gatherReactions = keepG; }
+        TV._pending = null; TV._render(); await sleep(30);
+        // The 2024 Assassin is Small or Medium.
+        const sub = () => (TV._body.querySelector('.tv-actor-sub') || {}).textContent || '';
+        let tries = 0; while (!/humanoid/i.test(sub()) && tries++ < 30){ await sleep(100); TV._render(); }
+        ok('monster sizes: the 2024 Assassin — “Small or Medium humanoid · CR 8”', /^Small or Medium humanoid · CR 8$/i.test(sub().trim()), sub());
+      } catch(e){ ok('round 305 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
+      finally { if (TV) TV._pending = null; state.combatants = JSON.parse(keepC); state.activeCombatantId = keepA; state.prompt = JSON.parse(keepPr); save(); TV && TV._body && TV._render(); }
+    }
+
     // -- Class features: represented, not just text ------------------------
     {
       try {
@@ -22390,6 +22424,23 @@ for (const cls of Object.keys(rule)) for (let L = 1; L <= 20; L++) for (const sc
           ok('player strip: round 2, the first — scrolled back to it', inView() === true, inView());
         } catch(e){ ok('round 291 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
         finally { state.sharedPanels = S0; state.activeCombatantId = A0; state.combatants = JSON.parse(C0); state.combatRound = R0; paRender(); }
+      }
+      // -- A reaction asked on this phone names every damage type --
+      {
+        const keepPr = JSON.stringify(state.prompt || null);
+        try {
+          const me = paMe().pcId || (state.party[0] || {}).id;
+          if (!paMe().pcId) paSetPc(me);
+          const ask = extra => { state.prompt = Object.assign({ id: 'p_r306' + Math.random().toString(36).slice(2, 6), ts: Date.now(), attacker: 'Assassin', label: 'Shortsword',
+            target: { id: me, name: 'Me' }, hit: true, total: 18, ac: 14, dmg: 25, type: 'piercing',
+            offers: [{ pcId: me, who: 'Me', key: 'shield', name: 'Shield', note: '', cost: '', ft: 0 }] }, extra); paRenderPrompt(); };
+          const line = () => ((document.querySelector('#pa-prompt .pa-prompt-line') || {}).textContent || '').replace(/\s+/g, ' ').trim();
+          ask({ dmgText: '7 piercing + 18 poison' }); await sleep(40);
+          ok('player: a reaction prompt — “for 7 piercing + 18 poison”', /for 7 piercing \+ 18 poison$/.test(line()), line());
+          ask({}); await sleep(40);
+          ok('player: from a DM page without it — “for 25 piercing”, as before', /for 25 piercing$/.test(line()), line());
+        } catch(e){ ok('player reaction prompt threw', false, e.message); }
+        finally { state.prompt = JSON.parse(keepPr); if (typeof paRenderPrompt === 'function') paRenderPrompt(); }
       }
   }
 

@@ -2635,13 +2635,19 @@ registerPanel('turnview', {
       ? `<span class="tv-waiting">${ICO('i-monitor')}asked ${esc(state.prompt.offers.map(x => x.who)
           .filter((v, i, a) => a.indexOf(v) === i).join(', '))}</span>` : '';
     return `<div class="tv-react"><span class="tv-react-l">Reaction?</span>${waiting}
-      <span class="tv-react-note">${esc(o.target.name)} ${o.hit ? `takes ${o.dmg} ${esc(o.type || 'damage')}` : 'was missed'}${
+      <span class="tv-react-note">${esc(o.target.name)} ${o.hit ? `takes ${esc(this._dmgWords(o))}` : 'was missed'}${
         o.total == null ? '' : ` — ${o.total} vs AC ${(o.target.ac || 0) + (o.acBonus || 0)}`}</span>
       ${opts}
       <button class="btn primary" data-tv="react" data-who="" data-key="__none">${o.hit ? `Take ${o.dmg}` : 'Let it miss'}</button>
     </div>`;
   },
 
+  // "7 piercing + 18 poison", as the hit line has it: the reaction prompt said
+  // "25 piercing" and hid the poison, which is what decides a resistance.
+  _dmgWords(o){
+    const ps = (o.parts || []).filter(p => p && p.amt);
+    return ps.length > 1 ? ps.map(p => p.amt + ' ' + (p.type || 'damage')).join(' + ') : o.dmg + ' ' + (o.type || 'damage');
+  },
   _setResult(html, live){ this._result = html; this._resultLive = !!live; },
 
   // ─── One step back ────────────────────────────────────────────────────────
@@ -2780,7 +2786,7 @@ registerPanel('turnview', {
       ts: Date.now(),
       attacker: o.attacker, label: o.label,
       target: { id: o.target.id, name: o.target.name },
-      hit: !!o.hit, total: o.total, ac: o.target.ac, dmg: o.dmg, type: o.type || '',
+      hit: !!o.hit, total: o.total, ac: o.target.ac, dmg: o.dmg, type: o.type || '', dmgText: this._dmgWords(o),
       offers: rows.map(({ who, r, ft }) => ({
         pcId: who.id, who: who.name, key: r.key, name: r.name,
         note: r.note || '', cost: this._costLabel(who, r) || '',

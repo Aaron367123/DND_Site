@@ -655,7 +655,7 @@ function paRenderPrompt(){
       <span class="pa-prompt-l">Reaction?</span>
       <span class="pa-prompt-line"><b>${paEsc(p.attacker)}</b>'s ${paEsc(p.label)}
         ${p.target.name ? `hits <b>${paEsc(p.target.name)}</b>` : ''}
-        for <b>${p.dmg} ${paEsc(p.type || 'damage')}</b></span>
+        for <b>${p.dmgText ? paEsc(p.dmgText) : p.dmg + ' ' + paEsc(p.type || 'damage')}</b></span>
     </div>
     ${mine.map((o, i) => `
       <button class="pa-prompt-b" data-pa-react="${i}">

@@ -1054,7 +1054,9 @@ async function _buildIndexFromFiles() {
     const imgKey = ((d.name||'') + '|' + (d.source||'')).toLowerCase();
     results.push({
       cat:'monster', name:d.name, _slug:r.index, _fromLocal:true,
-      meta:`${r.size} ${r.type} · CR ${r.challenge_rating}`.trim(),
+      // Every size it can be ("Small or Medium", a 2024 Assassin's): the
+      // record's .size keeps the first, for the token's cells.
+      meta:`${Array.isArray(d.size) && d.size.length > 1 ? d.size.map(s => _SIZE[s] || s).join(' or ') : r.size} ${r.type} · CR ${r.challenge_rating}`.trim(),
       _source:d.source,
       hp:r.hit_points, ac:r.armor_class?.[0]?.value||10,
       speed:Object.entries(r.speed||{}).map(([k,v])=>k+' '+v).join(', ')||'—',
