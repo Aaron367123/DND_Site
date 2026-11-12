@@ -19172,6 +19172,37 @@ for (const cls of Object.keys(rule)) for (let L = 1; L <= 20; L++) for (const sc
       } catch(e){ ok('round 296 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
       finally { window.showConfirm = keepAsk; if (win) win.style.width = keepW; state.party = JSON.parse(keepP); save(); P._render(); }
     }
+    // -- Round 297: Party Tracker — a caster's card shows its spell slots (spend and restore them there); the card grip resizes by touch too --
+    if (!PLAYER){
+      const keepP = JSON.stringify(state.party), keepS = JSON.stringify(state.settings || {}); const P = panelDefs.party;
+      try {
+        openPanel('party'); await sleep(250);
+        state.party.push({ id: 'r297w', name: 'Wiz', hp: 30, hpMax: 30, ac: 12, spd: 30, rules: '2024', level: 5, sheet: { spellSlots: { 1: { total: 4, expended: 1 }, 2: { total: 3, expended: 0 }, 3: { total: 2, expended: 2 } } } });
+        state.party.push({ id: 'r297k', name: 'Lock', hp: 30, hpMax: 30, ac: 12, spd: 30, rules: '2024', level: 5, sheet: { spellSlots: { 3: { total: 2, expended: 0, pact: true } } } });
+        state.party.push({ id: 'r297f', name: 'Ftr', hp: 40, hpMax: 40, ac: 18, spd: 30, rules: '2024', level: 5, sheet: {} });
+        save(); P._render(); await sleep(40);
+        const card = id => P._body.querySelector('.char-card[data-cidx="' + state.party.findIndex(p => p.id === id) + '"]');
+        const rows = id => [...card(id).querySelectorAll('.slot-section .resource-row')].map(r => r.querySelector('.resource-label').textContent + ' ' + r.querySelectorAll('.pip.filled').length + '/' + r.querySelectorAll('.pip').length).join(', ');
+        ok('slots: the wizard’s card — 1st 3 of 4, 2nd 3 of 3, 3rd 0 of 2', rows('r297w') === '1st 3/4, 2nd 3/3, 3rd 0/2', rows('r297w'));
+        ok('slots: a warlock’s pact slots are named so', rows('r297k') === '3rd (pact) 2/2', rows('r297k'));
+        ok('slots: the fighter has none to show', !card('r297f').querySelector('.slot-section'));
+        // Spend: the last lit 2nd-level pip.
+        card('r297w').querySelectorAll('.slot-section .resource-row')[1].querySelectorAll('.pip')[2].click(); await sleep(40);
+        const wiz = () => state.party.find(p => p.id === 'r297w');
+        ok('slots: the last lit 2nd-level pip — one spent', wiz().sheet.spellSlots[2].expended === 1 && rows('r297w') === '1st 3/4, 2nd 2/3, 3rd 0/2', JSON.stringify([wiz().sheet.spellSlots[2], rows('r297w')]));
+        // Restore: the first dark 3rd-level pip.
+        card('r297w').querySelectorAll('.slot-section .resource-row')[2].querySelectorAll('.pip')[0].click(); await sleep(40);
+        ok('slots: the first dark 3rd-level pip — one back', wiz().sheet.spellSlots[3].expended === 1, JSON.stringify(wiz().sheet.spellSlots[3]));
+        ok('slots: …the other levels untouched', wiz().sheet.spellSlots[1].expended === 1 && wiz().sheet.spellSlots[2].expended === 1);
+        // The grip: by pointer (touch), not only a mouse.
+        const grip = card('r297w').querySelector('.char-resize-grip'), gr = grip.getBoundingClientRect(), w0 = card('r297w').getBoundingClientRect().width;
+        grip.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, cancelable: true, clientX: gr.left + 5, clientY: gr.top + 5, pointerId: 7, pointerType: 'touch', button: 0 }));
+        document.dispatchEvent(new PointerEvent('pointermove', { bubbles: true, clientX: gr.left + 65, clientY: gr.top + 5, pointerId: 7, pointerType: 'touch' }));
+        document.dispatchEvent(new PointerEvent('pointerup', { bubbles: true, clientX: gr.left + 65, clientY: gr.top + 5, pointerId: 7, pointerType: 'touch' })); await sleep(40);
+        ok('resize grip: a finger drag of 60px widens the cards', Math.abs(state.settings.partyCardWidth - Math.round(w0 + 60)) <= 1, JSON.stringify([w0, state.settings.partyCardWidth]));
+      } catch(e){ ok('round 297 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
+      finally { state.party = JSON.parse(keepP); state.settings = JSON.parse(keepS); save(); P._render(); P._body && P._body.style.removeProperty('--party-card-w'); }
+    }
     // -- Class features: represented, not just text ------------------------
     {
       try {

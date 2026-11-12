@@ -1149,6 +1149,7 @@ body.player-mode .combat-hide-banner{padding:8px 10px;font-size:var(--fs-sm);col
 }
 .char-resize-grip:hover{opacity:.8}
 .party-grid.compact .char-resize-grip{display:none}
+.char-resize-grip{touch-action:none}
 
 /* Search row pinned above the grid. Tiny chip-count on the right shows
    "filtered/total" so the DM knows how many cards are currently hidden. */

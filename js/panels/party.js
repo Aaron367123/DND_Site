@@ -303,6 +303,25 @@ registerPanel('party',{
       });
       resHtml+='</div>';
     }
+    // Spell slots, as the sheet keeps them — a caster's most-spent resource.
+    // They went with the card's old Spells tab, and the tracker kept every
+    // other pool; a DM checking who has a 3rd-level slot left had to open
+    // each sheet.
+    {
+      const slots = (c.sheet && c.sheet.spellSlots) || {};
+      const lvls = Object.keys(slots).map(Number).filter(l => l >= 1 && l <= 9 && (+(slots[l] || {}).total || 0) > 0).sort((a, b) => a - b);
+      if (lvls.length){
+        const ORD = ['', '1st', '2nd', '3rd', '4th', '5th', '6th', '7th', '8th', '9th'];
+        resHtml += '<div class="resource-section slot-section"><div class="resource-section-head"><span>Spell slots</span></div>'
+          + lvls.map(l => {
+              const s = slots[l], t = +s.total || 0, left = Math.max(0, t - (+s.expended || 0));
+              let pips = '';
+              for (let p = 0; p < t; p++) pips += '<div class="pip slot ' + (p < left ? 'filled' : '') + '" data-act="slot" data-idx="' + i + '" data-lvl="' + l + '" data-pi="' + p + '" title="' + ORD[l] + '-level slot' + (s.pact ? ' (pact)' : '') + ' — ' + left + ' of ' + t + ' left"></div>';
+              return '<div class="resource-row"><span class="resource-label">' + ORD[l] + (s.pact ? ' (pact)' : '') + '</span><div class="resource-pips">' + pips + '</div></div>';
+            }).join('')
+          + '</div>';
+      }
+    }
 
     // Class/Race/Level subline. Falls back to c.sheet fields when the
     // top-level c.cls/race/level haven't been set (PDF imports populate the
@@ -2807,7 +2826,9 @@ registerPanel('party',{
     // setting persists in state.settings.partyCardWidth and syncs across
     // tabs via the normal save() path.
     b.querySelectorAll('.char-resize-grip').forEach(grip => {
-      grip.addEventListener('mousedown', e => {
+      // Pointer events: a mouse, a finger or a pen (it took a mouse only, so on
+      // a touchscreen the cards couldn't be resized).
+      grip.addEventListener('pointerdown', e => {
         e.preventDefault();
         e.stopPropagation();
         const card = grip.closest('.char-card');
@@ -2823,8 +2844,9 @@ registerPanel('party',{
           this._pendingCardWidth = next;
         };
         const onUp = () => {
-          document.removeEventListener('mousemove', onMove);
-          document.removeEventListener('mouseup', onUp);
+          document.removeEventListener('pointermove', onMove);
+          document.removeEventListener('pointerup', onUp);
+          document.removeEventListener('pointercancel', onUp);
           if (this._pendingCardWidth != null){
             if (!state.settings) state.settings = {};
             state.settings.partyCardWidth = this._pendingCardWidth;
@@ -2832,8 +2854,9 @@ registerPanel('party',{
             save();
           }
         };
-        document.addEventListener('mousemove', onMove);
-        document.addEventListener('mouseup', onUp);
+        document.addEventListener('pointermove', onMove);
+        document.addEventListener('pointerup', onUp);
+        document.addEventListener('pointercancel', onUp);
       });
       // Also suppress click + dragstart so the card itself doesn't try to
       // drag-to-combat when the grip is grabbed.
@@ -3309,6 +3332,15 @@ registerPanel('party',{
         res[ri]=r;
         state.party[i]={...state.party[i],resources:res};
         save();this._render();
+      }
+      else if(act==='slot'){
+        // As the pips above: a lit one spends down to it, a dark one restores up to it.
+        const l = +el.dataset.lvl, pi = +el.dataset.pi;
+        const p0 = state.party[i]; if (!p0 || !p0.sheet || !p0.sheet.spellSlots || !p0.sheet.spellSlots[l]) return;
+        const s = { ...p0.sheet.spellSlots[l] }, t = +s.total || 0, left = t - (+s.expended || 0);
+        s.expended = Math.max(0, Math.min(t, t - (pi < left ? pi : pi + 1)));
+        state.party[i] = { ...p0, sheet: { ...p0.sheet, spellSlots: { ...p0.sheet.spellSlots, [l]: s } } };
+        save(); this._render();
       }
       else if(act==='pip-step'){
         // Compact-mode +/- button on large pools. Clamps to [0, max].
