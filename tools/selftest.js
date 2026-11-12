@@ -19378,6 +19378,57 @@ for (const cls of Object.keys(rule)) for (let L = 1; L <= 20; L++) for (const sc
       } catch(e){ ok('round 302 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
       finally { if (TV) { TV._editInit = false; } state.party = JSON.parse(keepP); state.combatants = JSON.parse(keepC); state.activeCombatantId = keepA; state.combatRound = keepR; save(); TV && TV._body && TV._render(); }
     }
+    // -- Round 303: Turn View — a character's Extra Attack runs as a Multiattack does; the sheet's class line; "Next up" skips the fallen; the strip keeps the turn in view --
+    if (!PLAYER){
+      const keepP = JSON.stringify(state.party), keepC = JSON.stringify(state.combatants), keepA = state.activeCombatantId, keepR = state.combatRound; const TV = panelDefs.turnview;
+      try {
+        state.party.push({ id: 'r303a', name: 'Ann', race: 'Human', cls: 'fighter', subclass: 'Champion', hp: 40, hpMax: 40, ac: 16, spd: 30, rules: '2024', level: 5, abilities: { str: 16, dex: 12 },
+          sheet: { attacksPerAction: 2, attacks: [
+            { name: 'Longsword', atkBonus: '+6', damage: '1d8+3 slashing' },
+            { name: 'Fire Bolt', atkBonus: '+3', damage: '2d10 fire', spell: true },
+            { name: 'Dagger', atkBonus: '+4', damage: '1d4 piercing', offhand: true },
+            { name: 'Handaxe', atkBonus: '+6', damage: '1d6+3 slashing' } ] } });
+        state.party.push({ id: 'r303b', name: 'Bo', race: 'Elf', cls: 'rogue', hp: 30, hpMax: 30, ac: 14, spd: 30, rules: '2024', level: 5,
+          sheet: { attacksPerAction: 1, attacks: [ { name: 'Rapier', atkBonus: '+6', damage: '1d8+3 piercing' } ] } });
+        const foe = (id, name, init, hp) => ({ id, name, isPC: false, hp, hpMax: 20, ac: 12, initiative: init, initBonus: 0, conditions: [] });
+        state.combatants = [
+          { id: 'r303a', name: 'Ann', isPC: true, hp: 40, hpMax: 40, ac: 16, initiative: 20, conditions: [] },
+          foe('r303o', 'Orc Who Already Fell', 19, 0),
+          foe('r303g', 'Goblin Boss', 18, 20),
+          { id: 'r303b', name: 'Bo', isPC: true, hp: 30, hpMax: 30, ac: 14, initiative: 17, conditions: [] },
+        ];
+        for (let k = 0; k < 9; k++) state.combatants.push(foe('r303f' + k, 'Frost Giant Reaver ' + (k + 1), 16 - k, 20));
+        state.activeCombatantId = 'r303a'; state.combatRound = 1; save();
+        openPanel('turnview'); await sleep(300); TV._queue = null; TV._initScrolled = null; TV._render(); await sleep(60);
+        const B = () => TV._body;
+        ok('turn view: the sheet’s class line — “Human · Fighter (Champion) Level 5”', B().querySelector('.tv-actor-sub').textContent.trim() === 'Human · Fighter (Champion) Level 5', B().querySelector('.tv-actor-sub').textContent);
+        ok('turn view: “Next up” is the goblin — the fallen orc has no turn, as End turn skips it', /Next up Goblin Boss/.test(B().querySelector('.tv-turnline').textContent), B().querySelector('.tv-turnline').textContent);
+        const head = () => { const m = B().querySelector('.tv-multi:not(.bonus)'); return m ? m.textContent.replace(/\s+/g, ' ').trim() : ''; };
+        ok('extra attack: Ann’s turn offers Attack ×2', /^Attack ×2 2 attacks with each Attack action Run 2$/.test(head()), head());
+        B().querySelector('[data-tv="multi"]').click(); await sleep(80);
+        const picks = [...B().querySelectorAll('.tv-multi-pick button')].map(x => x.textContent.trim());
+        ok('extra attack: running it — attack 1 of 2', /^Attack 1\/2/.test(head()) && TV._queue && TV._queue.pc === true, head());
+        ok('extra attack: each attack is any weapon — not the spell, not the off-hand dagger', picks.join('|') === 'Longsword|Handaxe', picks.join('|'));
+        B().querySelector('[data-tv="qmiss"]').click(); await sleep(60);
+        ok('extra attack: a miss — on to attack 2 of 2', /^Attack 2\/2/.test(head()), head());
+        B().querySelector('[data-tv="qmiss"]').click(); await sleep(60);
+        ok('extra attack: done, and logged as the Attack action', !TV._queue && /Ann<\/strong> Attack action done/.test(TV._log[0] || ''), TV._log[0]);
+        state.activeCombatantId = 'r303b'; save(); TV._render(); await sleep(60);
+        ok('extra attack: Bo, one attack — no Attack ×N row', !B().querySelector('[data-tv="multi"]'), head());
+        // The strip: the last creature's turn is scrolled into view, and the edge before it fades.
+        const s = B().querySelector('.tv-init');
+        ok('strip: the order overflows it (else this proves nothing)', s.scrollWidth > s.clientWidth + 100, s.scrollWidth + ' / ' + s.clientWidth);
+        ok('strip: more to the right — its right edge fades', s.classList.contains('more-r') && !s.classList.contains('more-l'), s.className);
+        state.activeCombatantId = 'r303f8'; save(); TV._render(); await sleep(60);
+        const sr = s.getBoundingClientRect(), cr = s.querySelector('.tv-pip.cur').getBoundingClientRect();
+        ok('strip: the last giant’s turn — its pip scrolled into view', cr.left >= sr.left - 1 && cr.right <= sr.right + 1, JSON.stringify([Math.round(sr.left), Math.round(sr.right), Math.round(cr.left), Math.round(cr.right)]));
+        ok('strip: …and now the left edge fades', s.classList.contains('more-l'), s.className);
+        s.scrollLeft = 0; await sleep(60); TV._render(); await sleep(30);
+        ok('strip: scrolled back by hand, a re-render leaves it there', s.scrollLeft === 0 && s.classList.contains('more-r') && !s.classList.contains('more-l'), s.scrollLeft + ' ' + s.className);
+      } catch(e){ ok('round 303 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
+      finally { if (TV) { TV._queue = null; TV._initScrolled = null; } state.party = JSON.parse(keepP); state.combatants = JSON.parse(keepC); state.activeCombatantId = keepA; state.combatRound = keepR; save(); TV && TV._body && TV._render(); }
+    }
+
     // -- Class features: represented, not just text ------------------------
     {
       try {

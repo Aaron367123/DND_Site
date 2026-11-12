@@ -3918,6 +3918,10 @@ kbd{display:inline-block;background:var(--panel-3);border:1px solid var(--border
 .tv-initbar { display:flex; align-items:center; background:var(--panel-2);
   border-bottom:1px solid var(--border); flex-shrink:0; }
 .tv-init { display:flex; gap:6px; padding:8px 10px; overflow-x:auto; flex:1; min-width:0; }
+/* More of the order past an edge: that edge fades out. */
+.tv-init.more-r { -webkit-mask-image:linear-gradient(to right,#000 calc(100% - 40px),transparent); mask-image:linear-gradient(to right,#000 calc(100% - 40px),transparent); }
+.tv-init.more-l { -webkit-mask-image:linear-gradient(to right,transparent,#000 40px); mask-image:linear-gradient(to right,transparent,#000 40px); }
+.tv-init.more-l.more-r { -webkit-mask-image:linear-gradient(to right,transparent,#000 40px,#000 calc(100% - 40px),transparent); mask-image:linear-gradient(to right,transparent,#000 40px,#000 calc(100% - 40px),transparent); }
 .tv-init-tools { display:flex; align-items:center; gap:6px; padding:0 10px 0 2px; flex-shrink:0; }
 .tv-init-tools .btn { font-size:var(--fs-xs); padding:5px 10px; white-space:nowrap; }
 .tv-round { font-size:var(--fs-2xs); color:var(--text-muted); text-transform:uppercase;

@@ -1204,6 +1204,7 @@ registerPanel('turnview', {
 
     this._refreshMapChrome();
     const wrote = this._paint(c);
+    this._scrollInit();
     this._placeTokens();
     // When the tail has to scroll, the live end wins the visible space. A
     // dragon's five actions leave it 40px tall, and left at the top that
@@ -1227,6 +1228,28 @@ registerPanel('turnview', {
     }
     this._freshSkeleton = false;
     return wrote;
+  },
+
+  // The strip scrolls, and whoever's turn it is stays in it: scrolled to when
+  // the turn changes — not every render, so a DM reading further along keeps
+  // their place. Ten creatures overflowed a 960px panel, and the one acting
+  // could be off the end with nothing to say the order went on.
+  _scrollInit(){
+    const s = this._body && this._body.querySelector('.tv-init'); if (!s) return;
+    const sr = s.getBoundingClientRect();
+    const cur = s.querySelector('.tv-pip.cur'), key = state.activeCombatantId + '|' + (this._editInit ? 1 : 0);
+    if (cur && sr.width > 0 && this._initScrolled !== key){
+      this._initScrolled = key;
+      const cr = cur.getBoundingClientRect();
+      if (cr.left < sr.left || cr.right > sr.right) s.scrollLeft += (cr.left + cr.width / 2) - (sr.left + sr.width / 2);
+    }
+    this._initEdges(s);
+  },
+  // Each edge fades where more of the order is hidden past it.
+  _initEdges(s){
+    const more = s.scrollWidth - s.clientWidth;
+    s.classList.toggle('more-l', more > 1 && s.scrollLeft > 1);
+    s.classList.toggle('more-r', more > 1 && s.scrollLeft < more - 1);
   },
 
   _renderInit(){
@@ -1319,7 +1342,7 @@ registerPanel('turnview', {
     const entry = this._entryOf(c);
     const ws = this._wsOf(c);
     const sub = ws ? `Wild Shape · ${ws.name}${ws.cr != null ? ' · CR ' + ws.cr : ''}`
-              : p ? [p.cls, p.subclass, p.level ? 'level ' + p.level : ''].filter(Boolean).join(' · ')
+              : p ? (typeof csClassLine === 'function' ? csClassLine(p) : [p.cls, p.subclass, p.level ? 'level ' + p.level : ''].filter(Boolean).join(' · '))
                   : (entry && entry.meta) || (c.isPC ? 'Player character' : 'No stat block');
     const conds = (c.conditions || []).map(x => `<span class="tv-cond">${esc(x)}</span>`).join('');
     const res = p && Array.isArray(p.resources) ? p.resources.map(r => {
@@ -1480,7 +1503,7 @@ registerPanel('turnview', {
     // A wild-shaped druid runs the beast's Multiattack if it has one — the
     // usual PC short-circuit would have hidden it.
     const ws = c.isPC ? this._wsOf(c) : null;
-    if (c.isPC && !ws) return null;
+    if (c.isPC && !ws) return this._pcAttackOf(c);
     const raw = ws ? this._wsRaw(ws) : (this._entryOf(c) || {})._raw;
     if (!raw || !panelDefs.attacks) return null;
     const p = panelDefs.attacks._parsed(raw);
@@ -1491,6 +1514,21 @@ registerPanel('turnview', {
     const co = p.multi.combo || {};
     return { text: p.multi.text, ask: co.ask ? { what: co.ask, n: +c.multiCount || co.dflt || 0 } : null,
              plan: panelDefs.attacks._plan({ multi: p.multi, attacks }, { summonLevel: c.summon && c.summon.level, count: c.multiCount }) };
+  },
+
+  // Extra Attack: a character's Attack action is two (three, four) attacks,
+  // and runs as a Multiattack does — a target for each, each one any of their
+  // weapons. Not a spell, the off-hand's attack or another Bonus Action one:
+  // those aren't part of the Attack action.
+  _pcAttackOf(c){
+    const p = this._partyOf(c), n = Math.floor(+((p && p.sheet) || {}).attacksPerAction || 1);
+    if (n < 2) return null;
+    const list = this._attacksFor(c);
+    const choice = list.map((a, ai) => a.pc && !a.spell && !a.save && !a.offhand && !a.bonusAction && a.dmgText ? ai : -1).filter(ai => ai >= 0);
+    if (!choice.length) return null;
+    const plan = [];
+    for (let k = 0; k < n; k++) plan.push(Object.assign({ ai: choice[0], name: list[choice[0]].name }, choice.length > 1 ? { choice: choice.slice() } : {}));
+    return { pc: true, n, text: n + ' attacks with each Attack action', ask: null, plan };
   },
 
   // The damage types THIS creature can actually deal, read off the same parse
@@ -1645,10 +1683,10 @@ registerPanel('turnview', {
       // (a legendary action's steps are the legendary creature's, not this one's)
       const qsrc = this._order().find(x => x.id === q.srcId) || c;
       head = `<div class="tv-multi run${q.legendary ? ' legend' : ''}">
-        <span class="tv-multi-tag">${q.lair ? 'Lair' : q.legendary ? 'Legendary' : 'Multiattack'} ${q.i + 1}/${q.items.length}</span>
+        <span class="tv-multi-tag">${q.lair ? 'Lair' : q.legendary ? 'Legendary' : q.pc ? 'Attack' : 'Multiattack'} ${q.i + 1}/${q.items.length}</span>
         <span class="tv-multi-text">${q.lair ? esc(q.name) + '’s lair: ' : q.legendary ? esc(q.name) + ' · ' + esc(q.legendary) + ': ' : ''}<b>${esc(it ? it.name : '')}</b> — pick a target on the right</span>
         ${it && it.save ? `<button class="btn" data-tv="qarea" title="Several targets: each rolls its own save, the damage is rolled once">Area…</button>` : ''}
-        ${it && (it.choice || []).length > 1 ? `<span class="tv-multi-pick" title="The stat block lets this swing be any of these">${it.choice.map(ai => {
+        ${it && (it.choice || []).length > 1 ? `<span class="tv-multi-pick" title="${q.pc ? 'Any of their weapons' : 'The stat block lets this swing be any of these'}">${it.choice.map(ai => {
           const nm = ((this._attacksFor(qsrc) || [])[ai] || {}).name || '';
           return `<button class="btn small${ai === it.ai ? ' primary' : ''}" data-tv="qpick" data-ai="${ai}">${esc(nm)}</button>`;
         }).join('')}</span>` : ''}
@@ -1659,7 +1697,7 @@ registerPanel('turnview', {
       </div>`;
     } else if (m){
       head = `<div class="tv-multi">
-        <span class="tv-multi-tag">Multiattack</span>
+        <span class="tv-multi-tag">${m.pc ? 'Attack ×' + m.n : 'Multiattack'}</span>
         <span class="tv-multi-text">${esc(m.text)}</span>
         ${m.plan.length || m.ask ? `<button class="btn" data-tv="multi"
             title="${esc(m.plan.length ? m.plan.map(p => p.name).join(' → ') : 'One for each of its ' + m.ask.what)} — roll each in turn, choosing a target for every one"
@@ -2181,7 +2219,10 @@ registerPanel('turnview', {
   _renderTurnline(c){
     const o = this._order();
     const i = o.findIndex(x => x.id === (c && c.id));
-    const n = o[(i + 1) % o.length];
+    // Past the fallen, as End turn goes: a monster at 0 HP has no turn.
+    const CT = panelDefs.combat, noTurn = x => !!(CT && typeof CT._noTurn === 'function' && CT._noTurn(x));
+    let n = null;
+    for (let k = 1; k <= o.length && !n; k++){ const x = o[(i + k) % o.length]; if (!noTurn(x) || k === o.length) n = x; }
     const turn = this._turnOf();
     if (c && turn && c.id !== turn.id)
       return `Acting as <b>${esc(c.name)}</b>, off-turn · it is <b>${esc(turn.name)}</b>'s turn`;
@@ -3206,8 +3247,8 @@ registerPanel('turnview', {
       m = this._multiOf(c);
     }
     if (!m || !m.plan.length) return;
-    this._queue = { srcId: c.id, name: c.name, items: m.plan, i: 0, hits: 0, misses: 0 };
-    this._setResult(`<span class="dim">Multiattack — <b>${esc(m.plan[0].name)}</b>: pick a target.</span>`);
+    this._queue = { srcId: c.id, name: c.name, items: m.plan, i: 0, hits: 0, misses: 0, pc: !!m.pc };
+    this._setResult(`<span class="dim">${m.pc ? 'Attack 1 of ' + m.n : 'Multiattack'} — <b>${esc(m.plan[0].name)}</b>: pick a target.</span>`);
     this._render();
   },
   _advanceQueue(){
@@ -3219,7 +3260,7 @@ registerPanel('turnview', {
   },
   _finishMulti(stopped){
     const q = this._queue; if (!q) return;
-    this._log.unshift(`<strong>${esc(q.name)}</strong> ${q.legendary ? esc(q.legendary) + (q.lair ? ' (lair)' : ' (legendary)') : 'Multiattack'} ${stopped ? 'stopped' : 'done'}`
+    this._log.unshift(`<strong>${esc(q.name)}</strong> ${q.legendary ? esc(q.legendary) + (q.lair ? ' (lair)' : ' (legendary)') : q.pc ? 'Attack action' : 'Multiattack'} ${stopped ? 'stopped' : 'done'}`
       + ` — ${q.hits} hit${q.hits === 1 ? '' : 's'}` + (q.misses ? `, ${q.misses} missed` : ''));
     this._queue = null;
     this._render();
@@ -4692,6 +4733,8 @@ registerPanel('turnview', {
   _wire(){
     const b = this._body; if (!b || b._tvWired) return;
     b._tvWired = true;
+    // (scroll doesn't bubble: caught on the way down, for whichever strip is there now)
+    b.addEventListener('scroll', e => { const s = e.target; if (s && s.classList && s.classList.contains('tv-init')) this._initEdges(s); }, true);
 
     b.addEventListener('click', e => {
       // The class row is the Party panel's own markup, which speaks data-act
