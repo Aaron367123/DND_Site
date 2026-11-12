@@ -18959,6 +18959,22 @@ for (const cls of Object.keys(rule)) for (let L = 1; L <= 20; L++) for (const sc
       } catch(e){ ok('round 289 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
       finally { state.combatants = JSON.parse(keepC); state.activeCombatantId = keepA; state.party = JSON.parse(keepP); save(); C._render(); }
     }
+    // -- Round 290: the active creature's larger portrait stays out of its damage row --
+    if (!PLAYER){
+      const keepA = state.activeCombatantId; const C = panelDefs.combat;
+      try {
+        if (!state.combatants.length){ ok('portrait: a fight to look at', false, 'no combatants'); }
+        else {
+          state.activeCombatantId = state.combatants[0].id; save();
+          openPanel('combat'); await sleep(200); C._render(); await sleep(30);
+          const cd = C._body.querySelector('.combatant-card.active'), av = cd && cd.querySelector('.card-avatar'), row = cd && cd.querySelector('.hp-dmg-bar');
+          const a = av.getBoundingClientRect(), r = row.getBoundingClientRect(), plain = C._body.querySelector('.combatant-card:not(.active) .card-avatar');
+          ok('portrait: the active portrait is larger than the rest', plain && a.width > plain.getBoundingClientRect().width, JSON.stringify([a.width, plain && plain.getBoundingClientRect().width]));
+          ok('portrait: …and ends before its damage row starts', a.right <= r.left, JSON.stringify([a.right, r.left]));
+        }
+      } catch(e){ ok('round 290 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
+      finally { state.activeCombatantId = keepA; save(); C._render(); }
+    }
     // -- Class features: represented, not just text ------------------------
     {
       try {

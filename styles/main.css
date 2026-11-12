@@ -930,8 +930,10 @@ body.player-mode .window-actions [data-wact="lock"]{display:none}
 /* Active-turn avatar grow — mirrors the party tracker's behavior. Larger
    avatar + class-colored ring (var --class-color is set inline for PCs;
    monsters fall back to accent). */
+/* 42px, centred in its 36px column: it spills 3px into each 6px gap. At
+   46px (left-aligned) it ran 4px over the damage row beside it. */
 .combatant-card.active .card-avatar{
-  width:46px;height:46px;
+  width:42px;height:42px;justify-self:center;
   border-color:var(--class-color, var(--accent));
   box-shadow:0 0 0 1px var(--class-color, var(--accent)),0 0 12px rgba(212,165,116,.4)
 }
