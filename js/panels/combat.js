@@ -3359,7 +3359,14 @@ registerPanel('combat',{
             state.combatants[i] = { ...c, lrUsed: Math.min(c.lrMax || 0, (c.lrUsed || 0) + 1) };
             this._log(c.name + ' uses Legendary Resistance');
           }
-          rolled.dmg.forEach(d => {
+          // "…or drop to 0 hit points": a failure is all of them; the damage
+          // rolled is a success's, whole (a banshee's Wail).
+          if (pre.drop0 && !r.passed){
+            const slot = c.isPC ? (state.party || []).find(p => p.id === c.id) : null;
+            const all = (c.hp || 0) + ((slot ? slot.tempHp : c.tempHp) || 0);
+            if (all > 0) this._applyHpDelta(i, -all, null);
+          } else if (pre.drop0) rolled.dmg.forEach(d => { if (pre.onSuccess && d.amt > 0) this._applyHpDelta(i, -d.amt, d.type || null); });
+          else rolled.dmg.forEach(d => {
             const amt = this._saveDamage(c, d.amt, r.passed, ab, halfMode === 'half');
             if (amt > 0) this._applyHpDelta(i, -amt, d.type || null);
           });

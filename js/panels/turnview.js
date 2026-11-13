@@ -1905,8 +1905,9 @@ registerPanel('turnview', {
         // hit — the decision is whether the target made its save. Two buttons
         // instead of one, and no d20.
         ctl = `${rech}<span class="tv-save">DC ${a.save.dc} ${esc(String(a.save.ability).slice(0,3).toUpperCase())}</span>
-          <button class="btn" data-tv="save" data-ai="${i}" data-half="0" title="Target failed the save — full damage">Failed</button>
-          ${a.save.half ? `<button class="btn" data-tv="save" data-ai="${i}" data-half="1" title="Target saved — half damage">Saved ½</button>` : ''}
+          <button class="btn" data-tv="save" data-ai="${i}" data-half="0" title="${a.save.drop0 ? 'Target failed the save — it drops to 0 hit points' : 'Target failed the save — full damage'}">${a.save.drop0 ? 'Failed — 0 HP' : 'Failed'}</button>
+          ${a.save.half ? `<button class="btn" data-tv="save" data-ai="${i}" data-half="1" title="Target saved — half damage">Saved ½</button>`
+            : a.save.onSuccess ? `<button class="btn" data-tv="save" data-ai="${i}" data-half="1" title="Target saved — the damage a success takes">Saved</button>` : ''}
           <button class="btn" data-tv="area" data-ai="${i}" title="Several targets: each rolls its own save, the damage is rolled once">Area…</button>`;
       } else if (a.pc ? !!a.dmgText : ((a.parts || []).length || (a.effect && a.toHit))){
         ctl = `${rech}<button class="btn" data-tv="roll" data-ai="${i}" aria-label="Roll ${esc(a.name)}">${ICO('i-dice')}Roll</button>`
@@ -4997,10 +4998,20 @@ registerPanel('turnview', {
     // Evasion: a Dexterity save for half — nothing when saved, half when not.
     const C = panelDefs.combat;
     const ev = !rider && a.save && a.save.half !== false && /^dex/i.test(String(a.save.ability || '')) && C && typeof C._hasEvasion === 'function' && C._hasEvasion(t);
+    // "…or drop to 0 hit points": a failure is all of them (temporary ones
+    // too), a success what the text gives a success, if anything.
+    const d0 = !rider && a.save && a.save.drop0;
+    if (d0 && !half){
+      const tmp = (t.isPC ? (this._partyOf(t) || {}).tempHp : t.tempHp) || 0, all = (t.hp || 0) + tmp;
+      this._resolve({ attackerId: c.id, attacker: c.name, target: t, save: true, label: a.name + ' (failed) — drops to 0 hit points',
+        total: null, crit: false, hit: true, parts: [{ amt: all, type: '' }], detail: 'all its hit points', dmg: all, type: '', magical: true });
+      return;
+    }
     const parts = ((rider ? a.rider : a).parts || []).map(pt => {
       const r = this._roll(pt.dice);
-      const amt = ev ? (half ? 0 : Math.floor(r.total / 2)) : half ? Math.floor(r.total / 2) : r.total;
-      detail += (detail ? ' · ' : '') + pt.type + ' ' + r.detail + (ev ? (half ? ' → 0' : ' ÷2') : half ? ' ÷2' : '');
+      // (a drop-to-0 save's damage is the success's, whole)
+      const amt = ev ? (half ? 0 : Math.floor(r.total / 2)) : half && !d0 ? Math.floor(r.total / 2) : r.total;
+      detail += (detail ? ' · ' : '') + pt.type + ' ' + r.detail + (ev ? (half ? ' → 0' : ' ÷2') : half && !d0 ? ' ÷2' : '');
       return { amt, type: pt.type };
     });
     // What the failed save inflicts besides damage (Frightful Presence's fear).
@@ -5039,7 +5050,7 @@ registerPanel('turnview', {
       name: c.name + ' · ' + a.name, ab: a.save.ability, dc: a.save.dc,
       parts: (a.parts || []).map(p => ({ dice: p.dice, type: p.type })),
       half: !!a.save.half, exclude: c.id, targets: this._armed && this._armed !== c.id ? [this._armed] : [], spell: !!a.spell,
-      cond: a.cond || null, src: { id: c.id, name: c.name },
+      cond: a.cond || null, src: { id: c.id, name: c.name }, drop0: !!a.save.drop0, onSuccess: !!a.save.onSuccess,
       onApplied: () => {
         if (a.recharge) this._markRechargeSpent(c, a.name);
         this._markUsed(c, a);

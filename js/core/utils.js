@@ -1472,10 +1472,16 @@ function sktParseMonsterAttack(action){
     const cond = typeof sktSaveCondition === 'function' ? sktSaveCondition(desc, saveAt) : null;
     // (a condition alone makes it a save action only when nothing rolls to hit
     // first: a green dragon's Lashing Root attacks, +7, and THEN calls for the save)
-    if (parts.length || (cond && !/\bto hit\b|\battack roll\b/i.test(desc.slice(0, saveAt)))){
+    // "…or drop to 0 hit points" (a sea hag's Death Glare, a demilich's Howl,
+    // a banshee's Wail): a failure is the creature's hit points, all of them —
+    // and any damage named is then the success's ("On a successful save, a
+    // creature takes 10 (3d6) psychic damage"). It read as the damage on a
+    // failure, or as no save at all.
+    const drop0 = /\b(?:or|On a fail(?:ed save|ure),?[^.]*?)\s+(?:the target |it |a creature |the creature )?drops? to 0 hit points/i.test(desc.slice(saveAt));
+    if (parts.length || drop0 || (cond && !/\bto hit\b|\battack roll\b/i.test(desc.slice(0, saveAt)))){
       return {
         name, recharge, uses, toHit: null,
-        save: { dc: saveDc, ability: saveAbility,
+        save: { dc: saveDc, ability: saveAbility, ...(drop0 ? { drop0: true, onSuccess: parts.length > 0 } : {}),
                 // "half as much damage" (2014), "Half damage." (2024), and
         // "takes only half the damage" (the Bulette, among others). Missing a
         // phrasing here silently drops the Saved ½ button, so the DM applies

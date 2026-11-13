@@ -20299,6 +20299,58 @@ for (const cls of Object.keys(rule)) for (let L = 1; L <= 20; L++) for (const sc
       finally { TV._d = d0; TV._coverFor = cv0; if (document.getElementById('cb-root') && typeof cbClose === 'function') cbClose(); state.party = JSON.parse(keepP); state.combatants = JSON.parse(keepC); state.activeCombatantId = keepA; save(); TV && TV._body && TV._render(); }
     }
 
+    // -- Round 330: a save whose failure drops the creature to 0 hit points — a sea hag's Death Glare, a banshee's Wail (its damage is the success's) --
+    if (!PLAYER){
+      const A = (name, desc) => sktParseMonsterAttack({ name, desc });
+      const dg = A('Death Glare', 'The hag targets one Frightened creature she can see within 30 feet of her. If the target can see the hag, it must succeed on a DC 11 Wisdom saving throw against this magic or drop to 0 hit points.');
+      ok('drop to 0: a Death Glare is a DC 11 Wisdom save that drops it to 0', !!dg && dg.save && dg.save.dc === 11 && dg.save.drop0 === true && !dg.save.onSuccess, JSON.stringify(dg && dg.save));
+      const wail = A('Wail (1/Day)', 'The banshee releases a mournful wail, provided that she isn\'t in sunlight. This wail has no effect on constructs and undead. All other creatures within 30 feet of her that can hear her must make a DC 13 Constitution saving throw. On a failure, a creature drops to 0 hit points. On a success, a creature takes 10 (3d6) psychic damage.');
+      ok('drop to 0: a banshee’s Wail — 0 on a failure, its 3d6 psychic on a success, not halved', !!wail && wail.save.drop0 && wail.save.onSuccess && !wail.save.half && (wail.parts || []).length === 1, JSON.stringify(wail && [wail.save, wail.parts]));
+      const fb = A('Fire Breath', 'The dragon exhales fire. Each creature in that area must make a DC 17 Dexterity saving throw, taking 56 (16d6) fire damage on a failed save, or half as much damage on a successful one.');
+      ok('drop to 0: an ordinary breath is not one', !!fb && !fb.save.drop0 && fb.save.half === true);
+      const keepC = JSON.stringify(state.combatants), keepA = state.activeCombatantId, TV = panelDefs.turnview, C = panelDefs.combat; const r0 = TV._roll;
+      try {
+        state.combatants = [{ id: 'r330h', name: 'r330h', isPC: false, hp: 30, hpMax: 30, ac: 12, initiative: 20, initBonus: 0, conditions: [] }, { id: 'r330t', name: 'r330t', isPC: false, hp: 25, hpMax: 40, tempHp: 5, ac: 12, initiative: 5, initBonus: 0, conditions: [] }];
+        state.activeCombatantId = 'r330h'; TV._armed = 'r330t'; save();
+        const orig = TV._attacksFor; TV._attacksFor = c => c.id === 'r330h' ? [Object.assign({}, dg), Object.assign({}, wail)] : orig.call(TV, c);
+        try {
+          openPanel('turnview'); await sleep(200); TV._render(); await sleep(30);
+          const btn = TV._body.querySelector('[data-tv="save"][data-ai="0"][data-half="0"]');
+          ok('drop to 0: its Failed button says so', !!btn && /0 HP/.test(btn.textContent), btn && btn.textContent);
+          ok('drop to 0: the Wail has a Saved button (its damage), the Death Glare none', !!TV._body.querySelector('[data-tv="save"][data-ai="1"][data-half="1"]') && !TV._body.querySelector('[data-tv="save"][data-ai="0"][data-half="1"]'));
+          TV._rollSave(0, false); await sleep(40); if (TV._pending) TV._commit(TV._pending, null);
+          const t = () => state.combatants.find(x => x.id === 'r330t');
+          ok('drop to 0: failed, the target is at 0 — temporary hit points and all', t().hp === 0, JSON.stringify([t().hp, t().tempHp]));
+          t().hp = 25; t().tempHp = 0; state.combatants[0].actionUsed = false; TV._roll = () => ({ total: 10, detail: '3d6 [10]' });
+          TV._rollSave(1, true); await sleep(40); if (TV._pending) TV._commit(TV._pending, null);
+          ok('drop to 0: the Wail saved — its 3d6 whole, not halved', t().hp === 15, JSON.stringify(t().hp));
+          state.combatants[0].actionUsed = false; t().hp = 25;
+          TV._rollSave(0, true); await sleep(40); if (TV._pending) TV._commit(TV._pending, null);
+          ok('drop to 0: a Death Glare saved does nothing', t().hp === 25, JSON.stringify(t().hp));
+          // The area dialog: failed, 0; the Wail saved, its damage.
+          const area = async (ai, want) => {
+            state.combatants[0].actionUsed = false; TV._armed = 'r330t'; TV._areaSave(ai); await sleep(60);
+            const back = document.getElementById('area-save-back'); if (!back) return 'no dialog';
+            back.querySelector('[data-as="roll"]').click(); await sleep(60);
+            const fl = back.querySelector('[data-as="flip"][data-k="0"]'); if (!fl) return 'no row';
+            if (/saved/.test(fl.textContent) !== want){ fl.click(); await sleep(30); }
+            back.querySelector('[data-as="apply"]').click(); await sleep(60);
+            return 'ok';
+          };
+          t().hp = 25; t().tempHp = 3; save();
+          const r1 = await area(0, false);
+          ok('drop to 0 (area): failed, the target is at 0', r1 === 'ok' && t().hp === 0, JSON.stringify([r1, t().hp]));
+          t().hp = 25; t().tempHp = 0; save();
+          const r2 = await area(1, true);
+          ok('drop to 0 (area): the Wail saved — its damage whole', r2 === 'ok' && t().hp < 25 && t().hp >= 7, JSON.stringify([r2, t().hp]));
+          t().hp = 25; save();
+          const r3 = await area(0, true);
+          ok('drop to 0 (area): a Death Glare saved does nothing', r3 === 'ok' && t().hp === 25, JSON.stringify([r3, t().hp]));
+        } finally { TV._attacksFor = orig; document.getElementById('area-save-back')?.remove(); }
+      } catch(e){ ok('round 330 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
+      finally { TV._roll = r0; state.combatants = JSON.parse(keepC); state.activeCombatantId = keepA; save(); TV && TV._body && TV._render(); }
+    }
+
     // -- Class features: represented, not just text ------------------------
     {
       try {
