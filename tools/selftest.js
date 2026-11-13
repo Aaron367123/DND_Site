@@ -20896,6 +20896,42 @@ for (const cls of Object.keys(rule)) for (let L = 1; L <= 20; L++) for (const sc
       } catch(e){ ok('round 349 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
       finally { window.showConfirm = oConf; window.showToast = oToast; state.party = JSON.parse(keepP); state.combatants = JSON.parse(keepC); save(); if (P._body) P._render(); }
     }
+    // -- Round 350: compact party view — every row breaks the same way, a downed PC's saves show, nothing runs past the panel; concentration from the ⋯ menu --
+    if (!PLAYER){
+      const keepP = JSON.stringify(state.party), keepC = JSON.stringify(state.combatants), keepS = JSON.stringify(state.settings || {}); const P = panelDefs.party;
+      const oModal = window.showModal;
+      try {
+        openPanel('party'); await sleep(200);
+        const mk = (id, o) => Object.assign({ id, name: id, cls: 'fighter', level: 5, hp: 30, hpMax: 40, ac: 15, init: 2, spd: 30, tempHp: 0, resources: [], sheet: {} }, o);
+        state.combatants = [];
+        state.party = [mk('r350 a', { concentration: 'Hex', inspiration: true, conditions: ['Poisoned', 'Prone'] }), mk('r350 b', {}), mk('r350 c', { hp: 0, deathSaves: { success: 1, fail: 2 } })];
+        state.settings.partyCompact = true; P._render(); await sleep(80);
+        const cards = [...P._body.querySelectorAll('.char-card')];
+        const top = (c, sel) => Math.round(c.querySelector(sel).getBoundingClientRect().top);
+        // hit points sit level with the name on every row, badges or not
+        const lvl = cards.map(c => top(c, '.char-hp-block') - top(c, '.char-header'));
+        ok('compact: hit points in the same place on every row', lvl.every(d => Math.abs(d - lvl[1]) <= 2), JSON.stringify(lvl));
+        ok('compact: badges after the hit points', cards[0].querySelector('.char-status-badges').getBoundingClientRect().top >= cards[0].querySelector('.char-hp-block').getBoundingClientRect().bottom - 1);
+        const db = cards[2].querySelector('.char-downed-badge');
+        ok('compact: a downed character’s saves show', db && db.offsetParent !== null && db.getBoundingClientRect().width > 20 && /2\/3 fails/.test(db.textContent));
+        // a narrow panel: no card past its edge
+        const grid = P._body.querySelector('.party-grid'), w0 = grid.style.width;
+        grid.style.width = '360px'; await sleep(60);
+        const over = [...P._body.querySelectorAll('.char-card')].filter(c => c.getBoundingClientRect().right > grid.getBoundingClientRect().right + 1).length;
+        grid.style.width = w0;
+        ok('compact, narrow: no card runs past the panel', over === 0, over + ' over');
+        // concentration from the menu
+        state.settings.partyCompact = false; P._render();
+        let asked = null; window.showModal = (t, f) => { asked = t; return Promise.resolve({ spell: 'Bless' }); };
+        P._body.querySelector('[data-cidx="1"] [data-act="actions-menu"]').click(); await sleep(80);
+        const it = [...document.querySelectorAll('.ctx-menu .ctx-menu-item')].find(x => /Concentrating on/.test(x.textContent));
+        ok('the ⋯ menu offers concentration', !!it);
+        if (it){ it.click(); await sleep(60); }
+        ok('…and sets it', state.party[1].concentration === 'Bless', asked);
+        document.querySelectorAll('.ctx-menu').forEach(e => e.remove());
+      } catch(e){ ok('round 350 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
+      finally { window.showModal = oModal; state.party = JSON.parse(keepP); state.combatants = JSON.parse(keepC); state.settings = JSON.parse(keepS); save(); if (P._body) P._render(); }
+    }
     // -- Class features: represented, not just text ------------------------
     {
       try {

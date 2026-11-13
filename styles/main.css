@@ -1184,7 +1184,10 @@ body.player-mode .combat-hide-banner{padding:8px 10px;font-size:var(--fs-sm);col
 
    Every section that doesn't belong in compact mode is hidden via
    `display:none` so the card structure stays valid (events still wire). */
-.party-grid.compact{grid-template-columns:1fr;gap:4px}
+/* minmax(0,…): one card's long line (a downed badge) can't widen the column
+   past the panel and push every card off the right edge. */
+.party-grid.compact{grid-template-columns:minmax(0,1fr);gap:4px}
+.party-grid.compact .char-card{min-width:0}
 .party-grid.compact .char-card{
   flex-direction:row;align-items:center;
   padding:5px 8px 5px 11px;gap:8px;
@@ -1224,7 +1227,11 @@ body.player-mode .combat-hide-banner{padding:8px 10px;font-size:var(--fs-sm);col
 .party-grid.compact .party-hp-btn{height:18px;font-size:var(--fs-md)}
 .party-grid.compact .party-hp-amt{height:18px;font-size:var(--fs-xs)}
 .party-grid.compact .party-hp-type-wrap{height:18px}
-.party-grid.compact .char-downed-badge{display:none}
+/* A downed character's saves stay in view: the line was hidden, so compact
+   view showed a 0 and nothing to roll. */
+.party-grid.compact .char-downed-badge{flex:1 1 0;min-width:0;width:auto;margin:0;font-size:var(--fs-2xs);padding:1px 6px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+/* …in the place of the hit point bar, which is empty when they're down. */
+.party-grid.compact .char-card.downed .hp-bar-wrap{display:none}
 
 /* Stats row collapses to inline AC / Init / Spd separated by dividers. */
 .party-grid.compact .char-stats-row{
@@ -1246,6 +1253,16 @@ body.player-mode .combat-hide-banner{padding:8px 10px;font-size:var(--fs-sm);col
 .party-grid.compact .char-status-badges .status-badge{font-size:var(--fs-2xs);padding:1px 6px}
 
 /* Hide everything else in compact mode — heavy details belong to full view. */
+/* The same order on every row: who and hit points, then the numbers, then
+   badges, so a row breaks in the same place whatever badges it has. Badges
+   came second, so one card had its hit points on the first line and the
+   next on the second. Companions take a line of their own. */
+.party-grid.compact .char-header{order:1}
+.party-grid.compact .char-hp-block{order:2;min-width:min(260px,100%)}
+.party-grid.compact .char-stats-row{order:3}
+.party-grid.compact .char-status-badges{order:4;flex-wrap:wrap}
+.party-grid.compact .char-status-badges.empty{display:none}
+.party-grid.compact .char-extras{order:5;flex-basis:100%}
 .party-grid.compact .char-forms-row,
 .party-grid.compact .char-wildshape,
 .party-grid.compact .hd-row,

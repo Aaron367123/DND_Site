@@ -3279,6 +3279,13 @@ registerPanel('party',{
           label: '⚠ Conditions…',
           onClick: () => { const r = resolve(); if (r) setTimeout(() => this._openCondMenu(r.idx, rect.left, rect.bottom + 4), 0); },
         });
+        // Concentration, set from the card. The card could only drop it (the
+        // badge); setting it took the combat tracker or a cast from the sheet,
+        // so a spell cast at the table between fights had nowhere to go.
+        items.push({
+          label: c.concentration ? '🌀 Concentrating on ' + c.concentration + '…' : '🌀 Concentrating on…',
+          onClick: () => { const r = resolve(); if (r) this._onAction({ dataset: { act: 'conc-set', idx: String(r.idx) } }); },
+        });
         items.push({
           label: '😩 Exhaustion' + ((+c.exhaustion || 0) ? ' (level ' + (+c.exhaustion) + ')' : '') + '…',
           onClick: () => {
