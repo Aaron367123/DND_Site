@@ -20001,7 +20001,7 @@ for (const cls of Object.keys(rule)) for (let L = 1; L <= 20; L++) for (const sc
         cbClose();
         state.party = [ch, wt, fd];
         const pc = (r, init) => ({ id: r.id, name: r.id, isPC: true, hp: r.hpMax, hpMax: r.hpMax, ac: r.ac, initiative: init, conditions: [] });
-        state.combatants = [{ id: 'r319o', name: 'Orc', isPC: false, hp: 15, hpMax: 15, ac: 5, initiative: 30, initBonus: 0, conditions: [] }, pc(ch, 20), pc(wt, 15), pc(fd, 10)];
+        state.combatants = [{ id: 'r319o', name: 'r319o', isPC: false, hp: 15, hpMax: 15, ac: 5, initiative: 30, initBonus: 0, conditions: [] }, pc(ch, 20), pc(wt, 15), pc(fd, 10)];
         const cc = () => state.combatants.find(c => c.id === 'r319c'), cp = () => state.party.find(p => p.id === 'r319c');
         cc().hp = 30; cp().hp = 30; cp().inspiration = false;
         state.activeCombatantId = 'r319o'; state.combatRound = 1; save();
@@ -20020,12 +20020,12 @@ for (const cls of Object.keys(rule)) for (let L = 1; L <= 20; L++) for (const sc
         ok('vitality of the tree: raging gives temporary hit points equal to the barbarian level', state.party[ti].rage === true && state.party[ti].tempHp === 3, JSON.stringify([state.party[ti].rage, state.party[ti].tempHp]));
         // Dark One's Blessing: the warlock drops the orc.
         state.activeCombatantId = 'r319w'; TV._armed = 'r319o'; save(); TV._render(); await sleep(30);
-        const wc = state.combatants.find(c => c.id === 'r319w'), ai = TV._attacksFor(wc).findIndex(a => /^Eldritch Blast|^Sickle|^Dagger/.test(a.name));
-        TV._d = n => n === 20 ? 19 : n; TV._queue = null;
+        const wc = state.combatants.find(c => c.id === 'r319w'), ai = TV._attacksFor(wc).findIndex(a => /^Eldritch Blast/.test(a.name));   // (1d10, never 0: a Sickle's 1d4 − 1 could leave it standing)
+        TV._d = n => n === 20 ? 19 : n; TV._queue = null; TV._adv = 0; TV._covers = {}; TV._pending = null;
         state.combatants.find(c => c.id === 'r319o').hp = 1;
         await TV._rollAttack(ai, {}); await sleep(60); if (TV._queue) TV._finishMulti(true);
         const cha = Math.floor((fd.abilities.cha - 10) / 2);
-        ok('dark one’s blessing: dropping an enemy gives CHA + warlock level temporary hit points', state.combatants.find(c => c.id === 'r319o').hp === 0 && state.party.find(p => p.id === 'r319w').tempHp === Math.max(1, cha + 3), JSON.stringify([state.combatants.find(c => c.id === 'r319o').hp, state.party.find(p => p.id === 'r319w').tempHp, cha]));
+        ok('dark one’s blessing: dropping an enemy gives CHA + warlock level temporary hit points', state.combatants.find(c => c.id === 'r319o').hp === 0 && state.party.find(p => p.id === 'r319w').tempHp === Math.max(1, cha + 3), JSON.stringify([state.combatants.find(c => c.id === 'r319o').hp, state.party.find(p => p.id === 'r319w').tempHp, cha, String(TV._result || '').replace(/<[^>]+>/g, '').slice(0, 200)]));
       } catch(e){ ok('round 319 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
       finally { TV._d = d0; TV._queue = null; if (document.getElementById('cb-root') && typeof cbClose === 'function') cbClose(); state.party = JSON.parse(keepP); state.combatants = JSON.parse(keepC); state.activeCombatantId = keepA; state.combatRound = keepR; save(); TV && TV._body && TV._render(); }
     }
