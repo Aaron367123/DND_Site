@@ -1372,6 +1372,22 @@ function _sktDamageSegment(text, fromIdx){
 // (4d10) psychic damage") — and requiring one phrasing missed 678 actions.
 // Bounded to a few sentences so a long paragraph can't donate unrelated
 // damage numbers to an attack.
+// What a failed save does, in the stat block's words, short: "On a failed
+// save, a target can't use reactions, its speed is halved…", "…saving throw
+// or be possessed by the ghost", 2024's "wis DC 13, one creature. The target
+// has Disadvantage…" (the sentence after the save's). Null for none.
+function _sktFailText(desc, saveAt){
+  const s = String(desc || '').slice(Math.max(0, saveAt)).replace(/\s+/g, ' ');
+  let m = /\bOn a fail(?:ed save|ure),?\s+([^.]+)\./i.exec(s) || /\bFailure:\s*([^.]+)\./i.exec(s)
+       || /saving throw(?: against this magic)?,? or ([^.;]+)[.;]/i.exec(s);
+  if (!m && /^(?:str|dex|con|int|wis|cha)\s+DC\s+\d+,[^.]*\.\s+([^.]+)\./i.test(s)) m = /^(?:str|dex|con|int|wis|cha)\s+DC\s+\d+,[^.]*\.\s+([^.]+)\./i.exec(s);
+  // (not "…saving throw, or half as much damage on a successful one": a
+  // damage save whose damage didn't read)
+  if (!m || /^(?:or\s+)?half\b/i.test(m[1].trim())) return null;
+  let t = m[1].trim();
+  if (t.length > 140) t = t.slice(0, 137).replace(/\s\S*$/, '') + '…';
+  return t.charAt(0).toUpperCase() + t.slice(1);
+}
 function _sktFirstDamageSentence(text, fromIdx){
   const rest = text.slice(fromIdx);
   const sentences = rest.split(/(?<=\.)\s+/);
@@ -1492,6 +1508,12 @@ function sktParseMonsterAttack(action){
         ...(cond ? { cond, effect: parts.length ? '' : sktCondText(cond) } : {}),
       };
     }
+    // A save with no damage and no condition to put on — a stone golem's
+    // Slow, a ghost's Possession, a babau's Weakening Gaze: still a save to
+    // run, what a failure does said for the DM to apply. They had no row.
+    const fail = _sktFailText(desc, saveAt);
+    if (fail && !/\bto hit\b|\battack roll\b/i.test(desc.slice(0, saveAt)))
+      return { name, recharge, uses, toHit: null, save: { dc: saveDc, ability: saveAbility, half: false }, parts: [], alt: null, altLabel: '', effect: fail };
   }
 
   // Area damage with no save and no attack roll — "Maegera exhales a

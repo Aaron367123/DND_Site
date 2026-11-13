@@ -1937,7 +1937,9 @@ registerPanel('turnview', {
         ctl = `${rech}<span class="tv-save">DC ${a.save.dc} ${esc(String(a.save.ability).slice(0,3).toUpperCase())}</span>
           <button class="btn" data-tv="save" data-ai="${i}" data-half="0" title="${a.save.drop0 ? 'Target failed the save — it drops to 0 hit points' : 'Target failed the save — full damage'}">${a.save.drop0 ? 'Failed — 0 HP' : 'Failed'}</button>
           ${a.save.half ? `<button class="btn" data-tv="save" data-ai="${i}" data-half="1" title="Target saved — half damage">Saved ½</button>`
-            : a.save.onSuccess ? `<button class="btn" data-tv="save" data-ai="${i}" data-half="1" title="Target saved — the damage a success takes">Saved</button>` : ''}
+            : a.save.onSuccess ? `<button class="btn" data-tv="save" data-ai="${i}" data-half="1" title="Target saved — the damage a success takes">Saved</button>`
+            // (no damage — a charm, a curse, a Slow: the save made, logged and its use spent)
+            : !(a.parts || []).length ? `<button class="btn" data-tv="save" data-ai="${i}" data-half="1" title="Target saved — nothing happens">Saved</button>` : ''}
           <button class="btn" data-tv="area" data-ai="${i}" title="Several targets: each rolls its own save, the damage is rolled once">Area…</button>`;
       } else if (a.pc ? !!a.dmgText : ((a.parts || []).length || (a.effect && a.toHit))){
         ctl = `${rech}<button class="btn" data-tv="roll" data-ai="${i}" aria-label="Roll ${esc(a.name)}">${ICO('i-dice')}Roll</button>`
@@ -3148,6 +3150,9 @@ registerPanel('turnview', {
     // Every type, not just the first: "22 piercing" hid the fire half.
     const dmgText = (o.parts && o.parts.length > 1)
       ? o.parts.filter(p => p.amt).map(p => `${p.amt} ${esc(p.type)}`).join(' + ')
+      // (a save that does something other than damage — a stone golem's Slow:
+      // what a failure does, said for the DM to apply)
+      : o.failText != null ? (o.failText ? 'fails — ' + esc(o.failText) : 'saves')
       : (o.parts && !o.parts.length && !o.dmg) ? 'no damage'
       : `${o.dmg} ${esc(o.type || 'damage')}`;
     this._setResult(`<span class="${o.crit ? 'crit' : o.save ? 'dim' : 'hit'}">${
@@ -3183,7 +3188,8 @@ registerPanel('turnview', {
       ? (o.detail || '')
       : String(o.detail || '').replace(/^[a-z]+\s+/i, '');
     const rollTxt = rollRaw ? ` <span style="opacity:.6">[${esc(rollRaw)}]</span>` : '';
-    this._log.unshift(`<strong>${esc(o.attacker)}</strong> hit <strong>${esc(t.name)}</strong> for <strong>${dmgText}</strong>${o.crit ? ' (crit)' : ''}${rollTxt}${usedName ? ' — ' + esc(usedName) : ''}${notes ? ' <span style="opacity:.85">· ' + esc(notes) + '</span>' : ''}${appliedTxt}${soakTxt} <span style="opacity:.7">· ${before} → ${after}</span>`);
+    if (o.failText != null) this._log.unshift(`<strong>${esc(o.attacker)}</strong> — ${esc(String(o.label || '').replace(/\s*\((?:failed|saved)\)$/, ''))}: <strong>${esc(t.name)}</strong> ${dmgText}`);
+    else this._log.unshift(`<strong>${esc(o.attacker)}</strong> hit <strong>${esc(t.name)}</strong> for <strong>${dmgText}</strong>${o.crit ? ' (crit)' : ''}${rollTxt}${usedName ? ' — ' + esc(usedName) : ''}${notes ? ' <span style="opacity:.85">· ' + esc(notes) + '</span>' : ''}${appliedTxt}${soakTxt} <span style="opacity:.7">· ${before} → ${after}</span>`);
     if (o.onHit && !o.save) this._queueOnHit(o);
     if (before > 0 && after <= 0) this._darkBlessing(o.attackerId, t);
     if (before > 0 && after <= 0) this._hexCurseEnds(t);
@@ -5068,6 +5074,8 @@ registerPanel('turnview', {
       type: parts.length ? parts[0].type : '',
       magical: a.magical || (panelDefs.attacks && (this._entryOf(c) || {})._raw
                ? panelDefs.attacks._parsed(this._entryOf(c)._raw).magical : false),
+      // no damage and no condition: what a failure does, in its own words
+      ...(!rider && !parts.length && !a.cond && a.effect ? { failText: half ? '' : a.effect } : {}),
     });
   },
 

@@ -20317,7 +20317,7 @@ for (const cls of Object.keys(rule)) for (let L = 1; L <= 20; L++) for (const sc
           openPanel('turnview'); await sleep(200); TV._render(); await sleep(30);
           const btn = TV._body.querySelector('[data-tv="save"][data-ai="0"][data-half="0"]');
           ok('drop to 0: its Failed button says so', !!btn && /0 HP/.test(btn.textContent), btn && btn.textContent);
-          ok('drop to 0: the Wail has a Saved button (its damage), the Death Glare none', !!TV._body.querySelector('[data-tv="save"][data-ai="1"][data-half="1"]') && !TV._body.querySelector('[data-tv="save"][data-ai="0"][data-half="1"]'));
+          ok('drop to 0: the Wail has a Saved button (its damage), the Death Glare one that does nothing', /^Saved$/.test((TV._body.querySelector('[data-tv="save"][data-ai="1"][data-half="1"]') || {}).textContent || '') && /nothing happens/.test((TV._body.querySelector('[data-tv="save"][data-ai="0"][data-half="1"]') || { title: '' }).title));
           TV._rollSave(0, false); await sleep(40); if (TV._pending) TV._commit(TV._pending, null);
           const t = () => state.combatants.find(x => x.id === 'r330t');
           ok('drop to 0: failed, the target is at 0 — temporary hit points and all', t().hp === 0, JSON.stringify([t().hp, t().tempHp]));
@@ -20415,6 +20415,34 @@ for (const cls of Object.keys(rule)) for (let L = 1; L <= 20; L++) for (const sc
       ok('multiattack: "one with its weapon" is its Demonic Weapon', JSON.stringify(m.counts) === '{"demonic weapon":1,"wolf bite":1,"snakebite":1}', JSON.stringify(m.counts));
       const n = P('The knight makes two attacks: one with its weapon and one with its shield.', ['Longsword', 'Shield Bash']);
       ok('multiattack: with no action named a weapon, "its weapon" names none', !Object.keys(n.counts).some(k => /weapon|longsword/.test(k)), JSON.stringify(n.counts));
+    }
+
+    // -- Round 334: a monster's save that does something other than damage or a condition (a stone golem's Slow, a ghost's Possession) — a row, its failure said, Saved and Failed --
+    if (!PLAYER){
+      const A = (name, desc) => sktParseMonsterAttack({ name, desc });
+      const slow = A('Slow (Recharge 5–6)', 'The golem targets one or more creatures it can see within 10 feet of it. Each target must make a DC 17 Wisdom saving throw against this magic. On a failed save, a target can\'t use reactions, its speed is halved, and it can\'t make more than one attack on its turn. In addition, the target can take either an action or a bonus action on its turn, not both.');
+      ok('fail text: a Slow is a DC 17 Wisdom save, its failure said', !!slow && slow.save && slow.save.dc === 17 && /^A target can't use reactions/.test(slow.effect || '') && !(slow.parts || []).length, JSON.stringify(slow));
+      const pos = A('Possession (Recharge 6)', 'One humanoid that the ghost can see within 5 feet of it must succeed on a DC 13 Charisma saving throw or be possessed by the ghost; the ghost then disappears, and the target is incapacitated and loses control of its body.');
+      ok('fail text: "…or be possessed by the ghost"', !!pos && pos.save.dc === 13 && pos.effect === 'Be possessed by the ghost', JSON.stringify(pos && pos.effect));
+      const br = A('Breath Weapons (Recharge 5–6)', 'The dragon uses one of the following breath weapons. Fire Breath. The dragon exhales fire. Each creature in that area must make a DC 18 Dexterity saving throw, taking damage on a failed save, or half as much damage on a successful one.');
+      ok('fail text: not "or half as much damage"', !br || !/half/i.test(br.effect || ''), JSON.stringify(br && br.effect));
+      const keepC = JSON.stringify(state.combatants), keepA = state.activeCombatantId, TV = panelDefs.turnview;
+      try {
+        state.combatants = [{ id: 'r334g', name: 'r334g', isPC: false, hp: 100, hpMax: 100, ac: 17, initiative: 20, initBonus: 0, conditions: [] }, { id: 'r334t', name: 'r334t', isPC: false, hp: 30, hpMax: 30, ac: 12, initiative: 5, initBonus: 0, conditions: [] }];
+        state.activeCombatantId = 'r334g'; TV._armed = 'r334t'; save();
+        const orig = TV._attacksFor; TV._attacksFor = c => c.id === 'r334g' ? [Object.assign({}, slow)] : orig.call(TV, c);
+        try {
+          openPanel('turnview'); await sleep(200); TV._render(); await sleep(30);
+          ok('fail text: the row has Failed and Saved', !!TV._body.querySelector('[data-tv="save"][data-ai="0"][data-half="0"]') && !!TV._body.querySelector('[data-tv="save"][data-ai="0"][data-half="1"]'));
+          TV._rollSave(0, false); await sleep(40); if (TV._pending) TV._commit(TV._pending, null);
+          const r = String(TV._result).replace(/<[^>]+>/g, '').replace(/\s+/g, ' ');
+          ok('fail text: failed — what a failure does, no "no damage"', /fails — A target can/.test(r) && !/no damage/.test(r) && state.combatants[1].hp === 30, r.slice(0, 160));
+          ok('fail text: logged as the save, not as a hit', /— Slow.*r334t.*fails/.test(String(TV._log[0]).replace(/<[^>]+>/g, '')) && !/ hit /.test(String(TV._log[0])), String(TV._log[0]).slice(0, 160));
+          state.combatants[0].actionUsed = false; TV._rollSave(0, true); await sleep(40); if (TV._pending) TV._commit(TV._pending, null);
+          ok('fail text: saved — it saves', /saves/.test(String(TV._result).replace(/<[^>]+>/g, '')), String(TV._result).replace(/<[^>]+>/g, '').slice(0, 120));
+        } finally { TV._attacksFor = orig; }
+      } catch(e){ ok('round 334 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
+      finally { state.combatants = JSON.parse(keepC); state.activeCombatantId = keepA; save(); TV && TV._body && TV._render(); }
     }
 
     // -- Class features: represented, not just text ------------------------
