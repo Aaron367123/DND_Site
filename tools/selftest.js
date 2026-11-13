@@ -20726,6 +20726,40 @@ for (const cls of Object.keys(rule)) for (let L = 1; L <= 20; L++) for (const sc
       } catch(e){ ok('round 344 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
       finally { window.showConfirm = oConf; window.showToast = oToast; state.party = JSON.parse(keepP); state.combatants = JSON.parse(keepC); save(); if (P._body) P._render(); }
     }
+    // -- Round 345: party card between fights — dropping to 0 ends concentration, no CON save asked --
+    if (!PLAYER){
+      const keepP = JSON.stringify(state.party), keepC = JSON.stringify(state.combatants); const P = panelDefs.party;
+      try {
+        openPanel('party'); await sleep(200);
+        const mk = (o) => Object.assign({ id: 'r345' + Math.random().toString(36).slice(2, 7), name: 'r345 PC', cls: 'cleric', level: 5, hp: 6, hpMax: 30, ac: 15, tempHp: 0, resources: [], sheet: {} }, o);
+        state.combatants = [];
+        state.party = [mk({ concentration: 'Bless' })]; P._render(); P._applyHpDelta(0, -10, 'slashing');
+        ok('downed between fights: concentration ends, and no save is asked', state.party[0].concentration == null && !state.party[0].concCheck, JSON.stringify(state.party[0]));
+        state.party = [mk({ hp: 30, concentration: 'Bless' })]; P._render(); P._applyHpDelta(0, -10, 'slashing');
+        ok('still standing: concentration holds and the save is asked (DC 10)', state.party[0].concentration === 'Bless' && state.party[0].concCheck && state.party[0].concCheck.dc === 10, JSON.stringify(state.party[0]));
+      } catch(e){ ok('round 345 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
+      finally { state.party = JSON.parse(keepP); state.combatants = JSON.parse(keepC); save(); if (P._body) P._render(); }
+    }
+    // -- Round 346: exhaustion 6 kills a character — from the party card, the sheet, and the combat tracker --
+    if (!PLAYER){
+      const keepP = JSON.stringify(state.party), keepC = JSON.stringify(state.combatants); const P = panelDefs.party, C = panelDefs.combat;
+      try {
+        openPanel('party'); await sleep(200);
+        const mk = (o) => Object.assign({ id: 'r346' + Math.random().toString(36).slice(2, 7), name: 'r346 PC', cls: 'fighter', level: 5, hp: 30, hpMax: 30, ac: 15, tempHp: 0, exhaustion: 5, resources: [], sheet: {} }, o);
+        state.combatants = [];
+        state.party = [mk({})]; state.party[0].exhaustion = 6;
+        ok('between fights: level 6 is death, at 0 HP', sktExhaustionDeath(state.party[0]) === true && state.party[0].dead === true && state.party[0].hp === 0, JSON.stringify(state.party[0]));
+        P._render();
+        ok('…and the card says Dead', /Dead/.test((P._body.querySelector('[data-cidx="0"] .char-downed-badge') || {}).textContent || ''));
+        state.party = [mk({ exhaustion: 5 })];
+        ok('level 5 is not', sktExhaustionDeath(state.party[0]) === false && !state.party[0].dead);
+        // In a fight the combatant holds it.
+        state.party = [mk({})]; state.combatants = [{ id: state.party[0].id, name: 'r346 PC', isPC: true, hp: 30, hpMax: 30, ac: 15, init: 10, conditions: [] }];
+        C._setExhaustion(0, 6);
+        ok('in a fight: the combatant is dead at 0 HP, the party slot at 0 HP', state.combatants[0].dead === true && state.combatants[0].hp === 0 && state.party[0].hp === 0 && state.party[0].exhaustion === 6, JSON.stringify([state.combatants[0], state.party[0].hp]));
+      } catch(e){ ok('round 346 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
+      finally { state.party = JSON.parse(keepP); state.combatants = JSON.parse(keepC); save(); if (P._body) P._render(); if (C && C._body) C._render(); }
+    }
     // -- Class features: represented, not just text ------------------------
     {
       try {

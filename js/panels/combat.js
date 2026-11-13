@@ -2871,6 +2871,8 @@ registerPanel('combat',{
       const pi = state.party.findIndex(p => p.id === c.id);
       if (pi >= 0) state.party[pi] = { ...state.party[pi], exhaustion: n };
       state.combatants[i] = { ...c, conditions: conds };
+      // Level 6 is death for a character too (sktExhaustionDeath, party.js).
+      if (pi >= 0 && typeof sktExhaustionDeath === 'function') sktExhaustionDeath(state.party[pi]);
       panelDefs.party?._render?.();
     } else {
       const next = { ...c, conditions: conds, exhaustion: n || undefined };

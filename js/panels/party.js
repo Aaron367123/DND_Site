@@ -1710,8 +1710,15 @@ registerPanel('party',{
         c.rage = false; c.rageRounds = null;
         if (typeof showToast === 'function') showToast(c.name + ' falls — the rage ends', { alert: true });
       }
+      // Dropping to 0 is unconsciousness, and that ends concentration — there
+      // is no save to make. The combat tracker has always done this; between
+      // fights the card asked the downed caster for a CON save instead.
+      if (c.concentration && (c.hp || 0) <= 0){
+        const spell = c.concentration; c.concentration = null; c.concCheck = null;
+        if (typeof showToast === 'function') showToast('🌀 ' + spell + ' ends — ' + c.name + ' is down', { alert: true });
+      }
       // Concentration save reminder — 5e rule. Toast only; don't auto-roll.
-      if (c.concentration && damageForConc > 0){
+      else if (c.concentration && damageForConc > 0){
         const dc = sktConcDc(damageForConc, c);
         if (typeof showToast === 'function' && !document.body.classList.contains('player-app')){
           showToast('🌀 ' + c.name + ': DC ' + dc + ' CON save to maintain ' + c.concentration, { alert: true });
@@ -3226,6 +3233,7 @@ registerPanel('party',{
             showModal('Exhaustion — ' + r.c.name, [{ id: 'lvl', label: 'Level (0 to 6; 6 is death)', type: 'number', value: +r.c.exhaustion || 0, min: 0 }], 'Set').then(v => {
               if (!v) return; const q = resolve(); if (!q) return;
               state.party[q.idx] = { ...q.c, exhaustion: Math.max(0, Math.min(6, parseInt(v.lvl, 10) || 0)) };
+              if (sktExhaustionDeath(state.party[q.idx])){ syncPartyToCombat(q.idx); showToast('💀 ' + q.c.name + ' — exhaustion 6: dies', { alert: true }); }
               save(); this._render(); panelDefs.combat?._render?.();
             });
           },
@@ -3838,6 +3846,19 @@ registerPanel('party',{
 function sktDeathSaveHolder(pc){
   const ci = (typeof _findCombatantForPartyMember === 'function') ? _findCombatantForPartyMember(pc) : -1;
   return ci >= 0 ? state.combatants[ci] : pc;
+}
+// "If your Exhaustion level is 6, you die" — both editions. Marked on the
+// record that holds this character's death state (the fight's combatant, or
+// the party slot between fights), at 0 HP, so the card says Dead and a long
+// rest leaves them be. Setting level 6 used to toast "dies" and change nothing.
+// Returns true when it killed them.
+function sktExhaustionDeath(pc){
+  if (!pc || (+pc.exhaustion || 0) < 6) return false;
+  const h = sktDeathSaveHolder(pc);
+  if (h.dead) return false;
+  pc.hp = 0; pc.concentration = null; pc.rage = false; pc.rageRounds = null;
+  h.dead = true; h.deathSaves = null; h.stable = false; h.hp = 0;
+  return true;
 }
 function sktAddPartyDeathSave(pc, kind, n){
   const ds = Object.assign({ success: 0, fail: 0 }, pc.deathSaves);

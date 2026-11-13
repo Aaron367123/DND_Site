@@ -1454,7 +1454,10 @@ function csOnClick(e){
   }
   if (d.csCondinfo != null){ CS.condOpen = CS.condOpen === d.csCondinfo ? null : d.csCondinfo; return csRender(); }
   if (d.csCond) return csEdit('Condition', () => panelDefs.party._toggleCondition(csIdx(), d.csCond), CS_QUIET);
-  if (d.csExh) return csEdit('Exhaustion', p => { p.exhaustion = Math.max(0, Math.min(6, (+p.exhaustion || 0) + (+d.csExh))); }, CS_QUIET);
+  if (d.csExh) return csEdit('Exhaustion', p => {
+    p.exhaustion = Math.max(0, Math.min(6, (+p.exhaustion || 0) + (+d.csExh)));
+    if (typeof sktExhaustionDeath === 'function' && sktExhaustionDeath(p) && typeof showToast === 'function') showToast('💀 ' + p.name + ' — exhaustion 6: dies', { alert: true });
+  }, CS_QUIET);
   if (d.cs === 'death' || d.cs === 'deathset'){
     let given = null;
     if (d.cs === 'deathset'){ given = parseInt((document.querySelector('#cs-root [data-cs-deathval]') || {}).value, 10); if (!(given >= 1 && given <= 20)){ if (typeof showToast === 'function') showToast('Type the d20 rolled, 1 to 20'); return; } }
