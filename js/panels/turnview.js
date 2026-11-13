@@ -1809,6 +1809,18 @@ registerPanel('turnview', {
         title="${esc(s.label + (s.desc ? ' — ' + s.desc : '') + (on ? ' Click to end it.' : ''))}">${esc(s.label)}${on ? ' <span class="form-pill-x">×</span>' : ''}</button>`;
     }).join('');
   },
+  // A character's row's damage as it will land: the infused weapon's type and
+  // its 1d6 (Elemental Cleaver), Radiant Strikes' 1d8. The row said
+  // "1d12+5 slashing" with the cleaver on fire.
+  _dmgShown(c, a){
+    const t = String(a.dmgText || ''), p = c && c.isPC ? this._partyOf(c) : null;
+    if (!p || a.spell || !t) return t;
+    const fl = ((p.sheet || {}).featureList) || [], has = n => fl.some(f => f && f.name === n && !f.info);
+    const clv = p.rage && !/^Unarmed Strike/i.test(a.name) && (p.active || {})['Elemental Cleaver'];
+    let out = clv ? t.replace(/\s+[a-z]+$/i, ' ' + clv) + ' + 1d6 ' + clv : t;
+    if (!a.ranged && (has('Radiant Strikes') || (has('Improved Divine Smite') && !/^Unarmed Strike/i.test(a.name)))) out += ' + 1d8 radiant';
+    return out;
+  },
   // Elemental Cleaver (Path of the Giant): "When you enter your rage, you can
   // choose one weapon… and infuse it with one of the following damage types"
   // — the type, picked here while raging; its weapons then deal that type and
@@ -1905,7 +1917,7 @@ registerPanel('turnview', {
       // someone else's turn — never one of the creature's own actions.
       if (a.group === 'legendary' || a.group === 'lair') return '';
       const line = a.pc
-        ? (a.save ? esc(a.dmgText || '—') : `${a.bonus >= 0 ? '+' : ''}${a.bonus} to hit · ${esc(a.dmgText || '—')}${a.beams > 1 ? ' · ' + a.beams + ' beams' : ''}`)
+        ? (a.save ? esc(a.dmgText || '—') : `${a.bonus >= 0 ? '+' : ''}${a.bonus} to hit · ${esc(this._dmgShown(c, a) || '—')}${a.beams > 1 ? ' · ' + a.beams + ' beams' : ''}`)
         : `${a.toHit === 'auto' ? 'automatic hit · ' : a.toHit ? esc(a.toHit) + ' to hit · ' : ''}${(a.parts || []).map(pt => `${pt.avg ? pt.avg + ' (' + esc(pt.dice) + ')' : esc(pt.dice)} ${esc(pt.type)}${pt.ifAdv ? ' with advantage' : ''}`).join(' + ') || esc(a.effect || '')}`;
       const spent = (c.rechargeSpent || []).includes(a.name);
       const left = a.pc ? null : this._usesLeft(c, a);

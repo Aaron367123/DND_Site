@@ -20384,6 +20384,30 @@ for (const cls of Object.keys(rule)) for (let L = 1; L <= 20; L++) for (const sc
       finally { TV._d = d0; TV._coverFor = cv0; if (document.getElementById('cb-root') && typeof cbClose === 'function') cbClose(); state.party = JSON.parse(keepP); state.combatants = JSON.parse(keepC); state.activeCombatantId = keepA; save(); TV && TV._body && TV._render(); }
     }
 
+    // -- Round 332: a character's attack row shows the damage as it will land — Elemental Cleaver's type and 1d6, Radiant Strikes' 1d8 --
+    if (!PLAYER){
+      const keepP = JSON.stringify(state.party), keepC = JSON.stringify(state.combatants), keepA = state.activeCombatantId; const TV = panelDefs.turnview;
+      try {
+        const fl = n => [{ name: n, text: '' }];
+        state.party = [{ id: 'r332g', name: 'r332g', cls: 'barbarian', level: 6, hp: 60, hpMax: 60, ac: 15, rage: true, active: { 'Elemental Cleaver': 'fire' },
+                         sheet: { featureList: fl('Elemental Cleaver'), attacks: [{ name: 'Greataxe', atkBonus: '+6', damage: '1d12+5 slashing', str: true }, { name: 'Unarmed Strike', atkBonus: '+6', damage: '6 bludgeoning', str: true }] } },
+                       { id: 'r332p', name: 'r332p', cls: 'paladin', level: 11, hp: 90, hpMax: 90, ac: 18,
+                         sheet: { featureList: fl('Radiant Strikes'), attacks: [{ name: 'Longsword', atkBonus: '+8', damage: '1d8+4 slashing', str: true }, { name: 'Longbow', atkBonus: '+5', damage: '1d8+1 piercing', props: ['A', 'H', '2H'] }] } }];
+        const pc = id => ({ id, name: id, isPC: true, hp: 60, hpMax: 60, ac: 15, initiative: 20, conditions: [] });
+        state.combatants = [pc('r332g'), pc('r332p')]; state.activeCombatantId = 'r332g'; save();
+        openPanel('turnview'); await sleep(300); TV._render(); await sleep(30);
+        const line = nm => { const r = [...TV._body.querySelectorAll('.tv-act')].find(x => (x.textContent || '').indexOf(nm) >= 0); return r ? r.textContent.replace(/\s+/g, ' ') : ''; };
+        ok('row: the infused greataxe reads fire, and its 1d6', /1d12\+5 fire \+ 1d6 fire/.test(line('Greataxe')), line('Greataxe'));
+        ok('row: an Unarmed Strike isn’t infused', /6 bludgeoning/.test(line('Unarmed Strike')) && !/fire/.test(line('Unarmed Strike')), line('Unarmed Strike'));
+        state.party[0].rage = false; save(); TV._render(); await sleep(30);
+        ok('row: not raging, its own type', /1d12\+5 slashing/.test(line('Greataxe')) && !/fire/.test(line('Greataxe')), line('Greataxe'));
+        state.activeCombatantId = 'r332p'; save(); TV._render(); await sleep(30);
+        ok('row: a paladin’s melee weapon shows Radiant Strikes’ 1d8', /1d8\+4 slashing \+ 1d8 radiant/.test(line('Longsword')), line('Longsword'));
+        ok('row: not the bow', !/radiant/.test(line('Longbow')), line('Longbow'));
+      } catch(e){ ok('round 332 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
+      finally { state.party = JSON.parse(keepP); state.combatants = JSON.parse(keepC); state.activeCombatantId = keepA; save(); TV && TV._body && TV._render(); }
+    }
+
     // -- Class features: represented, not just text ------------------------
     {
       try {
