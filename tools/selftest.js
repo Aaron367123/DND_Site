@@ -24134,7 +24134,9 @@ for (const cls of Object.keys(rule)) for (let L = 1; L <= 20; L++) for (const sc
         ok('the DM’s area under the finger isn’t moved', dmNow && dmNow.x === cs * 6 && dmNow.y === cs * 6 && B._areas().length === n0 + 1);
         // Their own: moved by a drag
         const mx = mine.x;
-        B._areaPointerDown(mine.x + 2, mine.y, 100, 100, false); await sleep(20);
+        // Pressed in its middle (its origin is on its edge, inside or not by the way it points).
+        const g = B._areaGeom(mine), mid = g.circle ? g.circle : { x: g.poly.reduce((s, p) => s + p[0], 0) / g.poly.length, y: g.poly.reduce((s, p) => s + p[1], 0) / g.poly.length };
+        B._areaPointerDown(mid.x, mid.y, 100, 100, false); await sleep(20);
         document.dispatchEvent(new MouseEvent('mousemove', { bubbles: true, clientX: 140, clientY: 100 })); await sleep(20);
         document.dispatchEvent(new MouseEvent('mouseup', { bubbles: true, clientX: 140, clientY: 100 })); await sleep(80);
         ok('their own area moves with a drag', mine.x !== mx && B._areas().length === n0 + 1);
@@ -24147,6 +24149,30 @@ for (const cls of Object.keys(rule)) for (let L = 1; L <= 20; L++) for (const sc
       finally {
         if (keepD){ B._drawings = keepD; try { B._saveMap(); } catch(e){} }
         B._tplShape = keepShape; B._tplSize = keepSize; B._tool = '';
+        paTab = keepTab; paRender();
+      }
+    }
+    // -- Round 360: on a player's map, a Large monster with part of its space out of the fog shows; one wholly in the fog doesn't --
+    if (PLAYER){
+      const keepTab = paTab; const B = panelDefs.battlemap;
+      let keepT = null, keepF, keepS, keepG, saved = false;
+      try {
+        if (paMyIdx() < 0) paSetPc(state.party[0].id);
+        paTab = 'map'; paRender(); await sleep(900);
+        keepT = B._tokens.slice(); keepF = B._fog; keepS = B._fogStrokes; keepG = [B._gridOffsetX, B._gridOffsetY]; saved = true;
+        B._gridOffsetX = 0; B._gridOffsetY = 0; B._fogStrokes = [];
+        const cs = B._csScreen();
+        // Revealed: square (4,4) only. A Large ogre on squares (4,4)-(5,5), centre at the corner (5,5).
+        B._fog = new Set(['4,4']);
+        const big = { id: 'r360L', label: 'r360 Ogre', isPC: false, x: 5 * cs, y: 5 * cs, size: 2 };
+        const dark = { id: 'r360D', label: 'r360 Dark', isPC: false, x: 9 * cs, y: 9 * cs, size: 2 };
+        B._tokens = [big, dark]; B._renderTokens(); await sleep(60);
+        const shown = id => !!document.querySelector('#pa-screen .map-token[data-tid="' + id + '"]');
+        ok('player map: a Large monster with a square out of the fog is seen', shown('r360L'));
+        ok('player map: one wholly in the fog is not', !shown('r360D'));
+      } catch(e){ ok('round 360 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
+      finally {
+        if (saved){ B._tokens = keepT; B._fog = keepF; B._fogStrokes = keepS; B._gridOffsetX = keepG[0]; B._gridOffsetY = keepG[1]; try { B._renderTokens(); } catch(e){} }
         paTab = keepTab; paRender();
       }
     }

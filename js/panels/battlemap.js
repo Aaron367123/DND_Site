@@ -5187,6 +5187,18 @@ registerPanel('battlemap',{
   // cell-revealed square left the token showing. It also dropped the Align
   // offset that fogPaint applies when building the cell key, so on any map
   // whose grid has been aligned the lookup was a cell off.
+  // A creature is hidden by the fog only when all of its space is: a Large
+  // one at the edge of the lit room, three of its four squares in view, was
+  // hidden whole because the square under its centre was still dark.
+  _tokenFogged(t){
+    if (!t || t.x == null) return false;
+    const s = Math.max(1, Math.round(+t.size || 1));
+    if (s === 1) return this._isFogged(t.x, t.y);
+    const u = this._tokenUnitScreen() || this._csScreen() || 50;
+    for (let i = 0; i < s; i++) for (let j = 0; j < s; j++)
+      if (!this._isFogged(t.x + (i - (s - 1) / 2) * u, t.y + (j - (s - 1) / 2) * u)) return false;
+    return true;
+  },
   _isFogged(px, py){
     if (!this._fog) return false;               // fog disabled entirely
     const cs = this._csScreen();
@@ -5477,7 +5489,7 @@ registerPanel('battlemap',{
       // Still fogged where this token stands → hide it from players. See
       // _isFogged: it accounts for free-brush strokes and the Align offset,
       // which the inline cell lookup here did not.
-      if (isPlayer && !t.isPC && this._isFogged(t.x, t.y)) return;
+      if (isPlayer && !t.isPC && this._tokenFogged(t)) return;
       // Put on the board but not revealed yet: the ambush in the rafters,
       // the invisible stalker. The DM sees it ghosted; a player's screen is
       // never told it exists.
