@@ -1376,6 +1376,9 @@ function _sktFirstDamageSentence(text, fromIdx){
   const rest = text.slice(fromIdx);
   const sentences = rest.split(/(?<=\.)\s+/);
   for (let i = 0; i < Math.min(sentences.length, 3); i++){
+    // Not damage that comes later, each turn ("takes 21 (6d6) Acid damage at
+    // the start of each of the behir's turns" — a swallowed creature's).
+    if (/\bswallowed\b/i.test(sentences[i]) && /\bat the (?:start|end) of each of\b/i.test(sentences[i])) continue;
     if (_sktDamageClauses(sentences[i]).length) return sentences[i];
   }
   return '';
@@ -1426,7 +1429,10 @@ function sktParseMonsterAttack(action){
   // "saving throw".
   const save2014 = desc.match(/DC\s*(\d+)\s+(\w+)(?:\s+or\s+\w+)?\s+saving throw/i);
   const save2024 = desc.match(/(?:^|[\s(])(str|dex|con|int|wis|cha)\s+DC\s*(\d+)/i);
-  if (save2014){
+  // Whichever comes first: a behir's Swallow is "dex DC 18, …" and only later
+  // mentions the behir's own "DC 14 Constitution saving throw" to regurgitate.
+  const first24 = save2024 && (!save2014 || save2024.index < save2014.index);
+  if (save2014 && !first24){
     saveDc = parseInt(save2014[1]); saveAbility = save2014[2]; saveAt = save2014.index;
   } else if (save2024){
     saveDc = parseInt(save2024[2]);
@@ -1633,6 +1639,7 @@ function sktOnHitCondition(desc){
   const drainRe = /\b(?:DC (\d+) (Strength|Dexterity|Constitution|Intelligence|Wisdom|Charisma) saving throw,? or (?:have )?|(?:the target['’]s|its) )(?:its )?hit point maximum (?:is )?reduced by an amount equal to the (?:(acid|bludgeoning|cold|fire|force|lightning|necrotic|piercing|poison|psychic|radiant|slashing|thunder) )?damage (?:taken|dealt)/i;
   const flatRe = new RegExp('\\b(?:the target|it|the creature) (?:is|has the) (?:also )?(?:knocked )?(' + SKT_HIT_CONDS + ')\\b(?: condition)?(?:[^.(]*?\\(escape DC (\\d+)\\))?', 'i');
   const alsoRe = new RegExp('\\buntil (?:this|the) grapple ends, the (?:target|creature) (?:is|has the) (' + SKT_HIT_CONDS + ')\\b', 'i');
+  const alsoAfterRe = new RegExp('\\bthe (?:target|creature) (?:is|has the) (' + SKT_HIT_CONDS + ')\\b(?: condition)? until (?:this|the) grapple ends', 'i');
   for (let k = 0; k < sentences.length; k++){
     const sen = sentences[k];
     const ifM = /^(?:If|While|Unless)\s+([^,]*),\s*/i.exec(sen);
@@ -1644,7 +1651,9 @@ function sktOnHitCondition(desc){
     if (!out) continue;
     const when = ifM ? ifM[1].trim() : '';
     if (when && !/^the target is a creature$/i.test(when)) out.when = when;
-    const also = alsoRe.exec(sentences.slice(k).join(' '));
+    // (2024: "…has the Grappled condition (escape DC 14), and the target has
+    // the Stunned condition until the grapple ends" — a mind flayer's)
+    const also = alsoRe.exec(sentences.slice(k).join(' ')) || alsoAfterRe.exec(sentences.slice(k).join(' '));
     if (also && cap(also[1]) !== out.cond) out.also = cap(also[1]);
     // How long, and whether it can be shaken off: "paralyzed for 1 minute.
     // The target can repeat the saving throw at the end of each of its turns".
@@ -1687,6 +1696,14 @@ function sktSaveCondition(desc, saveAt){
     new RegExp('\\bOn a fail(?:ed save|ure),?[^.]*?\\b(?:is|be|becomes?|has the|falls?|falling)\\s+(?:magically\\s+)?(?:knocked\\s+)?(' + C + ')\\b', 'i'),
     new RegExp('\\bFailure:[^.]*?\\b(' + C + ')\\b', 'i'),
   ];
+  // The 2024 stat blocks as converted here: "dex DC 13, one creature… The
+  // target has the Restrained condition until…" — the "Failure:" is gone, so
+  // its condition was never read (a giant spider's Web, a mind flayer's Mind
+  // Blast stun).
+  // Not a condition the target must already have ("one creature… that has the
+  // Prone condition", an elephant's Trample; "if it has the Poisoned
+  // condition"), and the first of two ("the Blinded and Restrained conditions").
+  if (/\b(?:str|dex|con|int|wis|cha)\s+DC\s+\d+,/i.test(s)) res.push(new RegExp('(?<!\\b(?:that|which|who|if it|if the target|if they|unless it)\\s)\\b(?:has|have) the (' + C + ')(?: and (?:the )?(?:' + C + '))? conditions?\\b', 'i'));
   for (let k = 0; k < sentences.length; k++){
     const sen = sentences[k];
     for (const re of res){

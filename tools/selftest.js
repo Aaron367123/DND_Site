@@ -20143,6 +20143,22 @@ for (const cls of Object.keys(rule)) for (let L = 1; L <= 20; L++) for (const sc
       }
     }
 
+    // -- Round 324: the 2024 stat blocks' saves as converted ("dex DC 13, one creature… The target has the Restrained condition") — the condition a failure inflicts, and the save that comes first --
+    {
+      const A = (name, desc) => sktParseMonsterAttack({ name, desc });
+      const web = A('Web (Recharge 5–6)', 'dex DC 13, one creature the spider can see within 60 feet. The target has the Restrained condition until the web is destroyed (AC 10; HP 5; Vulnerability to Fire damage; Immunity to Poison and Psychic damage).');
+      ok('2024 save: a giant spider’s Web is a DC 13 Dexterity save, and restrains', !!web && web.save && web.save.dc === 13 && /dex/i.test(web.save.ability) && web.cond && web.cond.cond === 'Restrained', JSON.stringify(web && [web.save, web.cond]));
+      const mb = A('Mind Blast (Recharge 5–6)', "int DC 15, each creature in a 60-foot Cone. 31 (6d8 + 4) Psychic damage, and the target has the Stunned condition until the end of the mind flayer's next turn. Half damage only.");
+      ok('2024 save: Mind Blast stuns, until the end of the mind flayer’s next turn', !!mb && mb.cond && mb.cond.cond === 'Stunned' && mb.cond.dur && mb.cond.dur.kind === 'end-next' && mb.cond.dur.src && (mb.parts || []).length === 1, JSON.stringify(mb && [mb.cond, mb.parts]));
+      const tr = A('Trample', 'dex DC 16, one creature within 5 feet that has the Prone condition. 17 (2d10 + 6) Bludgeoning damage. Half damage.');
+      ok('2024 save: a Trample on a creature that is prone doesn’t knock it prone', !!tr && !tr.cond && (tr.parts || []).length === 1, JSON.stringify(tr && [tr.cond, tr.parts]));
+      const sw = A('Swallow', "dex DC 18, one Large or smaller creature Grappled by the behir (the behir can have only one creature swallowed at a time). The behir swallows the target, which is no longer Grappled. While swallowed, a creature has the Blinded and Restrained conditions, has Total Cover against attacks and other effects outside the behir, and takes 21 (6d6) Acid damage at the start of each of the behir's turns. If the behir takes 30 damage or more on a single turn from the swallowed creature, the behir must succeed on a DC 14 Constitution saving throw at the end of that turn or regurgitate the creature, which falls in a space within 10 feet of the behir and has the Prone condition.");
+      ok('2024 save: a behir’s Swallow is its DC 18 Dexterity save, not its own DC 14 Constitution one later', !!sw && sw.save && sw.save.dc === 18 && /dex/i.test(sw.save.ability), JSON.stringify(sw && sw.save));
+      ok('2024 save: swallowing deals no acid then — that comes each turn — and blinds and restrains', !!sw && !(sw.parts || []).length && sw.cond && sw.cond.cond === 'Blinded', JSON.stringify(sw && [sw.parts, sw.cond]));
+      const tn = sktOnHitCondition("Melee Attack Roll: +7, reach 5 ft. Hit: 22 (4d8 + 4) Psychic damage. If the target is a Medium or smaller creature, it has the Grappled condition (escape DC 14) from all the mind flayer's tentacles, and the target has the Stunned condition until the grapple ends.");
+      ok('2024 hit: a mind flayer’s Tentacles grapple, and stun while the grapple lasts', !!tn && tn.cond === 'Grappled' && tn.escape === 14 && tn.also === 'Stunned', JSON.stringify(tn));
+    }
+
     // -- Class features: represented, not just text ------------------------
     {
       try {
