@@ -672,6 +672,16 @@ registerPanel('turnview', {
       }
     }
     if (raged) extra += ' — raging';
+    // A feature that is a switch on the sheet (Bladesong, Innate Sorcery,
+    // Sacred Weapon, Hexblade's Curse): on, as the sheet's own button turns
+    // it — its AC, its bonus to hit, its advantage read that. Paid for above.
+    // Only the use was spent here before, and the bladesinger's AC stayed put.
+    const stRec = who.isPC ? this._partyOf(who) : null;
+    const stS = stRec ? this._featureStates(stRec).find(s => s.key === a.name) : null;
+    if (stS && !(stRec.active || {})[stS.key]){
+      stRec.active = Object.assign({}, stRec.active, { [stS.key]: true });
+      extra += ' — ' + esc(stS.label) + ' is on' + (stS.desc ? ' <span class="dim">(' + esc(stS.desc) + ')</span>' : '');
+    }
     const line = `${a.name}${a.action ? ' (' + a.action + ')' : ''}${spent}`;
     this._log.unshift(`<strong>${esc(who.name)}</strong> — ${esc(line)}${heal ? ' · +' + heal.amt + ' HP' : ''}`);
     this._setResult(`<strong>${esc(who.name)}</strong> uses <strong>${esc(a.name)}</strong>${esc(spent)}${extra}.`, true);
@@ -1625,13 +1635,57 @@ registerPanel('turnview', {
   _renderClassRow(c){
     const p = this._partyOf(c);
     const P = panelDefs.party;
-    if (!p || !P || typeof P._formsRow !== 'function') return '';
+    if (!p) return '';
     const i = state.party.indexOf(p);
     if (i < 0) return '';
     let row = '';
-    try { row = P._formsRow(p, i) || ''; } catch(e){ return ''; }
-    if (!row) return '';                 // not a barbarian or a druid
-    return `<div class="tv-classrow">${row}</div>`;
+    if (P && typeof P._formsRow === 'function'){ try { row = P._formsRow(p, i) || ''; } catch(e){ row = ''; } }
+    const st = this._statePills(c, p);
+    if (!row && !st) return '';          // nothing to switch on or off
+    return `<div class="tv-classrow">${row}${st}</div>`;
+  },
+  // The switches on a character's sheet that a feature gives — Reckless
+  // Attack, Bladesong, Innate Sorcery, Sacred Weapon, Hexblade's Curse — so
+  // the turn can use them. Rage has the party card's own pill, and a spell's
+  // switch is the spell, cast.
+  _featureStates(p){
+    return (((p && p.sheet) || {}).states || []).filter(s => s && s.key && !s.spell && s.key !== 'Rage');
+  },
+  _statePills(c, p){
+    if (this._wsOf(c)) return '';
+    const act = p.active || {};
+    return this._featureStates(p).map(s => {
+      const on = !!act[s.key];
+      return `<button class="form-pill ${on ? 'state-on' : 'state-off'}" data-tv="state" data-id="${esc(c.id)}" data-k="${esc(s.key)}" aria-pressed="${on}"
+        title="${esc(s.label + (s.desc ? ' — ' + s.desc : '') + (on ? ' Click to end it.' : ''))}">${esc(s.label)}${on ? ' <span class="form-pill-x">×</span>' : ''}</button>`;
+    }).join('');
+  },
+  // A feature's switch, from the turn: on through its activation when it has
+  // one (that spends its use and its action, as using it does), otherwise
+  // as the sheet's button does it — its use, if it has one, and nothing else
+  // (Reckless Attack is decided with the first attack, at no cost).
+  _toggleState(id, key){
+    const who = this._order().find(c => c.id === id); const p = who && this._partyOf(who); if (!p) return;
+    const s = this._featureStates(p).find(x => x.key === key); if (!s) return;
+    const on = !!(p.active || {})[key];
+    if (!on){
+      const a = this._activationsFor(who).find(x => x.name === key);
+      if (a) return this._useActivation(id, a.i);
+      const r = s.resource ? (p.resources || []).find(x => x.name === s.resource) : null;
+      if (r && (+r.current || 0) <= 0){ this._setResult(`<span class="dim">${esc(who.name)} can't — no ${esc(s.resource)} left.</span>`, true); this._render(); return; }
+      this._snapshot(`${who.name} · ${s.label}`);
+      if (r) r.current = Math.max(0, (+r.current || 0) - 1);
+      p.active = Object.assign({}, p.active, { [key]: true });
+      this._log.unshift(`<strong>${esc(who.name)}</strong> — ${esc(s.label)}${r ? ' · ' + esc(r.name) + ' ' + r.current + '/' + r.max : ''}`);
+      this._setResult(`<strong>${esc(who.name)}</strong> — <strong>${esc(s.label)}</strong>${s.desc ? ': ' + esc(s.desc) : ''}`, true);
+    } else {
+      this._snapshot(`${who.name} · ${s.label} ends`);
+      const a2 = Object.assign({}, p.active); delete a2[key];
+      p.active = Object.keys(a2).length ? a2 : null;
+      this._log.unshift(`<strong>${esc(who.name)}</strong> — ${esc(s.label)} ends`);
+      this._setResult(`<span class="dim">${esc(who.name)}'s ${esc(s.label)} ends.</span>`, true);
+    }
+    save(); panelDefs.party?._render?.(); panelDefs.combat?._render?.(); this._render();
   },
 
   // The Party panel binds its own click handler to its own body, so nothing
@@ -1639,6 +1693,13 @@ registerPanel('turnview', {
   // methods rather than duplicating what they do.
   _classAction(act, i){
     const P = panelDefs.party; if (!P) return false;
+    // Starting a Rage or a Wild Shape from the pill is the feature used: its
+    // Bonus Action as well as its use, through the activation when the
+    // character has one. The pill alone spent the use and left the Bonus
+    // Action free for something else.
+    const own = act === 'rage-on' || act === 'ws-start' ? this._order().find(x => this._partyOf(x) === state.party[i]) : null;
+    const viaAct = own && this._activationsFor(own).find(x => x.name === (act === 'rage-on' ? 'Rage' : 'Wild Shape'));
+    if (viaAct){ this._useActivation(own.id, viaAct.i); return true; }
     if (act === 'rage-on')  { P._setRage(i, true);  this._render(); return true; }
     if (act === 'rage-off') { P._setRage(i, false); this._render(); return true; }
     if (act === 'ws-start' || act === 'ws-edit'){ P._editWildShape(i); return true; }
@@ -2717,7 +2778,7 @@ registerPanel('turnview', {
       prompts: this._copyPrompts({ onHits: this._onHits, hit: this._lastPcHit, miss: this._lastPcMiss }),
       round: state.combatRound, active: state.activeCombatantId,
       combat: this._order().map(c => ({
-        id:c.id, hp:c.hp, dead:c.dead, stable:c.stable, reactionUsed:c.reactionUsed,
+        id:c.id, hp:c.hp, dead:c.dead, stable:c.stable, reactionUsed:c.reactionUsed, ac:c.ac, shieldAc:c.shieldAc,
         actionUsed:c.actionUsed, bonusUsed:c.bonusUsed, dodging:c.dodging, dashes:c.dashes || 0, stood:c.stood || 0, aimed:c.aimed ? {...c.aimed} : null, readied:c.readied ? {...c.readied} : null,
         // (a Help used by the roll being undone, and a hiding creature's
         // cover blown by it, come back with it)
@@ -2744,6 +2805,9 @@ registerPanel('turnview', {
         sheet: p.sheet && p.sheet.spellSlots ? JSON.parse(JSON.stringify(p.sheet.spellSlots)) : null,
         // the dice a character holds: Bardic Inspiration, Heroic Inspiration
         bardicInspiration: p.bardicInspiration, bardicFrom: p.bardicFrom, inspiration: p.inspiration,
+        // a Rage, a feature's switch, a concentration: an undone Bladesong
+        // takes its AC with it
+        rage: !!p.rage, rageRounds: p.rageRounds, active: p.active ? {...p.active} : null, concentration: p.concentration || null,
       })),
     };
   },
@@ -2767,6 +2831,7 @@ registerPanel('turnview', {
       p.resources = s.resources.map(r => ({...r}));
       if (s.sheet && p.sheet) p.sheet.spellSlots = s.sheet;
       if ('bardicInspiration' in s){ p.bardicInspiration = s.bardicInspiration; p.bardicFrom = s.bardicFrom; p.inspiration = s.inspiration; }
+      if ('active' in s){ p.rage = s.rage; p.rageRounds = s.rageRounds; p.active = s.active ? {...s.active} : null; p.concentration = s.concentration; }
     });
     state.combatRound = u.round;
     state.activeCombatantId = u.active;
@@ -3083,9 +3148,25 @@ registerPanel('turnview', {
       // produce, so the rule has to be applied here and not only at roll time.
       o.hit = o.crit || (o.nat !== 1 && o.total >= ac);
       this._commit(o, desc);
+      if (r.ac != null && /^Shield$/i.test(r.name) && who.id === o.target.id){ this._keepShield(who, r.ac); save(); panelDefs.combat?._render?.(); this._render(); }
       return;
     }
     this._commit(o, by);   // no mechanics: spent, logged, the DM adjudicates
+  },
+
+  // Shield lasts "until the start of your next turn": every attack until
+  // then meets the +5, not only the one it answered. A dragon's second claw
+  // hit the wizard's old AC. A built character's is the sheet's switch (its
+  // AC worked out again, the sheet showing it); anyone else's goes on the
+  // combatant. The tracker takes both off as that creature's turn starts.
+  _keepShield(who, n){
+    const p = this._partyOf(who);
+    if (p && p.build && (((p.sheet || {}).states) || []).some(s => s && s.key === 'Shield')){
+      p.active = Object.assign({}, p.active, { Shield: true });
+      return;
+    }
+    if (who.shieldAc) return;
+    who.shieldAc = n; who.ac = (+who.ac || 0) + n;
   },
 
   // `opts` lets an opportunity attack say who is swinging and at whom without
@@ -4877,6 +4958,7 @@ registerPanel('turnview', {
       else if (act === 'stdact'){ this._takeStandardAction(el.dataset.a); }
       // A character's sheet, from their turn: their spells, everything else
       // the panel doesn't draw. What they cast comes back here.
+      else if (act === 'state'){ this._toggleState(el.dataset.id, el.dataset.k); }
       else if (act === 'sheet'){ if (typeof openCharSheet === 'function') openCharSheet(el.dataset.id, el.dataset.tab ? { tab: el.dataset.tab } : {}); }
       else if (act === 'cover'){
         const c = this._active(), t = this._armed && this._order().find(x => x.id === this._armed);

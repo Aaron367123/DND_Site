@@ -19696,6 +19696,70 @@ for (const cls of Object.keys(rule)) for (let L = 1; L <= 20; L++) for (const sc
       finally { document.getElementById('cs-root')?.remove(); state.party = JSON.parse(keepP); state.combatants = JSON.parse(keepC); state.activeCombatantId = keepA; save(); TV && TV._body && TV._render(); }
     }
 
+    // -- Round 313: a feature's switch from the turn (Reckless Attack's pill, Bladesong through its activation), the Rage pill's Bonus Action, and Shield until the caster's next turn --
+    if (!PLAYER){
+      const keepP = JSON.stringify(state.party), keepC = JSON.stringify(state.combatants), keepA = state.activeCombatantId; const TV = panelDefs.turnview; const d0 = TV._d;
+      try {
+        const R = await sktRulesLoad('2024');
+        await openCharBuilder({}); for (let i = 0; i < 80 && !CB.R; i++) await sleep(100);
+        const mk = (cls, sub, id) => { CB.build = Object.assign(sktBlankBuild('2024'), { cls, level: 5, subclass: sub, species: 'Human', name: id, sources: SKT_ALL_SOURCES }); cbQuickBuild(); const r = sktComputeCharacter(CB.build, R); r.id = id; return r; };
+        const barb = mk('Barbarian', 'Berserker', 'r313b'), blade = mk('Wizard', 'Bladesinging', 'r313w'), evo = mk('Wizard', 'Evoker', 'r313e');
+        cbClose();
+        state.party = [barb, blade, evo, { id: 'r313i', name: 'r313i', cls: 'wizard', level: 5, hp: 30, hpMax: 30, ac: 12, sheet: { spells: ['Shield'], spellSlots: { 1: { total: 4, expended: 0 } } } }];
+        const pc = (r, init) => ({ id: r.id, name: r.id, isPC: true, hp: r.hpMax, hpMax: r.hpMax, ac: r.ac, initiative: init, conditions: [] });
+        state.combatants = [pc(barb, 20), pc(blade, 18), { id: 'r313o', name: 'Ogre', isPC: false, hp: 59, hpMax: 59, ac: 11, initiative: 15, initBonus: 0, conditions: [] }, pc(evo, 10), pc(state.party[3], 5)];
+        state.activeCombatantId = 'r313b'; save();
+        openPanel('turnview'); await sleep(300); TV._render(); await sleep(40);
+        const pill = k => TV._body.querySelector('.tv-classrow [data-tv="state"][data-k="' + k + '"]');
+        const txt = () => String(TV._result || '').replace(/<[^>]+>/g, '').replace(/\s+/g, ' ').trim();
+        ok('feature switch: a barbarian’s turn shows Reckless Attack, off', !!pill('Reckless Attack') && pill('Reckless Attack').getAttribute('aria-pressed') === 'false');
+        pill('Reckless Attack').click(); await sleep(60);
+        const b = () => state.party.find(p => p.id === 'r313b'), bc = () => state.combatants.find(c => c.id === 'r313b');
+        ok('feature switch: Reckless Attack on — on the sheet, with its advantage on Strength attacks', !!(b().active || {})['Reckless Attack'] && (b().sheet.rollAdv || []).some(x => x.label === 'Reckless Attack'), JSON.stringify(b().active));
+        ok('feature switch: Reckless Attack costs no action', !bc().actionUsed && !bc().bonusUsed);
+        TV._armed = 'r313o'; TV._d = n => n === 20 ? 12 : 1;
+        const gi = TV._attacksFor(bc()).findIndex(a => a.str && !a.ranged); await TV._rollAttack(gi, {}); await sleep(40);
+        ok('feature switch: the barbarian’s Strength attack rolls with advantage', /adv \(Reckless Attack\)/.test(txt()), txt().slice(0, 200));
+        bc().bonusUsed = false; TV._render(); await sleep(30);
+        const rage0 = (b().resources.find(r => r.name === 'Rage') || {}).current;
+        TV._body.querySelector('.tv-classrow [data-act="rage-on"]').click(); await sleep(60);
+        ok('feature switch: the Rage pill rages, spending a use and the Bonus Action', b().rage === true && bc().bonusUsed === true && b().resources.find(r => r.name === 'Rage').current === rage0 - 1, JSON.stringify([b().rage, bc().bonusUsed, rage0]));
+        pill('Reckless Attack').click(); await sleep(60);
+        ok('feature switch: clicked again, Reckless Attack ends', !(b().active || {})['Reckless Attack'] && pill('Reckless Attack').getAttribute('aria-pressed') === 'false');
+        // Bladesong through its activation: the AC goes up.
+        state.activeCombatantId = 'r313w'; save(); TV._render(); await sleep(40);
+        const w = () => state.party.find(p => p.id === 'r313w'), wc = () => state.combatants.find(c => c.id === 'r313w'), ac0 = wc().ac;
+        const bs = TV._activationsFor(wc()).find(a => a.name === 'Bladesong');
+        await TV._useActivation('r313w', bs.i); await sleep(60);
+        ok('feature switch: Bladesong used from the turn is on — AC up, the Bonus Action spent', !!(w().active || {}).Bladesong && wc().ac > ac0 && wc().bonusUsed === true, JSON.stringify([w().active, ac0, wc().ac]));
+        ok('feature switch: its pill shows it on', !!pill('Bladesong') && pill('Bladesong').getAttribute('aria-pressed') === 'true');
+        // Shield: until the start of the caster's next turn — a built wizard's
+        // through the sheet, an imported one's on the combatant.
+        state.activeCombatantId = 'r313o'; save(); TV._render(); await sleep(40);
+        const e = () => state.combatants.find(c => c.id === 'r313e'), eac = e().ac, ogre = state.combatants.find(c => c.id === 'r313o');
+        const oa = TV._attacksFor(ogre), hitb = parseInt(String(oa[0].toHit).replace(/[^\d-]/g, ''), 10) || 0;
+        const shieldBtn = () => [...TV._body.querySelectorAll('.tv-pendingwrap button')].find(x => /^Shield/.test(x.textContent.trim()));
+        TV._armed = 'r313e'; TV._d = n => n === 20 ? eac - hitb + 1 : 3;
+        await TV._rollAttack(0, {}); await sleep(60);
+        ok('shield: offered against the hit', !!shieldBtn());
+        shieldBtn() && shieldBtn().click(); await sleep(100);
+        ok('shield: that hit misses, and the AC stays up', /^Miss/.test(txt()) && e().ac === eac + 5, JSON.stringify([eac, e().ac, txt().slice(0, 80)]));
+        ok('shield: a built wizard’s is the sheet’s own switch', !!(state.party.find(p => p.id === 'r313e').active || {}).Shield && !e().shieldAc, JSON.stringify(state.party.find(p => p.id === 'r313e').active));
+        ogre.actionUsed = false; await TV._rollAttack(0, {}); await sleep(60);
+        ok('shield: the next attack this round meets it too', !TV._pending && /^Miss/.test(txt()), txt().slice(0, 120));
+        const ic = () => state.combatants.find(c => c.id === 'r313i');
+        TV._armed = 'r313i'; TV._d = n => n === 20 ? 12 - hitb + 1 : 3; ogre.actionUsed = false;
+        await TV._rollAttack(0, {}); await sleep(60);
+        shieldBtn() && shieldBtn().click(); await sleep(100);
+        ok('shield: on a character without a sheet switch, the combatant’s AC', ic().ac === 17 && ic().shieldAc === 5, JSON.stringify([ic().ac, ic().shieldAc]));
+        panelDefs.combat._nextTurn(); await sleep(150);
+        ok('shield: gone when the caster’s turn starts', state.activeCombatantId === 'r313e' && e().ac === eac && ic().ac === 17, JSON.stringify([state.activeCombatantId, e().ac, ic().ac]));
+        panelDefs.combat._nextTurn(); await sleep(150);
+        ok('shield: and the other’s at theirs', state.activeCombatantId === 'r313i' && ic().ac === 12 && !ic().shieldAc, JSON.stringify([state.activeCombatantId, ic().ac]));
+      } catch(e){ ok('round 313 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
+      finally { TV._d = d0; if (document.getElementById('cb-root') && typeof cbClose === 'function') cbClose(); state.party = JSON.parse(keepP); state.combatants = JSON.parse(keepC); state.activeCombatantId = keepA; save(); TV && TV._body && TV._render(); }
+    }
+
     // -- Class features: represented, not just text ------------------------
     {
       try {

@@ -1726,6 +1726,9 @@ registerPanel('combat',{
     if (c.legendaryMax) c.legendaryUsed = 0;
     this._tickCondTimers(c, 'start');
     this._tickByTimers(c, 'start');
+    // A Shield cast through the Turn View on someone without a sheet switch
+    // for it: its +5 ends now.
+    if (c.shieldAc){ c.ac = Math.max(0, (+c.ac || 0) - c.shieldAc); c.shieldAc = undefined; }
     if (c.isPC){
       const p = typeof _findPartyMemberForCombatant === 'function' ? state.party[_findPartyMemberForCombatant(c)] : null;
       if (p && p.active && (p.active['Reckless Attack'] || p.active.Shield)){
