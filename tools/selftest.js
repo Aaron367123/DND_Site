@@ -20667,6 +20667,35 @@ for (const cls of Object.keys(rule)) for (let L = 1; L <= 20; L++) for (const sc
       finally { if (document.getElementById('cb-root') && typeof cbClose === 'function') cbClose(); state.party = JSON.parse(keepP); state.combatants = JSON.parse(keepC); save(); }
     }
 
+    // -- Round 343: party card, out of combat — massive damage kills, a hit on a stable PC restarts dying, the downed badge repaints, rage shows once --
+    if (!PLAYER){
+      const keepP = JSON.stringify(state.party), keepC = JSON.stringify(state.combatants), keepS = JSON.stringify(state.settings || {}); const P = panelDefs.party;
+      try {
+        openPanel('party'); await sleep(200);
+        const mk = (o) => Object.assign({ id: 'r343' + Math.random().toString(36).slice(2, 7), name: 'r343 PC', cls: 'fighter', level: 5, hp: 5, hpMax: 20, ac: 15, tempHp: 0, resources: [], sheet: {} }, o);
+        state.combatants = [];
+        state.party = [mk({})]; P._render(); P._applyHpDelta(0, -30, 'slashing');
+        ok('massive damage out of combat: 25 past 0 on a 20-HP max is death', state.party[0].dead === true && !state.party[0].deathSaves, JSON.stringify(state.party[0]));
+        state.party = [mk({ hp: 20 })]; P._render(); P._applyHpDelta(0, -39, 'slashing');
+        ok('massive damage: 19 past 0 is not', !state.party[0].dead && state.party[0].deathSaves && state.party[0].deathSaves.fail === 0, JSON.stringify(state.party[0]));
+        state.party = [mk({ hp: 0, stable: true })]; P._render(); P._applyHpDelta(0, -3, 'slashing');
+        ok('a hit on a stable PC: no longer stable, one failure', state.party[0].stable === false && state.party[0].deathSaves && state.party[0].deathSaves.fail === 1, JSON.stringify(state.party[0]));
+        const badge = () => ((P._body.querySelector('[data-cidx="0"] .char-downed-badge') || {}).textContent || '');
+        ok('…and the card says so', /1\/3 fails/.test(badge()), badge());
+        P._applyHpDelta(0, -3, 'slashing');
+        ok('the downed badge repaints on the next hit at 0', /2\/3 fails/.test(badge()), badge());
+        P._applyHpDelta(0, -3, 'slashing');
+        ok('…and on the third, Dead', /Dead/.test(badge()) && state.party[0].dead === true, badge());
+        if (!state.settings) state.settings = {};
+        state.settings.partyCompact = false;
+        state.party = [mk({ cls: 'barbarian', hp: 40, hpMax: 40, rage: true })]; P._render();
+        const card = () => P._body.querySelector('[data-cidx="0"]');
+        ok('rage shows once on a full card (the forms-row pill, no badge)', card().querySelectorAll('.status-badge.rage').length === 0 && card().querySelectorAll('.form-pill.rage-on').length === 1);
+        state.settings.partyCompact = true; P._render();
+        ok('compact view hides the pill, so the badge shows', card().querySelectorAll('.status-badge.rage').length === 1);
+      } catch(e){ ok('round 343 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
+      finally { state.party = JSON.parse(keepP); state.combatants = JSON.parse(keepC); state.settings = JSON.parse(keepS); save(); if (P._body) P._render(); }
+    }
     // -- Class features: represented, not just text ------------------------
     {
       try {

@@ -461,16 +461,7 @@ registerPanel('party',{
         // themselves live on the combat slot (combat.js initializes deathSaves
         // on the matching combatant when HP crosses 0 in combat) — we just
         // surface the badge here so the party panel makes the state visible.
-        + (downed
-          ? (()=>{
-              const h = sktDeathSaveHolder(c);
-              if (h.dead) return '<div class="char-downed-badge dead">' + ICO('i-skull') + ' Dead</div>';
-              if (h.stable) return '<div class="char-downed-badge">⚕ Stable at 0 HP</div>';
-              const ds = h.deathSaves || { success: 0, fail: 0 };
-              return '<button class="char-downed-badge" data-act="death-roll" data-idx="'+i+'" title="Roll a death save">' + ICO('i-skull') + ' Downed · '
-                + (ds.success||0) + '/3 saves · ' + (ds.fail||0) + '/3 fails · Roll</button>';
-            })()
-          : '')
+        + (downed ? this._downedBadge(c, i) : '')
       +'</div>'
       // Stats: AC, Init, Spd. The AC input has a computed-breakdown tooltip
       // ("10 + 2 DEX + 5 gear = 17") so the DM can see at a glance whether
@@ -1413,10 +1404,13 @@ registerPanel('party',{
     if (c.concentration){
       badges.push(`<span class="status-badge conc" data-act="conc-drop" data-idx="${i}" title="Concentrating on ${esc(c.concentration)} — click to drop">${ICO('i-conc')} ${esc(c.concentration)}</span>`);
     }
-    if (c.rage){
+    // Rage and Wild Shape have their own pills in the forms row, which only
+    // compact view hides: a full card showed each twice.
+    const compact = !!(state.settings && state.settings.partyCompact);
+    if (c.rage && compact){
       badges.push(`<span class="status-badge rage" data-act="rage-off" data-idx="${i}" title="Raging — adv on STR · resist B/P/S${c.rageRounds != null ? ' · ' + c.rageRounds + ' round' + (c.rageRounds===1?'':'s') + ' left' : ''} · click to end">${ICO('i-burst')} Rage${c.rageRounds != null ? ' ' + c.rageRounds : ''}</span>`);
     }
-    if (c.wildshape && c.wildshape.name){
+    if (c.wildshape && c.wildshape.name && compact){
       badges.push(`<span class="status-badge wildshape" data-act="ws-end" data-idx="${i}" title="Wild Shape as ${esc(c.wildshape.name)} — click to revert">${ICO('i-paw')} ${esc(c.wildshape.name)}</span>`);
     }
     if (c.inspiration){
@@ -1673,6 +1667,15 @@ registerPanel('party',{
       }
       const taken = Math.max(0, remaining);
       hitThrough = taken > 0;
+      // Massive damage (PHB / 2024 alike): what is left after 0, at or past
+      // the hit point maximum, kills outright. Measured after temp HP and a
+      // beast pool soak their share, as the combat tracker does. This path
+      // let a PC on 5 of 20 who took 30 from a trap between fights go down
+      // and start death saves.
+      if (taken > 0 && !c.dead && (+c.hpMax || 0) > 0 && taken - hpBefore >= +c.hpMax){
+        c.dead = true; c.deathSaves = null; c.stable = false;
+        if (typeof showToast === 'function') showToast('💀 ' + c.name + ' dies instantly — massive damage', { alert: true });
+      }
       if (taken > 0){
         // Floor at 0. Damage that would take you below 0 sets you to 0 in 5e;
         // the excess only matters for instant death, which this tracker does
@@ -1732,7 +1735,13 @@ registerPanel('party',{
     if ((c.hp || 0) > 0){ delete c.deathSaves; delete c.stable; delete c.dead; }
     else if (delta < 0 && !c.dead){
       if (hpBefore > 0){ c.deathSaves = { success: 0, fail: 0 }; c.stable = false; }
-      else if (hitThrough) sktAddPartyDeathSave(c, 'fail', 1);
+      else if (hitThrough){
+        // Damage to a stable creature makes it start dying again: the
+        // flag goes, and the hit is the first failure. Left set, the card
+        // kept saying "Stable" over a recorded failure.
+        c.stable = false;
+        sktAddPartyDeathSave(c, 'fail', 1);
+      }
     }
     save();
     // Mirror to the matching combat slot. syncPartyToCombat() repaints the
@@ -2728,6 +2737,15 @@ registerPanel('party',{
   // the party↔combat mirror means one click used to rebuild BOTH panels.
   // Structural transitions (alive↔downed, tempHp 0↔>0) change the card's
   // markup, not just its numbers, so those still need the full path.
+  _downedBadge(c, i){
+    const h = sktDeathSaveHolder(c);
+    if (h.dead) return '<div class="char-downed-badge dead">' + ICO('i-skull') + ' Dead</div>';
+    if (h.stable) return '<div class="char-downed-badge">⚕ Stable at 0 HP</div>';
+    const ds = h.deathSaves || { success: 0, fail: 0 };
+    return '<button class="char-downed-badge" data-act="death-roll" data-idx="'+i+'" title="Roll a death save">' + ICO('i-skull') + ' Downed · '
+      + (ds.success||0) + '/3 saves · ' + (ds.fail||0) + '/3 fails · Roll</button>';
+  },
+
   _patchHp(i){
     const b = this._body; if (!b) return true;   // panel closed → nothing to paint
     const p = state.party[i]; if (!p) return false;
@@ -2738,6 +2756,16 @@ registerPanel('party',{
     const hadTemp   = !!card.querySelector('.hp-bar-temp');
     const hasTemp   = (p.tempHp||0) > 0;
     if (wasDowned !== isDowned || hadTemp !== hasTemp) return false;
+    // Still down, but a hit at 0 HP is a failed death save, and massive
+    // damage or a third failure is death: the badge's count and state change
+    // while the card stays downed. It kept the old "0/3 fails" until the next
+    // full render.
+    if (isDowned){
+      const badge = card.querySelector('.char-downed-badge');
+      const html = this._downedBadge(p, i);
+      if (!badge) return false;
+      if (badge.outerHTML !== html) badge.outerHTML = html;
+    }
     // A lowered maximum adds a marker and a bar segment: structural.
     const hadLoss = !!card.querySelector('.char-hpmax-loss');
     const loss = (typeof sktMaxHpLoss === 'function') ? sktMaxHpLoss(p) : 0;
