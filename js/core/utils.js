@@ -1984,6 +1984,34 @@ const SKT_DIAG_RULES = [
   ['alt',    '5-10-5',     'Diagonals alternate 5 ft and 10 ft (DMG optional rule)'],
   ['euclid', 'True distance', 'The straight-line distance, to the nearest square'],
 ];
+// The hex a point is in, on the battle map's hex grid: flat-topped hexes
+// cs wide, odd columns half a hex lower, shifted by the Align offset (offX,
+// offY, already in stage pixels). → {q, r}.
+function sktHexAt(px, py, cs, offX, offY){
+  const s = cs / 2, h = s * Math.sqrt(3), colStep = s * 1.5;
+  const x = px - (offX || 0), y = py - (offY || 0);
+  const approxQ = Math.round(x / colStep);
+  let best = null, bestD = Infinity;
+  for (let dq = -1; dq <= 1; dq++){
+    const q = approxQ + dq, yShift = (q & 1) ? h / 2 : 0;
+    const approxR = Math.round((y - yShift - h / 2) / h);
+    for (let dr = -1; dr <= 1; dr++){
+      const r = approxR + dr, cx = q * colStep, cy = yShift + r * h + h / 2;
+      const d = (cx - x) * (cx - x) + (cy - y) * (cy - y);
+      if (d < bestD){ bestD = d; best = { q, r }; }
+    }
+  }
+  return best;
+}
+// Hexes walked from the hex one point is in to the other's. A move on a hex
+// grid is so many hexes entered; the straight-line distance over a hex's
+// width, which the map and the Turn View used, came up short on any line
+// off the grid's axes — eight hexes out along a zig-zag row measured 35 ft.
+function sktHexSteps(x0, y0, x1, y1, cs, offX, offY){
+  const cube = c => { const x = c.q, z = c.r - (c.q - (c.q & 1)) / 2; return [x, -x - z, z]; };
+  const a = cube(sktHexAt(x0, y0, cs, offX, offY)), b = cube(sktHexAt(x1, y1, cs, offX, offY));
+  return Math.max(Math.abs(a[0] - b[0]), Math.abs(a[1] - b[1]), Math.abs(a[2] - b[2]));
+}
 function sktGridFeet(dx, dy, rule, ftPerCell){
   const ft = +ftPerCell > 0 ? +ftPerCell : 5;
   const a = Math.abs(+dx || 0), b = Math.abs(+dy || 0);

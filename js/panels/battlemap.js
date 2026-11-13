@@ -1934,8 +1934,8 @@ registerPanel('battlemap',{
   _feetBetweenPts(x0, y0, x1, y1){
     const ft = this._ftPerCell || 5;
     if (this._gridType === 'hex'){
-      const u = this._tokenUnitScreen() || this._csScreen() || 50;
-      return Math.round(Math.hypot(x1 - x0, y1 - y0) / u) * ft;
+      const cs = this._csScreen() || 50, o = this._gridOffPx();
+      return sktHexSteps(x0, y0, x1, y1, cs, o.x, o.y) * ft;
     }
     const cs = this._csScreen() || 50;
     return sktGridFeet((x1 - x0) / cs, (y1 - y0) / cs, this._diagRule, ft);
@@ -2681,6 +2681,19 @@ registerPanel('battlemap',{
     // the way the DM's does.
     if (+src.ftPerCell > 0) this._ftPerCell = +src.ftPerCell;
     if (src.diagRule) this._diagRule = src.diagRule;
+    // The rest of what _saveMap keeps: the fog's softness, snapping, and
+    // which tokens and names show. They reached a player's map only when it
+    // was reloaded (mount reads them), never as they changed, and an undo
+    // of one changed nothing on screen.
+    const looks = () => [this._fogHardness, this._snapToGrid, this._tokensVisible, this._namesVisible, this._pcsVisible, this._npcsVisible].join('|');
+    const looksBefore = looks();
+    if (src.fogHardness != null) this._fogHardness = +src.fogHardness;
+    if ('snapToGrid' in src) this._snapToGrid = !!src.snapToGrid;
+    if ('tokensVisible' in src) this._tokensVisible = src.tokensVisible !== false;
+    if ('namesVisible' in src)  this._namesVisible  = src.namesVisible  !== false;
+    if ('pcsVisible' in src)    this._pcsVisible    = src.pcsVisible    !== false;
+    if ('npcsVisible' in src)   this._npcsVisible   = src.npcsVisible   !== false;
+    const looksChanged = looks() !== looksBefore;
     this._bgMapPath = nextPath;
 
     // Three tiers, most expensive first. Only the last one is common.
@@ -2692,7 +2705,7 @@ registerPanel('battlemap',{
       this._loadBgFromPath?.(nextPath, nextPath !== prevPath, /*fromSync=*/true);
       return;
     }
-    if (struct() !== structBefore || (!nextPath && prevPath)){
+    if (struct() !== structBefore || (!nextPath && prevPath) || looksChanged){
       // Stage geometry moved, or the map was cleared — the canvases have to be
       // rebuilt. Re-baseline undo too: the stack would otherwise describe a
       // history that no longer matches shared state.
@@ -2809,6 +2822,10 @@ registerPanel('battlemap',{
         drawings: this._drawings || [],
         // Free-mode fog strokes (pixel-level, cell-fraction coords).
         fogStrokes: this._fogStrokes || [],
+        // The fog's softness, snapping and token visibility, as _saveMap keeps them.
+        fogHardness: this._fogHardness, snapToGrid: !!this._snapToGrid,
+        tokensVisible: this._tokensVisible !== false, namesVisible: this._namesVisible !== false,
+        pcsVisible: this._pcsVisible !== false, npcsVisible: this._npcsVisible !== false,
         // Who sent this. The DM tab needs it to tell a PLAYER tab's message
         // apart from another DM window's, because it accepts different things
         // from each (see the handler in _startBroadcast).
@@ -5101,33 +5118,17 @@ registerPanel('battlemap',{
 
   // Convert stage-pixel coordinates to the hovered cell. Returns null when
   // outside the cols×rows envelope. Square → {col,row}; hex → {q,r}.
+  // The Align offset in stage pixels, wrapped into one cell.
+  _gridOffPx(){
+    const cs = this._csScreen();
+    const scale = _mapBgImage ? (this._bgMapScale || 1) : 1;
+    return { x: (((this._gridOffsetX || 0) * scale) % cs + cs) % cs, y: (((this._gridOffsetY || 0) * scale) % cs + cs) % cs };
+  },
   _cellAtPx(px, py){
     const cs = this._csScreen();
     const gt = this._gridType || 'square';
-    const scale = _mapBgImage ? (this._bgMapScale || 1) : 1;
-    const offX = (((this._gridOffsetX || 0) * scale) % cs + cs) % cs;
-    const offY = (((this._gridOffsetY || 0) * scale) % cs + cs) % cs;
-    if (gt === 'hex'){
-      const s = cs / 2, h = s * Math.sqrt(3), colStep = s * 1.5;
-      // Coarse column candidate, then check neighbors to find the hex whose
-      // center is closest (axis-aligned distance is fine for flat-top tiling).
-      const x = px - offX, y = py - offY;
-      const approxQ = Math.round(x / colStep);
-      let best = null, bestD = Infinity;
-      for (let dq = -1; dq <= 1; dq++){
-        const q = approxQ + dq;
-        const yShift = (q & 1) ? h/2 : 0;
-        const approxR = Math.round((y - yShift - h/2) / h);
-        for (let dr = -1; dr <= 1; dr++){
-          const r = approxR + dr;
-          const cx = q * colStep;
-          const cy = yShift + r * h + h/2;
-          const d = (cx-x)*(cx-x) + (cy-y)*(cy-y);
-          if (d < bestD){ bestD = d; best = {q, r}; }
-        }
-      }
-      return best;
-    }
+    const { x: offX, y: offY } = this._gridOffPx();
+    if (gt === 'hex') return sktHexAt(px, py, cs, offX, offY);
     const col = Math.floor((px - offX) / cs);
     const row = Math.floor((py - offY) / cs);
     if (col < 0 || row < 0 || col >= this._cols || row >= this._rows) return null;
@@ -5920,8 +5921,13 @@ registerPanel('battlemap',{
       const i = idxOf(); if (i < 0 || !C || typeof showContextMenu !== 'function') return;
       const c = state.combatants[i];
       const have = new Set(c.conditions || []);
-      const items = (typeof SEARCH_DATA !== 'undefined' ? SEARCH_DATA : [])
-        .filter(d => d.cat === 'condition')
+      // Exhaustion is a level, not a tag: its own item, as on the tracker's
+      // card. Listed with the others it put a bare "Exhaustion" on the
+      // creature that changed nothing.
+      const exhLvl = (C._exhLevel ? C._exhLevel(c) : 0);
+      const items = [{ label: '😩 Exhaustion…' + (exhLvl ? ' (level ' + exhLvl + ')' : ''), onClick: () => { const k = idxOf(); if (k >= 0 && C._promptExhaustion) C._promptExhaustion(k); } }, { label: '─────', disabled: true }]
+        .concat((typeof SEARCH_DATA !== 'undefined' ? SEARCH_DATA : [])
+        .filter(d => d.cat === 'condition' && d.name !== 'Exhaustion')
         .map(d => ({ label: d.name, checked: have.has(d.name), onClick: () => {
           const k = idxOf(); if (k < 0) return;
           const nm = state.combatants[k].name;
@@ -5929,8 +5935,8 @@ registerPanel('battlemap',{
           if (typeof sktUndoable === 'function') sktUndoable(nm + ' \u2014 ' + d.name + (have.has(d.name) ? ' removed' : ' added'), act, { quiet: true });
           else act();
           paintHp(); this._renderTokens();
-        }}));
-      if (!items.length) items.push({ label: 'The rules are still loading\u2026', disabled: true });
+        }})));
+      if (items.length < 3) items.push({ label: 'The rules are still loading\u2026', disabled: true });
       const r = e.currentTarget.getBoundingClientRect();
       showContextMenu(r.left, r.bottom + 4, items);
     });

@@ -21006,6 +21006,57 @@ for (const cls of Object.keys(rule)) for (let L = 1; L <= 20; L++) for (const sc
       } catch(e){ ok('round 354 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
       finally { if (keepT) B._tokens = keepT; if (keepG) B._gridType = keepG; state.combatants = JSON.parse(keepC); state.party = JSON.parse(keepP); save(); }
     }
+    // -- Round 355: battle map — hexes counted on a hex map (ruler and Turn View); fog softness, snap and token visibility reach other screens; Exhaustion on a token is a level --
+    if (!PLAYER){
+      const B = panelDefs.battlemap, T = panelDefs.turnview, C = panelDefs.combat;
+      const keepC = JSON.stringify(state.combatants), keepMap = localStorage.getItem('skt-battlemap-v1');
+      let keepT = null, keepG = null; const oModal = window.showModal;
+      try {
+        openPanel('battlemap'); await sleep(600);
+        keepT = B._tokens.slice(); keepG = B._gridType; B._gridType = 'hex';
+        const cs = B._csScreen(), s = cs / 2, h = s * Math.sqrt(3), o = B._gridOffPx();
+        const ctr = (q, r) => ({ x: q * 1.5 * s + o.x, y: ((q & 1) ? h / 2 : 0) + r * h + h / 2 + o.y });
+        const a = ctr(2, 4), b = ctr(10, 4), c2 = ctr(9, 10), c0 = ctr(1, 1);
+        ok('hex ruler: eight hexes along a row is 40 ft', B._feetBetweenPts(a.x, a.y, b.x, b.y) === 40, B._feetBetweenPts(a.x, a.y, b.x, b.y));
+        ok('hex ruler: (1,1) to (9,10) is 13 hexes, 65 ft', B._feetBetweenPts(c0.x, c0.y, c2.x, c2.y) === 65, B._feetBetweenPts(c0.x, c0.y, c2.x, c2.y));
+        ok('hex ruler: the next hex is 5 ft', B._feetBetweenPts(a.x, a.y, ctr(3, 4).x, ctr(3, 4).y) === 5);
+        state.combatants = [{ id: 'r355a', name: 'r355 A', hp: 10, hpMax: 10, ac: 10, conditions: [] }, { id: 'r355b', name: 'r355 B', hp: 10, hpMax: 10, ac: 10, conditions: [] }];
+        B._tokens = [{ id: 'ta', cid: 'r355a', label: 'r355 A', x: a.x, y: a.y, size: 1 }, { id: 'tb', cid: 'r355b', label: 'r355 B', x: b.x, y: b.y, size: 1 }];
+        T._mapCache = null;
+        ok('Turn View on a hex map: the same 40 ft', T._ftBetween(state.combatants[0], state.combatants[1]) === 40, T._ftBetween(state.combatants[0], state.combatants[1]));
+        B._tokens[1].x = ctr(3, 4).x; B._tokens[1].y = ctr(3, 4).y; T._mapCache = null;
+        ok('…and the next hex is 5 ft (in reach)', T._ftBetween(state.combatants[0], state.combatants[1]) === 5);
+        B._gridType = keepG; T._mapCache = null;
+        // Map settings that arrive from another screen (sync, the player window, undo)
+        const src = JSON.parse(localStorage.getItem('skt-battlemap-v1') || '{}');
+        const was = { h: B._fogHardness, n: B._namesVisible, npc: B._npcsVisible, sn: B._snapToGrid };
+        B.applyMapState(Object.assign({}, src, { fogHardness: 12, namesVisible: false, npcsVisible: false, snapToGrid: !was.sn }));
+        await sleep(100);
+        const stage = B._body.querySelector('#map-stage');
+        ok('arriving from another screen: fog softness, names, NPCs and snapping', B._fogHardness === 12 && B._namesVisible === false && B._npcsVisible === false && B._snapToGrid === !was.sn
+          && stage && stage.classList.contains('hide-names') && stage.classList.contains('hide-npcs'), JSON.stringify([B._fogHardness, B._namesVisible, stage && stage.className]));
+        B.applyMapState(Object.assign({}, src, { fogHardness: was.h, namesVisible: was.n, npcsVisible: was.npc, snapToGrid: was.sn })); await sleep(60);
+        // Exhaustion on a token: a level, from its own item
+        state.combatants = [{ id: 'r355g', name: 'r355 Goblin', hp: 7, hpMax: 7, ac: 15, conditions: [] }];
+        const tok = { id: 'tg', cid: 'r355g', label: 'r355 Goblin', x: cs * 2, y: cs * 2, size: 1 };
+        B._tokens = [tok]; B._renderTokens(); B._showPanel(tok); await sleep(60);
+        B._body.querySelector('#tp-cond').click(); await sleep(80);
+        const labels = [...document.querySelectorAll('.ctx-menu .ctx-menu-item')].map(x => x.textContent.trim());
+        ok('a token’s conditions: Exhaustion is a level, not a bare tag', labels.some(l => /^Exhaustion…/.test(l)) && !labels.includes('Exhaustion'), JSON.stringify(labels.slice(0, 4)));
+        window.showModal = () => Promise.resolve({ lvl: '2' });
+        const it = [...document.querySelectorAll('.ctx-menu .ctx-menu-item')].find(x => /^Exhaustion…/.test(x.textContent.trim()));
+        if (it){ it.click(); await sleep(80); }
+        ok('…and sets the level', C._exhLevel(state.combatants[0]) === 2 && !(state.combatants[0].conditions || []).includes('Exhaustion'), JSON.stringify(state.combatants[0]));
+        document.querySelectorAll('.ctx-menu').forEach(e => e.remove());
+      } catch(e){ ok('round 355 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
+      finally {
+        window.showModal = oModal;
+        if (keepG) B._gridType = keepG; if (keepT) B._tokens = keepT; T._mapCache = null;
+        try { B._closePanel && B._closePanel(); } catch(e){}
+        state.combatants = JSON.parse(keepC); save();
+        if (keepMap != null){ localStorage.setItem('skt-battlemap-v1', keepMap); B.applyMapState(JSON.parse(keepMap)); }
+      }
+    }
     // -- Class features: represented, not just text ------------------------
     {
       try {

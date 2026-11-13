@@ -1080,6 +1080,13 @@ registerPanel('turnview', {
   _edgeFeet(ta, tb){
     const cs = this._cs() || 50;
     const span = ((ta.size || 1) + (tb.size || 1)) / 2 - 1;
+    // A hex map counts hexes (sktHexSteps), as the battle map's ruler does;
+    // the square-grid sum below read eight hexes along a row as six.
+    const m = this._map();
+    if (m.gridType === 'hex' && typeof sktHexSteps === 'function'){
+      const sc = m.bgPath ? (m.bgScale || 1) : 1, wrap = v => (((v || 0) * sc) % cs + cs) % cs;
+      return Math.max(0, sktHexSteps(ta.x, ta.y, tb.x, tb.y, cs, wrap(m.gridOffsetX), wrap(m.gridOffsetY)) - Math.max(0, Math.round(span))) * this._ftPerCell();
+    }
     const ax = Math.max(0, Math.abs(ta.x - tb.x) / cs - Math.max(0, span));
     const ay = Math.max(0, Math.abs(ta.y - tb.y) / cs - Math.max(0, span));
     return sktGridFeet(ax, ay, this._diagRule(), this._ftPerCell());
