@@ -20760,6 +20760,74 @@ for (const cls of Object.keys(rule)) for (let L = 1; L <= 20; L++) for (const sc
       } catch(e){ ok('round 346 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
       finally { state.party = JSON.parse(keepP); state.combatants = JSON.parse(keepC); save(); if (P._body) P._render(); if (C && C._body) C._render(); }
     }
+    // -- Round 347: a multiclass character — hit dice by size, Pact Magic slots that share a level --
+    if (!PLAYER){
+      const keepP = JSON.stringify(state.party), keepC = JSON.stringify(state.combatants); const P = panelDefs.party;
+      const oConf = window.showConfirm, oModal = window.showModal, oToast = window.showToast;
+      try {
+        const R = await sktRulesLoad('2024'), R14 = await sktRulesLoad('2014');
+        await openCharBuilder({}); for (let i = 0; i < 80 && !CB.R; i++) await sleep(100);
+        const mk = (ed, cls, sub, L, multi, id) => { CB.R = ed === '2014' ? R14 : R; CB.build = Object.assign(sktBlankBuild(ed), { cls, level: L, subclass: sub, species: 'Human', name: id, sources: SKT_ALL_SOURCES, multi }); cbQuickBuild(); const r = sktComputeCharacter(CB.build, CB.R); r.id = id; return r; };
+        const fw = mk('2024', 'Fighter', 'Champion', 5, [{ cls: 'Wizard', subclass: '', level: 2 }], 'r347fw');
+        const pw = mk('2024', 'Paladin', 'Devotion', 8, [{ cls: 'Warlock', subclass: 'Fiend', level: 3 }], 'r347pw');
+        const ws = mk('2024', 'Warlock', 'Fiend', 5, [{ cls: 'Sorcerer', subclass: 'Draconic', level: 2 }], 'r347ws');
+        const f14 = mk('2014', 'Fighter', 'Champion', 5, [{ cls: 'Wizard', subclass: '', level: 2 }], 'r347f14');
+        const solo = mk('2024', 'Warlock', 'Fiend', 5, [], 'r347solo');
+        cbClose();
+        ok('hit dice by size: 3d10 + 2d6', JSON.stringify(fw.hitDice.pools) === JSON.stringify([{ die: 'd10', max: 3, current: 3 }, { die: 'd6', max: 2, current: 2 }]) && fw.hitDice.max === 5 && sktHdLabel(fw) === '3d10 + 2d6', JSON.stringify(fw.hitDice));
+        ok('a single class has no pools', !solo.hitDice.pools && sktHdPools(solo).length === 1);
+        state.combatants = []; state.party = [fw, pw, ws, f14, solo];
+        openPanel('party'); await sleep(200); P._render();
+        const row = (i) => P._body.querySelector('[data-cidx="' + i + '"] .hd-row');
+        ok('the card shows a group of pips per die', row(0).querySelectorAll('.hd-pip[data-die="d10"]').length === 3 && row(0).querySelectorAll('.hd-pip[data-die="d6"]').length === 2, row(0).innerText);
+        // spend a d6 (rolled 4 at the table), CON as built
+        state.party[0].hp = 10; const con = Math.floor((state.party[0].abilities.con - 10) / 2);
+        let r = P._rollHitDie(0, 4, 'd6');
+        ok('a d6 spent heals 4 + CON and comes off the d6s', r && r.sides === 6 && r.heal === Math.max(1, 4 + con) && sktHdPools(state.party[0]).find(p => p.die === 'd6').current === 1 && state.party[0].hitDice.current === 4, JSON.stringify([r, state.party[0].hitDice]));
+        r = P._rollHitDie(0, 7);
+        ok('no size given: the largest left', r && r.sides === 10 && sktHdPools(state.party[0]).find(p => p.die === 'd10').current === 2);
+        // the pip click asks for that size
+        let asked = null; window.showConfirm = (msg) => { asked = msg; return Promise.resolve(null); };
+        row(0).querySelector('.hd-pip.filled[data-die="d6"]').click(); await sleep(30);
+        ok('a d6 pip offers a d6', /Spend 1 d6/.test(asked || ''), asked);
+        // the menu's spend asks which, when both sizes are left
+        let fields = null; window.showModal = (t, f) => { fields = f; return Promise.resolve({ die: 'd6', n: '2' }); };
+        window.showToast = () => {};
+        P._spendHitDie(0); await sleep(30);
+        ok('with both sizes left, it asks which', fields && fields[0].options.map(o => o.value).join() === 'd10,d6' && sktHdPools(state.party[0]).find(p => p.die === 'd6').current === 0, JSON.stringify(state.party[0].hitDice));
+        // a hand-edited total stays in line
+        state.party[0].hitDice.current = 1;
+        ok('the totals edited by hand: the pools follow, smallest spent first', JSON.stringify(sktHdPools(state.party[0]).map(p => p.current)) === '[1,0]');
+        // long rest: 2024 all; 2014 half, largest first
+        P._longRestOne(state.party[0], 0);
+        ok('2024 long rest: every die back', state.party[0].hitDice.current === 5 && sktHdPools(state.party[0]).every(p => p.current === p.max));
+        state.party[3].hitDice = Object.assign({}, state.party[3].hitDice, { current: 0, pools: [{ die: 'd10', max: 3, current: 0 }, { die: 'd6', max: 2, current: 0 }] });
+        P._longRestOne(state.party[3], 3);
+        ok('2014 long rest: two of five back, the d10s', JSON.stringify(sktHdPools(state.party[3]).map(p => p.current)) === '[2,0]', JSON.stringify(state.party[3].hitDice));
+        // Pact Magic
+        const sl = i => state.party[i].sheet.spellSlots;
+        ok('paladin 5 / warlock 3: 2nd level holds 4, 2 of them pact', sl(1)[2].total === 4 && sl(1)[2].pact === 2, JSON.stringify(sl(1)));
+        ok('…labelled so on the card', /2nd \(2 pact\)/.test(P._body.querySelector('[data-cidx="1"]').innerText), P._body.querySelector('[data-cidx="1"]').innerText.slice(0, 300));
+        Object.values(sl(1)).forEach(s => s.expended = s.total);
+        P._shortRestOne(state.party[1], 1);
+        ok('a short rest gives the two pact slots back, not the paladin’s', sl(1)[2].expended === 2 && sl(1)[1].expended === sl(1)[1].total, JSON.stringify(sl(1)));
+        Object.values(sl(2)).forEach(s => s.expended = s.total);
+        P._shortRestOne(state.party[2], 2);
+        const pactL = Object.keys(sl(2)).find(k => sl(2)[k].pact);
+        ok('warlock 5 / sorcerer 2: the sorcerer’s slots stay spent', pactL && Object.keys(sl(2)).every(k => (sl(2)[k].pact === true ? sl(2)[k].expended === 0 : sl(2)[k].expended === sl(2)[k].total - (+sl(2)[k].pact || 0))), JSON.stringify(sl(2)));
+        Object.values(sl(4)).forEach(s => s.expended = s.total);
+        P._shortRestOne(state.party[4], 4);
+        ok('a single-class warlock: all back', Object.values(sl(4)).every(s => !s.expended));
+        // Imported (no build, no marker): a pure warlock still gets them all; a
+        // warlock / sorcerer from a PDF can't tell them apart, so none.
+        state.party.push({ id: 'r347i1', name: 'r347 imp', cls: 'warlock', level: 5, hp: 30, hpMax: 30, resources: [], sheet: { spellSlots: { 3: { total: 2, expended: 2 } } } });
+        state.party.push({ id: 'r347i2', name: 'r347 imp2', cls: 'warlock', level: 5, hp: 30, hpMax: 30, resources: [], sheet: { classLevels: [{ cls: 'warlock', level: 3 }, { cls: 'sorcerer', level: 2 }], spellSlots: { 1: { total: 3, expended: 3 }, 2: { total: 2, expended: 2 } } } });
+        P._shortRestOne(state.party[5], 5); P._shortRestOne(state.party[6], 6);
+        ok('an imported warlock: all back', !sl(5)[3].expended);
+        ok('an imported warlock / sorcerer: left for the player', sl(6)[1].expended === 3 && sl(6)[2].expended === 2);
+      } catch(e){ ok('round 347 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
+      finally { window.showConfirm = oConf; window.showModal = oModal; window.showToast = oToast; if (document.getElementById('cb-root') && typeof cbClose === 'function') cbClose(); state.party = JSON.parse(keepP); state.combatants = JSON.parse(keepC); save(); if (P._body) P._render(); }
+    }
     // -- Class features: represented, not just text ------------------------
     {
       try {

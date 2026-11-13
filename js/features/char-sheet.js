@@ -500,6 +500,8 @@ function csRestHtml(pc){
   return '<div class="cs-rest"><h4>Short rest</h4>'
     + '<div>Hit dice <b>' + Math.max(0, hd.current ?? hd.max) + ' / ' + hd.max + '</b> ' + csE(hd.dieType || '') + (pc.sheet && pc.sheet.hitDiceByClass ? ' <span class="cb-dim">(' + csE(pc.sheet.hitDiceByClass) + ')</span>' : '') + ' · HP <b>' + (pc.hp || 0) + ' / ' + (pc.hpMax || 0) + '</b></div>'
     + (CS.resting.rolls.length ? '<div class="cb-dim">Rolled ' + csE(CS.resting.rolls.join(', ')) + ' — healed ' + CS.resting.healed + '</div>' : '')
+    + (typeof sktHdPools === 'function' && sktHdPools(pc).filter(p => p.current > 0).length > 1
+        ? '<div><label class="cb-dim">Die <select data-cs-restdie>' + sktHdPools(pc).filter(p => p.current > 0).map(p => '<option value="' + csE(p.die) + '">' + csE(p.die) + ' (' + p.current + ' left)</option>').join('') + '</select></label></div>' : '')
     + '<div class="cs-rest-b"><button class="btn" data-cs="restdie"' + ((hd.current || 0) > 0 && (pc.hp || 0) < (pc.hpMax || 0) ? '' : ' disabled') + '>🎲 Spend a hit die</button>'
     + ((hd.current || 0) > 0 && (pc.hp || 0) < (pc.hpMax || 0) ? '<span class="cs-physical"><span class="cb-dim">or the ' + csE(hd.dieType || 'd8') + ' rolled</span><input type="number" min="1" max="' + (parseInt(String(hd.dieType || 'd8').replace('d', ''), 10) || 8) + '" inputmode="numeric" data-cs-restval aria-label="The hit die rolled"><button class="btn" data-cs="restset">Spend it</button></span>' : '')
     + '<button class="btn primary" data-cs="restdone">Finish the rest</button><button class="btn" data-cs="restcancel">Cancel</button></div>'
@@ -1542,7 +1544,8 @@ function csOnClick(e){
     const P = panelDefs.party, i = csIdx();
     let given = null;
     if (d.cs === 'restset'){ given = parseInt((document.querySelector('#cs-root [data-cs-restval]') || {}).value, 10); if (!(given >= 1)){ if (typeof showToast === 'function') showToast('Type the number on the hit die rolled'); return; } }
-    const r = P && P._rollHitDie ? P._rollHitDie(i, given) : null;
+    const die = (document.querySelector('#cs-root [data-cs-restdie]') || {}).value || null;
+    const r = P && P._rollHitDie ? P._rollHitDie(i, given, die) : null;
     if (!r) return;
     CS.resting.healed += r.heal; CS.resting.rolls.push(r.roll + csSigned(r.conMod) + ' = ' + r.heal);
     const p = state.party[i]; p.hp = Math.min(p.hpMax || p.hp, (p.hp || 0));
@@ -1879,7 +1882,7 @@ function csSpellsHtml(pc){
   }
   if (lvls.length) h += '<div class="cs-slots">' + lvls.map(l => {
     const s = slots[l];
-    return '<div class="cs-slot"><span>' + CS_ORD[l] + (s.pact ? ' (pact)' : '') + '</span><span class="cs-pips">'
+    return '<div class="cs-slot"><span>' + CS_ORD[l] + (typeof sktSlotPactTag === 'function' ? sktSlotPactTag(s) : (s.pact ? ' (pact)' : '')) + '</span><span class="cs-pips">'
       + Array.from({ length: s.total }, (_, n) => '<button class="cs-pip slot' + (n < (s.total - (s.expended || 0)) ? ' on' : '') + '" data-cs-slot="' + l + ':' + n + '"' + (ro ? ' disabled' : '') + ' aria-label="Level ' + l + ' slot ' + (n + 1) + '"></button>').join('')
       + '</span></div>';
   }).join('') + '</div>';

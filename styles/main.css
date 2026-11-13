@@ -1800,6 +1800,9 @@ body.player-mode .combat-hide-banner{padding:8px 10px;font-size:var(--fs-sm);col
 .hd-row{display:flex;align-items:center;gap:6px;padding:4px 0;font-size:var(--fs-xs);color:var(--text-muted)}
 .hd-row .hd-label{font-weight:600;color:var(--text)}
 .hd-row .hd-pips{display:inline-flex;gap:3px;flex:1;flex-wrap:wrap}
+.hd-row .hd-groups{display:flex;flex-wrap:wrap;gap:4px 12px;flex:1;min-width:0}
+.hd-row .hd-group{display:inline-flex;align-items:center;gap:6px;white-space:nowrap}
+.hd-row .hd-group .hd-pips{flex:0 0 auto;flex-wrap:nowrap}
 .hd-row .hd-pip{width:10px;height:10px;border-radius:var(--r-sm);border:1px solid var(--border);background:transparent;cursor:default;transition:transform .12s}
 .hd-row .hd-pip.filled{background:var(--accent);border-color:var(--accent);cursor:pointer}
 .hd-row .hd-pip.filled:hover{transform:scale(1.2)}

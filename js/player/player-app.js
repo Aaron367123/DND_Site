@@ -1488,9 +1488,12 @@ function paOpenShortRest(req){
     ov.innerHTML = '<div class="pa-ho-card pa-rest-card" role="dialog" aria-modal="true" aria-label="Short rest">'
       + '<div class="pa-ho-head"><b>💤 Short rest</b></div>'
       + '<div class="pa-ho-body">'
-      +   '<div class="pa-rest-hp">HP <b>' + pc.hp + '</b> / ' + pc.hpMax + ' · Hit dice <b>' + (hd.current || 0) + '/' + hd.max + '</b> ' + paEsc(hd.dieType || 'd8')
+      +   '<div class="pa-rest-hp">HP <b>' + pc.hp + '</b> / ' + pc.hpMax + ' · Hit dice <b>' + (hd.current || 0) + '/' + hd.max + '</b> ' + paEsc(typeof sktHdLabel === 'function' ? sktHdLabel(pc) : (hd.dieType || 'd8'))
       +   ' · CON ' + (con >= 0 ? '+' : '') + con + '</div>'
-      +   '<button class="btn primary pa-rest-spend" data-rest="spend"' + ((hd.current || 0) > 0 && pc.hp < pc.hpMax ? '' : ' disabled') + '>🎲 Spend a hit die</button>'
+      // A multiclass character picks the size: one button per die left.
+      +   ((P && typeof sktHdPools === 'function' && sktHdPools(pc).length > 1)
+            ? sktHdPools(pc).map(p => '<button class="btn primary pa-rest-spend" data-rest="spend" data-die="' + paEsc(p.die) + '"' + (p.current > 0 && pc.hp < pc.hpMax ? '' : ' disabled') + '>🎲 Spend a ' + paEsc(p.die) + ' <span class="pa-dim">(' + p.current + ' left)</span></button>').join('')
+            : '<button class="btn primary pa-rest-spend" data-rest="spend"' + ((hd.current || 0) > 0 && pc.hp < pc.hpMax ? '' : ' disabled') + '>🎲 Spend a hit die</button>')
       +   (log.length ? '<div class="pa-rest-log">' + log.map(l => '<div>' + l + '</div>').join('') + '</div>' : '')
       + '</div>'
       + '<div class="pa-rest-btns"><button class="btn" data-rest="cancel">Not now</button>'
@@ -1500,7 +1503,7 @@ function paOpenShortRest(req){
     const b = e.target.closest('[data-rest]'); if (!b) return;
     const idx = paMyIdx(); if (idx < 0) return ov.remove();
     if (b.dataset.rest === 'spend' && P && typeof P._rollHitDie === 'function'){
-      const r = P._rollHitDie(idx);
+      const r = P._rollHitDie(idx, null, b.dataset.die || null);
       if (r) log.push(paEsc('d' + r.sides + ' (' + r.roll + ') ' + (r.conMod >= 0 ? '+' : '') + r.conMod + ' = ' + r.heal + ' HP'));
       paTick(); paint(); paRenderScreen();
     } else if (b.dataset.rest === 'finish'){
@@ -2039,7 +2042,7 @@ function paSpellsHtml(pc){
     const s = slots[l], total = s.total || 0, left = paSlotsLeft(slots, l);
     let pips = '';
     for (let i = 0; i < total; i++) pips += `<button class="pa-res-pip ${i < left ? '' : 'off'}" data-pa-slot="${l}" aria-label="${i < left ? 'Use a level ' + l + ' slot' : 'Get a level ' + l + ' slot back'}"></button>`;
-    return `<div class="pa-res"><span class="pa-res-n">${PA_ORD[l]} level${s.pact ? ' (pact)' : ''}</span><span class="pa-res-pips">${pips}</span><span class="pa-res-c">${left}/${total}</span></div>`;
+    return `<div class="pa-res"><span class="pa-res-n">${PA_ORD[l]} level${typeof sktSlotPactTag === 'function' ? sktSlotPactTag(s) : (s.pact ? ' (pact)' : '')}</span><span class="pa-res-pips">${pips}</span><span class="pa-res-c">${left}/${total}</span></div>`;
   }).join('');
   const atk = typeof csAtkText === 'function' ? csAtkText(sh.spellAtkBonus) : (sh.spellAtkBonus || '');
   const stats = [sh.spellSaveDc ? `Save DC <b>${paEsc(sh.spellSaveDc)}</b>` : '', atk ? `Attack <b>${paEsc(atk)}</b>` : ''].filter(Boolean).join('<span class="pa-dot">·</span>');

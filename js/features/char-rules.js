@@ -1539,6 +1539,29 @@ function _sktTitle(s){
 // Slots, cantrips and how many spells the character prepares or knows, from
 // the class table. Pact magic (warlock) is its own pool, as the app's rests
 // already expect: sheet.spellSlots gets the pact slots at the pact level.
+// A character's hit dice: the totals, and for more than one die size the
+// pools by size (see sktHdPools, party.js). Dice spent before stay spent —
+// by size where the last record kept sizes, the rest from the largest —
+// and new levels arrive with their die unspent.
+function _sktHitDiceOut(prior, L, dieType, parts, R){
+  const ph = prior.hitDice;
+  const cur = ph ? Math.max(0, Math.min(L, (+ph.current || 0) + Math.max(0, L - (+ph.max || L)))) : L;
+  const out = { current: cur, max: L, dieType };
+  const by = {};
+  (parts || []).filter(p => p.key).forEach(p => { const d = 'd' + ((sktRulesClass(R, p.cls) || {}).hd || 8); by[d] = (by[d] || 0) + (+p.level || 0); });
+  const dieN = d => parseInt(String(d).replace(/\D/g, ''), 10) || 8;
+  const dice = Object.keys(by).sort((a, b) => dieN(b) - dieN(a));
+  if (dice.length < 2) return out;
+  const wasSpent = {};
+  if (ph && Array.isArray(ph.pools)) ph.pools.forEach(p => { wasSpent[p.die] = Math.max(0, (+p.max || 0) - (+p.current || 0)); });
+  else if (ph) wasSpent[ph.dieType || dieType] = Math.max(0, (+ph.max || 0) - (+ph.current || 0));
+  let spent = L - cur;
+  const pools = dice.map(d => ({ die: d, max: by[d], current: by[d] }));
+  pools.forEach(p => { const n = Math.min(p.max, wasSpent[p.die] || 0, spent); p.current -= n; spent -= n; });
+  pools.forEach(p => { const n = Math.min(p.current, spent); p.current -= n; spent -= n; });
+  out.pools = pools;
+  return out;
+}
 function sktBuildSpellcasting(build, R, abilities){
   const parts = sktClassLevels(build, R);
   if (parts.length === 1) return _sktSpellcastingOne(build, R, abilities);
@@ -2192,7 +2215,7 @@ function sktPassiveGrants(text){
 // moves forward: an older build doesn't know it, keeps it as it is, and
 // can't undo the newer work. Raise SKT_RULES_REV when a rules change should
 // reach every saved character.
-const SKT_RULES_REV = '2026-11-12a';
+const SKT_RULES_REV = '2026-11-13a';
 let _sktStatesBusy = false;
 function sktStatesSyncAll(){
   if (_sktStatesBusy || typeof state === 'undefined' || !Array.isArray(state.party)) return;
@@ -3070,8 +3093,14 @@ function sktComputeCharacter(build, R, prior){
     const was = prior.sheet && prior.sheet.spellSlots && prior.sheet.spellSlots[l];
     spellSlots[l] = { total: sc.slots[l], expended: was ? Math.min(was.expended || 0, sc.slots[l]) : 0 };
   });
+  // Pact Magic slots: all of that level's (pact: true), or — a multiclass
+  // warlock's sharing a level with another class's slots — how many of them
+  // (pact: 2), so a short rest gives back those and only those.
   if (sc && sc.pact && spellSlots[sc.pact.level] && spellSlots[sc.pact.level].total === sc.pact.count) spellSlots[sc.pact.level].pact = true;
-  else if (sc && sc.pact) _fxNote(ctx, 'Pact Magic: ' + sc.pact.count + ' of the level ' + sc.pact.level + ' slots come back on a short rest.');
+  else if (sc && sc.pact && spellSlots[sc.pact.level]){
+    spellSlots[sc.pact.level].pact = sc.pact.count;
+    _fxNote(ctx, 'Pact Magic: ' + sc.pact.count + ' of the level ' + sc.pact.level + ' slots come back on a short rest.');
+  }
   // Heroes of Faerûn's Circle Magic: any 2024 caster can lead a Circle spell.
   if (sc && R.edition === '2024' && Object.keys(sc.slots || {}).length && sktBookOk(build, { source: 'FRHoF', core: false })) _sktCircleSpells(ctx, sc);
   if (sc && sc.classes) sc.classes.slice(1).forEach(x => _fxNote(ctx, _sktTitle(x.cls) + ' spells: ' + (SKT_AB_NAME[x.sc.ability] || x.sc.ability) + ', save DC ' + x.sc.dc + ', attack ' + sktSigned(x.sc.attack) + '.'));
@@ -3240,8 +3269,7 @@ function sktComputeCharacter(build, R, prior){
     gold: typeof prior.gold === 'number' ? prior.gold : gear.gold,
     tempHp: prior.tempHp || 0, inspiration: !!prior.inspiration,
     abilities, resources, feats,
-    hitDice: { current: prior.hitDice ? Math.min(L, prior.hitDice.current + Math.max(0, L - (prior.hitDice.max || L))) : L,
-               max: L, dieType: 'd' + hd },
+    hitDice: _sktHitDiceOut(prior, L, 'd' + hd, parts, R),
     resistances: [...ctx.resist],
     immunities: [...ctx.immune],
     // The party card edits vulnerabilities by hand; Customize's are added,

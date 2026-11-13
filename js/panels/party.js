@@ -319,7 +319,7 @@ registerPanel('party',{
               const s = slots[l], t = +s.total || 0, left = Math.max(0, t - (+s.expended || 0));
               let pips = '';
               for (let p = 0; p < t; p++) pips += '<div class="pip slot ' + (p < left ? 'filled' : '') + '" data-act="slot" data-idx="' + i + '" data-lvl="' + l + '" data-pi="' + p + '" title="' + ORD[l] + '-level slot' + (s.pact ? ' (pact)' : '') + ' — ' + left + ' of ' + t + ' left"></div>';
-              return '<div class="resource-row"><span class="resource-label">' + ORD[l] + (s.pact ? ' (pact)' : '') + '</span><div class="resource-pips">' + pips + '</div></div>';
+              return '<div class="resource-row"><span class="resource-label">' + ORD[l] + sktSlotPactTag(s) + '</span><div class="resource-pips">' + pips + '</div></div>';
             }).join('')
           + '</div>';
       }
@@ -1915,10 +1915,7 @@ registerPanel('party',{
       // regains 2, not 3. This rounded up and quietly handed every
       // odd-levelled character a spare die every night.
       // The 2024 rules give every die back.
-      if (c.hitDice && c.hitDice.max){
-        const back = ((c.build && c.build.edition) || c.rules || '2024') === '2024' ? c.hitDice.max : Math.max(1, Math.floor(c.hitDice.max / 2));
-        c.hitDice.current = Math.min(c.hitDice.max, (c.hitDice.current || 0) + back);
-      }
+      if (c.hitDice && c.hitDice.max) sktHdLongRest(c);
       // Magic items' uses: a lyre's spells, a tattoo's once a day, the charges
       // an imported character's wand keeps on itself. They come back at dawn.
       // A charged item regains what its own roll says (a wand's 1d6 + 1), not
@@ -2089,8 +2086,25 @@ registerPanel('party',{
     // "Warlock/Sorcerer" the same map holds both and refilling all of them
     // would hand back the sorcerer's slots too. A multiclass warlock still
     // refunds pips by hand, which is what happens today.
+    // A built character's slots say which are Pact Magic (pact: true, or
+    // how many of that level's slots, for a multiclass warlock whose pact
+    // slots share a level with the other class's). Those come back and the
+    // rest don't — on a Warlock 3 / Sorcerer 2 this refilled the sorcerer's
+    // slots too, and on a Paladin / Warlock it gave nothing back. Spent
+    // slots at a shared level are taken to be the pact ones first.
     const cls = String(c.cls || '').trim().toLowerCase();
-    if (cls === 'warlock' && c.sheet && c.sheet.spellSlots){
+    const marked = c.sheet && c.sheet.spellSlots && Object.values(c.sheet.spellSlots).some(s => s && s.pact);
+    if (marked){
+      const slots = {}; let changed = false;
+      Object.keys(c.sheet.spellSlots).forEach(k => {
+        const s = c.sheet.spellSlots[k]; slots[k] = s;
+        if (!s || !s.pact || !(s.expended > 0)) return;
+        const n = s.pact === true ? (+s.total || 0) : (+s.pact || 0);
+        slots[k] = {...s, expended: Math.max(0, (+s.expended || 0) - n)}; changed = true;
+      });
+      if (changed){ c.sheet = {...c.sheet, spellSlots: slots}; pactRestored = true; }
+    }
+    else if (cls === 'warlock' && !((c.sheet || {}).classLevels || []).some(x => x && x.cls && String(x.cls).toLowerCase() !== 'warlock') && c.sheet && c.sheet.spellSlots){
       const slots = {};
       let changed = false;
       Object.keys(c.sheet.spellSlots).forEach(k => {
@@ -2692,27 +2706,46 @@ registerPanel('party',{
     backdrop.addEventListener('mousedown', e => { if (e.target===backdrop) close(); });
   },
 
-  _spendHitDie(i){
+  // die: which size to spend, for a multiclass character ('d10'). Without
+  // one and with more than one size left, the dialog asks.
+  _spendHitDie(i, die){
     const c = state.party[i]; if (!c || !c.hitDice || c.hitDice.current <= 0) return;
     const conMod = (c.abilities && typeof c.abilities.con === 'number') ? Math.floor((c.abilities.con-10)/2) : 0;
-    const sides = parseInt(String(c.hitDice.dieType||'d8').replace('d','')) || 8;
-    showConfirm(`Spend 1 ${c.hitDice.dieType||'d8'} hit die? It heals the ${c.hitDice.dieType||'d8'} ${conMod<0?'−':'+'} ${Math.abs(conMod)} (CON). Rolled it at the table? Type the number on the die; leave it empty to roll here.`,
-      {title:'Spend hit die', confirmLabel:'Heal', input:{ label:'The ' + (c.hitDice.dieType||'d8') + ' rolled', min:1, max:sides }}).then(ok => {
+    const left = sktHdPools(c).filter(p => p.current > 0);
+    const cid = c.id, idx = () => state.party.findIndex(p => p.id === cid);
+    const done = r => { if (!r) return; this._render(); showToast(`Rolled ${r.roll} ${r.conMod<0?'−':'+'} ${Math.abs(r.conMod)} = ${r.heal} HP`); };
+    if (!die && left.length > 1 && typeof showModal === 'function'){
+      showModal('Spend a hit die — ' + c.name, [
+        { id: 'die', label: 'Which die', type: 'select', value: left[0].die, options: left.map(p => ({ value: p.die, label: p.die + ' (' + p.current + ' left) ' + (conMod<0?'−':'+') + ' ' + Math.abs(conMod) + ' CON' })) },
+        { id: 'n', label: 'The die rolled at the table (blank: roll it here)', type: 'number', value: '', min: 1 },
+      ], 'Heal').then(v => {
+        if (!v) return; const j = idx(); if (j < 0) return;
+        const n = parseInt(v.n, 10);
+        done(this._rollHitDie(j, n >= 1 ? n : null, v.die));
+      });
+      return;
+    }
+    const dt = die || (left[0] || {}).die || c.hitDice.dieType || 'd8';
+    const sides = _sktDieN(dt);
+    showConfirm(`Spend 1 ${dt} hit die? It heals the ${dt} ${conMod<0?'−':'+'} ${Math.abs(conMod)} (CON). Rolled it at the table? Type the number on the die; leave it empty to roll here.`,
+      {title:'Spend hit die', confirmLabel:'Heal', input:{ label:'The ' + dt + ' rolled', min:1, max:sides }}).then(ok => {
         if (!ok) return;
-        const r = this._rollHitDie(i, typeof ok === 'number' ? ok : null);
-        if (!r) return;
-        this._render();
-        showToast(`Rolled ${r.roll} ${r.conMod<0?'−':'+'} ${Math.abs(r.conMod)} = ${r.heal} HP`);
+        const r = this._rollHitDie(i, typeof ok === 'number' ? ok : null, dt);
+        done(r);
       });
   },
   // The roll itself, without the confirm or the repaint — the player's phone
   // spends hit dice through here too, so the two cannot heal differently.
   // Returns { roll, conMod, heal, sides } or null when there is none to spend.
   // given: the number on a die rolled at the table, in place of the app's.
-  _rollHitDie(i, given){
+  // die: the size to spend ('d6'); the largest left when not given.
+  _rollHitDie(i, given, die){
     const c = state.party[i]; if (!c || !c.hitDice || c.hitDice.current <= 0) return null;
     const conMod = (c.abilities && typeof c.abilities.con === 'number') ? Math.floor((c.abilities.con-10)/2) : 0;
-    const sides = parseInt(String(c.hitDice.dieType||'d8').replace('d','')) || 8;
+    const pools = sktHdPools(c);
+    const pool = pools.find(p => p.die === die && p.current > 0) || pools.find(p => p.current > 0);
+    if (!pool) return null;
+    const sides = _sktDieN(pool.die);
     const roll = given >= 1 ? Math.min(sides, Math.round(given)) : sktD(sides);
     // Minimum 1, where the PHB says minimum 0. A deliberate table ruling,
     // confirmed and kept — spending a die and healing nothing is a bad
@@ -2723,7 +2756,7 @@ registerPanel('party',{
     // Recorded rather than left as a bare "house rule" note so the next
     // pass over the rest rules does not raise it again.
     const heal = Math.max(1, roll + conMod);
-    c.hitDice.current -= 1;
+    pool.current -= 1; sktHdSetPools(c, pools);
     // Same cap expression as the heal path in _applyHpDelta. This used
     // c.hpMax directly, so a character with no hpMax recorded got
     // Math.min(undefined, n) === NaN — their HP became NaN and the die was
@@ -2743,13 +2776,19 @@ registerPanel('party',{
     const hd = c.hitDice;
     if (!hd || !hd.max) return '';
     const cur = Math.max(0, Math.min(hd.max, hd.current ?? hd.max));
-    let pips = '';
-    for (let n = 1; n <= hd.max; n++){
-      pips += `<span class="hd-pip ${n<=cur?'filled':''}" data-act="hd-spend" data-idx="${i}" data-n="${n}" title="${n<=cur?'Spend a hit die':'Already spent'}"></span>`;
-    }
+    const pools = sktHdPools(c);
+    // One group of pips per die size; a pip spends a die of its size.
+    const groups = pools.map((p, gi) => {
+      let pips = '';
+      for (let n = 1; n <= p.max; n++){
+        pips += `<span class="hd-pip ${n<=p.current?'filled':''}" data-act="hd-spend" data-idx="${i}" data-n="${n}"${pools.length > 1 ? ` data-die="${esc(p.die)}"` : ''} title="${n<=p.current?'Spend a ' + esc(p.die) + ' hit die':'Already spent'}"></span>`;
+      }
+      const one = `<span class="hd-label">${gi ? '' : ICO('i-dice') + ' '}${esc(p.die)}</span>
+      <span class="hd-pips">${pips}</span>`;
+      return pools.length > 1 ? `<span class="hd-group">${one}</span>` : one;
+    }).join('');
     return `<div class="hd-row">
-      <span class="hd-label">${ICO('i-dice')} ${esc(hd.dieType||'d8')}</span>
-      <span class="hd-pips">${pips}</span>
+      ${pools.length > 1 ? `<span class="hd-groups">${groups}</span>` : groups}
       <span class="hd-count">${cur}/${hd.max}</span>
       <button class="btn small" data-act="hd-rest" data-idx="${i}" title="Long rest for this character: HP, slots, resources, ${sktHdRestWords([c])}">${ICO('i-moon')} Long rest</button>
     </div>`;
@@ -3314,8 +3353,10 @@ registerPanel('party',{
       else if(act==='hd-spend'){
         const idx = +el.dataset.idx, n = +el.dataset.n;
         const c = state.party[idx]; if (!c || !c.hitDice) return;
-        if (n > c.hitDice.current) return; // empty pip — ignore
-        this._spendHitDie(idx);
+        const die = el.dataset.die || null;
+        const pool = sktHdPools(c).find(p => !die || p.die === die);
+        if (!pool || n > pool.current) return; // empty pip — ignore
+        this._spendHitDie(idx, die || pool.die);
       }
       // Heal/damage strip — same shape as the combat tracker's. Reads the
       // amount from this card's own input, drains tempHp first, and mirrors
@@ -3847,6 +3888,57 @@ function sktDeathSaveHolder(pc){
   const ci = (typeof _findCombatantForPartyMember === 'function') ? _findCombatantForPartyMember(pc) : -1;
   return ci >= 0 ? state.combatants[ci] : pc;
 }
+// Hit dice by size. A multiclass character's come in separate pools — a
+// Fighter 3 / Wizard 2 has three d10s and two d6s — kept on hitDice.pools
+// beside the totals everything else reads (current, max, dieType). The card
+// used to hold one number and one die, so that fighter spent five d10s.
+// A single-class character has no pools: one is made from the totals. When
+// the totals were edited by hand the pools are brought back in line with
+// them — spent from the smallest dice, regained into the largest.
+const _sktDieN = d => parseInt(String(d || 'd8').replace(/\D/g, ''), 10) || 8;
+function sktHdPools(pc){
+  const hd = pc && pc.hitDice; if (!hd || !hd.max) return [];
+  const one = () => [{ die: hd.dieType || 'd8', max: +hd.max || 0, current: Math.max(0, Math.min(+hd.max || 0, +(hd.current ?? hd.max) || 0)) }];
+  if (!Array.isArray(hd.pools) || hd.pools.length < 2) return one();
+  const pools = hd.pools.map(p => ({ die: p.die, max: +p.max || 0, current: Math.max(0, Math.min(+p.max || 0, +p.current || 0)) }))
+    .sort((a, b) => _sktDieN(b.die) - _sktDieN(a.die));
+  if (pools.reduce((s, p) => s + p.max, 0) !== +hd.max) return one();
+  let diff = Math.max(0, Math.min(+hd.max, +(hd.current ?? hd.max) || 0)) - pools.reduce((s, p) => s + p.current, 0);
+  for (const p of (diff < 0 ? pools.slice().reverse() : pools)){
+    if (!diff) break;
+    const d = diff < 0 ? -Math.min(p.current, -diff) : Math.min(p.max - p.current, diff);
+    p.current += d; diff -= d;
+  }
+  return pools;
+}
+function sktHdSetPools(pc, pools){
+  const hd = Object.assign({}, pc.hitDice);
+  hd.current = pools.reduce((s, p) => s + p.current, 0);
+  hd.max = pools.reduce((s, p) => s + p.max, 0);
+  if (pools.length > 1) hd.pools = pools.map(p => ({ die: p.die, max: p.max, current: p.current })); else delete hd.pools;
+  pc.hitDice = hd;
+}
+// " (pact)" on a level of Pact Magic slots, " (2 pact)" when only some of
+// that level's are (a multiclass warlock's sharing it), "" otherwise.
+function sktSlotPactTag(s){
+  if (!s || !s.pact) return '';
+  return s.pact === true || +s.pact >= +s.total ? ' (pact)' : ' (' + s.pact + ' pact)';
+}
+// "3d10 + 2d6", or "d8" for one pool.
+function sktHdLabel(pc){
+  const pools = sktHdPools(pc);
+  return pools.length > 1 ? pools.map(p => p.max + p.die).join(' + ') : ((pools[0] || {}).die || 'd8');
+}
+// A long rest's hit dice: 2024 all of them; 2014 half the total (at least
+// one), the largest dice first.
+function sktHdLongRest(pc){
+  const pools = sktHdPools(pc); if (!pools.length) return;
+  const ed = ((pc.build && pc.build.edition) || pc.rules || '2024');
+  let back = ed === '2024' ? Infinity : Math.max(1, Math.floor(pools.reduce((s, p) => s + p.max, 0) / 2));
+  pools.forEach(p => { const n = Math.min(p.max - p.current, back); p.current += n; back -= n; });
+  sktHdSetPools(pc, pools);
+}
+
 // "If your Exhaustion level is 6, you die" — both editions. Marked on the
 // record that holds this character's death state (the fight's combatant, or
 // the party slot between fights), at 0 HP, so the card says Dead and a long
