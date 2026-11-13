@@ -19916,6 +19916,33 @@ for (const cls of Object.keys(rule)) for (let L = 1; L <= 20; L++) for (const sc
       finally { if (document.getElementById('cb-root') && typeof cbClose === 'function') cbClose(); }
     }
 
+    // -- Round 317: Eldritch Blast's beams — each its own attack, a target for each, one Action --
+    if (!PLAYER){
+      const keepP = JSON.stringify(state.party), keepC = JSON.stringify(state.combatants), keepA = state.activeCombatantId; const TV = panelDefs.turnview; const d0 = TV._d;
+      try {
+        const R = await sktRulesLoad('2024');
+        await openCharBuilder({}); for (let i = 0; i < 80 && !CB.R; i++) await sleep(100);
+        CB.build = Object.assign(sktBlankBuild('2024'), { cls: 'Warlock', level: 5, subclass: 'Fiend', species: 'Human', name: 'r317', sources: SKT_ALL_SOURCES }); cbQuickBuild();
+        const wl = sktComputeCharacter(CB.build, R); wl.id = 'r317w'; cbClose();
+        state.party = [wl];
+        const foe = id => ({ id, name: id, isPC: false, hp: 100, hpMax: 100, ac: 5, initiative: 1, initBonus: 0, conditions: [] });
+        state.combatants = [{ id: 'r317w', name: 'r317w', isPC: true, hp: wl.hpMax, hpMax: wl.hpMax, ac: wl.ac, initiative: 20, conditions: [] }, foe('r317a'), foe('r317b')];
+        state.activeCombatantId = 'r317w'; TV._armed = 'r317a'; TV._queue = null; save();
+        openPanel('turnview'); await sleep(300); TV._render(); await sleep(30);
+        const c = state.combatants[0], list = TV._attacksFor(c), ai = list.findIndex(a => /^Eldritch Blast/.test(a.name));
+        ok('eldritch blast: two beams at 5th level, the damage one beam’s', ai >= 0 && list[ai].beams === 2 && !/beam/.test(list[ai].dmgText) && /force$/.test(list[ai].dmgText), JSON.stringify(list[ai]));
+        TV._d = n => n === 20 ? 15 : 1;
+        await TV._rollAttack(ai, {}); await sleep(40);
+        const hpA = () => state.combatants.find(x => x.id === 'r317a').hp, hpB = () => state.combatants.find(x => x.id === 'r317b').hp;
+        ok('eldritch blast: the first beam hits the creature picked, as force', hpA() < 100 && /force/.test(TV._log.find(l => /hit/.test(l)) || '') && !/beams/.test(TV._log.find(l => /hit/.test(l)) || ''), JSON.stringify([hpA(), (TV._log[0] || '').slice(0, 160)]));
+        ok('eldritch blast: the second beam waits for its own target', !!TV._queue && TV._queue.i === 1 && TV._queue.items.length === 2, JSON.stringify(TV._queue));
+        ok('eldritch blast: one Action spent', c.actionUsed === true);
+        await TV._rollQueueStep('r317b'); await sleep(40);
+        ok('eldritch blast: the second beam at another creature, and the blast is done', hpB() < 100 && !TV._queue, JSON.stringify([hpB(), !!TV._queue]));
+      } catch(e){ ok('round 317 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
+      finally { TV._d = d0; TV._queue = null; if (document.getElementById('cb-root') && typeof cbClose === 'function') cbClose(); state.party = JSON.parse(keepP); state.combatants = JSON.parse(keepC); state.activeCombatantId = keepA; save(); TV && TV._body && TV._render(); }
+    }
+
     // -- Class features: represented, not just text ------------------------
     {
       try {

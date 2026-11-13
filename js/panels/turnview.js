@@ -1507,6 +1507,11 @@ registerPanel('turnview', {
           bonusAction: /\(bonus action\)\s*$/i.test(String(a.name || '')),
         };
         row.ranged = this._pcRanged(row, a);
+        // Eldritch Blast's beams ("1d10+4 force ×2 beams"): the damage is one
+        // beam's, and the count is how many attacks. Rolled as one attack with
+        // "force ×2 beams" for its type, the second beam never happened.
+        const bm = /\s*×\s*(\d+)\s*beams?\s*$/i.exec(row.dmgText);
+        if (bm){ row.beams = +bm[1]; row.dmgText = row.dmgText.slice(0, bm.index); }
         // Crossbow Expert: no disadvantage for being close (2014: any ranged
         // weapon; 2024: a crossbow — the line drawn here is "a weapon").
         row.closeOk = !row.spell && ((p.sheet.featureList || []).some(f => /^Crossbow Expert$/i.test(f && f.name)) || (p.feats || []).some(f => /crossbow expert/i.test(String(f && (f.name || f)))));
@@ -1752,7 +1757,7 @@ registerPanel('turnview', {
       // someone else's turn — never one of the creature's own actions.
       if (a.group === 'legendary' || a.group === 'lair') return '';
       const line = a.pc
-        ? (a.save ? esc(a.dmgText || '—') : `${a.bonus >= 0 ? '+' : ''}${a.bonus} to hit · ${esc(a.dmgText || '—')}`)
+        ? (a.save ? esc(a.dmgText || '—') : `${a.bonus >= 0 ? '+' : ''}${a.bonus} to hit · ${esc(a.dmgText || '—')}${a.beams > 1 ? ' · ' + a.beams + ' beams' : ''}`)
         : `${a.toHit === 'auto' ? 'automatic hit · ' : a.toHit ? esc(a.toHit) + ' to hit · ' : ''}${(a.parts || []).map(pt => `${pt.avg ? pt.avg + ' (' + esc(pt.dice) + ')' : esc(pt.dice)} ${esc(pt.type)}${pt.ifAdv ? ' with advantage' : ''}`).join(' + ') || esc(a.effect || '')}`;
       const spent = (c.rechargeSpent || []).includes(a.name);
       const left = a.pc ? null : this._usesLeft(c, a);
@@ -3210,6 +3215,14 @@ registerPanel('turnview', {
     if (!t){ this._setResult('<span class="dim">Pick a target on the right first.</span>'); this._render(); return; }
     const a = this._attacksFor(c)[ai]; if (!a) return;
     if (this._charmBlocks(c, t)) return;
+    // Eldritch Blast's beams: one Action, a separate attack roll for each,
+    // a target for each — the first at the creature picked, the rest as a
+    // Multiattack's are.
+    if (a.beams > 1 && !o.queued && !o.cleave && !this._queue){
+      const items = []; for (let k = 0; k < a.beams; k++) items.push({ ai, name: a.name + ' (beam ' + (k + 1) + ')' });
+      this._queue = { srcId: c.id, name: c.name, items, i: 0, hits: 0, misses: 0, pc: true, label: a.name };
+      return this._rollAttack(ai, Object.assign({}, o, { attacker: c, target: t, queued: true }));
+    }
     this._snapshot(`${c.name} · ${a.name} → ${t.name}`);
     // Advantage and disadvantage, the most-used modifier in the game and the
     // one thing the panel had no way to express. Both dice are shown, because
