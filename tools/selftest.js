@@ -20568,6 +20568,40 @@ for (const cls of Object.keys(rule)) for (let L = 1; L <= 20; L++) for (const sc
       finally { TV._d = d0; TV._coverFor = cv0; TV._tokenFor = tf0; TV._edgeFeet = ef0; TV._attacksFor = af0; TV._sentinel = null; state.party = JSON.parse(keepP); state.combatants = JSON.parse(keepC); state.activeCombatantId = keepA; save(); TV && TV._body && TV._render(); }
     }
 
+    // -- Round 339: Lucky against an attack — a Luck Point for disadvantage on the roll at you, the reaction kept --
+    if (!PLAYER){
+      const keepP = JSON.stringify(state.party), keepC = JSON.stringify(state.combatants), keepA = state.activeCombatantId; const TV = panelDefs.turnview; const d0 = TV._d, cv0 = TV._coverFor, af0 = TV._attacksFor;
+      try {
+        TV._coverFor = () => ({ ac: 0 });
+        state.party = [{ id: 'r339k', name: 'r339k', cls: 'ranger', level: 6, hp: 40, hpMax: 40, ac: 15, resources: [{ name: 'Luck Points', type: 'pool', current: 3, max: 3 }], sheet: { attacks: [] } }];
+        state.combatants = [{ id: 'r339o', name: 'r339o', isPC: false, hp: 50, hpMax: 50, ac: 12, initiative: 20, initBonus: 0, conditions: [] },
+                            { id: 'r339k', name: 'r339k', isPC: true, hp: 40, hpMax: 40, ac: 15, initiative: 10, conditions: [], reactionUsed: true }];
+        state.activeCombatantId = 'r339o'; TV._armed = 'r339k'; TV._pending = null; save();
+        const claw = { name: 'Claw', toHit: '+5', parts: [{ dice: '1d6+3', type: 'slashing', avg: 6 }] };
+        TV._attacksFor = c => c.id === 'r339o' ? [claw] : af0.call(TV, c);
+        openPanel('turnview'); await sleep(200); TV._render(); await sleep(30);
+        let rolls = [12, 2]; TV._d = n => n === 20 ? (rolls.length ? rolls.shift() : 2) : 1;
+        await TV._rollAttack(0, {}); await sleep(40);
+        const btn = [...TV._body.querySelectorAll('.tv-pendingwrap button')].find(b => /^Lucky/.test(b.textContent.trim()));
+        ok('lucky: offered against the hit, the reaction already spent', !!TV._pending && !!btn, String(TV._body.querySelector('.tv-pendingwrap') && TV._body.querySelector('.tv-pendingwrap').textContent).replace(/\s+/g, ' ').slice(0, 160));
+        btn && btn.click(); await sleep(60);
+        const k = state.combatants.find(x => x.id === 'r339k'), lp = (state.party[0].resources.find(r => r.name === 'Luck Points') || {}).current;
+        ok('lucky: the attack rolled again, the lower kept — a miss', /^Miss/.test(String(TV._result).replace(/<[^>]+>/g, '').trim()) && k.hp === 40, String(TV._result).replace(/<[^>]+>/g, '').slice(0, 140));
+        ok('lucky: a Luck Point spent', lp === 2, JSON.stringify(lp));
+        k.reactionUsed = false; state.combatants[0].actionUsed = false; rolls = [12, 2];
+        await TV._rollAttack(0, {}); await sleep(40);
+        const b1 = [...TV._body.querySelectorAll('.tv-pendingwrap button')].find(b => /^Lucky/.test(b.textContent.trim())); b1 && b1.click(); await sleep(60);
+        ok('lucky: the reaction is left for something else', !!b1 && state.combatants.find(x => x.id === 'r339k').reactionUsed === false);
+        if (TV._pending) TV._commit(TV._pending, null);
+        state.party[0].resources[0].current = 0; state.combatants[0].actionUsed = false; rolls = [12];
+        await TV._rollAttack(0, {}); await sleep(40);
+        const b2 = [...TV._body.querySelectorAll('.tv-pendingwrap button')].find(b => /^Lucky/.test(b.textContent.trim()));
+        ok('lucky: none left — offered as spent or not at all', !b2 || /no luck/i.test(b2.textContent + ' ' + (b2.title || '')) || b2.disabled || !TV._pending, b2 && b2.outerHTML.slice(0, 160));
+        if (TV._pending) TV._commit(TV._pending, null);
+      } catch(e){ ok('round 339 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
+      finally { TV._d = d0; TV._coverFor = cv0; TV._attacksFor = af0; TV._pending = null; state.party = JSON.parse(keepP); state.combatants = JSON.parse(keepC); state.activeCombatantId = keepA; save(); TV && TV._body && TV._render(); }
+    }
+
     // -- Class features: represented, not just text ------------------------
     {
       try {

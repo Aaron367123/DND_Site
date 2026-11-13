@@ -275,6 +275,7 @@ registerPanel('turnview', {
     'Silvery Barbs':   { slot:1 },
     'Shield':          { slot:1 },
     'Spirit Shield':   { needs:'raging' },
+    'Lucky':           { res:'Luck Points', n:1 },
   },
 
   _rxTable(){ return (typeof window !== 'undefined' && window.SKT_REACTIONS) || null; },
@@ -361,6 +362,12 @@ registerPanel('turnview', {
       if (sc.some(t => /\bshield\b(?!\s+of\b)/i.test(String(t.text || ''))) && !out.some(r => r.name === 'Shield'))
         out.push({ name: 'Shield', note: 'When it is hit by an attack: +5 AC until the start of its next turn, including against the triggering attack (a 1st-level slot).', from: 'spell', scope: 'self', range: null });
     }
+    // Lucky (the feat): a Luck Point against an attack roll at you — 2024,
+    // disadvantage on it; 2014, a d20 of yours and the lower kept. Not a
+    // reaction: the reaction can be spent and this still offered. It was
+    // only ever offered on the character's own misses.
+    if (p && (p.resources || []).some(r => r && r.name === 'Luck Points'))
+      out.push({ name: 'Lucky', note: 'When an attack roll is made against you, spend a Luck Point: it has disadvantage.', from: 'feat', scope: 'self', range: null, when: 'tohit', disadv: true, noReaction: true });
     // Everyone has these, monsters included.
     (T.universal || []).forEach(r => out.push({ ...r, from:'always', scope:'self' }));
 
@@ -1279,7 +1286,7 @@ registerPanel('turnview', {
   _gatherReactions(o){
     const rows = [];
     this._order().forEach(c => {
-      if (c.reactionUsed || (c.hp || 0) <= 0) return;
+      if ((c.hp || 0) <= 0) return;
       // Stunned, paralyzed, unconscious…: no reactions at all (nor surprised, 2014).
       if (this._incap(c) || this._surprisedNow(c)) return;
       if (o.attackerId && c.id === o.attackerId) return;    // not the one swinging
@@ -1289,6 +1296,8 @@ registerPanel('turnview', {
       // prompt on his phone every time Zoey stabbed something.
       if (!isTarget && this._sideOf(c) !== this._sideOf(o.target)) return;
       this._reactionsFor(c).forEach(r => {
+        // (spent its reaction: only what isn't one — Lucky)
+        if (c.reactionUsed && !r.noReaction) return;
         // Only things with mechanics or an explicit hit trigger. Opportunity
         // Attack shouldn't appear every time someone is punched.
         if (!r.when &&
@@ -3371,7 +3380,7 @@ registerPanel('turnview', {
     if (!r) return;
     const problem = this._costProblem(who, r);
     if (problem){ this._setResult(`<span class="dim">${esc(who.name)} can't — ${esc(problem)}.</span>`, true); this._render(); return; }
-    who.reactionUsed = true;
+    if (!r.noReaction) who.reactionUsed = true;
     const spent = this._payCost(who, r);
     const by = (who.id === o.target.id ? r.name : `${who.name}'s ${r.name}`) + (spent ? ` · ${spent}` : '');
 
