@@ -19760,6 +19760,76 @@ for (const cls of Object.keys(rule)) for (let L = 1; L <= 20; L++) for (const sc
       finally { TV._d = d0; if (document.getElementById('cb-root') && typeof cbClose === 'function') cbClose(); state.party = JSON.parse(keepP); state.combatants = JSON.parse(keepC); state.activeCombatantId = keepA; save(); TV && TV._body && TV._render(); }
     }
 
+    // -- Round 314: what a character's hit adds, only when it may — an Unarmed Strike is no weapon, Lunar Form is a beast form's, Hunter's Prey wants a hurt target, Brutal Strike gives up Reckless Attack's advantage --
+    if (!PLAYER){
+      const keepP = JSON.stringify(state.party), keepC = JSON.stringify(state.combatants), keepA = state.activeCombatantId; const TV = panelDefs.turnview; const d0 = TV._d;
+      try {
+        const R = await sktRulesLoad('2024');
+        for (let i = 0; i < 100 && !(typeof _5eLoaded !== 'undefined' && _5eLoaded); i++) await sleep(100);
+        await openCharBuilder({}); for (let i = 0; i < 80 && !CB.R; i++) await sleep(100);
+        const mk = (cls, sub, L, id) => { CB.build = Object.assign(sktBlankBuild('2024'), { cls, level: L, subclass: sub, species: 'Human', name: id, sources: SKT_ALL_SOURCES }); cbQuickBuild(); const r = sktComputeCharacter(CB.build, R); r.id = id; return r; };
+        const fey = mk('Ranger', 'Fey Wanderer', 5, 'r314f'), hun = mk('Ranger', 'Hunter', 5, 'r314h'), moon = mk('Druid', 'Moon', 14, 'r314d'), brs = mk('Barbarian', 'Berserker', 9, 'r314b');
+        cbClose();
+        state.party = [fey, hun, moon, brs];
+        const pc = r => ({ id: r.id, name: r.id, isPC: true, hp: r.hpMax, hpMax: r.hpMax, ac: r.ac, initiative: 20, conditions: [] });
+        const orc = () => ({ id: 'r314o', name: 'Orc', isPC: false, hp: 300, hpMax: 300, ac: 5, initiative: 1, initBonus: 0, conditions: [] });
+        openPanel('turnview'); await sleep(300);
+        const hitWith = async (who, pickFn) => {
+          state.combatants = [pc(who), orc()]; state.activeCombatantId = who.id; TV._lastPcHit = null; TV._armed = 'r314o'; save(); TV._render(); await sleep(30);
+          const c = state.combatants[0], ai = TV._attacksFor(c).findIndex(pickFn);
+          TV._d = n => n === 20 ? 15 : 1; await TV._rollAttack(ai, {}); await sleep(30);
+          return TV._lastPcHit ? TV._pcExtraOptions(TV._lastPcHit).map(o => o.label) : null;
+        };
+        let got = await hitWith(fey, a => a.pc && /^Scimitar/.test(a.name));
+        ok('after a hit: Dreadful Strikes on a weapon hit', !!got && got.includes('Dreadful Strikes'), JSON.stringify(got));
+        got = await hitWith(fey, a => a.pc && /^Unarmed Strike/.test(a.name));
+        ok('after a hit: not on an Unarmed Strike — it is no weapon', !!got && !got.includes('Dreadful Strikes'), JSON.stringify(got));
+        // Hunter's Prey: the target missing hit points before this hit.
+        got = await hitWith(hun, a => a.pc && /^Scimitar/.test(a.name));
+        ok('after a hit: Hunter’s Prey not on an unhurt target', !!got && !got.includes('Hunter\'s Prey'), JSON.stringify(got));
+        { const c = state.combatants[0]; c.actionUsed = false; c.onceTurn = {}; TV._d = n => n === 20 ? 15 : 1;
+          await TV._rollAttack(TV._attacksFor(c).findIndex(a => a.pc && /^Scimitar/.test(a.name)), {}); await sleep(30);
+          const g2 = TV._pcExtraOptions(TV._lastPcHit).map(o => o.label);
+          ok('after a hit: Hunter’s Prey on one already hurt', g2.includes('Hunter\'s Prey'), JSON.stringify(g2)); }
+        // Lunar Form: a Wild Shape form's attack only.
+        got = await hitWith(moon, a => a.pc && /^Sickle/.test(a.name));
+        ok('after a hit: Lunar Form not on the druid’s sickle', !!got && !got.includes('Lunar Form'), JSON.stringify(got));
+        const wolf = _5eData.find(d => d.cat === 'monster' && d.name === 'Wolf' && d._raw);
+        state.party.find(p => p.id === 'r314d').wildshape = { name: 'Wolf', slug: wolf._slug, hp: 11, hpMax: 11, ac: 12 };
+        got = await hitWith(moon, a => /^Bite/i.test(a.name));
+        ok('after a hit: Lunar Form on the wolf’s bite', !!got && got.includes('Lunar Form') && got.length === 1, JSON.stringify(got));
+        { const ws0 = (state.party.find(p => p.id === 'r314d').resources.find(r => r.name === 'Wild Shape') || {}).current;
+          TV._usePcExtra(TV._pcExtraOptions(TV._lastPcHit).find(o => o.label === 'Lunar Form').key); await sleep(30);
+          ok('after a hit: Lunar Form spends no Wild Shape use', (state.party.find(p => p.id === 'r314d').resources.find(r => r.name === 'Wild Shape') || {}).current === ws0 && /Lunar Form/.test(TV._result), JSON.stringify([ws0, String(TV._result).slice(0, 80)])); }
+        { state.party.find(p => p.id === 'r314d').concentration = 'Hex'; save(); const dr = state.party.find(p => p.id === 'r314d'); dr.resources = (dr.resources || []).concat([{ name: 'Sneak Attack', type: 'toggle', current: 1, max: 1, die: '2d6' }]);
+          got = await hitWith(moon, a => /^Bite/i.test(a.name));
+          ok('after a hit: in beast form a Hex still counts, Sneak Attack doesn’t', !!got && got.includes('Hex') && !got.includes('Sneak Attack'), JSON.stringify(got)); }
+        // Brutal Strike: only on the roll that gave up Reckless Attack's advantage.
+        const b = () => state.party.find(p => p.id === 'r314b');
+        panelDefs.party._setRage(state.party.indexOf(b()), true, { paid: true }); save();
+        got = await hitWith(brs, a => a.pc && a.str && !a.ranged);
+        ok('after a hit: no Brutal Strike without Reckless Attack', !!got && !got.includes('Brutal Strike'), JSON.stringify(got));
+        ok('after a hit: raging, no Frenzy without Reckless Attack', !!got && !got.includes('Frenzy'), JSON.stringify(got));
+        ok('brutal strike: no button without Reckless Attack', !TV._body.querySelector('[data-tv="brutal"]'));
+        b().active = { 'Reckless Attack': true }; save(); await sleep(20); TV._render(); await sleep(30);
+        got = await hitWith(brs, a => a.pc && a.str && !a.ranged);
+        ok('after a hit: none on a reckless roll made with advantage either', !!got && !got.includes('Brutal Strike') && /adv/.test(TV._result), JSON.stringify(got));
+        ok('after a hit: raging and reckless, Frenzy', !!got && got.includes('Frenzy'), JSON.stringify(got));
+        state.combatants[0].actionUsed = false; TV._render(); await sleep(20);
+        const bb = TV._body.querySelector('[data-tv="brutal"]');
+        ok('brutal strike: the button, attacking recklessly', !!bb);
+        bb && bb.click(); await sleep(20);
+        { const c = state.combatants[0]; c.onceTurn = {}; TV._lastPcHit = null; TV._d = n => n === 20 ? 15 : 1;
+          await TV._rollAttack(TV._attacksFor(c).findIndex(a => a.pc && a.str && !a.ranged), {}); await sleep(30);
+          const r = String(TV._result).replace(/<[^>]+>/g, '');
+          const g3 = TV._lastPcHit ? TV._pcExtraOptions(TV._lastPcHit).map(o => o.label) : null;
+          ok('brutal strike: that roll gives up its advantage', !/\badv\b/.test(r) && /Brutal Strike: its advantage given up/.test(r), r.slice(0, 160));
+          ok('brutal strike: and its hit offers the extra damage', !!g3 && g3.includes('Brutal Strike'), JSON.stringify(g3));
+          ok('brutal strike: once a turn — the button is gone', !TV._body.querySelector('[data-tv="brutal"]')); }
+      } catch(e){ ok('round 314 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
+      finally { TV._d = d0; TV._brutal = null; if (document.getElementById('cb-root') && typeof cbClose === 'function') cbClose(); state.party = JSON.parse(keepP); state.combatants = JSON.parse(keepC); state.activeCombatantId = keepA; save(); TV && TV._body && TV._render(); }
+    }
+
     // -- Class features: represented, not just text ------------------------
     {
       try {

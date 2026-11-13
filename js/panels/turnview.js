@@ -1817,6 +1817,8 @@ registerPanel('turnview', {
       ${advBtn(-1, 'Disadv', 'Roll two d20 and keep the lower')}
       ${advBtn(0, 'Straight', 'One d20')}
       ${advBtn(1, 'Adv', 'Roll two d20 and keep the higher')}
+      ${this._brutalOk(c) ? `<button class="btn ${this._brutal === this._turnKey() + '|' + c.id ? 'primary' : ''}" data-tv="brutal" aria-pressed="${this._brutal === this._turnKey() + '|' + c.id}"
+          title="Brutal Strike: the next Strength attack gives up Reckless Attack's advantage; if it hits, ${esc(this._brutalOk(c).dice)} more and a blow (${esc(this._brutalOk(c).note.replace(/^.*?Hamstring Blow/, 'Forceful or Hamstring Blow'))})">Brutal Strike</button>` : ''}
       ${this._sunSensitive(c) ? `<button class="btn tv-sun ${state.combatSunlight ? 'primary' : ''}" data-tv="sun" aria-pressed="${!!state.combatSunlight}"
           title="Sunlight Sensitivity: in sunlight, its attack rolls (and sight-based Perception) have disadvantage. For the whole scene, until switched off.">In sunlight</button>` : ''}
     </div>`;
@@ -3004,9 +3006,12 @@ registerPanel('turnview', {
     this._log.unshift(`<strong>${esc(o.attacker)}</strong> hit <strong>${esc(t.name)}</strong> for <strong>${dmgText}</strong>${o.crit ? ' (crit)' : ''}${rollTxt}${usedName ? ' — ' + esc(usedName) : ''}${notes ? ' <span style="opacity:.85">· ' + esc(notes) + '</span>' : ''}${appliedTxt}${soakTxt} <span style="opacity:.7">· ${before} → ${after}</span>`);
     if (o.onHit && !o.save) this._queueOnHit(o);
     // A character's hit: the damage their features add, one click away.
-    if (o.pcAtk) this._lastPcHit = { turn: this._turnKey(), atkId: o.attackerId, tgtId: t.id, crit: !!o.crit, mode: o.mode || 0,
+    if (o.pcAtk || o.wsAtk) this._lastPcHit = { turn: this._turnKey(), atkId: o.attackerId, tgtId: t.id, crit: !!o.crit, mode: o.mode || 0,
       ranged: !!o.ranged, spell: !!o.spellAtk, props: o.props || null, type: o.type || '', magical: !!o.magical, label: o.label, used: [], mastery: o.mastery || '',
-      wDice: o.wDice || null, wSum: o.wSum, wName: o.label };
+      wDice: o.wDice || null, wSum: o.wSum, wName: o.label,
+      // a beast form's attack; a Strength attack; Brutal Strike's roll; and
+      // whether the target was already hurt before this hit (Hunter's Prey)
+      ws: !!o.wsAtk, str: !!o.str, brutal: !!o.brutal, hpBefore: before, hpMaxT: t.hpMax };
     if (o.queued && this._queue){ this._queue.hits++; this._advanceQueue(); return; }
     this._render();
   },
@@ -3169,6 +3174,14 @@ registerPanel('turnview', {
     who.shieldAc = n; who.ac = (+who.ac || 0) + n;
   },
 
+  // Brutal Strike can be chosen: a 2024 barbarian attacking recklessly, on
+  // their own turn, not used yet this turn. Its extra damage, or null.
+  _brutalOk(c){
+    const p = c && c.isPC && c.id === state.activeCombatantId ? this._partyOf(c) : null;
+    if (!p || !(p.active || {})['Reckless Attack'] || c.brutalTurn === this._turnKey() || this._wsOf(c)) return null;
+    return (((p.sheet || {}).extraDamage) || []).find(x => x && x.label === 'Brutal Strike') || null;
+  },
+
   // `opts` lets an opportunity attack say who is swinging and at whom without
   // borrowing state.activeCombatantId to say it. Borrowing was a real bug:
   // _applyHpDelta calls save(), so the wrong creature's id reached
@@ -3234,6 +3247,14 @@ registerPanel('turnview', {
     const pcSheet = a.pc ? ((this._partyOf(c) || {}).sheet || {}) : {};
     const atkTags = ['attack', a.spell ? 'attack:spell' : a.str ? 'attack:str' : ''];
     (pcSheet.rollAdv || []).forEach(x => { if ((x.on || []).some(k => atkTags.includes(k))) advWhy.push(x.label); });
+    // Brutal Strike (2024): with Reckless Attack, one Strength attack a turn
+    // gives up its advantage — all of it — for the extra die and a blow if it
+    // hits. "The chosen attack roll mustn't have Disadvantage."
+    let brutal = false, brutalNote = '';
+    if (this._brutal === this._turnKey() + '|' + c.id && a.pc && a.str && !a.spell){
+      if (disWhy.length) brutalNote = 'Brutal Strike: not with disadvantage';
+      else { advWhy.length = 0; brutal = true; this._brutal = null; c.brutalTurn = this._turnKey(); brutalNote = 'Brutal Strike: its advantage given up'; }
+    }
     const adv = advWhy.length > 0, dis = disWhy.length > 0;
     const mode = (adv && dis) ? 0 : adv ? 1 : dis ? -1 : 0;
     // Cover: total, and there is no attack to roll; half or three-quarters
@@ -3261,6 +3282,7 @@ registerPanel('turnview', {
         + (hitNote ? ` (${hitNote})` : '');
       nat = keep;
     }
+    if (brutalNote) hitNote = (hitNote ? hitNote + ' · ' : '') + brutalNote;
     if (a.recharge) this._markRechargeSpent(c, a.name);
     this._markUsed(c, a);
     // A multiattack is one action for the whole sequence, not one per swing.
@@ -3353,7 +3375,9 @@ registerPanel('turnview', {
     this._resolve({ attackerId: c.id, attacker: c.name, label: o.label || a.name, target: t,
                     total, crit, hit, dmg, parts, queued: !!o.queued, nat, bonus, hitNote, onHit: a.pc ? null : (a.onHit || null), acBonus: cov.ac || 0,
                     type: parts.length ? parts[0].type : '', detail,
-                    pcAtk: !!a.pc, critAt, wDice, wSum, mode,
+                    pcAtk: !!a.pc, critAt, wDice, wSum, mode, brutal, str: !!a.str,
+                    // a druid's beast-form attack: what a Wild Shape form's hit adds (Lunar Form)
+                    wsAtk: !a.pc && !!c.isPC && !!this._wsOf(c),
                     // its weapon mastery, and the ability modifier its damage carries (Graze, Topple)
                     mastery: a.pc && !a.spell ? String(a.mastery || '') : '',
                     masteryMod: a.pc ? (parseInt(((/[+-]\d+(?!\d*d)/.exec(String(a.dmgText || '').replace(/\s+/g, '')) || ['0'])[0]), 10) || 0) : 0, ranged: !!a.ranged, spellAtk: !!a.spell, props: a.props || null,
@@ -3993,13 +4017,35 @@ registerPanel('turnview', {
     (sh.extraDamage || []).forEach((x, i) => {
       if (!x || !x.dice) return;
       const note = String(x.note || '');
-      const pool = (p.resources || []).find(r => r.name === x.label) || (p.resources || []).find(r => r.name && note.includes(r.name));
+      // A pool the note names is spent only where the note says to spend it:
+      // Lunar Form's "a Wild Shape form's attack" names Wild Shape, and spent
+      // a use of it on every hit.
+      const pool = (p.resources || []).find(r => r.name === x.label) || (/\b(?:spend|expend)/i.test(note) ? (p.resources || []).find(r => r.name && note.includes(r.name)) : null);
       if (pool && (+pool.current || 0) < 1) return;
-      if (/weapon/i.test(note) && !weapon) return;
+      // A beast form's attack adds only what a beast form's hit does (Lunar
+      // Form, Primal Strike); what only a beast form's hit adds is not a
+      // weapon's. Lunar Form came up on a druid's sickle and Starry Wisp.
+      const beast = /beast[- ]form|wild shape form/i.test(note);
+      if (h.ws ? !beast : beast && !/weapon/i.test(note)) return;
+      // "with a weapon": an Unarmed Strike is not one (2024), unless the
+      // feature names it too (Giant's Might).
+      if (!h.ws && /weapon/i.test(note) && !(weapon && (!unarmed || /unarmed/i.test(note)))) return;
+      // Someone else's hit (Violent Attraction), the drake's bite, the target
+      // of a Divine Smite: not this hit's, or not until the smite.
+      if (/^(?:\S+ ){0,6}When another creature\b|\bdrake's Bite\b/i.test(note)) return;
+      if (/target of your Divine Smite/i.test(note) && !h.used.includes('smite')) return;
+      // Reckless Attack and a Strength attack (Frenzy, Brutal Strike) — and
+      // Brutal Strike only on the roll that gave up its advantage for it.
+      if (/Reckless Attack/.test(note) && !((p.active || {})['Reckless Attack'])) return;
+      if (/\bStrength\b/.test(note) && !h.str) return;
+      if (x.label === 'Brutal Strike' && !h.brutal) return;
+      // "if it's missing any of its Hit Points" — before this hit, or every
+      // first hit would qualify by hurting it.
+      if (/missing any (?:of its )?hit points|below its hit point maximum/i.test(note) && !(h.hpBefore != null && h.hpMaxT != null && h.hpBefore < h.hpMaxT)) return;
       if (/during your rage|while (?:you(?:'|’)re |you are )?raging|while your rage/i.test(note) && !p.rage) return;
       const onceT = !!(x.once || pool || /once (?:per|on each of your|each) turn|(?:first|once) [a-z ]*each turn|each turn/i.test(note));
       if (onceT && once(x.label)) return;
-      out.push({ key: 'x' + i, label: x.label, dice: x.dice, type: '', ok: true, once: onceT, res: pool ? pool.name : undefined,
+      out.push({ key: 'x' + i, label: x.label, dice: x.dice, type: '', ok: true, once: onceT, res: pool ? pool.name : undefined, beast,
         why: note + (pool ? ' (' + pool.current + ' left)' : '') });
     });
     // Savage Attacker: once a turn, the weapon's damage dice rolled again and
@@ -4046,6 +4092,10 @@ registerPanel('turnview', {
           why: t.name + ' is ' + tSize + ', larger than you (' + fury.current + ' left)' });
       }
     }
+    // A beast form's hit: Sneak Attack, a smite, Savage Attacker and the rest
+    // are the character's, not the beast's. A Hunter's Mark or a Hex held
+    // through the change still counts — "whenever you hit it with an attack".
+    if (h.ws) return out.filter(o => (o.beast || o.key === 'hm' || o.key === 'hex') && !h.used.includes(o.key));
     return out.filter(o => !h.used.includes(o.key));
   },
   _renderPcExtras(){
@@ -4959,6 +5009,7 @@ registerPanel('turnview', {
       // A character's sheet, from their turn: their spells, everything else
       // the panel doesn't draw. What they cast comes back here.
       else if (act === 'state'){ this._toggleState(el.dataset.id, el.dataset.k); }
+      else if (act === 'brutal'){ const k = this._turnKey() + '|' + state.activeCombatantId; this._brutal = this._brutal === k ? null : k; this._render(); }
       else if (act === 'sheet'){ if (typeof openCharSheet === 'function') openCharSheet(el.dataset.id, el.dataset.tab ? { tab: el.dataset.tab } : {}); }
       else if (act === 'cover'){
         const c = this._active(), t = this._armed && this._order().find(x => x.id === this._armed);
