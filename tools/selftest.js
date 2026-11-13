@@ -19698,7 +19698,7 @@ for (const cls of Object.keys(rule)) for (let L = 1; L <= 20; L++) for (const sc
 
     // -- Round 313: a feature's switch from the turn (Reckless Attack's pill, Bladesong through its activation), the Rage pill's Bonus Action, and Shield until the caster's next turn --
     if (!PLAYER){
-      const keepP = JSON.stringify(state.party), keepC = JSON.stringify(state.combatants), keepA = state.activeCombatantId; const TV = panelDefs.turnview; const d0 = TV._d;
+      const keepP = JSON.stringify(state.party), keepC = JSON.stringify(state.combatants), keepA = state.activeCombatantId; const TV = panelDefs.turnview; const d0 = TV._d; const cv0 = TV._coverFor; TV._coverFor = () => ({ ac: 0 });   // (cover off: a map token another round left can stand "in the way")
       try {
         const R = await sktRulesLoad('2024');
         await openCharBuilder({}); for (let i = 0; i < 80 && !CB.R; i++) await sleep(100);
@@ -19757,12 +19757,12 @@ for (const cls of Object.keys(rule)) for (let L = 1; L <= 20; L++) for (const sc
         panelDefs.combat._nextTurn(); await sleep(150);
         ok('shield: and the other’s at theirs', state.activeCombatantId === 'r313i' && ic().ac === 12 && !ic().shieldAc, JSON.stringify([state.activeCombatantId, ic().ac]));
       } catch(e){ ok('round 313 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
-      finally { TV._d = d0; if (document.getElementById('cb-root') && typeof cbClose === 'function') cbClose(); state.party = JSON.parse(keepP); state.combatants = JSON.parse(keepC); state.activeCombatantId = keepA; save(); TV && TV._body && TV._render(); }
+      finally { TV._d = d0; TV._coverFor = cv0; if (document.getElementById('cb-root') && typeof cbClose === 'function') cbClose(); state.party = JSON.parse(keepP); state.combatants = JSON.parse(keepC); state.activeCombatantId = keepA; save(); TV && TV._body && TV._render(); }
     }
 
     // -- Round 314: what a character's hit adds, only when it may — an Unarmed Strike is no weapon, Lunar Form is a beast form's, Hunter's Prey wants a hurt target, Brutal Strike gives up Reckless Attack's advantage --
     if (!PLAYER){
-      const keepP = JSON.stringify(state.party), keepC = JSON.stringify(state.combatants), keepA = state.activeCombatantId; const TV = panelDefs.turnview; const d0 = TV._d;
+      const keepP = JSON.stringify(state.party), keepC = JSON.stringify(state.combatants), keepA = state.activeCombatantId; const TV = panelDefs.turnview; const d0 = TV._d; const cv0 = TV._coverFor; TV._coverFor = () => ({ ac: 0 });   // (cover off: a map token another round left can stand "in the way")
       try {
         const R = await sktRulesLoad('2024');
         for (let i = 0; i < 100 && !(typeof _5eLoaded !== 'undefined' && _5eLoaded); i++) await sleep(100);
@@ -19827,12 +19827,12 @@ for (const cls of Object.keys(rule)) for (let L = 1; L <= 20; L++) for (const sc
           ok('brutal strike: and its hit offers the extra damage', !!g3 && g3.includes('Brutal Strike'), JSON.stringify(g3));
           ok('brutal strike: once a turn — the button is gone', !TV._body.querySelector('[data-tv="brutal"]')); }
       } catch(e){ ok('round 314 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
-      finally { TV._d = d0; TV._brutal = null; if (document.getElementById('cb-root') && typeof cbClose === 'function') cbClose(); state.party = JSON.parse(keepP); state.combatants = JSON.parse(keepC); state.activeCombatantId = keepA; save(); TV && TV._body && TV._render(); }
+      finally { TV._d = d0; TV._coverFor = cv0; TV._brutal = null; if (document.getElementById('cb-root') && typeof cbClose === 'function') cbClose(); state.party = JSON.parse(keepP); state.combatants = JSON.parse(keepC); state.activeCombatantId = keepA; save(); TV && TV._body && TV._render(); }
     }
 
     // -- Round 315: a Battle Master's maneuvers on a hit, an Open Hand monk's Flurry of Blows hit, and a paladin's Radiant Strikes --
     if (!PLAYER){
-      const keepP = JSON.stringify(state.party), keepC = JSON.stringify(state.combatants), keepA = state.activeCombatantId; const TV = panelDefs.turnview; const d0 = TV._d;
+      const keepP = JSON.stringify(state.party), keepC = JSON.stringify(state.combatants), keepA = state.activeCombatantId; const TV = panelDefs.turnview; const d0 = TV._d; const cv0 = TV._coverFor; TV._coverFor = () => ({ ac: 0 });   // (cover off: a map token another round left can stand "in the way")
       try {
         const R = await sktRulesLoad('2024');
         await openCharBuilder({}); for (let i = 0; i < 80 && !CB.R; i++) await sleep(100);
@@ -19898,7 +19898,7 @@ for (const cls of Object.keys(rule)) for (let L = 1; L <= 20; L++) for (const sc
         await TV._rollAttack(TV._attacksFor(pcc()).findIndex(a => a.pc && a.ranged && !a.spell), {}); await sleep(30);
         ok('radiant strikes: not a bow’s', !/Radiant Strikes/.test(TV._log[0] || ''), (TV._log[0] || '').slice(0, 200));
       } catch(e){ ok('round 315 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
-      finally { TV._d = d0; if (document.getElementById('cb-root') && typeof cbClose === 'function') cbClose(); state.party = JSON.parse(keepP); state.combatants = JSON.parse(keepC); state.activeCombatantId = keepA; save(); TV && TV._body && TV._render(); }
+      finally { TV._d = d0; TV._coverFor = cv0; if (document.getElementById('cb-root') && typeof cbClose === 'function') cbClose(); state.party = JSON.parse(keepP); state.combatants = JSON.parse(keepC); state.activeCombatantId = keepA; save(); TV && TV._body && TV._render(); }
     }
 
     // -- Round 316: how a feature is used, not read off a companion's Reaction or the words "Action Surge" --
@@ -19918,7 +19918,7 @@ for (const cls of Object.keys(rule)) for (let L = 1; L <= 20; L++) for (const sc
 
     // -- Round 317: Eldritch Blast's beams — each its own attack, a target for each, one Action --
     if (!PLAYER){
-      const keepP = JSON.stringify(state.party), keepC = JSON.stringify(state.combatants), keepA = state.activeCombatantId; const TV = panelDefs.turnview; const d0 = TV._d;
+      const keepP = JSON.stringify(state.party), keepC = JSON.stringify(state.combatants), keepA = state.activeCombatantId; const TV = panelDefs.turnview; const d0 = TV._d; const cv0 = TV._coverFor; TV._coverFor = () => ({ ac: 0 });   // (cover off: a map token another round left can stand "in the way")
       try {
         const R = await sktRulesLoad('2024');
         await openCharBuilder({}); for (let i = 0; i < 80 && !CB.R; i++) await sleep(100);
@@ -19940,7 +19940,7 @@ for (const cls of Object.keys(rule)) for (let L = 1; L <= 20; L++) for (const sc
         await TV._rollQueueStep('r317b'); await sleep(40);
         ok('eldritch blast: the second beam at another creature, and the blast is done', hpB() < 100 && !TV._queue, JSON.stringify([hpB(), !!TV._queue]));
       } catch(e){ ok('round 317 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
-      finally { TV._d = d0; TV._queue = null; if (document.getElementById('cb-root') && typeof cbClose === 'function') cbClose(); state.party = JSON.parse(keepP); state.combatants = JSON.parse(keepC); state.activeCombatantId = keepA; save(); TV && TV._body && TV._render(); }
+      finally { TV._d = d0; TV._coverFor = cv0; TV._queue = null; if (document.getElementById('cb-root') && typeof cbClose === 'function') cbClose(); state.party = JSON.parse(keepP); state.combatants = JSON.parse(keepC); state.activeCombatantId = keepA; save(); TV && TV._body && TV._render(); }
     }
 
     // -- Round 318: a feature whose targets save — Turn Undead, Radiance of the Dawn, Land's Aid, Intimidating Presence — runs the save, filled in from its text --
@@ -19992,7 +19992,7 @@ for (const cls of Object.keys(rule)) for (let L = 1; L <= 20; L++) for (const sc
 
     // -- Round 319: what a feature does on its own — Survivor and Heroic Warrior as the Champion's turn starts, Vitality of the Tree's rage, Dark One's Blessing on a kill --
     if (!PLAYER){
-      const keepP = JSON.stringify(state.party), keepC = JSON.stringify(state.combatants), keepA = state.activeCombatantId, keepR = state.combatRound; const TV = panelDefs.turnview; const d0 = TV._d;
+      const keepP = JSON.stringify(state.party), keepC = JSON.stringify(state.combatants), keepA = state.activeCombatantId, keepR = state.combatRound; const TV = panelDefs.turnview; const d0 = TV._d; const cv0 = TV._coverFor; TV._coverFor = () => ({ ac: 0 });   // (cover off: a map token another round left can stand "in the way")
       try {
         const R = await sktRulesLoad('2024');
         await openCharBuilder({}); for (let i = 0; i < 80 && !CB.R; i++) await sleep(100);
@@ -20027,12 +20027,12 @@ for (const cls of Object.keys(rule)) for (let L = 1; L <= 20; L++) for (const sc
         const cha = Math.floor((fd.abilities.cha - 10) / 2);
         ok('dark one’s blessing: dropping an enemy gives CHA + warlock level temporary hit points', state.combatants.find(c => c.id === 'r319o').hp === 0 && state.party.find(p => p.id === 'r319w').tempHp === Math.max(1, cha + 3), JSON.stringify([state.combatants.find(c => c.id === 'r319o').hp, state.party.find(p => p.id === 'r319w').tempHp, cha, String(TV._result || '').replace(/<[^>]+>/g, '').slice(0, 200)]));
       } catch(e){ ok('round 319 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
-      finally { TV._d = d0; TV._queue = null; if (document.getElementById('cb-root') && typeof cbClose === 'function') cbClose(); state.party = JSON.parse(keepP); state.combatants = JSON.parse(keepC); state.activeCombatantId = keepA; state.combatRound = keepR; save(); TV && TV._body && TV._render(); }
+      finally { TV._d = d0; TV._coverFor = cv0; TV._queue = null; if (document.getElementById('cb-root') && typeof cbClose === 'function') cbClose(); state.party = JSON.parse(keepP); state.combatants = JSON.parse(keepC); state.activeCombatantId = keepA; state.combatRound = keepR; save(); TV && TV._body && TV._render(); }
     }
 
     // -- Round 320: a mark on one creature — Vow of Enmity's advantage against it, Hunter's Mark's die only on the marked one --
     if (!PLAYER){
-      const keepP = JSON.stringify(state.party), keepC = JSON.stringify(state.combatants), keepA = state.activeCombatantId; const TV = panelDefs.turnview; const d0 = TV._d;
+      const keepP = JSON.stringify(state.party), keepC = JSON.stringify(state.combatants), keepA = state.activeCombatantId; const TV = panelDefs.turnview; const d0 = TV._d; const cv0 = TV._coverFor; TV._coverFor = () => ({ ac: 0 });   // (cover off: a map token another round left can stand "in the way")
       try {
         const R = await sktRulesLoad('2024');
         await openCharBuilder({}); for (let i = 0; i < 80 && !CB.R; i++) await sleep(100);
@@ -20075,12 +20075,12 @@ for (const cls of Object.keys(rule)) for (let L = 1; L <= 20; L++) for (const sc
         o = TV._pcExtraOptions(TV._lastPcHit).find(x => x.key === 'hm');
         ok('hunter’s mark: the marked creature down, the mark can go anywhere', !!o && o.ok === true, JSON.stringify(o));
       } catch(e){ ok('round 320 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
-      finally { TV._d = d0; if (document.getElementById('cb-root') && typeof cbClose === 'function') cbClose(); state.party = JSON.parse(keepP); state.combatants = JSON.parse(keepC); state.activeCombatantId = keepA; save(); TV && TV._body && TV._render(); }
+      finally { TV._d = d0; TV._coverFor = cv0; if (document.getElementById('cb-root') && typeof cbClose === 'function') cbClose(); state.party = JSON.parse(keepP); state.combatants = JSON.parse(keepC); state.activeCombatantId = keepA; save(); TV && TV._body && TV._render(); }
     }
 
     // -- Round 321: a feature's Bonus Action attack (War Priest) — the attack itself, a target to pick, the Action left alone --
     if (!PLAYER){
-      const keepP = JSON.stringify(state.party), keepC = JSON.stringify(state.combatants), keepA = state.activeCombatantId; const TV = panelDefs.turnview; const d0 = TV._d;
+      const keepP = JSON.stringify(state.party), keepC = JSON.stringify(state.combatants), keepA = state.activeCombatantId; const TV = panelDefs.turnview; const d0 = TV._d; const cv0 = TV._coverFor; TV._coverFor = () => ({ ac: 0 });   // (cover off: a map token another round left can stand "in the way")
       try {
         const R = await sktRulesLoad('2024');
         await openCharBuilder({}); for (let i = 0; i < 80 && !CB.R; i++) await sleep(100);
@@ -20098,7 +20098,7 @@ for (const cls of Object.keys(rule)) for (let L = 1; L <= 20; L++) for (const sc
         await TV._rollQueueStep('r321o'); await sleep(40);
         ok('war priest: the attack lands, the Action still free', state.combatants[1].hp < 100 && !c.actionUsed && !TV._queue, JSON.stringify([state.combatants[1].hp, c.actionUsed, !!TV._queue]));
       } catch(e){ ok('round 321 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
-      finally { TV._d = d0; TV._queue = null; if (document.getElementById('cb-root') && typeof cbClose === 'function') cbClose(); state.party = JSON.parse(keepP); state.combatants = JSON.parse(keepC); state.activeCombatantId = keepA; save(); TV && TV._body && TV._render(); }
+      finally { TV._d = d0; TV._coverFor = cv0; TV._queue = null; if (document.getElementById('cb-root') && typeof cbClose === 'function') cbClose(); state.party = JSON.parse(keepP); state.combatants = JSON.parse(keepC); state.activeCombatantId = keepA; save(); TV && TV._body && TV._render(); }
     }
 
     // -- Round 322: a Multiattack's list, the ways older stat blocks write it — "one Beak attack" after a colon, "one to constrict", "one with a dagger", "two unarmed strikes", "his gore attack", a tail "in place of" the claws, "and casts one spell" --
@@ -20163,7 +20163,7 @@ for (const cls of Object.keys(rule)) for (let L = 1; L <= 20; L++) for (const sc
     if (!PLAYER){
       const dr = sktOnHitCondition('Melee Attack Roll: +4, reach 5 ft. Hit: 7 (2d6) Necrotic damage. If the target is a creature, its Hit Point maximum decreases by an amount equal to the damage taken.');
       ok('life drain (2024): "its Hit Point maximum decreases by an amount equal to the damage taken"', !!dr && !!dr.drain, JSON.stringify(dr));
-      const keepP = JSON.stringify(state.party), keepC = JSON.stringify(state.combatants), keepA = state.activeCombatantId; const TV = panelDefs.turnview; const d0 = TV._d;
+      const keepP = JSON.stringify(state.party), keepC = JSON.stringify(state.combatants), keepA = state.activeCombatantId; const TV = panelDefs.turnview; const d0 = TV._d; const cv0 = TV._coverFor; TV._coverFor = () => ({ ac: 0 });   // (cover off: a map token another round left can stand "in the way")
       try {
         for (let i = 0; i < 100 && !(typeof _5eLoaded !== 'undefined' && _5eLoaded); i++) await sleep(100);
         const mg = _5eData.find(x => x.cat === 'monster' && x.name === 'Mage' && x._source === 'XMM');
@@ -20184,7 +20184,7 @@ for (const cls of Object.keys(rule)) for (let L = 1; L <= 20; L++) for (const sc
         panelDefs.combat._nextTurn(); await sleep(150);
         ok('protective magic: gone as the mage’s turn starts', state.activeCombatantId === 'r325m' && m.ac === 15 && !m.shieldAc, JSON.stringify([state.activeCombatantId, m.ac]));
       } catch(e){ ok('round 325 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
-      finally { TV._d = d0; TV._pending = null; state.party = JSON.parse(keepP); state.combatants = JSON.parse(keepC); state.activeCombatantId = keepA; save(); TV && TV._body && TV._render(); }
+      finally { TV._d = d0; TV._coverFor = cv0; TV._pending = null; state.party = JSON.parse(keepP); state.combatants = JSON.parse(keepC); state.activeCombatantId = keepA; save(); TV && TV._body && TV._render(); }
     }
 
     // -- Round 326: a monster whose spell list has Shield can cast it as its reaction (a 2014 mage); Shield of Faith is no Shield --
