@@ -20629,6 +20629,20 @@ for (const cls of Object.keys(rule)) for (let L = 1; L <= 20; L++) for (const sc
       finally { TV._onHits = []; state.party = JSON.parse(keepP); state.combatants = JSON.parse(keepC); save(); TV && TV._body && TV._render(); }
     }
 
+    // -- Round 341: Bless's d4 on a save the tracker rolls --
+    if (!PLAYER){
+      const keepP = JSON.stringify(state.party), keepC = JSON.stringify(state.combatants); const C = panelDefs.combat;
+      try {
+        state.party = [{ id: 'r341b', name: 'r341b', cls: 'fighter', level: 5, hp: 40, hpMax: 40, ac: 16, abilities: { wis: 10 }, sheet: { rollDice: [{ on: ['attack', 'save'], die: 4, label: 'Bless' }] } },
+                       { id: 'r341n', name: 'r341n', cls: 'fighter', level: 5, hp: 40, hpMax: 40, ac: 16, abilities: { wis: 10 }, sheet: {} }];
+        state.combatants = [{ id: 'r341b', name: 'r341b', isPC: true, hp: 40, hpMax: 40, ac: 16, conditions: [] }, { id: 'r341n', name: 'r341n', isPC: true, hp: 40, hpMax: 40, ac: 16, conditions: [] }];
+        sktSetRandom(() => 0.5);        // every die rolls its middle: d20 → 11, d4 → 3
+        const b = C.rollSave(state.combatants[0], 'wis', 15, {}), n = C.rollSave(state.combatants[1], 'wis', 15, {});
+        ok('bless: a blessed character’s save adds its d4', b.total === n.total + 3 && /\+ 3 Bless/.test(b.detail), JSON.stringify([b.total, n.total, b.detail]));
+      } catch(e){ ok('round 341 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
+      finally { sktSetRandom(null); state.party = JSON.parse(keepP); state.combatants = JSON.parse(keepC); save(); }
+    }
+
     // -- Class features: represented, not just text ------------------------
     {
       try {

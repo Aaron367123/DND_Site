@@ -2654,10 +2654,15 @@ registerPanel('combat',{
     // Cover: +2 (half) or +5 (three-quarters) to a Dexterity save — the
     // caller knows the geometry, this only adds it.
     const cov = ab === 'dex' ? Math.max(0, +(opts && opts.cover) || 0) : 0;
-    const total = nat + bonus + extra + cov;
+    // Dice a character's switch adds to a save (Bless's d4) — the sheet's own
+    // roll added them; a save rolled here didn't.
+    const sdice = p ? ((((p.sheet || {}).rollDice) || []).filter(x => x && (x.on || []).some(t => t === 'save' || t === 'save:' + ab))
+      .map(x => ({ label: x.label, n: sktD(+x.die || 4) }))) : [];
+    const sd = sdice.reduce((s, x) => s + x.n, 0);
+    const total = nat + bonus + extra + cov + sd;
     const why = [adv.length ? 'advantage: ' + adv.join(', ') : '', dis.length ? 'disadvantage: ' + dis.join(', ') : '', extra ? 'exhaustion ' + extra : ''].filter(Boolean).join('; ');
     return { total, nat, passed: total >= dc, auto: '',
-      detail: 'd20 ' + (b == null ? a : a + '/' + b) + (bonus ? (bonus > 0 ? ' + ' : ' − ') + Math.abs(bonus) : '') + (extra ? ' ' + extra : '') + (cov ? ' + ' + cov + ' (' + (cov >= 5 ? '¾' : '½') + ' cover)' : '') + (why ? ' (' + why + ')' : '') };
+      detail: 'd20 ' + (b == null ? a : a + '/' + b) + (bonus ? (bonus > 0 ? ' + ' : ' − ') + Math.abs(bonus) : '') + (extra ? ' ' + extra : '') + (cov ? ' + ' + cov + ' (' + (cov >= 5 ? '¾' : '½') + ' cover)' : '') + sdice.map(x => ' + ' + x.n + ' ' + x.label).join('') + (why ? ' (' + why + ')' : '') };
   },
   // What gives a creature advantage on a save against a condition, read off
   // its own features or traits: "advantage on saving throws to avoid or end
