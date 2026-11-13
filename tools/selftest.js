@@ -20932,6 +20932,23 @@ for (const cls of Object.keys(rule)) for (let L = 1; L <= 20; L++) for (const sc
       } catch(e){ ok('round 350 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
       finally { window.showModal = oModal; state.party = JSON.parse(keepP); state.combatants = JSON.parse(keepC); state.settings = JSON.parse(keepS); save(); if (P._body) P._render(); }
     }
+    // -- Round 351: a multiclass character's short rest on the sheet — pick the die size --
+    if (!PLAYER){
+      const keepP = JSON.stringify(state.party), keepC = JSON.stringify(state.combatants);
+      try {
+        state.combatants = [];
+        state.party = [{ id: 'r351', name: 'r351 FW', cls: 'fighter', level: 5, hp: 1, hpMax: 60, ac: 15, abilities: { con: 10 }, resources: [], sheet: {},
+                         hitDice: { current: 5, max: 5, dieType: 'd10', pools: [{ die: 'd10', max: 3, current: 3 }, { die: 'd6', max: 2, current: 2 }] } }];
+        save(); openCharSheet('r351'); await sleep(250);
+        document.querySelector('#cs-root [data-cs="short"]').click(); await sleep(120);
+        const sel = document.querySelector('#cs-root [data-cs-restdie]');
+        ok('sheet short rest, multiclass: it asks which die', !!sel && [...sel.options].map(o => o.value).join() === 'd10,d6');
+        if (sel){ sel.value = 'd6'; document.querySelector('#cs-root [data-cs="restdie"]').click(); await sleep(120); }
+        const pools = sktHdPools(state.party[0]);
+        ok('…and spends that one', pools.find(p => p.die === 'd6').current === 1 && pools.find(p => p.die === 'd10').current === 3, JSON.stringify(state.party[0].hitDice));
+      } catch(e){ ok('round 351 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
+      finally { if (typeof csClose === 'function') try { csClose(); } catch(e){} state.party = JSON.parse(keepP); state.combatants = JSON.parse(keepC); save(); }
+    }
     // -- Class features: represented, not just text ------------------------
     {
       try {
@@ -23863,6 +23880,24 @@ for (const cls of Object.keys(rule)) for (let L = 1; L <= 20; L++) for (const sc
         } catch(e){ ok('player reaction prompt threw', false, e.message); }
         finally { state.prompt = JSON.parse(keepPr); if (typeof paRenderPrompt === 'function') paRenderPrompt(); }
       }
+    // -- Round 352: a multiclass character's short rest on the phone — a button per die size --
+    if (PLAYER){
+      const keepP = JSON.stringify(state.party), keepTab = paTab;
+      try {
+        if (paMyIdx() < 0) paSetPc(state.party[0].id);
+        const i = paMyIdx();
+        state.party[i] = Object.assign({}, state.party[i], { hp: 1, hpMax: 60, abilities: Object.assign({}, state.party[i].abilities, { con: 10 }),
+          hitDice: { current: 5, max: 5, dieType: 'd10', pools: [{ die: 'd10', max: 3, current: 3 }, { die: 'd6', max: 2, current: 2 }] } });
+        save(); paOpenShortRest(null); await sleep(150);
+        const btns = [...document.querySelectorAll('#pa-rest [data-rest="spend"]')];
+        ok('phone rest, multiclass: a button per die size', btns.map(b => b.dataset.die).join() === 'd10,d6', btns.map(b => b.textContent).join(' | '));
+        ok('…the header says 3d10 + 2d6', /3d10 \+ 2d6/.test((document.getElementById('pa-rest') || {}).textContent || ''));
+        const d6 = btns.find(b => b.dataset.die === 'd6'); if (d6) d6.click(); await sleep(120);
+        const pools = sktHdPools(state.party[i]);
+        ok('…the d6 button spends a d6', pools.find(p => p.die === 'd6').current === 1 && pools.find(p => p.die === 'd10').current === 3, JSON.stringify(state.party[i].hitDice));
+      } catch(e){ ok('round 352 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
+      finally { document.getElementById('pa-rest')?.remove(); state.party = JSON.parse(keepP); save(); paTab = keepTab; paRender(); }
+    }
   }
 
   // ══════════════════════════════════════════════════════════ mobile / phone
