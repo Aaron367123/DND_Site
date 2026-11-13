@@ -2031,6 +2031,19 @@ registerPanel('party',{
         if (rc === 'short-one') return {...r, current: Math.min(r.max, (r.current || 0) + 1)};
         return r;
       });
+      // Sorcerous Restoration: "when you finish a Short Rest, you can regain
+      // expended Sorcery Points" — half the sorcerer level (2014: 4) — once a
+      // long rest. The rest took it for nobody; the player had to know to.
+      // (2014's, at 20th level, is 4 on every short rest, no use to spend)
+      const sr = c.resources.find(r => r && r.name === 'Sorcerous Restoration'), sp = c.resources.find(r => r && r.name === 'Sorcery Points');
+      const sr14 = this._rulesOf(c) === '2014' && (((c.sheet || {}).featureList) || []).some(f => f && f.name === 'Sorcerous Restoration' && !f.info);
+      if (sp && (+sp.current || 0) < (+sp.max || 0)){
+        if (sr14) sp.current = Math.min(+sp.max, (+sp.current || 0) + 4);
+        else if (sr && (+sr.current || 0) > 0){
+          sp.current = Math.min(+sp.max, (+sp.current || 0) + Math.max(1, Math.floor((this._classLevel(c, 'sorcerer') || +c.level || 1) / 2)));
+          sr.current = (+sr.current || 0) - 1;
+        }
+      }
     }
     // Warlock Pact Magic is the one kind of spell slot that comes back on a
     // SHORT rest, and nothing restored it — a warlock had to refund every

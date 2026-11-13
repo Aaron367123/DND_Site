@@ -20643,6 +20643,30 @@ for (const cls of Object.keys(rule)) for (let L = 1; L <= 20; L++) for (const sc
       finally { sktSetRandom(null); state.party = JSON.parse(keepP); state.combatants = JSON.parse(keepC); save(); }
     }
 
+    // -- Round 342: a short rest takes Sorcerous Restoration — half the sorcerer level in Sorcery Points (2014: 4), once a long rest --
+    if (!PLAYER){
+      const keepP = JSON.stringify(state.party), keepC = JSON.stringify(state.combatants); const P = panelDefs.party;
+      try {
+        const R = await sktRulesLoad('2024'), R14 = await sktRulesLoad('2014');
+        await openCharBuilder({}); for (let i = 0; i < 80 && !CB.R; i++) await sleep(100);
+        const mk = (ed, L, id) => { CB.R = ed === '2014' ? R14 : R; CB.build = Object.assign(sktBlankBuild(ed), { cls: 'Sorcerer', level: L, subclass: 'Draconic', species: 'Human', name: id, sources: SKT_ALL_SOURCES }); cbQuickBuild(); const r = sktComputeCharacter(CB.build, CB.R); r.id = id; return r; };
+        const s6 = mk('2024', 6, 'r342a'), s20 = mk('2014', 20, 'r342b'); cbClose();
+        state.party = [s6, s20]; state.combatants = [];
+        const res = (i, n) => (state.party[i].resources.find(r => r.name === n) || {});
+        res(0, 'Sorcery Points').current = 0; res(1, 'Sorcery Points').current = 0;
+        P._shortRestOne(state.party[0], 0); P._shortRestOne(state.party[1], 1);
+        ok('sorcerous restoration: a 6th-level sorcerer’s short rest gives back 3 Sorcery Points, the use spent', res(0, 'Sorcery Points').current === 3 && res(0, 'Sorcerous Restoration').current === 0, JSON.stringify([res(0, 'Sorcery Points'), res(0, 'Sorcerous Restoration')]));
+        ok('sorcerous restoration (2014): 4 Sorcery Points', res(1, 'Sorcery Points').current === 4, JSON.stringify(res(1, 'Sorcery Points')));
+        P._shortRestOne(state.party[0], 0); P._shortRestOne(state.party[1], 1);
+        ok('sorcerous restoration: not again before a long rest', res(0, 'Sorcery Points').current === 3);
+        ok('sorcerous restoration (2014): 4 more on every short rest', res(1, 'Sorcery Points').current === 8, JSON.stringify(res(1, 'Sorcery Points')));
+        res(0, 'Sorcery Points').current = 6; res(0, 'Sorcerous Restoration').current = 1;
+        P._shortRestOne(state.party[0], 0);
+        ok('sorcerous restoration: not spent when nothing is missing', res(0, 'Sorcerous Restoration').current === 1);
+      } catch(e){ ok('round 342 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
+      finally { if (document.getElementById('cb-root') && typeof cbClose === 'function') cbClose(); state.party = JSON.parse(keepP); state.combatants = JSON.parse(keepC); save(); }
+    }
+
     // -- Class features: represented, not just text ------------------------
     {
       try {
