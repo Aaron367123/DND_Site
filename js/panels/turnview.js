@@ -714,6 +714,17 @@ registerPanel('turnview', {
     // A feature that casts a spell (Hunter's Mark through Favored Enemy):
     // concentrating on it, as using it from the sheet does — so the mark's
     // extra die is offered after a hit.
+    // A mark on one creature — Vow of Enmity's advantage against it, Hunter's
+    // Mark's and Hex's extra die on it: the enemy picked on the right, when
+    // there is one. (A spell cast from the sheet leaves none: its die is
+    // offered on any hit, as before.)
+    const mk = /^Vow of Enmity$/i.test(a.name) ? 'vow' : /Hunter.s Mark/i.test(a.castSpell || a.name) ? 'hm' : /^Hex$/i.test(a.castSpell || '') ? 'hex' : null;
+    const mt = mk && this._order().find(x => x.id === this._armed && x.id !== who.id && this._sideOf(x) !== this._sideOf(who));
+    if (mk){
+      who.marks = Object.assign({}, who.marks);
+      if (mt){ who.marks[mk] = { tgt: mt.id, name: mt.name, round: state.combatRound || 1 }; extra += ' — on <strong>' + esc(mt.name) + '</strong>'; }
+      else delete who.marks[mk];
+    }
     if (a.castSpell){
       const p = this._partyOf(who);
       let conc = null;
@@ -2883,7 +2894,7 @@ registerPanel('turnview', {
         // (a Life Drain's lowered maximum, and a condition's timer)
         hpMax:c.hpMax, hpMaxNormal:c.hpMaxNormal, hpMaxNote:c.hpMaxNote,
         condTimers: c.condTimers ? JSON.parse(JSON.stringify(c.condTimers)) : undefined,
-        distracted:c.distracted ? {...c.distracted} : undefined, legendaryUsed:c.legendaryUsed, lrUsed:c.lrUsed, concentration:c.concentration, vex:c.vex ? {...c.vex} : undefined, sapped:c.sapped ? {...c.sapped} : undefined, slowed:c.slowed ? {...c.slowed} : undefined, charmedBy:c.charmedBy ? {...c.charmedBy} : undefined, frightenedBy:c.frightenedBy ? {...c.frightenedBy} : undefined, extraDmgTurn:c.extraDmgTurn, onceTurn:c.onceTurn ? {...c.onceTurn} : undefined,
+        distracted:c.distracted ? {...c.distracted} : undefined, marks:c.marks ? JSON.parse(JSON.stringify(c.marks)) : undefined, legendaryUsed:c.legendaryUsed, lrUsed:c.lrUsed, concentration:c.concentration, vex:c.vex ? {...c.vex} : undefined, sapped:c.sapped ? {...c.sapped} : undefined, slowed:c.slowed ? {...c.slowed} : undefined, charmedBy:c.charmedBy ? {...c.charmedBy} : undefined, frightenedBy:c.frightenedBy ? {...c.frightenedBy} : undefined, extraDmgTurn:c.extraDmgTurn, onceTurn:c.onceTurn ? {...c.onceTurn} : undefined,
         deathSaves: c.deathSaves ? {...c.deathSaves} : c.deathSaves,
         rechargeSpent: (c.rechargeSpent || []).slice(),
         usesSpent: c.usesSpent ? {...c.usesSpent} : undefined, usesRound: c.usesRound ? {...c.usesRound} : undefined, slotsUsed: c.slotsUsed ? {...c.slotsUsed} : undefined,
@@ -3342,6 +3353,10 @@ registerPanel('turnview', {
     // attack on that creature has advantage), Sap (this attacker's next attack
     // has disadvantage). Each is used by the attack that reads it.
     if (c.vex && c.vex.tgt === t.id){ advWhy.push('Vex'); c.vex = undefined; }
+    // Vow of Enmity: advantage on attacks against the vowed creature, for a
+    // minute.
+    const vow = (c.marks || {}).vow;
+    if (vow && vow.tgt === t.id && (state.combatRound || 1) - (vow.round || 1) < 10) advWhy.push('Vow of Enmity');
     // Distracting Strike: the next attack on it by someone other than the fighter.
     if (t.distracted && t.distracted.by !== c.id){ advWhy.push('distracted by ' + t.distracted.name); t.distracted = undefined; }
     // Steady Aim: the next attack this turn.
@@ -4105,8 +4120,13 @@ registerPanel('turnview', {
         why: h.mode > 0 ? 'with advantage' : ally && h.mode >= 0 ? ally.name + ' is beside the target' : 'needs advantage, or an ally beside the target (without disadvantage)' });
     }
     const conc = String(p.concentration || '');
-    if (weapon && /Hunter.s Mark/i.test(conc)) out.push({ key: 'hm', label: 'Hunter’s Mark', dice: '1d6', type: ed === '2014' ? h.type : 'force', ok: true, why: 'on the marked creature' });
-    if (/^Hex\b/i.test(conc)) out.push({ key: 'hex', label: 'Hex', dice: '1d6', type: 'necrotic', ok: true, why: 'on the cursed creature' });
+    // (a mark on a creature now down or gone is no mark: it can be moved)
+    const markOn = k => { const m = (c.marks || {})[k]; if (!m || m.tgt === t.id) return null; return this._order().some(x => x.id === m.tgt && !x.dead && (x.hp || 0) > 0) ? m : null; };
+    // (2024: "whenever you hit it with an attack roll" — a spell's too; 2014: a weapon attack)
+    if ((weapon || ed !== '2014') && /Hunter.s Mark/i.test(conc)){ const off = markOn('hm');
+      out.push({ key: 'hm', label: 'Hunter’s Mark', dice: '1d6', type: ed === '2014' ? h.type : 'force', ok: !off, why: off ? 'the mark is on ' + off.name + ' — move it with a Bonus Action' : 'on the marked creature' }); }
+    if (/^Hex\b/i.test(conc)){ const off = markOn('hex');
+      out.push({ key: 'hex', label: 'Hex', dice: '1d6', type: 'necrotic', ok: !off, why: off ? 'the curse is on ' + off.name : 'on the cursed creature' }); }
     const smite = (sh.activations || []).some(a => /Divine Smite|Paladin.s Smite/.test(a.name)) || (sh.spells || []).includes('Divine Smite');
     if (smite && weapon && !h.ranged){
       const slots = sh.spellSlots || {};
@@ -4434,6 +4454,7 @@ registerPanel('turnview', {
   _usePcExtra(key){
     const h = this._lastPcHit; if (!h || h.turn !== this._turnKey()) return;
     const o = this._pcExtraOptions(h).find(x => x.key === key); if (!o) return;
+    if (o.ok === false && (key === 'hm' || key === 'hex')){ this._setResult(`<span class="dim">${esc(o.label)}: ${esc(o.why)}.</span>`, true); this._render(); return; }
     const c = this._order().find(x => x.id === h.atkId), t = this._order().find(x => x.id === h.tgtId), p = this._partyOf(c);
     if (!c || !t || typeof sktDamageRoll !== 'function') return;
     if (o.push){

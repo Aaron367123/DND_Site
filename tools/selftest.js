@@ -20030,6 +20030,54 @@ for (const cls of Object.keys(rule)) for (let L = 1; L <= 20; L++) for (const sc
       finally { TV._d = d0; TV._queue = null; if (document.getElementById('cb-root') && typeof cbClose === 'function') cbClose(); state.party = JSON.parse(keepP); state.combatants = JSON.parse(keepC); state.activeCombatantId = keepA; state.combatRound = keepR; save(); TV && TV._body && TV._render(); }
     }
 
+    // -- Round 320: a mark on one creature — Vow of Enmity's advantage against it, Hunter's Mark's die only on the marked one --
+    if (!PLAYER){
+      const keepP = JSON.stringify(state.party), keepC = JSON.stringify(state.combatants), keepA = state.activeCombatantId; const TV = panelDefs.turnview; const d0 = TV._d;
+      try {
+        const R = await sktRulesLoad('2024');
+        await openCharBuilder({}); for (let i = 0; i < 80 && !CB.R; i++) await sleep(100);
+        const mk = (cls, sub, L, id) => { CB.build = Object.assign(sktBlankBuild('2024'), { cls, level: L, subclass: sub, species: 'Human', name: id, sources: SKT_ALL_SOURCES }); cbQuickBuild(); const r = sktComputeCharacter(CB.build, R); r.id = id; return r; };
+        const pal = mk('Paladin', 'Vengeance', 3, 'r320p'), rgr = mk('Ranger', 'Hunter', 3, 'r320r');
+        cbClose();
+        state.party = [pal, rgr];
+        const foe = id => ({ id, name: id, isPC: false, hp: 200, hpMax: 200, ac: 5, initiative: 1, initBonus: 0, conditions: [] });
+        const setup = who => { state.combatants = [{ id: who.id, name: who.id, isPC: true, hp: who.hpMax, hpMax: who.hpMax, ac: who.ac, initiative: 20, conditions: [] }, foe('r320a'), foe('r320b')];
+          state.activeCombatantId = who.id; TV._armed = 'r320a'; TV._lastPcHit = null; save(); TV._render(); };
+        openPanel('turnview'); await sleep(300);
+        const txt = () => String(TV._result || '').replace(/<[^>]+>/g, '');
+        setup(pal); await sleep(30);
+        const pc = () => state.combatants[0], melee = () => TV._attacksFor(pc()).findIndex(a => a.pc && !a.ranged && !a.spell && !/^Unarmed/.test(a.name));
+        const vow = TV._activationsFor(pc()).find(a => a.name === 'Vow of Enmity');
+        await TV._useActivation(pc().id, vow.i); await sleep(30);
+        ok('vow of enmity: sworn against the creature picked', (pc().marks || {}).vow && pc().marks.vow.tgt === 'r320a', JSON.stringify(pc().marks));
+        TV._d = n => n === 20 ? 12 : 1;
+        await TV._rollAttack(melee(), {}); await sleep(30);
+        ok('vow of enmity: attacks on it have advantage', /Vow of Enmity/.test(txt()) && /\badv\b/.test(txt()), txt().slice(0, 160));
+        pc().actionUsed = false; TV._armed = 'r320b';
+        await TV._rollAttack(melee(), {}); await sleep(30);
+        ok('vow of enmity: not on another creature', !/Vow of Enmity/.test(txt()), txt().slice(0, 160));
+        // Hunter's Mark from the turn: its die on the marked creature only.
+        setup(rgr); await sleep(30);
+        const hm = TV._activationsFor(pc()).find(a => /^Hunter's Mark/.test(a.name));
+        await TV._useActivation(pc().id, hm.i); await sleep(30);
+        ok('hunter’s mark: on the creature picked', (pc().marks || {}).hm && pc().marks.hm.tgt === 'r320a' && /Hunter/.test(String(state.party.find(p => p.id === 'r320r').concentration || '')), JSON.stringify([pc().marks, state.party.find(p => p.id === 'r320r').concentration]));
+        TV._d = n => n === 20 ? 15 : 1;
+        await TV._rollAttack(melee(), {}); await sleep(30);
+        let o = TV._pcExtraOptions(TV._lastPcHit).find(x => x.key === 'hm');
+        ok('hunter’s mark: its die on a hit on the marked creature', !!o && o.ok === true, JSON.stringify(o));
+        pc().actionUsed = false; TV._armed = 'r320b'; TV._lastPcHit = null;
+        await TV._rollAttack(melee(), {}); await sleep(30);
+        o = TV._pcExtraOptions(TV._lastPcHit).find(x => x.key === 'hm');
+        const hb = state.combatants.find(c => c.id === 'r320b').hp;
+        TV._usePcExtra('hm'); await sleep(30);
+        ok('hunter’s mark: not on another creature — and clicking it does nothing', !!o && o.ok === false && /r320a/.test(o.why) && state.combatants.find(c => c.id === 'r320b').hp === hb, JSON.stringify(o));
+        state.combatants.find(c => c.id === 'r320a').hp = 0; save();
+        o = TV._pcExtraOptions(TV._lastPcHit).find(x => x.key === 'hm');
+        ok('hunter’s mark: the marked creature down, the mark can go anywhere', !!o && o.ok === true, JSON.stringify(o));
+      } catch(e){ ok('round 320 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
+      finally { TV._d = d0; if (document.getElementById('cb-root') && typeof cbClose === 'function') cbClose(); state.party = JSON.parse(keepP); state.combatants = JSON.parse(keepC); state.activeCombatantId = keepA; save(); TV && TV._body && TV._render(); }
+    }
+
     // -- Class features: represented, not just text ------------------------
     {
       try {
