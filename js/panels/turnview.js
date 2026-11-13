@@ -522,6 +522,71 @@ registerPanel('turnview', {
     if (/^Rage$/i.test(a.name) && c.isPC && (this._partyOf(c) || {}).rage) return 'already raging';
     return null;
   },
+  // A feature that makes creatures save — Turn Undead, Radiance of the Dawn,
+  // Land's Aid, Abjure Foes, Intimidating Presence, Quivering Palm: the save
+  // from the feature's own text, for the area-save dialog. The ability, the
+  // DC (8 + a modifier + proficiency where it says so; the spell save DC for
+  // Channel Divinity and "your spell save DC"; a monk's 8 + WIS +
+  // proficiency), the damage on a failure and whether a success halves it,
+  // and the condition a failure inflicts. Null when the text gives no save
+  // to run, or no DC to run it at. Used from the Turn View, these spent
+  // their use and their action and nothing happened to anyone.
+  _actSave(c, a){
+    const p = this._partyOf(c);
+    if (!p || !a || !/^(Action|Magic|Magic Action|Bonus Action)$/i.test(String(a.action || ''))) return null;
+    const sh = p.sheet || {}, fl = sh.featureList || [];
+    const f = fl.find(x => x && x.name === a.name) || fl.find(x => x && x.name === a.feature);
+    const t = String((f && f.text) || a.desc || '').replace(/\s+/g, ' ');
+    let block = t;
+    // (the sheet's own one-line account when the feature's text names none:
+    // Turn Undead's "Undead within 30 feet make a DC 15 Wisdom save…")
+    const SV = /\b(Strength|Dexterity|Constitution|Intelligence|Wisdom|Charisma) sav(?:ing throw|e)\b/i;
+    if (!SV.test(block) && a.desc) block = String(a.desc);
+    const sv = SV.exec(block);
+    if (!sv) return null;
+    // A table to roll on (Wild Surge): not one save to run.
+    if (/ \| /.test(block)) return null;
+    const AB = { strength: 'str', dexterity: 'dex', constitution: 'con', intelligence: 'int', wisdom: 'wis', charisma: 'cha' };
+    const pb = +sh.profBonus || 2, mod = k => Math.floor(((+((p.abilities || {})[k]) || 10) - 10) / 2);
+    const lvlOf = n => ((sh.classLevels || []).find(x => x && x.cls === String(n || '').toLowerCase()) || {}).level || +p.level || 1;
+    let dc = null;
+    const d8 = /DC (?:equals )?8 (?:plus|\+) your (\w+) modifier (?:and|\+|plus) (?:your )?Proficiency Bonus/i.exec(block)
+            || /DC (?:equals )?8 (?:plus|\+) your Proficiency Bonus (?:and|\+|plus) your (\w+) modifier/i.exec(block);
+    if (d8 && AB[d8[1].toLowerCase()]) dc = 8 + pb + mod(AB[d8[1].toLowerCase()]);
+    else if (/spell save DC/i.test(block) || a.resource === 'Channel Divinity' || /Channel Divinity/.test(t)) dc = +sh.spellSaveDc || null;
+    else if ((sh.classLevels || []).some(x => x && x.cls === 'monk') && /Focus Points?|Ki Points?|Monk|Martial Arts|Quivering/i.test(t + ' ' + a.name)) dc = 8 + pb + mod('wis');
+    if (!dc) return null;
+    // The damage a failure takes.
+    const T = '(acid|bludgeoning|cold|fire|force|lightning|necrotic|piercing|poison|psychic|radiant|slashing|thunder)';
+    let dice = '', type = '', m;
+    if ((m = new RegExp('taking ' + T + ' damage equal to (\\d*d\\d+) plus your (\\w+) level', 'i').exec(block))){ dice = m[2] + '+' + lvlOf(m[3]); type = m[1]; }
+    else if ((m = new RegExp('(?:taking|takes?|take) (\\d*d\\d+)(?: plus your (\\w+) level)? ' + T + ' damage', 'i').exec(block))){ dice = m[1] + (m[2] ? '+' + lvlOf(m[2]) : ''); type = m[3]; }
+    else if ((m = /roll a number of d(\d+)s equal to your (\w+) modifier/i.exec(block)) && AB[m[2].toLowerCase()]) dice = Math.max(1, mod(AB[m[2].toLowerCase()])) + 'd' + m[1];
+    // (the sheet's line: Divine Spark's "4d8 + 4 radiant or necrotic")
+    else if ((m = new RegExp('(\\d*d\\d+)(?: ?\\+ ?(\\d+))? ' + T, 'i').exec(block))){ dice = m[1] + (m[2] ? '+' + m[2] : ''); type = m[3]; }
+    if (dice && !type){ const ty = new RegExp(T + '(?: or ' + T + ')? damage', 'i').exec(block); if (ty) type = ty[1]; }
+    // "The damage increases when you reach Druid level 10 (3d6) and 14 (4d6)."
+    if (dice){
+      const L = lvlOf((sh.classLevels || [])[0] && sh.classLevels[0].cls);
+      let die = (/^\d*d\d+/.exec(dice) || [''])[0];
+      (block.match(/\b(\d+) \((\d+d\d+)\)/g) || []).forEach(x => { const q = /(\d+) \((\d+d\d+)\)/.exec(x); if (q && L >= +q[1] && /level/i.test(block)) die = q[2]; });
+      dice = dice.replace(/^\d*d\d+/, die);
+    }
+    // What a failure inflicts: the shared reader, then 2024's "fails its
+    // save, it has the Frightened and Incapacitated conditions".
+    let cond = typeof sktSaveCondition === 'function' ? sktSaveCondition(block, block.search(/saving throw/i)) : null;
+    if (!cond){
+      const C = typeof SKT_HIT_CONDS !== 'undefined' ? SKT_HIT_CONDS : 'Frightened|Prone|Restrained|Stunned|Charmed|Incapacitated|Blinded|Poisoned|Paralyzed|Deafened|Grappled';
+      // (and a text the shared reader leaves alone for its "one of the
+      // following" — Abjure Foes' list of what a frightened target can do)
+      const cm = new RegExp('(?:fails (?:its|the|this) save,? (?:it|the creature|the target) (?:has|is) (?:the )?|saving throw or (?:have|be|become) (?:the )?)(' + C + ')', 'i').exec(block);
+      if (cm){ cond = { cond: cm[1].charAt(0).toUpperCase() + cm[1].slice(1).toLowerCase() }; const mn = /for (\d+) minutes?/i.exec(block); if (mn && +mn[1] <= 10) cond.dur = { kind: 'rounds', left: 10 * +mn[1] }; }
+    }
+    // Turned (Turn Undead): frightened, for its minute.
+    if (!cond && /\b(?:are|is|be) turned\b/i.test(block)) cond = { cond: 'Frightened', dur: { kind: 'rounds', left: 10 } };
+    if (!dice && !cond) return null;
+    return { ab: sv[1].slice(0, 3).toUpperCase(), dc, parts: dice ? [{ dice, type: type.toLowerCase() }] : [], half: /half as much|takes? half|save for half/i.test(block), cond: cond || null };
+  },
   async _useActivation(id, idx, typed){
     const who = this._order().find(c => c.id === id); if (!who) return;
     const a = this._activationsFor(who).find(x => x.i === +idx); if (!a) return;
@@ -563,6 +628,16 @@ registerPanel('turnview', {
         parts: [{ dice: ar[3], type: String(ar[4] || '').toLowerCase() }], half: true, exclude: who.id,
         targets: this._armed && this._armed !== who.id ? [this._armed] : [], src: { id: who.id, name: who.name },
         onApplied: () => this._useActivation(id, idx, 'applied') });
+      return;
+    }
+    // A feature whose targets save: the area-save dialog, filled in from its
+    // text. Its use and its action are spent when that is applied, as a
+    // breath weapon's are; cancelled, nothing is.
+    const fsv = typed !== 'applied' && C0 && typeof C0.openAreaSave === 'function' ? this._actSave(who, a) : null;
+    if (fsv){
+      C0.openAreaSave(Object.assign(fsv, { name: who.name + ' · ' + a.name, exclude: who.id,
+        targets: this._armed && this._armed !== who.id ? [this._armed] : [], src: { id: who.id, name: who.name },
+        onApplied: () => this._useActivation(id, idx, 'applied') }));
       return;
     }
     // Steady Aim: "if you haven't moved during this turn" — advantage on the

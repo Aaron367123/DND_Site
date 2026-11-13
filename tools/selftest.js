@@ -19943,6 +19943,53 @@ for (const cls of Object.keys(rule)) for (let L = 1; L <= 20; L++) for (const sc
       finally { TV._d = d0; TV._queue = null; if (document.getElementById('cb-root') && typeof cbClose === 'function') cbClose(); state.party = JSON.parse(keepP); state.combatants = JSON.parse(keepC); state.activeCombatantId = keepA; save(); TV && TV._body && TV._render(); }
     }
 
+    // -- Round 318: a feature whose targets save — Turn Undead, Radiance of the Dawn, Land's Aid, Intimidating Presence — runs the save, filled in from its text --
+    if (!PLAYER){
+      const keepP = JSON.stringify(state.party), keepC = JSON.stringify(state.combatants), keepA = state.activeCombatantId; const TV = panelDefs.turnview; const C = panelDefs.combat; const oas = C.openAreaSave;
+      try {
+        const R = await sktRulesLoad('2024');
+        await openCharBuilder({}); for (let i = 0; i < 80 && !CB.R; i++) await sleep(100);
+        const mk = (cls, sub, L, id) => { CB.build = Object.assign(sktBlankBuild('2024'), { cls, level: L, subclass: sub, species: 'Human', name: id, sources: SKT_ALL_SOURCES }); cbQuickBuild(); const r = sktComputeCharacter(CB.build, R); r.id = id; return r; };
+        const life = mk('Cleric', 'Life', 5, 'r318c'), light = mk('Cleric', 'Light', 5, 'r318l'), land = mk('Druid', 'Land', 6, 'r318d'), brs = mk('Barbarian', 'Berserker', 14, 'r318b'), dev = mk('Paladin', 'Devotion', 9, 'r318p'), wm = mk('Barbarian', 'Wild Magic', 3, 'r318w');
+        cbClose();
+        state.party = [life, light, land, brs, dev, wm];
+        const md = (r, k) => Math.floor((r.abilities[k] - 10) / 2);
+        openPanel('turnview'); await sleep(300);
+        let got = null; C.openAreaSave = pre => { got = pre; };
+        const use = async (who, name) => {
+          state.combatants = [{ id: who.id, name: who.id, isPC: true, hp: who.hpMax, hpMax: who.hpMax, ac: who.ac, initiative: 20, conditions: [] },
+            { id: 'r318z', name: 'Zombie', isPC: false, hp: 22, hpMax: 22, ac: 8, initiative: 1, initBonus: 0, conditions: [] }];
+          state.activeCombatantId = who.id; TV._armed = 'r318z'; got = null; save(); TV._render(); await sleep(20);
+          const c = state.combatants[0], a = TV._activationsFor(c).find(x => x.name === name);
+          if (!a) return { missing: name };
+          await TV._useActivation(c.id, a.i); await sleep(20);
+          return got;
+        };
+        let g = await use(life, 'Turn Undead');
+        ok('feature save: Turn Undead — Wisdom, the spell save DC, frightened', !!g && g.ab === 'WIS' && g.dc === life.sheet.spellSaveDc && g.cond && g.cond.cond === 'Frightened' && !g.parts.length, JSON.stringify(g));
+        ok('feature save: the creature picked is ticked, the cleric left out', !!g && g.targets.includes('r318z') && g.exclude === 'r318c');
+        const cd = () => (state.party.find(p => p.id === 'r318c').resources.find(r => r.name === 'Channel Divinity') || {}).current, cd0 = cd();
+        ok('feature save: nothing spent until the save is applied', cd() === cd0 && !state.combatants[0].actionUsed);
+        g && g.onApplied(); await sleep(30);
+        ok('feature save: applied, the use and the action are spent', cd() === cd0 - 1 && state.combatants[0].actionUsed === true, JSON.stringify([cd0, cd()]));
+        g = await use(light, 'Radiance of the Dawn');
+        ok('feature save: Radiance of the Dawn — Constitution, 2d10 + cleric level radiant, half on a save', !!g && g.ab === 'CON' && g.parts.length === 1 && g.parts[0].dice === '2d10+5' && g.parts[0].type === 'radiant' && g.half === true, JSON.stringify(g));
+        g = await use(land, 'Land\'s Aid');
+        ok('feature save: Land’s Aid — Constitution, the spell save DC, 2d6 necrotic, half', !!g && g.ab === 'CON' && g.dc === land.sheet.spellSaveDc && g.parts[0] && g.parts[0].dice === '2d6' && g.parts[0].type === 'necrotic' && g.half === true, JSON.stringify(g));
+        g = await use(brs, 'Intimidating Presence');
+        ok('feature save: Intimidating Presence — Wisdom, DC 8 + STR + proficiency, frightened', !!g && g.ab === 'WIS' && g.dc === 8 + md(brs, 'str') + 5 && g.cond && g.cond.cond === 'Frightened', JSON.stringify(g));
+        g = await use(life, 'Divine Spark');
+        ok('feature save: Divine Spark — Constitution for half, 1d8 + WIS', !!g && g.ab === 'CON' && g.half === true && g.parts[0] && g.parts[0].dice === '1d8+' + md(life, 'wis'), JSON.stringify(g));
+        g = await use(dev, 'Abjure Foes');
+        ok('feature save: Abjure Foes — Wisdom or frightened, at the spell save DC', !!g && g.ab === 'WIS' && g.dc === dev.sheet.spellSaveDc && g.cond && g.cond.cond === 'Frightened', JSON.stringify(g));
+        g = await use(wm, 'Wild Surge');
+        ok('feature save: Wild Surge, a table to roll on, isn’t one', g === null, JSON.stringify(g));
+        g = await use(brs, 'Rage');
+        ok('feature save: Rage, with no save, isn’t one', g === null);
+      } catch(e){ ok('round 318 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
+      finally { C.openAreaSave = oas; if (document.getElementById('cb-root') && typeof cbClose === 'function') cbClose(); state.party = JSON.parse(keepP); state.combatants = JSON.parse(keepC); state.activeCombatantId = keepA; save(); TV && TV._body && TV._render(); }
+    }
+
     // -- Class features: represented, not just text ------------------------
     {
       try {
