@@ -20262,6 +20262,43 @@ for (const cls of Object.keys(rule)) for (let L = 1; L <= 20; L++) for (const sc
       finally { TV._d = d0; TV._coverFor = cv0; if (document.getElementById('cb-root') && typeof cbClose === 'function') cbClose(); state.party = JSON.parse(keepP); state.combatants = JSON.parse(keepC); state.activeCombatantId = keepA; save(); TV && TV._body && TV._render(); }
     }
 
+    // -- Round 329: Hexblade's Curse on the creature picked — its proficiency bonus on the damage, a critical on 19, hit points when it dies --
+    if (!PLAYER){
+      const keepP = JSON.stringify(state.party), keepC = JSON.stringify(state.combatants), keepA = state.activeCombatantId; const TV = panelDefs.turnview; const d0 = TV._d; const cv0 = TV._coverFor; TV._coverFor = () => ({ ac: 0 });
+      try {
+        const R14 = await sktRulesLoad('2014');
+        await openCharBuilder({}); for (let i = 0; i < 80 && !CB.R; i++) await sleep(100); CB.R = R14;
+        CB.build = Object.assign(sktBlankBuild('2014'), { cls: 'Warlock', level: 5, subclass: 'Hexblade', species: 'Human', name: 'r329', sources: SKT_ALL_SOURCES }); cbQuickBuild();
+        const wl = sktComputeCharacter(CB.build, R14); wl.id = 'r329w'; cbClose();
+        state.party = [wl];
+        const foe = id => ({ id, name: id, isPC: false, hp: 200, hpMax: 200, ac: 5, initiative: 1, initBonus: 0, conditions: [] });
+        state.combatants = [{ id: 'r329w', name: 'r329w', isPC: true, hp: 10, hpMax: wl.hpMax, ac: wl.ac, initiative: 20, conditions: [] }, foe('r329a'), foe('r329b')];
+        state.party[0].hp = 10; state.activeCombatantId = 'r329w'; TV._armed = 'r329a'; save();
+        openPanel('turnview'); await sleep(300); TV._render(); await sleep(30);
+        const c = state.combatants[0], hc = TV._activationsFor(c).find(a => a.name === 'Hexblade\'s Curse');
+        await TV._useActivation(c.id, hc.i); await sleep(40);
+        ok('hexblade’s curse: on the creature picked, and switched on', (c.marks || {}).hexc && c.marks.hexc.tgt === 'r329a' && !!(state.party[0].active || {})['Hexblade\'s Curse'], JSON.stringify([c.marks, state.party[0].active]));
+        const ai = TV._attacksFor(c).findIndex(a => a.pc && !a.spell && !/^Unarmed/.test(a.name));
+        TV._d = n => n === 20 ? 19 : 1; c.actionUsed = false;
+        await TV._rollAttack(ai, {}); await sleep(40);
+        const log = () => String(TV._log.find(l => /hit/.test(l)) || '');
+        ok('hexblade’s curse: a 19 against it is a critical, the sheet’s damage as it is', /\(crit\)/.test(log()) && !/Hexblade/.test(log()), log().replace(/<[^>]+>/g, '').slice(0, 200));
+        { const eb = TV._attacksFor(c).findIndex(x => /^Eldritch Blast/.test(x.name)); TV._log.length = 0; c.actionUsed = false; TV._queue = null;
+          await TV._rollAttack(eb, {}); await sleep(40); if (TV._queue) TV._finishMulti(true);
+          ok('hexblade’s curse: a spell attack’s 19 against it is a critical too', eb >= 0 && TV._log.some(l => / hit <strong>/.test(l) && /\(crit\)/.test(l)), TV._log.slice(0, 3).join(' / ').replace(/<[^>]+>/g, '').slice(0, 200)); }
+        TV._armed = 'r329b'; c.actionUsed = false; TV._log.length = 0;
+        await TV._rollAttack(ai, {}); await sleep(40);
+        ok('hexblade’s curse: against another creature, no 19 critical and its bonus damage taken back off', !/\(crit\)/.test(log()) && /− 3 \(Hexblade’s Curse is on r329a\)/.test(log()), log().replace(/<[^>]+>/g, '').slice(0, 200));
+        state.combatants.find(x => x.id === 'r329a').hp = 1; TV._armed = 'r329a'; c.actionUsed = false;
+        const cha = Math.floor((wl.abilities.cha - 10) / 2), hp0 = c.hp;
+        TV._d = n => n === 20 ? 15 : 1;
+        await TV._rollAttack(ai, {}); await sleep(60);
+        const cn = state.combatants.find(x => x.id === 'r329w');
+        ok('hexblade’s curse: the cursed creature dies — warlock level + CHA hit points, and the curse ends', state.combatants.find(x => x.id === 'r329a').hp === 0 && cn.hp === Math.min(wl.hpMax, hp0 + Math.max(1, 5 + cha)) && !(state.party[0].active || {})['Hexblade\'s Curse'], JSON.stringify([cn.hp, hp0, cha, state.party[0].active]));
+      } catch(e){ ok('round 329 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
+      finally { TV._d = d0; TV._coverFor = cv0; if (document.getElementById('cb-root') && typeof cbClose === 'function') cbClose(); state.party = JSON.parse(keepP); state.combatants = JSON.parse(keepC); state.activeCombatantId = keepA; save(); TV && TV._body && TV._render(); }
+    }
+
     // -- Class features: represented, not just text ------------------------
     {
       try {

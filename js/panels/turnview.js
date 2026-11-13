@@ -727,7 +727,7 @@ registerPanel('turnview', {
     // Mark's and Hex's extra die on it: the enemy picked on the right, when
     // there is one. (A spell cast from the sheet leaves none: its die is
     // offered on any hit, as before.)
-    const mk = /^Vow of Enmity$/i.test(a.name) ? 'vow' : /Hunter.s Mark/i.test(a.castSpell || a.name) ? 'hm' : /^Hex$/i.test(a.castSpell || '') ? 'hex' : null;
+    const mk = /^Vow of Enmity$/i.test(a.name) ? 'vow' : /^Hexblade.s Curse$/i.test(a.name) ? 'hexc' : /Hunter.s Mark/i.test(a.castSpell || a.name) ? 'hm' : /^Hex$/i.test(a.castSpell || '') ? 'hex' : null;
     const mt = mk && this._order().find(x => x.id === this._armed && x.id !== who.id && this._sideOf(x) !== this._sideOf(who));
     if (mk){
       who.marks = Object.assign({}, who.marks);
@@ -3155,6 +3155,7 @@ registerPanel('turnview', {
     this._log.unshift(`<strong>${esc(o.attacker)}</strong> hit <strong>${esc(t.name)}</strong> for <strong>${dmgText}</strong>${o.crit ? ' (crit)' : ''}${rollTxt}${usedName ? ' — ' + esc(usedName) : ''}${notes ? ' <span style="opacity:.85">· ' + esc(notes) + '</span>' : ''}${appliedTxt}${soakTxt} <span style="opacity:.7">· ${before} → ${after}</span>`);
     if (o.onHit && !o.save) this._queueOnHit(o);
     if (before > 0 && after <= 0) this._darkBlessing(o.attackerId, t);
+    if (before > 0 && after <= 0) this._hexCurseEnds(t);
     // A character's hit: the damage their features add, one click away.
     if (o.pcAtk || o.wsAtk) this._lastPcHit = { turn: this._turnKey(), atkId: o.attackerId, tgtId: t.id, crit: !!o.crit, mode: o.mode || 0,
       ranged: !!o.ranged, spell: !!o.spellAtk, props: o.props || null, type: o.type || '', magical: !!o.magical, label: o.label, used: [], mastery: o.mastery || '',
@@ -3166,6 +3167,36 @@ registerPanel('turnview', {
       flurry: !!(o.queued && this._queue && this._queue.label === 'Flurry of Blows') };
     if (o.queued && this._queue){ this._queue.hits++; this._advanceQueue(); return; }
     this._render();
+  },
+  // Hexblade's Curse (XGE): on the creature picked when it was used, while
+  // the curse is on.
+  _hexCursed(c, t){
+    const m = c && t && (c.marks || {}).hexc, p = c && c.isPC ? this._partyOf(c) : null;
+    return !!(m && m.tgt === t.id && p && (p.active || {})['Hexblade\'s Curse']);
+  },
+  // The curse on, on another creature still up: that creature's name.
+  _hexElsewhere(c, t){
+    const m = c && t && (c.marks || {}).hexc, p = c && c.isPC ? this._partyOf(c) : null;
+    if (!m || m.tgt === t.id || !p || !(p.active || {})['Hexblade\'s Curse']) return '';
+    return this._order().some(x => x.id === m.tgt && (x.hp || 0) > 0) ? m.name : '';
+  },
+  // "If the cursed target dies, you regain hit points equal to your warlock
+  // level + your Charisma modifier (minimum of 1)" — and the curse ends.
+  _hexCurseEnds(t){
+    this._order().forEach(w => {
+      const m = (w.marks || {}).hexc, p = w.isPC ? this._partyOf(w) : null;
+      if (!m || m.tgt !== t.id || !p || !(p.active || {})['Hexblade\'s Curse']) return;
+      const lvl = (((p.sheet || {}).classLevels || []).find(x => x && x.cls === 'warlock') || {}).level || +p.level || 1;
+      const n = Math.max(1, lvl + Math.floor((((p.abilities || {}).cha || 10) - 10) / 2));
+      const C = panelDefs.combat, i = state.combatants.indexOf(w), was = w.hp || 0;
+      if (C && i >= 0 && typeof C._applyHpDelta === 'function') C._applyHpDelta(i, n, null);
+      const now = (state.combatants[i] || w).hp || 0;
+      const rec = this._partyOf(w) || p, a2 = Object.assign({}, rec.active); delete a2['Hexblade\'s Curse'];
+      rec.active = Object.keys(a2).length ? a2 : null;
+      w.marks = Object.assign({}, w.marks); delete w.marks.hexc;
+      this._log.unshift(`<strong>${esc(w.name)}</strong> — Hexblade’s Curse: ${esc(t.name)} dies, +${Math.max(0, now - was)} hit points; the curse ends`);
+      this._setResultAppend(` <span class="tv-dmg-note">${esc(w.name)} — Hexblade’s Curse: +${Math.max(0, now - was)} hit points</span>`);
+    });
   },
   // Dark One's Blessing (a Fiend warlock): an enemy dropped to 0 — by the
   // warlock, or (2024) by anyone while it is within 10 ft of them — gives
@@ -3496,7 +3527,12 @@ registerPanel('turnview', {
     const autoHit = !a.pc && a.toHit === 'auto';
     if (autoHit) hitNote = 'automatic hit';
     // A Champion's Improved Critical: a weapon crits on 19 (Superior, 18).
-    const critAt = a.pc && !a.spell ? Math.min(20, +(((this._partyOf(c) || {}).sheet || {}).critRange) || 20) : 20;
+    // (and a Hexblade's Curse: a critical on 19 or 20 against the cursed
+    // creature, any attack roll. The sheet, which can't know the target,
+    // puts the 19 and the bonus damage on every attack while the curse is
+    // on: against another creature they're taken back off here.)
+    const hexc = this._hexCursed(c, t), hexOff = this._hexElsewhere(c, t);
+    const critAt = Math.min(hexc ? 19 : 20, a.pc && !a.spell && !hexOff ? Math.min(20, +(((this._partyOf(c) || {}).sheet || {}).critRange) || 20) : 20);
     const natCrit = !autoHit && nat >= critAt;
     const hit = autoHit || natCrit || (nat !== 1 && total >= (t.ac || 10) + cov.ac);
     if (this._coverNote(cov)) hitNote = (hitNote ? hitNote + ' · ' : '') + this._coverNote(cov);
@@ -3535,6 +3571,10 @@ registerPanel('turnview', {
       // Smite (2014), a melee weapon's. The sheet only said so.
       const rsF = pp && !a.spell && !a.save && !a.ranged && (((pp.sheet || {}).featureList) || []).find(f => f && !f.info
         && (f.name === 'Radiant Strikes' || (f.name === 'Improved Divine Smite' && !/^Unarmed Strike/i.test(a.name))));
+      // Hexblade's Curse: the proficiency bonus is in the sheet's damage while
+      // the curse is on — right against the cursed creature, taken off
+      // against any other.
+      if (hexOff && parts.length){ const pb = +((pp && pp.sheet) || {}).profBonus || 2; parts[0].amt = Math.max(0, parts[0].amt - pb); detail += ' − ' + pb + ' (Hexblade’s Curse is on ' + hexOff + ')'; }
       if (rsF && parts.length){
         const r2 = typeof sktDamageRoll === 'function' ? sktDamageRoll('1d8', crit) : this._roll(crit ? '2d8' : '1d8');
         parts.push({ amt: r2.total, type: 'radiant' }); detail += ' + ' + rsF.name + ' ' + r2.detail;
