@@ -20201,6 +20201,44 @@ for (const cls of Object.keys(rule)) for (let L = 1; L <= 20; L++) for (const sc
       } finally { state.combatants = JSON.parse(keepC); }
     }
 
+    // -- Round 327: Divine Smite at any slot the paladin has, Paladin's Smite without one, one smite a Bonus Action (2024), the 2014 cap --
+    if (!PLAYER){
+      const keepP = JSON.stringify(state.party), keepC = JSON.stringify(state.combatants), keepA = state.activeCombatantId; const TV = panelDefs.turnview; const d0 = TV._d; const cv0 = TV._coverFor; TV._coverFor = () => ({ ac: 0 });
+      try {
+        const R = await sktRulesLoad('2024'), R14 = await sktRulesLoad('2014');
+        await openCharBuilder({}); for (let i = 0; i < 80 && !CB.R; i++) await sleep(100);
+        const mk = (ed, L, id) => { CB.R = ed === '2014' ? R14 : R; CB.build = Object.assign(sktBlankBuild(ed), { cls: 'Paladin', level: L, subclass: 'Devotion', species: 'Human', name: id, sources: SKT_ALL_SOURCES }); cbQuickBuild(); const r = sktComputeCharacter(CB.build, CB.R); r.id = id; return r; };
+        const p24 = mk('2024', 9, 'r327a'), p17 = mk('2024', 17, 'r327b'), p14 = mk('2014', 17, 'r327c');
+        cbClose();
+        state.party = [p24, p17, p14];
+        const setup = who => { state.combatants = [{ id: who.id, name: who.id, isPC: true, hp: who.hpMax, hpMax: who.hpMax, ac: who.ac, initiative: 20, conditions: [] }, { id: 'r327o', name: 'r327o', isPC: false, hp: 300, hpMax: 300, ac: 5, initiative: 1, initBonus: 0, conditions: [] }];
+          state.activeCombatantId = who.id; TV._armed = 'r327o'; TV._lastPcHit = null; save(); TV._render(); };
+        openPanel('turnview'); await sleep(300);
+        const hit = async () => { const c = state.combatants[0]; c.actionUsed = false; TV._lastPcHit = null; TV._d = n => n === 20 ? 15 : 1;
+          await TV._rollAttack(TV._attacksFor(c).findIndex(a => a.pc && !a.ranged && !a.spell && !/^Unarmed/.test(a.name)), {}); await sleep(30); return TV._pcExtraOptions(TV._lastPcHit).filter(o => o.smite); };
+        setup(p24); await sleep(30);
+        let sm = await hit();
+        ok('smite: Paladin’s Smite without a slot, and each slot level the paladin has', sm.map(o => o.key + ':' + o.dice).join(' ') === 'smite:free:2d8 smite:2d8 smite:2:3d8 smite:3:4d8', sm.map(o => o.key + ':' + o.dice).join(' '));
+        const sl = () => state.party.find(p => p.id === 'r327a').sheet.spellSlots, x3 = sl()[3].expended || 0, x1 = sl()[1].expended || 0;
+        TV._usePcExtra('smite:3'); await sleep(30);
+        ok('smite: at 3rd level — that slot spent, the Bonus Action too', (sl()[3].expended || 0) === x3 + 1 && (sl()[1].expended || 0) === x1 && state.combatants[0].bonusUsed === true, JSON.stringify([x3, sl()[3], state.combatants[0].bonusUsed]));
+        ok('smite: none left to add to that hit', !TV._pcExtraOptions(TV._lastPcHit).some(o => o.smite));
+        sm = await hit();
+        ok('smite: on the next hit, not with the Bonus Action spent (2024)', sm.length > 0 && sm.every(o => o.ok === false), JSON.stringify(sm.map(o => [o.key, o.ok])));
+        const hp0 = state.combatants[1].hp; TV._usePcExtra('smite'); await sleep(30);
+        ok('smite: clicking one that can’t does nothing', state.combatants[1].hp === hp0);
+        const ps = () => (state.party.find(p => p.id === 'r327a').resources.find(r => /^Paladin.s Smite$/.test(r.name)) || {}).current;
+        state.combatants[0].bonusUsed = false; const ps0 = ps(); sm = await hit();
+        TV._usePcExtra('smite:free'); await sleep(30);
+        ok('smite: Paladin’s Smite spends its use, not a slot', ps() === ps0 - 1 && (sl()[1].expended || 0) === x1, JSON.stringify([ps0, ps(), sl()[1]]));
+        setup(p17); await sleep(30); sm = await hit();
+        ok('smite (2024): a 5th-level slot is 6d8 — the spell has no cap', (sm.find(o => o.slot === 5) || {}).dice === '6d8', JSON.stringify(sm.map(o => [o.slot, o.dice])));
+        setup(p14); await sleep(30); sm = await hit();
+        ok('smite (2014): 5d8 at most, and no free cast', (sm.find(o => o.slot === 5) || {}).dice === '5d8' && !sm.some(o => o.key === 'smite:free'), JSON.stringify(sm.map(o => [o.key, o.dice])));
+      } catch(e){ ok('round 327 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
+      finally { TV._d = d0; TV._coverFor = cv0; if (document.getElementById('cb-root') && typeof cbClose === 'function') cbClose(); state.party = JSON.parse(keepP); state.combatants = JSON.parse(keepC); state.activeCombatantId = keepA; save(); TV && TV._body && TV._render(); }
+    }
+
     // -- Class features: represented, not just text ------------------------
     {
       try {

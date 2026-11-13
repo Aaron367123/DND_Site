@@ -4151,14 +4151,22 @@ registerPanel('turnview', {
       out.push({ key: 'hex', label: 'Hex', dice: '1d6', type: 'necrotic', ok: !off, why: off ? 'the curse is on ' + off.name : 'on the cursed creature' }); }
     const smite = (sh.activations || []).some(a => /Divine Smite|Paladin.s Smite/.test(a.name)) || (sh.spells || []).includes('Divine Smite');
     if (smite && weapon && !h.ranged){
+      // Any slot it has, not only the lowest: a bigger smite on the hit that
+      // matters, as D&D Beyond lets you choose. 2014 caps the dice at 5d8 (6d8
+      // on a fiend or undead); the 2024 spell has no cap. And 2024's
+      // Paladin's Smite: the spell once without a slot. (2024: a Bonus Action
+      // spell — not with the Bonus Action spent.)
       const slots = sh.spellSlots || {};
-      const lv = Object.keys(slots).map(Number).filter(l => l >= 1 && (slots[l].total - (slots[l].expended || 0)) > 0).sort((a, b) => a - b)[0];
-      if (lv){
-        const ty = String((((this._entryOf(t) || {})._raw || {}).type && ((this._entryOf(t)._raw.type.type) || this._entryOf(t)._raw.type)) || '').toLowerCase();
-        const n = Math.min(5, 1 + lv) + (/fiend|undead/.test(ty) ? 1 : 0);
-        out.push({ key: 'smite', label: 'Divine Smite', dice: n + 'd8', type: 'radiant', slot: lv, ok: true,
-          why: 'a ' + ['', '1st', '2nd', '3rd', '4th', '5th'][Math.min(lv, 5)] + '-level slot' + (/fiend|undead/.test(ty) ? ', +1d8 against ' + (ty.includes('fiend') ? 'a fiend' : 'the undead') : '') });
-      }
+      const lvs = Object.keys(slots).map(Number).filter(l => l >= 1 && (slots[l].total - (slots[l].expended || 0)) > 0).sort((a, b) => a - b);
+      const free = ed !== '2014' ? (p.resources || []).find(r => /^Paladin.s Smite$/.test(r.name) && (+r.current || 0) > 0) : null;
+      const ty = String((((this._entryOf(t) || {})._raw || {}).type && ((this._entryOf(t)._raw.type.type) || this._entryOf(t)._raw.type)) || '').toLowerCase();
+      const fu = /fiend|undead/.test(ty), ORD = ['', '1st', '2nd', '3rd', '4th', '5th', '6th', '7th', '8th', '9th'];
+      const nOf = lv => (ed === '2014' ? Math.min(5, 1 + lv) : 1 + lv) + (fu ? 1 : 0);
+      const ba = ed !== '2014' && c.bonusUsed, done = h.used.some(k => /^smite/.test(k));
+      const why = s => s + (fu ? ', +1d8 against ' + (ty.includes('fiend') ? 'a fiend' : 'the undead') : '') + (ba ? ' — the Bonus Action is spent' : '');
+      if (!done && free) out.push({ key: 'smite:free', label: 'Divine Smite', dice: nOf(1) + 'd8', type: 'radiant', res: free.name, ok: !ba, smite: true, why: why('Paladin’s Smite: no slot (' + free.current + ' left)') });
+      if (!done) lvs.forEach((lv, k) => out.push({ key: k === 0 ? 'smite' : 'smite:' + lv, label: k === 0 ? 'Divine Smite' : 'Smite (' + ORD[lv] + ')', dice: nOf(lv) + 'd8', type: 'radiant', slot: lv, ok: !ba, smite: true,
+        why: why('a ' + ORD[lv] + '-level slot') }));
     }
     // A monk's hit: Stunning Strike, and a Warrior of Mercy's Hand of Harm —
     // each a Focus Point (ki, in 2014), each once a turn (Stunning Strike:
@@ -4208,7 +4216,7 @@ registerPanel('turnview', {
       // Someone else's hit (Violent Attraction), the drake's bite, the target
       // of a Divine Smite: not this hit's, or not until the smite.
       if (/^(?:\S+ ){0,6}When another creature\b|\bdrake's Bite\b/i.test(note)) return;
-      if (/target of your Divine Smite/i.test(note) && !h.used.includes('smite')) return;
+      if (/target of your Divine Smite/i.test(note) && !h.used.some(k => /^smite/.test(k))) return;
       // Reckless Attack and a Strength attack (Frenzy, Brutal Strike) — and
       // Brutal Strike only on the roll that gave up its advantage for it.
       if (/Reckless Attack/.test(note) && !((p.active || {})['Reckless Attack'])) return;
@@ -4476,7 +4484,7 @@ registerPanel('turnview', {
   _usePcExtra(key){
     const h = this._lastPcHit; if (!h || h.turn !== this._turnKey()) return;
     const o = this._pcExtraOptions(h).find(x => x.key === key); if (!o) return;
-    if (o.ok === false && (key === 'hm' || key === 'hex')){ this._setResult(`<span class="dim">${esc(o.label)}: ${esc(o.why)}.</span>`, true); this._render(); return; }
+    if (o.ok === false && (key === 'hm' || key === 'hex' || o.smite)){ this._setResult(`<span class="dim">${esc(o.label)}: ${esc(o.why)}.</span>`, true); this._render(); return; }
     const c = this._order().find(x => x.id === h.atkId), t = this._order().find(x => x.id === h.tgtId), p = this._partyOf(c);
     if (!c || !t || typeof sktDamageRoll !== 'function') return;
     if (o.push){
@@ -4528,7 +4536,7 @@ registerPanel('turnview', {
     const r = o.dice ? sktDamageRoll(o.dice + (o.type && !/[a-z]{3,}/i.test(o.dice) ? ' ' + o.type : ''), h.crit) : { total: 0, detail: (o.picked || []).length ? 'every die spent on Cunning Strike' : '', type: '' };
     const type = r.type || o.type || h.type || '';
     const before = t.hp;
-    if (r.total) this._applyDamage(t, [{ amt: r.total, type }], h.magical || key === 'smite' || key === 'hm' || key === 'hex', h.crit);
+    if (r.total) this._applyDamage(t, [{ amt: r.total, type }], h.magical || o.smite || key === 'hm' || key === 'hex', h.crit);
     const after = (this._order().find(x => x.id === t.id) || t).hp;
     h.used.push(key);
     if (o.once) c.onceTurn = Object.assign({}, c.onceTurn, { [o.label]: this._turnKey() });
@@ -4537,7 +4545,7 @@ registerPanel('turnview', {
     const pool = o.res && p ? (p.resources || []).find(x => x.name === o.res) : null;
     if (pool) pool.current = Math.max(0, (+pool.current || 0) - 1);
     // (2024: Divine Smite is a spell cast as a bonus action)
-    if (key === 'smite' && this._edOf(c) !== '2014') this._spend(c, 'bonusUsed');
+    if (o.smite && this._edOf(c) !== '2014') this._spend(c, 'bonusUsed');
     // Cunning Strike: a save-or-condition goes on the hit's queue (roll it
     // here, or take the table's roll); Withdraw and the like are said.
     const said = [];
