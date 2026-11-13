@@ -1831,7 +1831,7 @@ registerPanel('party',{
       this._applyLongRest();
       return;
     }
-    showConfirm('Long rest the whole party? HP to max, all spell slots and class resources restored, ' + sktHdRestWords(state.party) + ', exhaustion −1, concentration dropped.',
+    showConfirm('Long rest the whole party? HP to max, all spell slots and class resources restored, ' + sktHdRestWords(state.party.filter(p => !p.foe)) + ', exhaustion −1, concentration dropped.',
       {title:'Long rest', confirmLabel:'Rest', danger:false}).then(ok => {
         if (ok) this._applyLongRest();
       });
@@ -1864,7 +1864,10 @@ registerPanel('party',{
     // Eight hours pass on the world clock too, in the same undo step.
     const clock = typeof sktAdvanceClock === 'function' && !document.body.classList.contains('player-mode');
     sktUndoable('🛌 Long rest — party fully recovered' + (clock ? ' · 8 hours pass' : ''), () => {
-      state.party.forEach((c, i) => this._longRestOne(c, i));
+      // The party's rest, not a rival's: one fighting against the party
+      // (Manage Party's rivals) rests on their own card's Long rest. The short
+      // rest already left them out; the long rest gave them everything back.
+      state.party.forEach((c, i) => { if (!c.foe) this._longRestOne(c, i); });
       save();
       this._render();
       panelDefs.combat?._render?.();
@@ -2014,7 +2017,7 @@ registerPanel('party',{
   _applyShortRest(){
     let pactRestored = 0;
     sktUndoable('💤 Short rest', () => {
-      state.party.forEach((c, i) => { if (this._shortRestOne(c, i)) pactRestored++; });
+      state.party.forEach((c, i) => { if (!c.foe && this._shortRestOne(c, i)) pactRestored++; });
       save();
       this._render();
       panelDefs.combat?._render?.();

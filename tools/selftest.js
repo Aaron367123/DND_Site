@@ -20949,6 +20949,22 @@ for (const cls of Object.keys(rule)) for (let L = 1; L <= 20; L++) for (const sc
       } catch(e){ ok('round 351 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
       finally { if (typeof csClose === 'function') try { csClose(); } catch(e){} state.party = JSON.parse(keepP); state.combatants = JSON.parse(keepC); save(); }
     }
+    // -- Round 353: a party rest is the party's — a rival (Manage Party) is left out --
+    if (!PLAYER){
+      const keepP = JSON.stringify(state.party), keepC = JSON.stringify(state.combatants); const P = panelDefs.party;
+      try {
+        const mk = (id, o) => Object.assign({ id, name: id, cls: 'fighter', level: 5, hp: 5, hpMax: 40, ac: 15, resources: [{ name: 'Action Surge', type: 'pool', current: 0, max: 1, recharge: 'short' }], hitDice: { current: 0, max: 5, dieType: 'd10' }, sheet: {} }, o);
+        state.combatants = [];
+        state.party = [mk('r353pc', {}), mk('r353rival', { foe: true })];
+        P._applyLongRest(); await sleep(30);
+        ok('party long rest: the party at full, the rival as they were', state.party[0].hp === 40 && state.party[1].hp === 5 && state.party[1].hitDice.current === 0, JSON.stringify(state.party.map(p => p.hp)));
+        P._applyShortRest(); await sleep(30);
+        ok('party short rest: not the rival either', state.party[1].resources[0].current === 0 && state.party[0].resources[0].current === 1);
+        P._longRestOne(state.party[1], 1);
+        ok('the rival’s own long rest still works', state.party[1].hp === 40);
+      } catch(e){ ok('round 353 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
+      finally { state.party = JSON.parse(keepP); state.combatants = JSON.parse(keepC); save(); if (P._body) P._render(); }
+    }
     // -- Class features: represented, not just text ------------------------
     {
       try {
