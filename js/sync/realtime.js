@@ -438,7 +438,13 @@ const _ENTITY_KEYS = {
     playerWritable(node, prev, next){
       if (node === 'drawings' || _isDrawNode(node)) return true;
       if (node.indexOf('tokens/') !== 0) return false;
-      if (node in prev) return true;
+      // An existing token: only the player's own, a companion or summon of
+      // theirs, or one they drag along in a grapple (sktPlayerMayMoveToken).
+      // Any token was writable, whole — a phone could hide or rename a monster.
+      if (node in prev){
+        let was = null; try { was = JSON.parse(prev[node]); } catch(e){}
+        return typeof sktPlayerMayMoveToken !== 'function' || sktPlayerMayMoveToken(was, { sync: true });
+      }
       const me = typeof paPc === 'function' ? paPc() : null;
       let t = null; try { t = JSON.parse(next); } catch(e){}
       if (!me || !t || !t.isPC || t.label !== me.name) return false;

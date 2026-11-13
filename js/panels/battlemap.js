@@ -5589,6 +5589,8 @@ registerPanel('battlemap',{
       // Right-click on a token opens the options panel (drag/select are left-click only).
       el.addEventListener('contextmenu', e => {
         e.preventDefault(); e.stopPropagation();
+        // The token panel (hit points, hide, delete) is the DM's.
+        if (isPlayer) return;
         stage.querySelectorAll('.map-token').forEach(tok=>tok.classList.remove('selected'));
         el.classList.add('selected');
         this._selected = t.id;
@@ -5607,6 +5609,8 @@ registerPanel('battlemap',{
         // With the ruler out, a token is where a measurement starts, not
         // something to move.
         if (this._tool === 'ruler'){ this._rulerDrag(t.x, t.y, false); return; }
+        // A player moves (or rubs out) only what is theirs.
+        if (isPlayer && !sktPlayerMayMoveToken(t)) return;
 
         if(this._tool==='erase'){
           const i=this._tokens.findIndex(x=>x.id===t.id);
@@ -5714,6 +5718,7 @@ registerPanel('battlemap',{
         const touch = e.touches[0];
 
         if (this._tool === 'ruler'){ this._rulerDrag(t.x, t.y, true); return; }
+        if (isPlayer && !sktPlayerMayMoveToken(t)) return;
 
         if(this._tool==='erase'){
           const i=this._tokens.findIndex(x=>x.id===t.id);
@@ -6266,6 +6271,22 @@ function _sktTokenRules(){
     if (waiting) _sktRetryTokensSoon();
   };
   return { hold, spare, done };
+}
+
+// What a player's phone may move: their own character, and a companion or
+// summon of theirs (the sheet's Extras, a spell's creature). With opts.sync,
+// also a creature they hold grappled — it comes along when they move
+// (sktDragHeld), so its new place has to be written too. Everything else on
+// the map is the DM's. A phone could drag any monster about, and open its
+// token panel to hide it, rename it or take it off the map.
+function sktPlayerMayMoveToken(t, opts){
+  const me = typeof paPc === 'function' ? paPc() : null;
+  if (!me || !t) return false;
+  if ((t.cid != null && t.cid === me.id) || (t.isPC && t.label === me.name)) return true;
+  const c = t.cid != null ? (state.combatants || []).find(x => x && x.id === t.cid) : null;
+  if (!c) return false;
+  if ((c.extraOf && c.extraOf.pc === me.id) || (c.summonedBy && c.summonedBy.id === me.id)) return true;
+  return !!(opts && opts.sync && c.grappledBy && c.grappledBy.id === me.id);
 }
 
 // Entry point, called from save(). Works whether or not the panel is mounted:

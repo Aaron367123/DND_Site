@@ -24039,6 +24039,61 @@ for (const cls of Object.keys(rule)) for (let L = 1; L <= 20; L++) for (const sc
       } catch(e){ ok('round 352 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
       finally { document.getElementById('pa-rest')?.remove(); state.party = JSON.parse(keepP); save(); paTab = keepTab; paRender(); }
     }
+    // -- Round 357: on a player's phone, the map moves only what is theirs — their character, their companion; a monster stays put, has no token panel, and its node isn't theirs to write --
+    if (PLAYER){
+      const keepTab = paTab, keepC = JSON.stringify(state.combatants); const B = panelDefs.battlemap;
+      let keepT = null, keepF; let fogSaved = false;
+      try {
+        if (paMyIdx() < 0) paSetPc(state.party[0].id);
+        const me = paPc();
+        paTab = 'map'; paRender(); await sleep(900);
+        keepT = B._tokens.slice();
+        const cs = B._csScreen();
+        state.combatants = [{ id: 'r357m', name: 'r357 Ogre', hp: 59, hpMax: 59, ac: 11, conditions: [] },
+                            { id: 'r357w', name: 'r357 Wolf', hp: 11, hpMax: 11, ac: 13, conditions: [], extraOf: { pc: me.id } },
+                            { id: 'r357h', name: 'r357 Held', hp: 7, hpMax: 7, ac: 12, conditions: ['Grappled'], grappledBy: { id: me.id, name: me.name } }];
+        const mon = { id: 'r357tm', cid: 'r357m', label: 'r357 Ogre', x: 6.5 * cs, y: 4.5 * cs, size: 2, isPC: false };
+        const wolf = { id: 'r357tw', cid: 'r357w', label: 'r357 Wolf', x: 3.5 * cs, y: 8.5 * cs, size: 1, isPC: false };
+        const mine = { id: 'r357tp', cid: me.id, label: me.name, x: 3.5 * cs, y: 4.5 * cs, size: 1, isPC: true };
+        keepF = B._fog; fogSaved = true; B._fog = null;   // players don't see a monster under fog
+        B._tokens = [mon, wolf, mine]; B._renderTokens(); await sleep(80);
+        const drag = async (t) => {
+          const el = document.querySelector('#pa-screen .map-token[data-tid="' + t.id + '"]'); if (!el) return 'no element';
+          const r = el.getBoundingClientRect(), cx = r.left + r.width / 2, cy = r.top + r.height / 2, x0 = t.x, y0 = t.y;
+          el.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, cancelable: true, clientX: cx, clientY: cy, button: 0 }));
+          for (let i = 1; i <= 5; i++){ document.dispatchEvent(new MouseEvent('mousemove', { bubbles: true, clientX: cx + i * 12, clientY: cy })); await sleep(15); }
+          document.dispatchEvent(new MouseEvent('mouseup', { bubbles: true, clientX: cx + 60, clientY: cy })); await sleep(80);
+          const now = B._tokens.find(x => x.id === t.id) || t;
+          return now.x !== x0 || now.y !== y0 ? 'moved' : 'stayed';
+        };
+        // A finger, as on a phone
+        const touchDrag = async (t) => {
+          const el = document.querySelector('#pa-screen .map-token[data-tid="' + t.id + '"]'); if (!el) return 'no element';
+          const r = el.getBoundingClientRect(), cx = r.left + r.width / 2, cy = r.top + r.height / 2, x0 = t.x, y0 = t.y;
+          const T = (x, y) => new Touch({ identifier: 7, target: el, clientX: x, clientY: y });
+          el.dispatchEvent(new TouchEvent('touchstart', { bubbles: true, cancelable: true, touches: [T(cx, cy)], targetTouches: [T(cx, cy)], changedTouches: [T(cx, cy)] }));
+          for (let i = 1; i <= 5; i++){ const tt = T(cx + i * 12, cy); el.dispatchEvent(new TouchEvent('touchmove', { bubbles: true, cancelable: true, touches: [tt], targetTouches: [tt], changedTouches: [tt] })); await sleep(15); }
+          const te = T(cx + 60, cy); el.dispatchEvent(new TouchEvent('touchend', { bubbles: true, cancelable: true, touches: [], targetTouches: [], changedTouches: [te] })); await sleep(80);
+          const now = B._tokens.find(x => x.id === t.id) || t;
+          return now.x !== x0 || now.y !== y0 ? 'moved' : 'stayed';
+        };
+        ok('phone map: a monster can’t be dragged with a finger', await touchDrag(mon) === 'stayed');
+        ok('…my own character can', await touchDrag(mine) === 'moved');
+        ok('phone map: a monster can’t be dragged', await drag(mon) === 'stayed');
+        ok('phone map: my own character can', await drag(mine) === 'moved');
+        ok('phone map: and my companion', await drag(wolf) === 'moved');
+        const el = document.querySelector('#pa-screen .map-token[data-tid="r357tm"]');
+        if (el){ const r = el.getBoundingClientRect(); el.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true, clientX: r.left + 5, clientY: r.top + 5 })); await sleep(80); }
+        const tp = document.querySelector('#token-panel');
+        ok('phone map: no token panel (hit points, hide, delete) for a player', !tp || getComputedStyle(tp).display === 'none');
+        // What the phone may write back to Firebase
+        const spec = _ENTITY_KEYS['skt-battlemap-v1'];
+        const w = (t) => spec.playerWritable('tokens/' + t.id, { ['tokens/' + t.id]: JSON.stringify(t) }, JSON.stringify(Object.assign({}, t, { hidden: true })));
+        ok('sync: a monster’s token isn’t the phone’s to write', w(mon) === false);
+        ok('sync: its own token, its companion, and a creature it drags in a grapple are', w(mine) && w(wolf) && w({ id: 'r357th', cid: 'r357h', label: 'r357 Held', x: 1, y: 1 }));
+      } catch(e){ ok('round 357 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
+      finally { if (fogSaved) B._fog = keepF; if (keepT){ B._tokens = keepT; try { B._saveMap(); } catch(e){} } state.combatants = JSON.parse(keepC); try { B._renderTokens(); } catch(e){} paTab = keepTab; paRender(); }
+    }
   }
 
   // ══════════════════════════════════════════════════════════ mobile / phone

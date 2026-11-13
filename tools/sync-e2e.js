@@ -237,6 +237,30 @@ const window = {};
       return lat(await W(dm, zt + ' === 1'));
     });
 
+    await step('phone moves its own token → DM; a monster it can’t move → the DM’s stays put', async () => {
+      const pos = id => "const t = (panelDefs.battlemap._tokens||[]).find(t => " + id + "); return t ? Math.round(t.x) + ',' + Math.round(t.y) : null";
+      const ZOEY = "t.isPC && t.label === 'Zoey'";
+      // The phone's map holds its tokens once its Map tab has been opened.
+      await pl.ev("paTab = 'map'; paRender(); await new Promise(r=>setTimeout(r,900)); return 1");
+      // A monster on the DM's map, in plain sight.
+      await dm.ev("const B = panelDefs.battlemap; B._fog = null; B._tokens = B._tokens.filter(t => t.id !== 'e2e-ogre'); const z = B._tokens.find(t => " + ZOEY + "); B._tokens.push({ id: 'e2e-ogre', label: 'E2E Ogre', isPC: false, x: (z ? z.x : 200) + B._csScreen() * 3, y: z ? z.y : 200, size: 2 }); B._saveMap(); B._renderTokens(); return 1");
+      if (await W(pl, pos("t.id === 'e2e-ogre'") + ' ? 1 : 0') == null) return { ok: false, why: 'the ogre never reached the phone' };
+      const ogre0 = await dm.ev(pos("t.id === 'e2e-ogre'"));
+      await pl.ev("paRender(); await new Promise(r=>setTimeout(r,600)); return 1");
+      const drag = id => "const B = panelDefs.battlemap; const t = B._tokens.find(t => " + id + "); const el = t && document.querySelector('#pa-screen .map-token[data-tid=\"' + t.id + '\"]'); if (!el) return 'no element'; const r = el.getBoundingClientRect(), cx = r.left + r.width/2, cy = r.top + r.height/2; el.dispatchEvent(new MouseEvent('mousedown', {bubbles:true, cancelable:true, clientX:cx, clientY:cy, button:0})); for (let i = 1; i <= 6; i++){ document.dispatchEvent(new MouseEvent('mousemove', {bubbles:true, clientX:cx + i*14, clientY:cy + i*6})); await new Promise(r=>setTimeout(r,20)); } document.dispatchEvent(new MouseEvent('mouseup', {bubbles:true, clientX:cx + 84, clientY:cy + 36})); return 'done'";
+      const r1 = await pl.ev(drag("t.id === 'e2e-ogre'"));
+      const r2 = await pl.ev(drag(ZOEY));
+      if (r1 !== 'done' || r2 !== 'done') return { ok: false, why: 'phone drag: ' + r1 + ' / ' + r2 };
+      const zPhone = await pl.ev(pos(ZOEY));
+      const t = await W(dm, 'return (' + "(() => { " + pos(ZOEY) + " })()" + ') === ' + JSON.stringify(zPhone));
+      if (t == null) return { ok: false, why: 'Zoey’s move never reached the DM (' + zPhone + ')' };
+      await sleep(1500);
+      const ogre1 = await dm.ev(pos("t.id === 'e2e-ogre'")), ogreP = await pl.ev(pos("t.id === 'e2e-ogre'"));
+      await dm.ev("const B = panelDefs.battlemap; B._tokens = B._tokens.filter(t => t.id !== 'e2e-ogre'); B._saveMap(); B._renderTokens(); return 1");
+      if (ogre1 !== ogre0 || ogreP !== ogre0) return { ok: false, why: 'the ogre moved: DM ' + ogre0 + ' → ' + ogre1 + ', phone ' + ogreP };
+      return lat(t);
+    });
+
     await step('DM uploads a map (3000×4000) → phone draws it at the same size and grid', async () => {
       const geo = 'const B = panelDefs.battlemap; return [B._bgMapPath, B._bgMapNaturalW, B._bgMapNaturalH, B._cols, B._rows].join(" ")';
       const before = await dm.ev("return panelDefs.battlemap._bgMapPath || ''");
