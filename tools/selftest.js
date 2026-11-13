@@ -20481,6 +20481,27 @@ for (const cls of Object.keys(rule)) for (let L = 1; L <= 20; L++) for (const sc
       finally { TV._roll = r0; state.combatants = JSON.parse(keepC); state.activeCombatantId = keepA; save(); TV && TV._body && TV._render(); }
     }
 
+    // -- Round 336: a legendary action that heals (a unicorn's Heal Self) heals the creature itself, at once --
+    if (!PLAYER && typeof _5eData !== 'undefined' && typeof _5eLoaded !== 'undefined' && _5eLoaded){
+      const keepC = JSON.stringify(state.combatants), keepA = state.activeCombatantId, TV = panelDefs.turnview, r0 = TV._roll;
+      try {
+        const u = _5eData.find(x => x.cat === 'monster' && x.name === 'Unicorn' && x._source === 'MM');
+        state.combatants = [{ id: 'r336h', name: 'r336h', isPC: false, hp: 40, hpMax: 40, ac: 12, initiative: 20, initBonus: 0, conditions: [] },
+          { id: 'r336u', name: 'Unicorn', baseName: 'Unicorn', _slug: u._slug, _source: 'MM', isPC: false, hp: 30, hpMax: 67, ac: 12, initiative: 10, initBonus: 0, conditions: [], legendaryMax: 3, legendaryUsed: 0 }];
+        state.activeCombatantId = 'r336h'; TV._armed = 'r336h'; TV._queue = null; save();
+        openPanel('turnview'); await sleep(200); TV._render(); await sleep(30);
+        const acts = TV._rawList(u._raw, ['legendary_actions', 'legendary']), li = acts.findIndex(a => /^Heal Self/.test(a.name));
+        TV._roll = () => ({ total: 11, detail: '2d8+2 [11]' });
+        TV._useLegendary('r336u', li); await sleep(60);
+        const un = state.combatants.find(x => x.id === 'r336u'), h = state.combatants.find(x => x.id === 'r336h');
+        ok('legendary heal: the unicorn heals itself — 11, three legendary actions', li >= 0 && un.hp === 41 && un.legendaryUsed === 3 && h.hp === 40 && !TV._queue, JSON.stringify([li, un.hp, un.legendaryUsed, h.hp, !!TV._queue]));
+        TV._armed = null; un.legendaryUsed = 0; un.hp = 30;
+        TV._useLegendary('r336u', li); await sleep(60);
+        ok('legendary heal: with no creature picked, the same', un.hp === 41 && !TV._queue, JSON.stringify([un.hp, !!TV._queue]));
+      } catch(e){ ok('round 336 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
+      finally { TV._roll = r0; TV._queue = null; state.combatants = JSON.parse(keepC); state.activeCombatantId = keepA; save(); TV && TV._body && TV._render(); }
+    }
+
     // -- Class features: represented, not just text ------------------------
     {
       try {

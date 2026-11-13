@@ -2279,6 +2279,9 @@ registerPanel('turnview', {
       this._setResult(`<strong>${esc(c.name)}</strong> — ${esc(bare)}. <span class="dim">${esc(a.text)}</span>`, true);
       // A single attack with a target already picked: rolled now.
       if (steps.length === 1 && this._armed && !steps[0].save && this._armed !== c.id){ this._rollQueueStep(this._armed); return; }
+      // …and one that heals the creature itself: no target to pick.
+      const h0 = (this._attacksFor(c) || [])[steps[0].ai];
+      if (steps.length === 1 && h0 && h0.heal && h0.heal.self){ this._rollQueueStep(c.id); return; }
       this._render();
       return;
     }
@@ -3712,6 +3715,13 @@ registerPanel('turnview', {
     // removed by the DM. Abandon rather than throw.
     if (!src || !t || !it){ this._finishMulti(true); return; }
     const a = (this._attacksFor(src) || [])[it.ai];
+    // (a legendary heal — a unicorn's Heal Self: no roll to hit, the heal)
+    if (a && a.heal){
+      this._snapshot(`${src.name} · ${a.name}`);
+      this._healApply(src, a.heal.self ? src : t, a);
+      this._queue.hits++; save(); panelDefs.combat?._render?.(); panelDefs.party?._render?.(); this._advanceQueue();
+      return;
+    }
     if (a && !a.toHit && (a.save || a.rays)){ this._queueSave(src, t, it.ai); return; }
     this._rollAttack(it.ai, { attacker: src, target: t, queued: true });
   },
@@ -3784,12 +3794,15 @@ registerPanel('turnview', {
     if (a.recharge) this._markRechargeSpent(c, a.name);
     this._markUsed(c, a);
     this._spend(c, this._econFor(a));
+    this._healApply(c, t, a);
+    save(); panelDefs.combat?._render?.(); panelDefs.party?._render?.(); this._render();
+  },
+  _healApply(c, t, a){
     const r = this._roll(a.heal.dice), C = panelDefs.combat, i = state.combatants.indexOf(t), was = t.hp || 0;
     if (C && i >= 0 && typeof C._applyHpDelta === 'function') C._applyHpDelta(i, r.total, null);
     const now = ((state.combatants[i] || t).hp) || 0;
     const txt = `<strong>${esc(c.name)}</strong> — ${esc(a.name)}: <strong>${esc(t.name)}</strong> regains <strong>${Math.max(0, now - was)}</strong> hit points <span class="dim">[${esc(r.detail)}] · ${was} → ${now}</span>`;
     this._setResult(txt, true); this._log.unshift(txt);
-    save(); panelDefs.combat?._render?.(); panelDefs.party?._render?.(); this._render();
   },
   _renderEconomy(c){
     const pip = (key, label, title) =>
