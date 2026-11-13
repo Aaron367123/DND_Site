@@ -20408,6 +20408,15 @@ for (const cls of Object.keys(rule)) for (let L = 1; L <= 20; L++) for (const sc
       finally { state.party = JSON.parse(keepP); state.combatants = JSON.parse(keepC); state.activeCombatantId = keepA; save(); TV && TV._body && TV._render(); }
     }
 
+    // -- Round 333: a Multiattack's "one with its weapon" is the one action named a weapon (a molydeus's Demonic Weapon) --
+    {
+      const P = (txt, acts) => sktParseMultiattack({ actions: [{ name: 'Multiattack', desc: txt }].concat((acts || []).map(n => ({ name: n, desc: '' }))) });
+      const m = P('The molydeus makes three attacks: one with its weapon, one with its wolf bite, and one with its snakebite.', ['Demonic Weapon', 'Wolf Bite', 'Snakebite']);
+      ok('multiattack: "one with its weapon" is its Demonic Weapon', JSON.stringify(m.counts) === '{"demonic weapon":1,"wolf bite":1,"snakebite":1}', JSON.stringify(m.counts));
+      const n = P('The knight makes two attacks: one with its weapon and one with its shield.', ['Longsword', 'Shield Bash']);
+      ok('multiattack: with no action named a weapon, "its weapon" names none', !Object.keys(n.counts).some(k => /weapon|longsword/.test(k)), JSON.stringify(n.counts));
+    }
+
     // -- Class features: represented, not just text ------------------------
     {
       try {

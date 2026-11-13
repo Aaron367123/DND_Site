@@ -2085,7 +2085,10 @@ function sktParseMultiattack(raw){
   const junk = t => !t || /\b(?:attacks?|with|and|or|using|uses?|times?|makes?|casts?|spells?)\b/.test(t) || /^(?:a|an|one|other|melee|ranged|weapon|natural weapon|melee weapon|ranged weapon|different weapon|different|natural|other weapon)$/.test(t) || /^(?:a|an)\s/.test(t);
   // "a Lightning Antlers attack and a Thunder Hooves attack": one each.
   const num = w => /^an?$/i.test(String(w || '')) ? 1 : _sktCount(w);
-  const add = (w, s, strike) => { const n = num(w), t = clean(s, strike); if (!n || junk(t)) return false; counts[t] = Math.max(counts[t] || 0, n); return true; };
+  // "one with its weapon" (a molydeus's): the one action named a weapon
+  // (Demonic Weapon), when there is exactly one.
+  const weaponActs = (raw.actions || []).map(a => String(a && a.name || '').replace(/\s*\(.*\)$/, '').trim()).filter(n => /\bweapon\b/i.test(n) && !/^multiattack/i.test(n));
+  const add = (w, s, strike) => { const n = num(w); let t = clean(s, strike); if (t === 'weapon' && weaponActs.length === 1) t = weaponActs[0].toLowerCase(); if (!n || junk(t)) return false; counts[t] = Math.max(counts[t] || 0, n); return true; };
   let m;
   // "Makes two handaxe attacks OR uses his Hurl Flame twice", "attacks three
   // times with his scimitar, OR twice with his darts": alternatives, not a
