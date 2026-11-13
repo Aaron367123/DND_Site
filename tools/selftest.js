@@ -20101,6 +20101,23 @@ for (const cls of Object.keys(rule)) for (let L = 1; L <= 20; L++) for (const sc
       finally { TV._d = d0; TV._queue = null; if (document.getElementById('cb-root') && typeof cbClose === 'function') cbClose(); state.party = JSON.parse(keepP); state.combatants = JSON.parse(keepC); state.activeCombatantId = keepA; save(); TV && TV._body && TV._render(); }
     }
 
+    // -- Round 322: a Multiattack's list, the ways older stat blocks write it — "one Beak attack" after a colon, "one to constrict", "one with a dagger", "two unarmed strikes", "his gore attack", a tail "in place of" the claws, "and casts one spell" --
+    {
+      const P = txt => sktParseMultiattack({ actions: [{ name: 'Multiattack', desc: txt }] });
+      const C = txt => JSON.stringify((P(txt) || {}).counts);
+      ok('multiattack: after a colon, "one Beak attack and one Fiery Talons attack"', C('The phoenix makes two attacks: one Beak attack and one Fiery Talons attack.') === '{"beak":1,"fiery talons":1}', C('The phoenix makes two attacks: one Beak attack and one Fiery Talons attack.'));
+      ok('multiattack: "one with its bite and one to constrict"', C('The behir makes two attacks: one with its bite and one to constrict.') === '{"bite":1,"constrict":1}', C('The behir makes two attacks: one with its bite and one to constrict.'));
+      ok('multiattack: "one with a dagger and two with its rapier"', C('The swashbuckler makes three attacks: one with a dagger and two with its rapier.') === '{"dagger":1,"rapier":2}', C('The swashbuckler makes three attacks: one with a dagger and two with its rapier.'));
+      ok('multiattack: "two unarmed strikes and one with its Piscine Anatomy"', C('The sea spawn makes three attacks: two unarmed strikes and one with its Piscine Anatomy.') === '{"unarmed strike":2,"piscine anatomy":1}', C('The sea spawn makes three attacks: two unarmed strikes and one with its Piscine Anatomy.'));
+      ok('multiattack: "one with his gore attack"', C('Baphomet makes three attacks: one with Heartcleaver, one with his bite, and one with his gore attack.') === '{"heartcleaver":1,"bite":1,"gore":1}', C('Baphomet makes three attacks: one with Heartcleaver, one with his bite, and one with his gore attack.'));
+      ok('multiattack: a tail "in place of its two claw attacks" is not a fourth', C('The dragon turtle makes three attacks: one with its bite and two with its claws. It can make one tail attack in place of its two claw attacks.') === '{"bite":1,"claws":2}', C('The dragon turtle makes three attacks: one with its bite and two with its claws. It can make one tail attack in place of its two claw attacks.'));
+      const g = P('The glabrezu makes four attacks: two with its pincers and two with its fists. Alternatively, it makes two attacks with its pincers and casts one spell.');
+      ok('multiattack: "…and casts one spell" is not a choice of attacks — the four stand', JSON.stringify(g.counts) === '{"pincers":2,"fists":2}' && !g.combo, JSON.stringify([g.counts, g.combo]));
+      ok('multiattack: "each with a different weapon" still names none', C('The lizardfolk makes two melee attacks, each one with a different weapon.') === '{}', C('The lizardfolk makes two melee attacks, each one with a different weapon.'));
+      ok('multiattack: "one with each of its different flail attacks" names no attack called that', !Object.keys((P('The flind makes three attacks: one with each of its different flail attacks or three with its longbow.') || {}).counts || {}).some(k => /each|flail/.test(k)), C('The flind makes three attacks: one with each of its different flail attacks or three with its longbow.'));
+      ok('multiattack: "two fist attacks or two maul attacks" — the first, not a choice', (() => { const r = P('The Dao makes two fist attacks or two maul attacks.'); return JSON.stringify(r.counts) === '{"fist":2}' && !r.combo; })());
+    }
+
     // -- Class features: represented, not just text ------------------------
     {
       try {

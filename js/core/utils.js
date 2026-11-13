@@ -2058,7 +2058,8 @@ function sktParseMultiattack(raw){
     return t;
   };
   // Junk a lazy match can swallow: "attacks with his shortsword and two".
-  const junk = t => !t || /\b(?:attacks?|with|and|or|using|uses?|times?|makes?)\b/.test(t) || /^(?:a|an|one|other|melee|ranged|weapon|natural weapon|melee weapon|ranged weapon|different weapon)$/.test(t) || /^(?:a|an)\s/.test(t);
+  // (and a spell: the Glabrezu's "…two attacks with its pincers and casts one spell")
+  const junk = t => !t || /\b(?:attacks?|with|and|or|using|uses?|times?|makes?|casts?|spells?)\b/.test(t) || /^(?:a|an|one|other|melee|ranged|weapon|natural weapon|melee weapon|ranged weapon|different weapon|different|natural|other weapon)$/.test(t) || /^(?:a|an)\s/.test(t);
   // "a Lightning Antlers attack and a Thunder Hooves attack": one each.
   const num = w => /^an?$/i.test(String(w || '')) ? 1 : _sktCount(w);
   const add = (w, s, strike) => { const n = num(w), t = clean(s, strike); if (!n || junk(t)) return false; counts[t] = Math.max(counts[t] || 0, n); return true; };
@@ -2074,7 +2075,8 @@ function sktParseMultiattack(raw){
   // bite attack and two unarmed strikes", "uses his staff to make three Arcane Blast attacks"
   // (and the middle of a list: "one Claw attack, one Tentacles attack, and one Trident attack")
   // (or the start of an alternative: "…or | two fist attacks")
-  const reNamed = /(?:^|\bmakes?|,\s+and|\band|,)\s*(?:up\s+to\s+)?(\w+)\s+([A-Za-z][\w'’\- ]*?)\s+(attacks?|strikes?)\b/gi;
+  // (after a colon too: "makes two attacks: one Beak attack and…", "three attacks: two unarmed strikes and…")
+  const reNamed = /(?:^|\bmakes?|,\s+and|\band|,|:)\s*(?:up\s+to\s+)?(\w+)\s+([A-Za-z][\w'’\- ]*?)\s+(attacks?|strikes?)\b/gi;
   // A rejected match (", the werebear makes two claw attacks" read from the
   // comma) is searched again from just past where it began, or it hides the
   // real "makes two claw attacks" inside it.
@@ -2084,8 +2086,13 @@ function sktParseMultiattack(raw){
   // attack with its spear", "two melee attacks with its staff"
   // (an em dash ends a name too: "three attacks—one with its slam and two with its eldritch turrets—")
   // (a bonus in the name: "two with her +1 rapier")
-  const reWith = /(\w+)\s+(?:(?:melee|ranged|weapon)\s+)?(?:attacks?\s+)?with\s+(?:its|his|her|their|the)?\s*((?:[+-]\d+\s+)?[A-Za-z][\w'’\- ]*?)(?=\s*(?:,|\.|;|—|\band\b|\bor\b|$))/gi;
-  while ((m = reWith.exec(text))) add(m[1], m[2]);
+  // (and "one with a dagger" — a Swashbuckler's)
+  const reWith = /(\w+)\s+(?:(?:melee|ranged|weapon)\s+)?(?:attacks?\s+)?with\s+(?:(?:its|his|her|their|the|an?)\s+)?((?:[+-]\d+\s+)?[A-Za-z][\w'’\- ]*?)(?=\s*(?:,|\.|;|—|\band\b|\bor\b|$))/gi;
+  // ("one with his gore attack": the gore)
+  while ((m = reWith.exec(text))) add(m[1], m[2].replace(/\s+attack$/i, ''));
+  // "one with its bite and one to constrict" (a behir): the verb is the attack.
+  const reTo = /\b(one|two|three|four)\s+to\s+([a-z][\w'’-]*)(?=\s*(?:,|\.|;|\band\b|$))/gi;
+  while ((m = reTo.exec(text))) add(m[1], m[2]);
   // "attacks twice with her flail and once with Matalotok", "three times with its daggers"
   const reTimes = /\b(once|twice|thrice|\w+\s+times)\s+with\s+(?:its|his|her|their|the)?\s*((?:[+-]\d+\s+)?[A-Za-z][\w'’\- ]*?)(?=\s*(?:,|\.|;|\band\b|\bor\b|$))/gi;
   const TIMES = { once: 'one', twice: 'two', thrice: 'three' };
@@ -2115,7 +2122,8 @@ function sktParseMultiattack(raw){
   // (and Mammon's "makes four attacks using Tail Swipe, Constrict, or a combination of the two")
   const both = /(?:makes\s+(\w+)\s+attacks?|attacks\s+(once|twice|thrice|\w+\s+times))\s+using\s+(?:(?:its|his|her|their)\s+)?(.+?),?\s+or\s+(?:both|a\s+combination(?:\s+of\s+(?:the\s+)?(?:two|them))?)/i.exec(text);
   // "It can replace one attack with Deadly Shaping if it is ready": not a count.
-  alts[0] = alts[0].replace(/(?:^|\.\s+|,\s*and\s+)(?:it|he|she|they|the\s+\w+)\s+can\s+(?:replace|substitute)\b[^.]*(?:\.|$)/gi, '. ');
+  // (nor "It can make one tail attack in place of its two claw attacks" — a dragon turtle's)
+  alts[0] = alts[0].replace(/(?:^|\.\s+|,\s*and\s+)(?:it|he|she|they|the\s+\w+)\s+can\s+(?:replace|substitute|make\s+[^.]*?\bin\s+place\s+of)\b[^.]*(?:\.|$)/gi, '. ');
   // "makes two melee attacks", "three melee weapon attacks": any of its attacks.
   const ANY_RE = /makes\s+(\w+)\s+(?:(?:melee|ranged|weapon)\s+){0,2}attacks?\b(?!\s*:\s*\S)/i;
   // "…three melee attacks, but can use Constrict only once": a limit, not a count.
