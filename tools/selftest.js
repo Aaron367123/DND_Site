@@ -20445,6 +20445,42 @@ for (const cls of Object.keys(rule)) for (let L = 1; L <= 20; L++) for (const sc
       finally { state.combatants = JSON.parse(keepC); state.activeCombatantId = keepA; save(); TV && TV._body && TV._render(); }
     }
 
+    // -- Round 335: a monster's Bonus Action spends its Bonus Action, not its Action; a monster's healing action is a row that heals --
+    if (!PLAYER){
+      const A = (name, desc) => sktParseMonsterAttack({ name, desc });
+      const ht = A('Healing Touch (3/Day)', 'The deva touches another creature. The target magically regains 20 (4d8 + 2) hit points and is freed from any curse, disease, poison, blindness, or deafness.');
+      ok('heal: Healing Touch is a heal of 4d8+2, on another creature', !!ht && ht.heal && ht.heal.dice === '4d8+2' && !ht.heal.self, JSON.stringify(ht && ht.heal));
+      const hs = A('Heal Self (Costs 3 Actions)', 'The unicorn magically regains 11 (2d8 + 2) hit points.');
+      ok('heal: Heal Self is its own', !!hs && hs.heal && hs.heal.self === true, JSON.stringify(hs && hs.heal));
+      const keepC = JSON.stringify(state.combatants), keepA = state.activeCombatantId, TV = panelDefs.turnview, r0 = TV._roll;
+      try {
+        state.combatants = [{ id: 'r335m', name: 'r335m', isPC: false, hp: 20, hpMax: 60, ac: 12, initiative: 20, initBonus: 0, conditions: [] }, { id: 'r335a', name: 'r335a', isPC: false, hp: 10, hpMax: 50, ac: 12, initiative: 5, initBonus: 0, conditions: [] },
+                            { id: 'r335t', name: 'r335t', isPC: false, hp: 300, hpMax: 300, ac: 5, initiative: 1, initBonus: 0, conditions: [] }];
+        state.activeCombatantId = 'r335m'; TV._armed = 'r335a'; save();
+        const gaze = Object.assign(A('Petrifying Gaze', 'con DC 12, one creature the basilisk can see within 30 feet. The target has the Restrained condition and repeats the save at the end of its next turn.'), { group: 'bonus' });
+        const bite = Object.assign(A('Bite', 'Melee Attack Roll: +5, reach 5 ft. Hit: 10 (2d6 + 3) Piercing damage.'), { group: 'bonus' });
+        const orig = TV._attacksFor; TV._attacksFor = c => c.id === 'r335m' ? [Object.assign({}, ht), Object.assign({}, hs), gaze, bite] : orig.call(TV, c);
+        try {
+          openPanel('turnview'); await sleep(200); TV._render(); await sleep(30);
+          ok('heal: its row has a Heal button', !!TV._body.querySelector('[data-tv="mheal"][data-ai="0"]'));
+          TV._roll = () => ({ total: 15, detail: '4d8+2 [15]' });
+          TV._body.querySelector('[data-tv="mheal"][data-ai="0"]').click(); await sleep(40);
+          const m = () => state.combatants.find(x => x.id === 'r335m'), al = () => state.combatants.find(x => x.id === 'r335a');
+          ok('heal: Healing Touch heals the creature picked, spends the Action', al().hp === 25 && m().hp === 20 && m().actionUsed === true, JSON.stringify([al().hp, m().hp, m().actionUsed]));
+          m().actionUsed = false; TV._render(); await sleep(20);
+          TV._body.querySelector('[data-tv="mheal"][data-ai="1"]').click(); await sleep(40);
+          ok('heal: Heal Self heals the monster itself', m().hp === 35 && al().hp === 25, JSON.stringify([m().hp, al().hp]));
+          m().actionUsed = false; m().bonusUsed = false; TV._armed = 'r335t';
+          TV._rollSave(2, false); await sleep(40); if (TV._pending) TV._commit(TV._pending, null);
+          ok('bonus action: a Bonus Action save spends the Bonus Action, not the Action', m().bonusUsed === true && !m().actionUsed, JSON.stringify([m().actionUsed, m().bonusUsed]));
+          m().actionUsed = false; m().bonusUsed = false; TV._d = n => n === 20 ? 15 : 1;
+          await TV._rollAttack(3, {}); await sleep(40); if (TV._pending) TV._commit(TV._pending, null);
+          ok('bonus action: a Bonus Action attack too', m().bonusUsed === true && !m().actionUsed, JSON.stringify([m().actionUsed, m().bonusUsed]));
+        } finally { TV._attacksFor = orig; }
+      } catch(e){ ok('round 335 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
+      finally { TV._roll = r0; state.combatants = JSON.parse(keepC); state.activeCombatantId = keepA; save(); TV && TV._body && TV._render(); }
+    }
+
     // -- Class features: represented, not just text ------------------------
     {
       try {

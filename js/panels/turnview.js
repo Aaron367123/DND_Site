@@ -1930,6 +1930,8 @@ registerPanel('turnview', {
         ctl = `${rech}<span class="tv-act-note">used up</span>`;
       } else if (spent){
         ctl = `${rech}<span class="tv-act-note">spent — recharges on its turn</span>`;
+      } else if (a.heal){
+        ctl = `${rech}<button class="btn" data-tv="mheal" data-ai="${i}" title="${esc(a.heal.self ? 'It heals itself' : 'Heals the creature picked on the right (itself if none)')}">${ICO('i-heart')}Heal</button>`;
       } else if (a.save){
         // A breath weapon has no attack roll, so there is nothing to roll to
         // hit — the decision is whether the target made its save. Two buttons
@@ -3548,7 +3550,7 @@ registerPanel('turnview', {
       hitNote = (hitNote ? hitNote + ' · ' : '') + (nick ? 'Nick: part of the Attack action' : a.offhand ? 'off-hand: its Bonus Action' : 'its Bonus Action')
         + (after || a.feature ? '' : a.offhand ? ' (after the Attack action with a light weapon)' : ' (after an attack with the first)');
     }
-    else if (!o.queued || (this._queue && this._queue.i === 0 && !this._queue.legendary && !this._queue.bonus)) this._spend(c, 'actionUsed');
+    else if (!o.queued || (this._queue && this._queue.i === 0 && !this._queue.legendary && !this._queue.bonus)) this._spend(c, this._econFor(a));
     const bonus = a.pc ? a.bonus : (parseInt(String(a.toHit || '').replace(/[^\d+-]/g, ''), 10) || 0);
     // Dice a state adds to the roll (Bless's d4).
     const extra = (pcSheet.rollDice || []).filter(x => (x.on || []).some(k => atkTags.includes(k))).map(x => ({ label: x.label, n: this._d(x.die) }));
@@ -3767,6 +3769,28 @@ registerPanel('turnview', {
   // does plenty the panel doesn't model and the pips have to be able to tell
   // the truth about it.
   _spend(c, what){ if (c && !c[what]) { c[what] = true; } },
+  // What a monster's row spends: its Bonus Action when the stat block lists
+  // it among the Bonus Actions (a basilisk's Petrifying Gaze, a behir's
+  // Swallow) — they spent the Action, so the monster lost its attacks.
+  _econFor(a){ return a && (a.group === 'bonus' || a.bonusAction) ? 'bonusUsed' : 'actionUsed'; },
+  // A monster's healing action: rolled, on itself when it heals itself, else
+  // on the creature picked (itself when none is). Its use, its recharge and
+  // its action spent.
+  _monsterHeal(ai){
+    const c = this._active(); if (!c) return;
+    const a = this._attacksFor(c)[ai]; if (!a || !a.heal) return;
+    const t = a.heal.self ? c : (this._order().find(x => x.id === this._armed) || c);
+    this._snapshot(`${c.name} · ${a.name} → ${t.name}`);
+    if (a.recharge) this._markRechargeSpent(c, a.name);
+    this._markUsed(c, a);
+    this._spend(c, this._econFor(a));
+    const r = this._roll(a.heal.dice), C = panelDefs.combat, i = state.combatants.indexOf(t), was = t.hp || 0;
+    if (C && i >= 0 && typeof C._applyHpDelta === 'function') C._applyHpDelta(i, r.total, null);
+    const now = ((state.combatants[i] || t).hp) || 0;
+    const txt = `<strong>${esc(c.name)}</strong> — ${esc(a.name)}: <strong>${esc(t.name)}</strong> regains <strong>${Math.max(0, now - was)}</strong> hit points <span class="dim">[${esc(r.detail)}] · ${was} → ${now}</span>`;
+    this._setResult(txt, true); this._log.unshift(txt);
+    save(); panelDefs.combat?._render?.(); panelDefs.party?._render?.(); this._render();
+  },
   _renderEconomy(c){
     const pip = (key, label, title) =>
       `<button class="tv-econ ${c[key] ? 'spent' : ''}" data-tv="econ" data-k="${key}"
@@ -5037,7 +5061,7 @@ registerPanel('turnview', {
     if (!rider){
       if (a.recharge) this._markRechargeSpent(c, a.name);
       this._markUsed(c, a);
-      this._spend(c, 'actionUsed');
+      this._spend(c, this._econFor(a));
     }
     let detail = '';
     // Evasion: a Dexterity save for half — nothing when saved, half when not.
@@ -5101,7 +5125,7 @@ registerPanel('turnview', {
       onApplied: () => {
         if (a.recharge) this._markRechargeSpent(c, a.name);
         this._markUsed(c, a);
-        if (!src) this._spend(c, 'actionUsed');
+        if (!src) this._spend(c, this._econFor(a));
         if (then) then();
         this._render();
       },
@@ -5367,6 +5391,7 @@ registerPanel('turnview', {
       // A character's sheet, from their turn: their spells, everything else
       // the panel doesn't draw. What they cast comes back here.
       else if (act === 'state'){ this._toggleState(el.dataset.id, el.dataset.k); }
+      else if (act === 'mheal'){ this._monsterHeal(+el.dataset.ai); }
       else if (act === 'brutal'){ const k = this._turnKey() + '|' + state.activeCombatantId; this._brutal = this._brutal === k ? null : k; this._render(); }
       else if (act === 'sheet'){ if (typeof openCharSheet === 'function') openCharSheet(el.dataset.id, el.dataset.tab ? { tab: el.dataset.tab } : {}); }
       else if (act === 'cover'){

@@ -1578,6 +1578,19 @@ function sktParseMonsterAttack(action){
     }
   }
 
+  // Healing: "The target magically regains 20 (4d8 + 2) hit points" (a
+  // deva's Healing Touch), "The unicorn magically regains 11 (2d8 + 2) hit
+  // points" (its own). A row to heal with — it had none.
+  if (saveDc == null && desc.search(/\bHit:/i) === -1){
+    const hm = /\b(?:regains?|restores?)\s+(\d+)\s*\((\d*d\d+(?:\s*[+-]\s*\d+)?)\)\s+hit points/i.exec(desc);
+    if (hm){
+      const lead = desc.slice(desc.lastIndexOf('.', hm.index) + 1, hm.index);
+      const other = /\b(?:target|another|creature|ally|allies|one)\b/i.test(lead);
+      return { name, recharge, uses, toHit: null, save: null, parts: [], alt: null, altLabel: '',
+               heal: { dice: hm[2].replace(/\s+/g, ''), avg: +hm[1], self: !other },
+               effect: 'regains ' + hm[1] + ' (' + hm[2].replace(/\s+/g, ' ') + ') hit points' + (other ? '' : ' — itself') };
+    }
+  }
   // Attack: "…: +14 to hit, … Hit: 19 (2d10 + 8) piercing damage plus 7 (2d6)
   // fire damage."
   const hitIdx = desc.search(/\bHit:/i);
