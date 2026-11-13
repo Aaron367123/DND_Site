@@ -20696,6 +20696,36 @@ for (const cls of Object.keys(rule)) for (let L = 1; L <= 20; L++) for (const sc
       } catch(e){ ok('round 343 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
       finally { state.party = JSON.parse(keepP); state.combatants = JSON.parse(keepC); state.settings = JSON.parse(keepS); save(); if (P._body) P._render(); }
     }
+    // -- Round 344: party card — the hit-die toast's sum, an incapacitating condition between fights ends concentration, the speed shown is the speed as it stands --
+    if (!PLAYER){
+      const keepP = JSON.stringify(state.party), keepC = JSON.stringify(state.combatants); const P = panelDefs.party;
+      const oConf = window.showConfirm, oToast = window.showToast; const toasts = [];
+      try {
+        openPanel('party'); await sleep(200);
+        const mk = (o) => Object.assign({ id: 'r344' + Math.random().toString(36).slice(2, 7), name: 'r344 PC', cls: 'fighter', level: 5, hp: 10, hpMax: 40, ac: 15, spd: 30, tempHp: 0, abilities: { str: 10, dex: 10, con: 14, int: 10, wis: 10, cha: 10 }, hitDice: { current: 3, max: 5, dieType: 'd10' }, resources: [], sheet: {} }, o);
+        state.combatants = [];
+        window.showToast = (m) => { toasts.push(String(m)); };
+        window.showConfirm = () => Promise.resolve(5);
+        state.party = [mk({})]; P._render(); P._spendHitDie(0); await sleep(50);
+        ok('hit-die toast: "Rolled 5 + 2 = 7 HP"', toasts.some(t => t === 'Rolled 5 + 2 = 7 HP') && state.party[0].hp === 17, JSON.stringify(toasts));
+        toasts.length = 0;
+        state.party = [mk({ abilities: { con: 8 } })]; P._render(); P._spendHitDie(0); await sleep(50);
+        ok('…and with a negative CON: "Rolled 5 − 1 = 4 HP"', toasts.some(t => t === 'Rolled 5 − 1 = 4 HP'), JSON.stringify(toasts));
+        state.party = [mk({ concentration: 'Bless' })]; P._render();
+        P._toggleCondition(0, 'Stunned');
+        ok('stunned between fights: concentration ends', state.party[0].concentration == null && (state.party[0].conditions || []).includes('Stunned'), JSON.stringify(state.party[0]));
+        state.party = [mk({ concentration: 'Bless' })]; P._render();
+        P._toggleCondition(0, 'Poisoned');
+        ok('…poisoned does not end it', state.party[0].concentration === 'Bless');
+        const spd = () => { const s = [...P._body.querySelectorAll('[data-cidx="0"] .char-stat')].find(x => /spd/i.test((x.querySelector('.l') || {}).textContent || '')); return s ? (s.querySelector('input') ? 'input ' + s.querySelector('input').value : 'shown ' + (s.querySelector('.v') || {}).textContent) : 'none'; };
+        ok('speed: the base, editable, when nothing holds it', spd() === 'input 30', spd());
+        P._toggleCondition(0, 'Grappled');
+        ok('grappled: the card shows 0', spd() === 'shown 0', spd());
+        state.party = [mk({ exhaustion: 2, build: { edition: '2024' } })]; P._render();
+        ok('2024 exhaustion 2: 20 ft', spd() === 'shown 20', spd());
+      } catch(e){ ok('round 344 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
+      finally { window.showConfirm = oConf; window.showToast = oToast; state.party = JSON.parse(keepP); state.combatants = JSON.parse(keepC); save(); if (P._body) P._render(); }
+    }
     // -- Class features: represented, not just text ------------------------
     {
       try {

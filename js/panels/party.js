@@ -472,7 +472,18 @@ registerPanel('party',{
       +'<div class="char-stats-row'+(pas ? ' four' : '')+'">'
         +'<div class="char-stat"><div class="l">'+ICO('i-shield')+' AC</div><input type="number" value="'+c.ac+'" data-field="ac" data-idx="'+i+'" title="'+esc(this._acBreakdown(c))+'"></div>'
         +'<div class="char-stat"><div class="l">'+ICO('i-bolt')+' Init</div><input type="number" value="'+c.init+'" data-field="init" data-idx="'+i+'" aria-label="'+esc(c.name)+' initiative bonus"></div>'
-        +'<div class="char-stat"><div class="l">Spd</div><input type="number" value="'+c.spd+'" data-field="spd" data-idx="'+i+'" aria-label="'+esc(c.name)+' speed"></div>'
+        +(()=>{
+          // The speed as it stands — grappled, restrained, exhaustion — the
+          // way the sheet and D&D Beyond show it. The card showed the base,
+          // so a grappled fighter read 30. The base stays editable here
+          // whenever nothing is holding it down.
+          const sn = typeof sktSpeedNow === 'function' ? sktSpeedNow(c) : null;
+          if (sn && sn.why && sn.ft !== sn.base){
+            const tip = sn.why + ': ' + sn.ft + ' ft (' + sn.base + ' ft normally)';
+            return '<div class="char-stat spd-now" title="'+esc(tip)+'" aria-label="'+esc(c.name + ' speed — ' + tip)+'"><div class="l">Spd</div><b class="v down">'+sn.ft+'</b></div>';
+          }
+          return '<div class="char-stat"><div class="l">Spd</div><input type="number" value="'+c.spd+'" data-field="spd" data-idx="'+i+'" aria-label="'+esc(c.name)+' speed"></div>';
+        })()
         +(pas ? '<button class="char-stat passive'+(pas.adj > 0 ? ' up' : pas.adj < 0 ? ' down' : '')+'" data-act="passives" data-idx="'+i+'" title="'+esc(pasTip)+'" aria-label="'+esc(c.name + ' — ' + pasTip)+'"><div class="l">'+ICO('i-eye')+' PP</div><b class="v">'+pas.value+'</b></button>' : '')
       +'</div>'
       // Active-form row — class-aware buttons for rage (barbarian) and wild
@@ -916,6 +927,14 @@ registerPanel('party',{
         co.conditions = [...(co.conditions || []), name];
       } else {
         c.conditions = [...(c.conditions || []), name];
+        // "If you are incapacitated or die" — the combat tracker ends it for
+        // a creature in the fight (_endConcOnIncap); between fights nothing
+        // did, and a stunned or unconscious caster kept Bless going.
+        const INC = ['incapacitated', 'paralyzed', 'petrified', 'stunned', 'unconscious'];
+        if (c.concentration && INC.includes(String(name).toLowerCase())){
+          const spell = c.concentration; c.concentration = null;
+          if (typeof showToast === 'function') showToast(spell + ' ends — ' + c.name + ' is ' + String(name).toLowerCase());
+        }
       }
     }
     save(); this._render();
@@ -2676,7 +2695,7 @@ registerPanel('party',{
         const r = this._rollHitDie(i, typeof ok === 'number' ? ok : null);
         if (!r) return;
         this._render();
-        showToast(`Rolled ${r.roll}+${r.conMod>=0?'+':''}${r.conMod} = ${r.heal} HP`);
+        showToast(`Rolled ${r.roll} ${r.conMod<0?'−':'+'} ${Math.abs(r.conMod)} = ${r.heal} HP`);
       });
   },
   // The roll itself, without the confirm or the repaint — the player's phone

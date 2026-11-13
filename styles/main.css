@@ -1791,6 +1791,10 @@ body.player-mode .combat-hide-banner{padding:8px 10px;font-size:var(--fs-sm);col
 .char-stat.passive .v{display:block;font-weight:600;font-size:var(--fs-md);line-height:1.5}
 .char-stat.passive.down .v{color:var(--danger)}
 .char-stat.passive.up .v{color:var(--success)}
+.char-stat.spd-now .v{display:block;font-weight:600;font-size:var(--fs-md);line-height:1.5}
+.char-stat .v.down{color:var(--danger)}
+.party-grid.compact .char-stat.spd-now{display:flex;align-items:center;gap:4px}
+.party-grid.compact .char-stat.spd-now .v{font-size:var(--fs-sm);line-height:inherit}
 .party-grid.compact .char-stat.passive{display:flex;align-items:center;width:auto}
 .party-grid.compact .char-stat.passive .v{font-size:var(--fs-sm);line-height:inherit}
 .hd-row{display:flex;align-items:center;gap:6px;padding:4px 0;font-size:var(--fs-xs);color:var(--text-muted)}
