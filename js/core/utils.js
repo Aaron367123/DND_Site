@@ -1683,8 +1683,8 @@ function sktSaveCondition(desc, saveAt){
   const sentences = s.slice(Math.max(0, saveAt || 0)).split(/(?<=\.)\s+/).slice(0, 4);
   const C = SKT_HIT_CONDS;
   const res = [
-    new RegExp('saving throw[^.]*?\\b(?:or|and)\\s+(?:take[^.]*?\\s+and\\s+)?(?:be |become |is |fall |be knocked |have the )?(?:knocked )?(' + C + ')\\b', 'i'),
-    new RegExp('\\bOn a fail(?:ed save|ure),?[^.]*?\\b(?:is|be|becomes?|has the|falls?)\\s+(?:knocked\\s+)?(' + C + ')\\b', 'i'),
+    new RegExp('saving throw[^.]*?\\b(?:or|and)\\s+(?:take[^.]*?\\s+and\\s+)?(?:be |become |is |fall |be knocked |have the )?(?:magically |\\w+ly )?(?:knocked )?(' + C + ')\\b', 'i'),
+    new RegExp('\\bOn a fail(?:ed save|ure),?[^.]*?\\b(?:is|be|becomes?|has the|falls?|falling)\\s+(?:magically\\s+)?(?:knocked\\s+)?(' + C + ')\\b', 'i'),
     new RegExp('\\bFailure:[^.]*?\\b(' + C + ')\\b', 'i'),
   ];
   for (let k = 0; k < sentences.length; k++){

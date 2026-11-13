@@ -20118,6 +20118,31 @@ for (const cls of Object.keys(rule)) for (let L = 1; L <= 20; L++) for (const sc
       ok('multiattack: "two fist attacks or two maul attacks" — the first, not a choice', (() => { const r = P('The Dao makes two fist attacks or two maul attacks.'); return JSON.stringify(r.counts) === '{"fist":2}' && !r.combo; })());
     }
 
+    // -- Round 323: a monster's save that only inflicts a condition, worded with an adverb — "or be magically Charmed", "falling Unconscious" — is a save the Turn View runs --
+    {
+      const SC = t => sktSaveCondition(t, t.search(/saving throw/i));
+      const a = SC('The dryad targets one humanoid or beast that she can see within 30 feet of her. If the target can see the dryad, it must succeed on a DC 14 Wisdom saving throw or be magically Charmed. The Charmed creature regards the dryad as a trusted friend.');
+      ok('save condition: "or be magically Charmed"', !!a && a.cond === 'Charmed', JSON.stringify(a));
+      const b = SC('The scarecrow targets one creature it can see within 30 feet of it. If the target can see the scarecrow, the target must succeed on a DC 11 Wisdom saving throw or be magically Frightened until the end of the scarecrow\'s next turn.');
+      ok('save condition: "or be magically Frightened until the end of the scarecrow’s next turn"', !!b && b.cond === 'Frightened' && b.dur && b.dur.kind === 'end-next' && b.dur.src, JSON.stringify(b));
+      const c = SC('The jackalwere gazes at one creature it can see within 30 feet of it. The target must make a DC 10 Wisdom saving throw. On a failed save, the target succumbs to a magical slumber, falling Unconscious for 10 minutes or until someone uses an action to shake the target awake.');
+      ok('save condition: "On a failed save… falling Unconscious for 10 minutes"', !!c && c.cond === 'Unconscious' && c.dur && c.dur.left === 100, JSON.stringify(c));
+      const d = SC('Each creature in that area must make a DC 13 Dexterity saving throw, taking 10 (3d6) fire damage on a failed save, or half as much damage on a successful one.');
+      ok('save condition: none in plain damage', d === null, JSON.stringify(d));
+      if (typeof _5eData !== 'undefined' && typeof _5eLoaded !== 'undefined' && _5eLoaded && panelDefs.turnview){
+        const dr = _5eData.find(x => x.cat === 'monster' && x.name === 'Dryad' && x._source === 'MM');
+        if (dr){
+          const keepC = JSON.stringify(state.combatants), keepA = state.activeCombatantId, TV = panelDefs.turnview;
+          try {
+            state.combatants = [{ id: 'r323d', name: 'Dryad', baseName: 'Dryad', _slug: dr._slug, _source: 'MM', isPC: false, hp: 22, hpMax: 22, ac: 11, initiative: 20, initBonus: 0, conditions: [] }];
+            state.activeCombatantId = 'r323d';
+            const row = TV._attacksFor(state.combatants[0]).find(x => x.name === 'Fey Charm');
+            ok('save condition: a dryad’s turn offers Fey Charm, a DC 14 Wisdom save', !!row && row.save && row.save.dc === 14 && /wis/i.test(row.save.ability), JSON.stringify(row && row.save));
+          } finally { state.combatants = JSON.parse(keepC); state.activeCombatantId = keepA; }
+        }
+      }
+    }
+
     // -- Class features: represented, not just text ------------------------
     {
       try {
