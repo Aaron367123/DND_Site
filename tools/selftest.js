@@ -20351,6 +20351,39 @@ for (const cls of Object.keys(rule)) for (let L = 1; L <= 20; L++) for (const sc
       finally { TV._roll = r0; state.combatants = JSON.parse(keepC); state.activeCombatantId = keepA; save(); TV && TV._body && TV._render(); }
     }
 
+    // -- Round 331: Elemental Cleaver (Path of the Giant) — its type picked while raging; the weapon deals it, and 1d6 more --
+    if (!PLAYER){
+      const keepP = JSON.stringify(state.party), keepC = JSON.stringify(state.combatants), keepA = state.activeCombatantId; const TV = panelDefs.turnview; const d0 = TV._d; const cv0 = TV._coverFor; TV._coverFor = () => ({ ac: 0 });
+      try {
+        const R = await sktRulesLoad('2024');
+        await openCharBuilder({}); for (let i = 0; i < 80 && !CB.R; i++) await sleep(100);
+        CB.build = Object.assign(sktBlankBuild('2024'), { cls: 'Barbarian', level: 6, subclass: 'Giant', species: 'Human', name: 'r331', sources: SKT_ALL_SOURCES }); cbQuickBuild();
+        const gb = sktComputeCharacter(CB.build, R); gb.id = 'r331g'; cbClose();
+        state.party = [gb];
+        state.combatants = [{ id: 'r331g', name: 'r331g', isPC: true, hp: gb.hpMax, hpMax: gb.hpMax, ac: gb.ac, initiative: 20, conditions: [] }, { id: 'r331o', name: 'r331o', isPC: false, hp: 200, hpMax: 200, ac: 5, initiative: 1, initBonus: 0, conditions: [] }];
+        state.activeCombatantId = 'r331g'; TV._armed = 'r331o'; save();
+        openPanel('turnview'); await sleep(300); TV._render(); await sleep(30);
+        const sel = () => TV._body.querySelector('[data-tvcleaver]');
+        ok('cleaver: no pick before the rage', !sel());
+        const c = state.combatants[0], rg = TV._activationsFor(c).find(a => a.name === 'Rage');
+        await TV._useActivation(c.id, rg.i); await sleep(40);
+        ok('cleaver: raging, its pick by the rage pill', !!sel() && sel().value === '');
+        sel().value = 'cold'; sel().dispatchEvent(new Event('change', { bubbles: true })); await sleep(40);
+        ok('cleaver: picked, kept on the character', (state.party[0].active || {})['Elemental Cleaver'] === 'cold', JSON.stringify(state.party[0].active));
+        TV._d = n => n === 20 ? 15 : 1; TV._lastPcHit = null;
+        const dr0 = window.sktDamageRoll; window.sktDamageRoll = (e) => ({ total: /^1d6$/.test(String(e).trim()) ? 6 : 1, detail: String(e), dice: 1, type: '' });
+        try { await TV._rollAttack(TV._attacksFor(c).findIndex(a => /^Greataxe/.test(a.name)), {}); await sleep(40); } finally { window.sktDamageRoll = dr0; }
+        ok('cleaver: its 1d6 lands with the weapon’s damage', state.combatants[1].hp === 193, JSON.stringify(state.combatants[1].hp));
+        const log = String(TV._log.find(l => / hit <strong>/.test(l)) || '');
+        ok('cleaver: the greataxe hits for cold, and 1d6 cold more', /Elemental Cleaver/.test(log) && !/slashing/.test(log) && /cold/.test(log), log.replace(/<[^>]+>/g, '').slice(0, 200));
+        ok('cleaver: no Elemental Cleaver to click after the hit — it’s in the damage', !TV._pcExtraOptions(TV._lastPcHit).some(o => o.label === 'Elemental Cleaver'));
+        const pi = state.party.findIndex(p => p.id === 'r331g');
+        panelDefs.party._setRage(pi, false); panelDefs.party._setRage(pi, true, { paid: true }); await sleep(30);
+        ok('cleaver: a new rage starts with none picked', !(state.party[pi].active || {})['Elemental Cleaver'], JSON.stringify(state.party[pi].active));
+      } catch(e){ ok('round 331 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
+      finally { TV._d = d0; TV._coverFor = cv0; if (document.getElementById('cb-root') && typeof cbClose === 'function') cbClose(); state.party = JSON.parse(keepP); state.combatants = JSON.parse(keepC); state.activeCombatantId = keepA; save(); TV && TV._body && TV._render(); }
+    }
+
     // -- Class features: represented, not just text ------------------------
     {
       try {

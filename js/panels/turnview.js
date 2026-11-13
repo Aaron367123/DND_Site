@@ -1789,7 +1789,7 @@ registerPanel('turnview', {
     if (i < 0) return '';
     let row = '';
     if (P && typeof P._formsRow === 'function'){ try { row = P._formsRow(p, i) || ''; } catch(e){ row = ''; } }
-    const st = this._statePills(c, p);
+    const st = this._statePills(c, p) + this._cleaverPick(c, p);
     if (!row && !st) return '';          // nothing to switch on or off
     return `<div class="tv-classrow">${row}${st}</div>`;
   },
@@ -1808,6 +1808,24 @@ registerPanel('turnview', {
       return `<button class="form-pill ${on ? 'state-on' : 'state-off'}" data-tv="state" data-id="${esc(c.id)}" data-k="${esc(s.key)}" aria-pressed="${on}"
         title="${esc(s.label + (s.desc ? ' — ' + s.desc : '') + (on ? ' Click to end it.' : ''))}">${esc(s.label)}${on ? ' <span class="form-pill-x">×</span>' : ''}</button>`;
     }).join('');
+  },
+  // Elemental Cleaver (Path of the Giant): "When you enter your rage, you can
+  // choose one weapon… and infuse it with one of the following damage types"
+  // — the type, picked here while raging; its weapons then deal that type and
+  // 1d6 more of it (_rollAttack). A new rage starts with none (party.js).
+  _cleaverPick(c, p){
+    if (!p.rage || this._wsOf(c) || !(((p.sheet || {}).featureList) || []).some(f => f && f.name === 'Elemental Cleaver' && !f.info)) return '';
+    const v = (p.active || {})['Elemental Cleaver'] || '';
+    return `<select class="tv-in tv-cleaver" data-tvcleaver="${esc(c.id)}" aria-label="Elemental Cleaver: the infused weapon's damage type"
+        title="Elemental Cleaver — the weapon's damage type while raging, and 1d6 more of it on each hit">
+      <option value="">Cleaver: none</option>${['acid', 'cold', 'fire', 'lightning', 'thunder'].map(t => `<option value="${t}"${v === t ? ' selected' : ''}>Cleaver: ${t}</option>`).join('')}</select>`;
+  },
+  _setCleaver(id, v){
+    const who = this._order().find(c => c.id === id), p = who && this._partyOf(who); if (!p) return;
+    const a = Object.assign({}, p.active); if (v) a['Elemental Cleaver'] = v; else delete a['Elemental Cleaver'];
+    p.active = Object.keys(a).length ? a : null;
+    if (v) this._log.unshift(`<strong>${esc(who.name)}</strong> — Elemental Cleaver: ${esc(v)}`);
+    save(); this._render();
   },
   // A feature's switch, from the turn: on through its activation when it has
   // one (that spends its use and its action, as using it does), otherwise
@@ -3572,6 +3590,14 @@ registerPanel('turnview', {
       // Smite (2014), a melee weapon's. The sheet only said so.
       const rsF = pp && !a.spell && !a.save && !a.ranged && (((pp.sheet || {}).featureList) || []).find(f => f && !f.info
         && (f.name === 'Radiant Strikes' || (f.name === 'Improved Divine Smite' && !/^Unarmed Strike/i.test(a.name))));
+      // Elemental Cleaver, its type picked: a weapon's damage is that type, and
+      // 1d6 more of it.
+      const clv = pp && pp.rage && !a.spell && !/^Unarmed Strike/i.test(a.name) && (pp.active || {})['Elemental Cleaver'];
+      if (clv && parts.length){
+        parts[0].type = clv;
+        const r3 = typeof sktDamageRoll === 'function' ? sktDamageRoll('1d6', crit) : this._roll(crit ? '2d6' : '1d6');
+        parts.push({ amt: r3.total, type: clv }); detail += ' + Elemental Cleaver ' + r3.detail + ' ' + clv;
+      }
       // Hexblade's Curse: the proficiency bonus is in the sheet's damage while
       // the curse is on — right against the cursed creature, taken off
       // against any other.
@@ -4285,6 +4311,7 @@ registerPanel('turnview', {
       if (/Reckless Attack/.test(note) && !((p.active || {})['Reckless Attack'])) return;
       if (/\bStrength\b/.test(note) && !h.str) return;
       if (x.label === 'Brutal Strike' && !h.brutal) return;
+      if (x.label === 'Elemental Cleaver' && (p.active || {})['Elemental Cleaver']) return;   // (in the damage already)
       // "if it's missing any of its Hit Points" — before this hit, or every
       // first hit would qualify by hurting it.
       if (/missing any (?:of its )?hit points|below its hit point maximum/i.test(note) && !(h.hpBefore != null && h.hpMaxT != null && h.hpBefore < h.hpMaxT)) return;
@@ -5391,6 +5418,8 @@ registerPanel('turnview', {
       if (f) this._setInit(f.dataset.tvinit, parseInt(f.value, 10));
       const as = e.target.closest('[data-tvactas]');
       if (as && as.value) this.actAs(as.value);
+      const cl = e.target.closest('[data-tvcleaver]');
+      if (cl) this._setCleaver(cl.dataset.tvcleaver, cl.value);
     });
 
     // Map: enlarge on approach so it is already the right size by the time the

@@ -1006,6 +1006,8 @@ registerPanel('party',{
     const c = state.party[i]; if (!c) return;
     if (on && !c.rage && !(opts && opts.paid) && !this._spendUse(c, 'Rage', 'rages')) return;
     const next = {...c, rage: !!on};
+    // Elemental Cleaver's infusion is chosen as each rage begins.
+    if (on && !c.rage && next.active && next.active['Elemental Cleaver']){ const a = Object.assign({}, next.active); delete a['Elemental Cleaver']; next.active = Object.keys(a).length ? a : null; }
     // Vitality of the Tree (World Tree): entering the rage gives temporary hit
     // points equal to the barbarian level.
     if (on && !c.rage && ((c.sheet || {}).featureList || []).some(f => f && f.name === 'Vitality of the Tree' && !f.info))
