@@ -20078,6 +20078,29 @@ for (const cls of Object.keys(rule)) for (let L = 1; L <= 20; L++) for (const sc
       finally { TV._d = d0; if (document.getElementById('cb-root') && typeof cbClose === 'function') cbClose(); state.party = JSON.parse(keepP); state.combatants = JSON.parse(keepC); state.activeCombatantId = keepA; save(); TV && TV._body && TV._render(); }
     }
 
+    // -- Round 321: a feature's Bonus Action attack (War Priest) — the attack itself, a target to pick, the Action left alone --
+    if (!PLAYER){
+      const keepP = JSON.stringify(state.party), keepC = JSON.stringify(state.combatants), keepA = state.activeCombatantId; const TV = panelDefs.turnview; const d0 = TV._d;
+      try {
+        const R = await sktRulesLoad('2024');
+        await openCharBuilder({}); for (let i = 0; i < 80 && !CB.R; i++) await sleep(100);
+        CB.build = Object.assign(sktBlankBuild('2024'), { cls: 'Cleric', level: 3, subclass: 'War', species: 'Human', name: 'r321', sources: SKT_ALL_SOURCES }); cbQuickBuild();
+        const cl = sktComputeCharacter(CB.build, R); cl.id = 'r321c'; cbClose();
+        state.party = [cl];
+        state.combatants = [{ id: 'r321c', name: 'r321c', isPC: true, hp: cl.hpMax, hpMax: cl.hpMax, ac: cl.ac, initiative: 20, conditions: [] }, { id: 'r321o', name: 'Orc', isPC: false, hp: 100, hpMax: 100, ac: 5, initiative: 1, initBonus: 0, conditions: [] }];
+        state.activeCombatantId = 'r321c'; TV._armed = 'r321o'; TV._queue = null; save();
+        openPanel('turnview'); await sleep(300); TV._render(); await sleep(30);
+        const c = state.combatants[0], wp = TV._activationsFor(c).find(a => a.name === 'War Priest');
+        const pool = () => (state.party[0].resources.find(r => r.name === 'War Priest') || {}).current, p0 = pool();
+        await TV._useActivation(c.id, wp.i); await sleep(30);
+        ok('war priest: its Bonus Action and a use spent, and its attack waiting for a target', c.bonusUsed === true && pool() === p0 - 1 && !!TV._queue && TV._queue.items.length === 1 && TV._queue.bonus === true, JSON.stringify([c.bonusUsed, p0, pool(), TV._queue]));
+        TV._d = n => n === 20 ? 15 : 1;
+        await TV._rollQueueStep('r321o'); await sleep(40);
+        ok('war priest: the attack lands, the Action still free', state.combatants[1].hp < 100 && !c.actionUsed && !TV._queue, JSON.stringify([state.combatants[1].hp, c.actionUsed, !!TV._queue]));
+      } catch(e){ ok('round 321 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
+      finally { TV._d = d0; TV._queue = null; if (document.getElementById('cb-root') && typeof cbClose === 'function') cbClose(); state.party = JSON.parse(keepP); state.combatants = JSON.parse(keepC); state.activeCombatantId = keepA; save(); TV && TV._body && TV._render(); }
+    }
+
     // -- Class features: represented, not just text ------------------------
     {
       try {

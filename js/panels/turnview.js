@@ -797,6 +797,19 @@ registerPanel('turnview', {
       this._queue = { srcId: who.id, name: who.name, items, i: 0, hits: 0, misses: 0, pc: true, bonus: flag === 'bonusUsed', label: a.name };
       this._setResultAppend(` <span class="dim">${esc(a.name)} — <b>${esc(list[ua].name)}</b>: pick a target.</span>`);
     }
+    // War Priest, Battle Magic, Telekinetic Master: "make one attack with a
+    // weapon as a Bonus Action" — that attack, any of their weapons (an
+    // Unarmed Strike too where it says so), a target to pick. Only the Bonus
+    // Action and the use were spent before, and the attack went nowhere.
+    const wa = !ns && flag === 'bonusUsed' && who.isPC && /\bmake one (?:weapon attack|attack with a weapon)/i.test(String(a.desc || ''));
+    if (wa){
+      const wl = this._attacksFor(who), un = /Unarmed Strike/i.test(String(a.desc || ''));
+      const choice = wl.map((x, ai) => x && x.pc && !x.spell && !x.save && !x.offhand && !x.bonusAction && x.dmgText && (un || !/^Unarmed Strike/i.test(x.name)) ? ai : -1).filter(ai => ai >= 0);
+      if (choice.length){
+        this._queue = { srcId: who.id, name: who.name, items: [Object.assign({ ai: choice[0], name: wl[choice[0]].name }, choice.length > 1 ? { choice } : {})], i: 0, hits: 0, misses: 0, pc: true, bonus: true, label: a.name };
+        this._setResultAppend(` <span class="dim">${esc(a.name)} — one attack: pick a target${choice.length > 1 ? ' (any of their weapons)' : ''}.</span>`);
+      }
+    }
     save(); panelDefs.combat?._render?.(); this._render();
   },
   // Collapse state for the features row. A view preference, so localStorage
