@@ -1914,7 +1914,10 @@ function _sktTitledBlocks(text){
 function sktActivationFromText(text, name, ctx){
   const t = String(text || '').replace(/\s+/g, ' ').trim(); if (!t) return null;
   const sents = t.split(/(?<=[.!?])\s+/);
-  const timing = s0 => { const s = s0.replace(/as part of (?:the|an?) [\w ]{0,30}?\baction\b/gi, ''); return /\breaction\b/i.test(s) ? 'Reaction' : /bonus action/i.test(s) ? 'Bonus Action' : /magic action/i.test(s) ? 'Magic'
+  // Not how it is used: "as part of the Attack action", the companion's own
+  // "its Reaction" (a Primal Companion's beast), "your Action Surge" (Arcane
+  // Charge read as an Action).
+  const timing = s0 => { const s = s0.replace(/as part of (?:the|an?) [\w ]{0,30}?\baction\b/gi, '').replace(/\b(?:its|their) (?:bonus action|reaction|action)\b|\baction surge\b/gi, ''); return /\breaction\b/i.test(s) ? 'Reaction' : /bonus action/i.test(s) ? 'Bonus Action' : /magic action/i.test(s) ? 'Magic'
     : /\b(as an action|use your action|take an action|an action to|use an action)\b/i.test(s) ? 'Action' : null; };
   // The sentence that says how it's used: the character's own action, not another creature's.
   let action = null, at = -1;
@@ -2189,7 +2192,7 @@ function sktPassiveGrants(text){
 // moves forward: an older build doesn't know it, keeps it as it is, and
 // can't undo the newer work. Raise SKT_RULES_REV when a rules change should
 // reach every saved character.
-const SKT_RULES_REV = '2026-11-04f';
+const SKT_RULES_REV = '2026-11-12a';
 let _sktStatesBusy = false;
 function sktStatesSyncAll(){
   if (_sktStatesBusy || typeof state === 'undefined' || !Array.isArray(state.party)) return;

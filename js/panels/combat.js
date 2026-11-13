@@ -1703,7 +1703,7 @@ registerPanel('combat',{
     for (const p of state.party || []) for (const r of (p && p.resources) || []) if (r.recharge === 'turn' && (r.current || 0) < (r.max || 1)) r.current = r.max || 1;
     c.reactionUsed = false;
     // Sap lasts "before the start of your next turn": the sapper's turn begins.
-    (state.combatants || []).forEach(x => { if (x.sapped && x.sapped.by === id) x.sapped = undefined; if (x.slowed && x.slowed.by === id) x.slowed = undefined; });
+    (state.combatants || []).forEach(x => { if (x.sapped && x.sapped.by === id) x.sapped = undefined; if (x.slowed && x.slowed.by === id) x.slowed = undefined; if (x.distracted && x.distracted.by === id) x.distracted = undefined; });
     c.actionUsed = false;
     c.bonusUsed = false;
     c.dodging = false;

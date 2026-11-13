@@ -19830,6 +19830,92 @@ for (const cls of Object.keys(rule)) for (let L = 1; L <= 20; L++) for (const sc
       finally { TV._d = d0; TV._brutal = null; if (document.getElementById('cb-root') && typeof cbClose === 'function') cbClose(); state.party = JSON.parse(keepP); state.combatants = JSON.parse(keepC); state.activeCombatantId = keepA; save(); TV && TV._body && TV._render(); }
     }
 
+    // -- Round 315: a Battle Master's maneuvers on a hit, an Open Hand monk's Flurry of Blows hit, and a paladin's Radiant Strikes --
+    if (!PLAYER){
+      const keepP = JSON.stringify(state.party), keepC = JSON.stringify(state.combatants), keepA = state.activeCombatantId; const TV = panelDefs.turnview; const d0 = TV._d;
+      try {
+        const R = await sktRulesLoad('2024');
+        await openCharBuilder({}); for (let i = 0; i < 80 && !CB.R; i++) await sleep(100);
+        const mk = (cls, sub, L, id, extra) => { CB.build = Object.assign(sktBlankBuild('2024'), { cls, level: L, subclass: sub, species: 'Human', name: id, sources: SKT_ALL_SOURCES }, extra || {}); cbQuickBuild(); const r = sktComputeCharacter(CB.build, R); r.id = id; return r; };
+        const bm = mk('Fighter', 'Battle Master', 3, 'r315f', { optional: { Maneuvers: ['Trip Attack', 'Distracting Strike', 'Sweeping Attack'], 'Fighting Style': ['Defense'] } });
+        const oh = mk('Monk', 'Open Hand', 3, 'r315m'), pal = mk('Paladin', 'Devotion', 11, 'r315p');
+        cbClose();
+        state.party = [bm, oh, pal];
+        const pc = r => ({ id: r.id, name: r.id, isPC: true, hp: r.hpMax, hpMax: r.hpMax, ac: r.ac, initiative: 20, conditions: [] });
+        const foe = (id, extra) => Object.assign({ id, name: id, isPC: false, hp: 300, hpMax: 300, ac: 5, initiative: 1, initBonus: 0, conditions: [] }, extra || {});
+        openPanel('turnview'); await sleep(300);
+        const setup = (who, foes) => { state.combatants = [pc(who)].concat(foes); state.activeCombatantId = who.id; TV._lastPcHit = null; TV._onHits = []; TV._armed = foes[0].id; save(); TV._render(); };
+        const offers = () => TV._lastPcHit ? TV._pcExtraOptions(TV._lastPcHit) : [];
+        const sd = () => (state.party.find(p => p.id === 'r315f').resources.find(r => r.name === 'Superiority Dice') || {}).current;
+        // Trip Attack: the die on the damage, and the Strength save queued.
+        setup(bm, [foe('r315a'), foe('r315b')]); await sleep(30);
+        TV._d = n => n === 20 ? 15 : 1;
+        const fc = () => state.combatants[0], melee = () => TV._attacksFor(fc()).findIndex(a => a.pc && !a.ranged && !a.spell && !/^Unarmed/.test(a.name));
+        await TV._rollAttack(melee(), {}); await sleep(30);
+        let labs = offers().map(o => o.label);
+        ok('maneuver: the Battle Master’s hit offers its maneuvers', ['Trip Attack', 'Distracting Strike', 'Sweeping Attack'].every(n => labs.includes(n)), JSON.stringify(labs));
+        const sd0 = sd(), hp0 = state.combatants.find(c => c.id === 'r315a').hp;
+        TV._usePcExtra(offers().find(o => o.label === 'Trip Attack').key); await sleep(40);
+        const dc = 8 + 2 + Math.max(Math.floor((bm.abilities.str - 10) / 2), Math.floor((bm.abilities.dex - 10) / 2));
+        ok('maneuver: Trip Attack spends a die, adds it to the damage', sd() === sd0 - 1 && state.combatants.find(c => c.id === 'r315a').hp < hp0, JSON.stringify([sd0, sd(), hp0]));
+        ok('maneuver: and its save, DC 8 + proficiency + STR or DEX, Strength or prone', (TV._onHits || []).some(x => x.cond === 'Prone' && x.ability === 'Str' && x.dc === dc), JSON.stringify(TV._onHits));
+        ok('maneuver: one a hit — no second maneuver on it', !offers().some(o => /Attack|Strike/.test(o.label) && o.key.indexOf('mv:') === 0), JSON.stringify(offers().map(o => o.label)));
+        // Distracting Strike: someone else's next attack has advantage.
+        fc().actionUsed = false; TV._lastPcHit = null; await TV._rollAttack(melee(), {}); await sleep(30);
+        TV._usePcExtra(offers().find(o => o.label === 'Distracting Strike').key); await sleep(40);
+        const ta = () => state.combatants.find(c => c.id === 'r315a');
+        ok('maneuver: Distracting Strike marks the target', !!ta().distracted && ta().distracted.by === 'r315f', JSON.stringify(ta().distracted));
+        // Sweeping Attack: the die's damage to a second creature the roll would hit.
+        fc().actionUsed = false; TV._lastPcHit = null; await TV._rollAttack(melee(), {}); await sleep(30);
+        TV._armed = 'r315b'; TV._render(); await sleep(20);
+        const sw = offers().find(o => o.label === 'Sweeping Attack'), hb = state.combatants.find(c => c.id === 'r315b').hp;
+        ok('maneuver: Sweeping Attack, the second creature armed', !!sw && sw.ok, JSON.stringify(sw));
+        sw && TV._usePcExtra(sw.key); await sleep(40);
+        ok('maneuver: its die’s damage goes to the second creature', state.combatants.find(c => c.id === 'r315b').hp < hb, JSON.stringify([hb, state.combatants.find(c => c.id === 'r315b').hp]));
+        // Open Hand: only on a Flurry of Blows hit.
+        setup(oh, [foe('r315c')]); await sleep(30);
+        const mc = () => state.combatants[0];
+        TV._d = n => n === 20 ? 15 : 1;
+        await TV._rollAttack(TV._attacksFor(mc()).findIndex(a => /^Unarmed Strike/.test(a.name)), {}); await sleep(30);
+        ok('open hand: not on an ordinary strike', !offers().some(o => o.label === 'Topple'), JSON.stringify(offers().map(o => o.label)));
+        mc().bonusUsed = false; TV._lastPcHit = null;
+        const fl = TV._activationsFor(mc()).find(a => a.name === 'Flurry of Blows');
+        await TV._useActivation(mc().id, fl.i); await sleep(30);
+        await TV._rollQueueStep('r315c'); await sleep(40);
+        labs = offers().map(o => o.label);
+        ok('open hand: a Flurry of Blows hit offers Addle, Push and Topple', ['Addle', 'Push', 'Topple'].every(n => labs.includes(n)), JSON.stringify(labs));
+        const odc = 8 + 2 + Math.floor((oh.abilities.wis - 10) / 2);
+        TV._usePcExtra('oht:topple'); await sleep(40);
+        ok('open hand: Topple — its Dexterity save at the monk’s DC', (TV._onHits || []).some(x => x.cond === 'Prone' && x.ability === 'Dex' && x.dc === odc), JSON.stringify(TV._onHits));
+        ok('open hand: one effect a hit', !offers().some(o => /^oht:/.test(o.key)));
+        // Radiant Strikes: every melee weapon hit, 1d8 radiant more.
+        setup(pal, [foe('r315d')]); await sleep(30);
+        const pcc = () => state.combatants[0];
+        TV._d = n => n === 20 ? 15 : 1;
+        await TV._rollAttack(TV._attacksFor(pcc()).findIndex(a => a.pc && !a.ranged && !a.spell && !/^Unarmed/.test(a.name)), {}); await sleep(30);
+        ok('radiant strikes: a paladin’s melee hit deals radiant too', /radiant/.test(String(TV._result)) && /Radiant Strikes/.test(TV._log[0] || ''), String(TV._result).replace(/<[^>]+>/g, '').slice(0, 200));
+        pcc().actionUsed = false;
+        await TV._rollAttack(TV._attacksFor(pcc()).findIndex(a => a.pc && a.ranged && !a.spell), {}); await sleep(30);
+        ok('radiant strikes: not a bow’s', !/Radiant Strikes/.test(TV._log[0] || ''), (TV._log[0] || '').slice(0, 200));
+      } catch(e){ ok('round 315 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
+      finally { TV._d = d0; if (document.getElementById('cb-root') && typeof cbClose === 'function') cbClose(); state.party = JSON.parse(keepP); state.combatants = JSON.parse(keepC); state.activeCombatantId = keepA; save(); TV && TV._body && TV._render(); }
+    }
+
+    // -- Round 316: how a feature is used, not read off a companion's Reaction or the words "Action Surge" --
+    if (!PLAYER){
+      try {
+        const R = await sktRulesLoad('2024');
+        await openCharBuilder({}); for (let i = 0; i < 80 && !CB.R; i++) await sleep(100);
+        const acts = (cls, sub) => { CB.build = Object.assign(sktBlankBuild('2024'), { cls, level: 15, subclass: sub, species: 'Human', name: 'r316', sources: SKT_ALL_SOURCES }); cbQuickBuild(); return (sktComputeCharacter(CB.build, R).sheet.activations || []); };
+        const ek = acts('Fighter', 'Eldritch Knight'), bm = acts('Ranger', 'Beast Master');
+        cbClose();
+        ok('timing: Arcane Charge is no Action — it rides on Action Surge', !ek.some(a => a.name === 'Arcane Charge' && a.action === 'Action'), JSON.stringify(ek.map(a => a.name + ':' + a.action)));
+        const pcmp = bm.find(a => a.name === 'Primal Companion');
+        ok('timing: a Primal Companion is commanded with a Bonus Action, not the beast’s Reaction', !!pcmp && pcmp.action === 'Bonus Action', JSON.stringify(pcmp));
+      } catch(e){ ok('round 316 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
+      finally { if (document.getElementById('cb-root') && typeof cbClose === 'function') cbClose(); }
+    }
+
     // -- Class features: represented, not just text ------------------------
     {
       try {

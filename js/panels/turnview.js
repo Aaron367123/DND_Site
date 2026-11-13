@@ -251,6 +251,20 @@ registerPanel('turnview', {
   // this panel those ARE the party tracker's pools — spending here decrements
   // state.party[i].resources[j] and the party card repaints, because there is
   // only one copy of the number.
+  // A Battle Master's maneuvers that a hit spends a Superiority Die on: the
+  // die on the damage, then what it does. A save is the fighter's maneuver DC
+  // (8 + proficiency + STR or DEX); a condition goes on the hit's queue, to
+  // roll or to take from the table. The same in both editions' wording.
+  MANEUVERS: {
+    'Trip Attack':        { save: 'Str', cond: 'Prone', large: true },
+    'Menacing Attack':    { save: 'Wis', cond: 'Frightened', dur: 'end-next' },
+    'Pushing Attack':     { save: 'Str', large: true, say: 'on a failed Strength save, pushed up to 15 ft straight away' },
+    'Disarming Attack':   { save: 'Str', say: 'on a failed Strength save, it drops one object of your choice that it’s holding' },
+    'Goading Attack':     { save: 'Wis', say: 'on a failed Wisdom save, disadvantage on attacks against anyone but you until the end of your next turn' },
+    'Distracting Strike': { distract: true, say: 'the next attack against it by someone else has advantage, before the start of your next turn' },
+    'Maneuvering Attack': { say: 'a willing ally can use its reaction to move half its Speed without provoking an opportunity attack from the target' },
+    'Sweeping Attack':    { sweep: true },
+  },
   COST: {
     'Cutting Words':   { res:'Bardic Inspiration', n:1 },
     'Absorb Elements': { slot:1 },
@@ -2789,7 +2803,7 @@ registerPanel('turnview', {
         // (a Life Drain's lowered maximum, and a condition's timer)
         hpMax:c.hpMax, hpMaxNormal:c.hpMaxNormal, hpMaxNote:c.hpMaxNote,
         condTimers: c.condTimers ? JSON.parse(JSON.stringify(c.condTimers)) : undefined,
-        legendaryUsed:c.legendaryUsed, lrUsed:c.lrUsed, concentration:c.concentration, vex:c.vex ? {...c.vex} : undefined, sapped:c.sapped ? {...c.sapped} : undefined, slowed:c.slowed ? {...c.slowed} : undefined, charmedBy:c.charmedBy ? {...c.charmedBy} : undefined, frightenedBy:c.frightenedBy ? {...c.frightenedBy} : undefined, extraDmgTurn:c.extraDmgTurn, onceTurn:c.onceTurn ? {...c.onceTurn} : undefined,
+        distracted:c.distracted ? {...c.distracted} : undefined, legendaryUsed:c.legendaryUsed, lrUsed:c.lrUsed, concentration:c.concentration, vex:c.vex ? {...c.vex} : undefined, sapped:c.sapped ? {...c.sapped} : undefined, slowed:c.slowed ? {...c.slowed} : undefined, charmedBy:c.charmedBy ? {...c.charmedBy} : undefined, frightenedBy:c.frightenedBy ? {...c.frightenedBy} : undefined, extraDmgTurn:c.extraDmgTurn, onceTurn:c.onceTurn ? {...c.onceTurn} : undefined,
         deathSaves: c.deathSaves ? {...c.deathSaves} : c.deathSaves,
         rechargeSpent: (c.rechargeSpent || []).slice(),
         usesSpent: c.usesSpent ? {...c.usesSpent} : undefined, usesRound: c.usesRound ? {...c.usesRound} : undefined, slotsUsed: c.slotsUsed ? {...c.slotsUsed} : undefined,
@@ -3011,7 +3025,9 @@ registerPanel('turnview', {
       wDice: o.wDice || null, wSum: o.wSum, wName: o.label,
       // a beast form's attack; a Strength attack; Brutal Strike's roll; and
       // whether the target was already hurt before this hit (Hunter's Prey)
-      ws: !!o.wsAtk, str: !!o.str, brutal: !!o.brutal, hpBefore: before, hpMaxT: t.hpMax };
+      ws: !!o.wsAtk, str: !!o.str, brutal: !!o.brutal, hpBefore: before, hpMaxT: t.hpMax, total: o.total,
+      // a hit from Flurry of Blows (Open Hand Technique)
+      flurry: !!(o.queued && this._queue && this._queue.label === 'Flurry of Blows') };
     if (o.queued && this._queue){ this._queue.hits++; this._advanceQueue(); return; }
     this._render();
   },
@@ -3220,6 +3236,8 @@ registerPanel('turnview', {
     // attack on that creature has advantage), Sap (this attacker's next attack
     // has disadvantage). Each is used by the attack that reads it.
     if (c.vex && c.vex.tgt === t.id){ advWhy.push('Vex'); c.vex = undefined; }
+    // Distracting Strike: the next attack on it by someone other than the fighter.
+    if (t.distracted && t.distracted.by !== c.id){ advWhy.push('distracted by ' + t.distracted.name); t.distracted = undefined; }
     // Steady Aim: the next attack this turn.
     if (c.aimed && !c.aimed.used && typeof sktMoveKey === 'function' && c.aimed.k === sktMoveKey()){ advWhy.push('Steady Aim'); c.aimed = Object.assign({}, c.aimed, { used: true }); }
     if (c.sapped){ disWhy.push('sapped'); c.sapped = undefined; }
@@ -3346,6 +3364,15 @@ registerPanel('turnview', {
         detail = r.detail;
         const rb = typeof sktRageBonus === 'function' ? sktRageBonus(pp, a) : 0;
         if (rb){ parts[0].amt += rb; detail += ' + ' + rb + ' rage'; }
+      }
+      // Radiant Strikes (a 2024 paladin from 11th level): every melee weapon
+      // or Unarmed Strike hit deals an extra 1d8 radiant — Improved Divine
+      // Smite (2014), a melee weapon's. The sheet only said so.
+      const rsF = pp && !a.spell && !a.save && !a.ranged && (((pp.sheet || {}).featureList) || []).find(f => f && !f.info
+        && (f.name === 'Radiant Strikes' || (f.name === 'Improved Divine Smite' && !/^Unarmed Strike/i.test(a.name))));
+      if (rsF && parts.length){
+        const r2 = typeof sktDamageRoll === 'function' ? sktDamageRoll('1d8', crit) : this._roll(crit ? '2d8' : '1d8');
+        parts.push({ amt: r2.total, type: 'radiant' }); detail += ' + ' + rsF.name + ' ' + r2.detail;
       }
     } else {
       // Damage that comes only with advantage is left off a roll without it.
@@ -4048,6 +4075,43 @@ registerPanel('turnview', {
       out.push({ key: 'x' + i, label: x.label, dice: x.dice, type: '', ok: true, once: onceT, res: pool ? pool.name : undefined, beast,
         why: note + (pool ? ' (' + pool.current + ' left)' : '') });
     });
+    // A Battle Master's maneuver: one a hit, a Superiority Die each.
+    const sdie = (p.resources || []).find(r => r.name === 'Superiority Dice');
+    if (sdie && (+sdie.current || 0) >= 1 && weapon && !h.used.some(k => /^mv:/.test(k))){
+      const ab = p.abilities || {}, md = k => Math.floor(((+ab[k] || 10) - 10) / 2);
+      const dc = 8 + (+sh.profBonus || 2) + Math.max(md('str'), md('dex'));
+      const die = '1d' + (parseInt(String(sdie.die || 'd8').replace(/^\d*d/i, ''), 10) || 8);
+      const SZ = ['tiny', 'small', 'medium', 'large', 'huge', 'gargantuan'];
+      const tSize = String(t.isPC ? (((this._partyOf(t) || {}).sheet || {}).size || 'Medium') : ((((this._entryOf(t) || {})._raw) || {}).size || t.size || 'Medium')).toLowerCase().split(/\s/)[0];
+      const by = { by: c.id, byName: c.name };
+      (sh.activations || []).forEach(a => {
+        const M = a && this.MANEUVERS[a.name]; if (!M || a.resource !== 'Superiority Dice') return;
+        const big = M.large && SZ.indexOf(tSize) > SZ.indexOf('large');
+        if (M.sweep){
+          if (h.ranged) return;
+          const t2 = this._order().find(x => x.id === this._armed && x.id !== t.id && x.id !== c.id && (x.hp || 0) > 0 && this._sideOf(x) !== this._sideOf(c));
+          const ft = t2 ? this._feetBetween(t, t2) : null, near = t2 && (ft == null || ft <= 5), hits = t2 && h.total != null && h.total >= (t2.ac || 10);
+          out.push({ key: 'mv:' + a.name, label: a.name, dice: die, type: h.type, ok: !!(near && hits), res: sdie.name, sweep: t2 && near && hits ? t2.id : null,
+            why: !t2 ? 'arm a second creature within 5 ft of ' + t.name + ' on the right' : !near ? t2.name + ' is ' + ft + ' ft from ' + t.name : !hits ? 'the roll (' + h.total + ') would miss ' + t2.name + ' (AC ' + t2.ac + ')' : t2.name + ' takes the die’s damage' });
+          return;
+        }
+        out.push({ key: 'mv:' + a.name, label: a.name, dice: die, type: h.type, ok: true, res: sdie.name, distract: !!M.distract,
+          why: 'a Superiority Die (' + sdie.current + ' left) on the damage' + (M.save ? ' — DC ' + dc + ' ' + M.save + ' save' : '') + (big ? '; ' + t.name + ' is ' + tSize + ', too big' : ''),
+          say: big ? '' : M.say ? (M.save ? 'DC ' + dc + ' ' + M.save + ' save: ' : '') + M.say : '',
+          queue: M.cond && !big ? [{ cond: M.cond, ability: M.save, dc, dur: M.dur ? Object.assign({ kind: M.dur }, by) : undefined }] : [] });
+      });
+    }
+    // Open Hand Technique: a Flurry of Blows hit — Addle, Push or Topple, at
+    // the monk's DC (8 + proficiency + WIS). One a hit, no cost.
+    if (h.flurry && feat('Open Hand Technique') && !h.used.some(k => /^oht:/.test(k))){
+      const odc = 8 + (+sh.profBonus || 2) + Math.floor((((p.abilities || {}).wis || 10) - 10) / 2);
+      const by = { by: c.id, byName: c.name };
+      out.push({ key: 'oht:topple', label: 'Topple', dice: '', ok: true, why: 'Open Hand Technique — DC ' + odc + ' Dex save or prone', queue: [{ cond: 'Prone', ability: 'Dex', dc: odc }] });
+      out.push({ key: 'oht:push', label: 'Push', dice: '', ok: true, why: 'Open Hand Technique — DC ' + odc + ' Str save or pushed up to 15 ft', say: 'DC ' + odc + ' Strength save, or pushed up to 15 ft away' });
+      out.push({ key: 'oht:addle', label: 'Addle', dice: '', ok: true, addle: true,
+        why: 'Open Hand Technique — ' + (ed === '2014' ? 'it can’t take reactions until the end of your next turn' : 'it can’t make opportunity attacks until the start of its next turn'),
+        say: ed === '2014' ? 'it can’t take reactions until the end of ' + c.name + '’s next turn' : 'it can’t make opportunity attacks until the start of its next turn' });
+    }
     // Savage Attacker: once a turn, the weapon's damage dice rolled again and
     // the better roll used (2014: a melee weapon).
     // Push (a weapon mastery): a Large or smaller creature 10 ft straight away —
@@ -4289,6 +4353,17 @@ registerPanel('turnview', {
       return;
     }
     this._snapshot(`${c.name} · ${o.label} → ${t.name}`);
+    if (o.sweep || (/^mv:/.test(key) && this.MANEUVERS[o.label] && this.MANEUVERS[o.label].sweep)){
+      const t2 = this._order().find(x => x.id === o.sweep); if (!o.ok || !t2) return;
+      const r2 = sktDamageRoll(o.dice, false), b2 = t2.hp;
+      if (r2.total) this._applyDamage(t2, [{ amt: r2.total, type: h.type || '' }], h.magical, false);
+      const sp = (p.resources || []).find(x => x.name === o.res); if (sp) sp.current = Math.max(0, (+sp.current || 0) - 1);
+      h.used.push(key);
+      const tx = `<strong>${esc(c.name)}</strong> — Sweeping Attack: <strong>${r2.total}${h.type ? ' ' + esc(h.type) : ''}</strong> to <strong>${esc(t2.name)}</strong> <span class="dim">[${esc(r2.detail)}] · ${b2} → ${(this._order().find(x => x.id === t2.id) || t2).hp}${sp ? ' · Superiority Dice ' + sp.current + ' left' : ''}</span>`;
+      this._setResult(tx, true); this._log.unshift(tx);
+      save(); panelDefs.combat?._render?.(); panelDefs.party?._render?.(); this._render();
+      return;
+    }
     if (o.savage){
       const r2 = sktDamageRoll(h.wDice, h.crit, Object.assign({}, typeof csDamageOpts === 'function' && p ? csDamageOpts(p, { name: h.wName, props: h.props || [], spell: false }, false) : {}, { add: [] }));
       const gain = Math.max(0, r2.dice - h.wSum), before0 = t.hp;
@@ -4323,10 +4398,16 @@ registerPanel('turnview', {
     });
     // What it inflicts (Stunning Strike's save, Physician's Touch): the hit's queue.
     (o.queue || []).forEach(q => this._queueOnHit({ onHit: q, target: t, attacker: c.name, attackerId: c.id, label: o.label }));
+    if (o.say) said.push(o.label + ': ' + o.say);
+    // (an Addle: no reaction left to take, in the tracker's terms)
+    if (o.addle) t.reactionUsed = true;
+    // Distracting Strike: someone else's next attack on it, before the
+    // fighter's next turn.
+    if (o.distract) t.distracted = { by: c.id, name: c.name };
     h.cun = [];
     const spent = pool ? ` · ${pool.name === 'Focus Points' ? '1 Focus Point' : /^Ki/.test(pool.name) ? '1 ki point' : 'a use of ' + pool.name} spent (${pool.current} left)` : '';
     if (!o.dice && !(o.picked || []).length){
-      const txt0 = `<strong>${esc(c.name)}</strong> — ${esc(o.label)} → <strong>${esc(t.name)}</strong><span class="dim">${esc(spent)}</span>`;
+      const txt0 = `<strong>${esc(c.name)}</strong> — ${esc(o.label)} → <strong>${esc(t.name)}</strong><span class="dim">${esc(spent)}</span>` + said.map(x => ` <span class="tv-dmg-note">${esc(x)}</span>`).join('');
       this._setResult(txt0, true); this._log.unshift(txt0);
       save(); panelDefs.combat?._render?.(); panelDefs.party?._render?.(); this._render();
       return;
