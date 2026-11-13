@@ -2721,7 +2721,7 @@ registerPanel('party',{
       ], 'Heal').then(v => {
         if (!v) return; const j = idx(); if (j < 0) return;
         const n = parseInt(v.n, 10);
-        done(this._rollHitDie(j, n >= 1 ? n : null, v.die));
+        done(this._undoQuiet(state.party[j].name + ' spent a hit die', () => this._rollHitDie(j, n >= 1 ? n : null, v.die)));
       });
       return;
     }
@@ -2730,7 +2730,7 @@ registerPanel('party',{
     showConfirm(`Spend 1 ${dt} hit die? It heals the ${dt} ${conMod<0?'−':'+'} ${Math.abs(conMod)} (CON). Rolled it at the table? Type the number on the die; leave it empty to roll here.`,
       {title:'Spend hit die', confirmLabel:'Heal', input:{ label:'The ' + dt + ' rolled', min:1, max:sides }}).then(ok => {
         if (!ok) return;
-        const r = this._rollHitDie(i, typeof ok === 'number' ? ok : null, dt);
+        const r = this._undoQuiet(c.name + ' spent a hit die', () => this._rollHitDie(i, typeof ok === 'number' ? ok : null, dt));
         done(r);
       });
   },
@@ -2738,6 +2738,7 @@ registerPanel('party',{
   // spends hit dice through here too, so the two cannot heal differently.
   // Returns { roll, conMod, heal, sides } or null when there is none to spend.
   // given: the number on a die rolled at the table, in place of the app's.
+  _undoQuiet(label, fn){ return typeof sktUndoable === 'function' ? sktUndoable(label, fn, { quiet: true }) : fn(); },
   // die: the size to spend ('d6'); the largest left when not given.
   _rollHitDie(i, given, die){
     const c = state.party[i]; if (!c || !c.hitDice || c.hitDice.current <= 0) return null;
@@ -3086,8 +3087,21 @@ registerPanel('party',{
 
   // Single dispatch for every [data-act] click inside the panel body.
   // `el` is the closest [data-act] element to the click target.
+  // What the card changes with one click goes on the undo stack (Ctrl+Z, the
+  // command palette). Only damage, healing and the rests did; a misclick on a
+  // raging barbarian's pill ended the rage, and starting it again cost
+  // another use. Ending a rage or a form says so with an Undo button; the
+  // rest are quiet — a pip clicks back as easily as it clicked.
+  _UNDO_ACTS: { 'rage-on': 'rage', 'rage-off': 'rage ended', 'ws-end': 'Wild Shape ended', 'pip': 'a resource', 'pip-step': 'a resource',
+                'slot': 'a spell slot', 'insp': 'Inspiration', 'bardic-insp': 'Bardic Inspiration used', 'cond-remove': 'a condition', 'conc-drop': 'concentration dropped' },
   _onAction(el, e){
       const act=el.dataset.act, i=+el.dataset.idx;
+      if (this._UNDO_ACTS[act] && !this._inUndo && typeof sktUndoable === 'function'){
+        const who = (state.party[i] || {}).name || '';
+        this._inUndo = true;
+        try { return sktUndoable(who + ' — ' + this._UNDO_ACTS[act], () => this._onAction(el, e), { quiet: act !== 'rage-off' && act !== 'ws-end' }); }
+        finally { this._inUndo = false; }
+      }
       if(act==='party-add'){ this._addCharacter(); return; }
       if(act==='party-compact'){ if (!state.settings) state.settings = {}; state.settings.partyCompact = !state.settings.partyCompact; save(); this._render(); return; }
       if(act==='party-rest'){ this._openRestMenu(el); return; }
@@ -3482,8 +3496,8 @@ registerPanel('party',{
         showConfirm(c.name + ' makes a death save: 10 or more is a success, a 1 counts twice, a 20 brings them back at 1 HP. Rolled it at the table? Type the d20; leave it empty to roll here.',
           { title: 'Death save', confirmLabel: 'Death save', input: { label: 'The d20 rolled', min: 1, max: 20 } }).then(ok => {
           if (!ok) return;
-          const r = sktRollDeathSave(c, typeof ok === 'number' ? ok : null);
-          save(); this._render(); panelDefs.combat?._render?.();
+          const r = this._undoQuiet(c.name + ' death save', () => { const x = sktRollDeathSave(c, typeof ok === 'number' ? ok : null); save(); return x; });
+          this._render(); panelDefs.combat?._render?.();
           showToast(c.name + ' · death save ' + r.msg);
         });
       }

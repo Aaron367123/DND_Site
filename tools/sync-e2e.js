@@ -61,6 +61,9 @@ const window = {};
     await sleep(1500);
     for (const d of [pl, p2]) await d.ev("for (let k = 0; k < 10; k++){ const x = document.querySelector('#pa-handout .pa-ho-close'); if (!x) break; x.click(); await new Promise(r=>setTimeout(r,150)); } return 1");
 
+    // An earlier run in this campaign can leave someone down or dead: start everyone standing.
+    await dm.ev("state.party.forEach(p => { p.hp = p.hpMax; delete p.deathSaves; delete p.stable; delete p.dead; p.concentration = null; p.concCheck = null; p.exhaustion = 0; p.rage = false; p.wildshape = null; }); state.combatants = []; state.combatRound = 0; save(); panelDefs.party._render(); return 1");
+    await sleep(1500);
     // ── Party: buttons on each side ─────────────────────────────────────────
     await step('DM party card − button → phone HP', async () => {
       const before = await pl.ev('return ' + hpOf('zoey'));
@@ -90,6 +93,73 @@ const window = {};
     await step('DM adds a condition → phone shows it', async () => {
       await dm.ev("const p = state.party.find(p=>p.id==='zoey'); p.conditions = ['Poisoned']; save(); panelDefs.party._render(); return 1");
       return lat(await W(pl, "return (state.party.find(p=>p.id==='zoey').conditions||[]).includes('Poisoned') && /Poisoned/.test(document.getElementById('pa-screen').textContent)"));
+    });
+
+    // ── Party card: rage, wild shape, exhaustion, bardic, concentration, death saves, a short rest ──
+    const pidx = id => "state.party.findIndex(p=>p.id==='" + id + "')";
+    const partyWin = "document.querySelector('.window[data-panel=\"party\"]')";
+    // Between fights: a fight the test campaign kept from an earlier run would
+    // take the damage below on its combatants instead.
+    await dm.ev("state.combatants = []; state.combatRound = 0; state.activeCombatantId = null; save(); panelDefs.combat._render(); return 1");
+    await step('DM rage button → phone', async () => {
+      await dm.ev("const i = " + pidx('ulrick') + "; panelDefs.party._render(); " + partyWin + ".querySelector('[data-act=\"rage-on\"][data-idx=\"'+i+'\"]').click(); return 1");
+      if (!await dm.ev("return !!state.party.find(p=>p.id==='ulrick').rage")) return { ok: false, why: 'DM click did nothing' };
+      return lat(await W(pl, "return !!state.party.find(p=>p.id==='ulrick').rage"));
+    });
+    await step('DM Wild Shape (Namroc) → Namroc’s phone shows the form', async () => {
+      // The test campaign keeps its state between runs: a use to spend, no form yet.
+      await dm.ev("const n = state.party.find(p=>p.id==='namroc'); n.wildshape = null; (n.resources||[]).forEach(r => { if (r.name === 'Wild Shape') r.current = r.max; }); save(); return 1");
+      await dm.ev("const wolf = _5eData.find(d=>d.cat==='monster' && d.name==='Wolf' && d._raw); panelDefs.party._applyWildShape(" + pidx('namroc') + ", wolf); return 1");
+      if (!await dm.ev("return (state.party.find(p=>p.id==='namroc').wildshape||{}).name === 'Wolf'")) return { ok: false, why: 'no form on the DM' };
+      return lat(await W(p2, "paTab='you'; return (state.party.find(p=>p.id==='namroc').wildshape||{}).name === 'Wolf' && /Wild Shape: Wolf/.test(document.getElementById('pa-screen').textContent)"));
+    });
+    await step('DM exhaustion → phone shows the level', async () => {
+      await pl.ev("paTab='you'; paRender(); return 1");
+      await dm.ev("const i = " + pidx('zoey') + "; state.party[i] = { ...state.party[i], exhaustion: 2 }; save(); panelDefs.party._render(); return 1");
+      const t = await W(pl, "return state.party.find(p=>p.id==='zoey').exhaustion === 2 && /Exhaustion.{0,3}2/.test(document.getElementById('pa-screen').textContent)");
+      if (t == null) return { ok: false, why: 'phone: ' + await pl.ev("return JSON.stringify({ exh: state.party.find(p=>p.id==='zoey').exhaustion, tab: paTab, me: (paPc()||{}).id, text: (document.getElementById('pa-screen').textContent.match(/.{0,30}xhaust.{0,30}/) || [''])[0] })") };
+      return lat(t);
+    });
+    await step('DM gives Bardic Inspiration (Zindle → Zoey) → phone holds the die, the bard’s use is spent', async () => {
+      const before = await dm.ev("return (state.party.find(p=>p.id==='zindle').resources.find(r=>r.name==='Bardic Inspiration')||{}).current");
+      await dm.ev("const i = " + pidx('zoey') + "; panelDefs.party._render(); const b = " + partyWin + ".querySelector('[data-act=\"bardic-give\"][data-idx=\"'+i+'\"], [data-act=\"bardic-insp\"][data-idx=\"'+i+'\"]'); if (!b) throw new Error('no Bardic button'); b.click(); return 1");
+      return lat(await W(pl, "const z = state.party.find(p=>p.id==='zoey'), b = state.party.find(p=>p.id==='zindle'); return !!z.bardicInspiration && (b.resources.find(r=>r.name==='Bardic Inspiration')||{}).current === " + (before - 1) + " && /Bardic/.test(document.getElementById('pa-screen').textContent)"));
+    });
+    await step('DM hits a concentrating PC → phone asks for the CON save; its answer reaches the DM', async () => {
+      await dm.ev("const i = " + pidx('zoey') + "; state.party[i] = { ...state.party[i], hp: 30, concentration: 'Bless', concCheck: null }; save(); panelDefs.party._applyHpDelta(i, -6, 'slashing'); return 1");
+      const t = await W(pl, "return !!document.getElementById('pa-conc-save')", 15000);
+      if (t == null) return { ok: false, why: 'the phone never asked' };
+      // A failed save with something left to try (Heroic Inspiration) asks first: let it end.
+      await pl.ev("document.querySelector('#pa-conc-save [data-pa-cs=\"roll\"]').click(); await new Promise(r=>setTimeout(r,300)); const end = document.querySelector('#pa-conc-save [data-pa-cs=\"end\"]'); if (end) end.click(); return 1");
+      const kept = await W(pl, "return !state.party.find(p=>p.id==='zoey').concCheck", 8000);
+      if (kept == null) return { ok: false, why: 'the phone never cleared the check' };
+      const want = await pl.ev("return state.party.find(p=>p.id==='zoey').concentration || ''");
+      return lat(await W(dm, "const z = state.party.find(p=>p.id==='zoey'); return !z.concCheck && (z.concentration || '') === " + JSON.stringify(want)));
+    });
+    await step('DM drops a PC between fights → phone rolls the death save → DM card shows it', async () => {
+      await dm.ev("const i = " + pidx('zoey') + "; state.party[i] = { ...state.party[i], hp: 2, deathSaves: null, stable: false, dead: false }; save(); panelDefs.party._applyHpDelta(i, -5, 'slashing'); return 1");
+      await pl.ev("paTab='you'; paRender(); return 1");
+      // The phone's own screen is the character sheet: its Death saves Roll.
+      const DS = "#pa-screen [data-cs=\"death\"], #pa-screen [data-pa-death=\"roll\"]";
+      const t = await W(pl, "paTab='you'; return !!document.querySelector('" + DS + "')", 15000);
+      if (t == null) return { ok: false, why: 'no death save on the phone: ' + await pl.ev("const z = state.party.find(p=>p.id==='zoey'); return JSON.stringify({ hp: z.hp, ds: z.deathSaves, dead: z.dead, stable: z.stable, tab: paTab, me: (paPc()||{}).id, inFight: (state.combatants||[]).some(c=>c.id==='zoey') })") };
+      await pl.ev("document.querySelector('" + DS + "').click(); return 1");
+      await sleep(400);
+      const after = await pl.ev("const z = state.party.find(p=>p.id==='zoey'); return JSON.stringify({ hp: z.hp, ds: z.deathSaves || null })");
+      return lat(await W(dm, "const z = state.party.find(p=>p.id==='zoey'); return JSON.stringify({ hp: z.hp, ds: z.deathSaves || null }) === " + JSON.stringify(after) + " && (z.hp > 0 || /saves/.test(" + partyWin + ".textContent))"));
+    });
+    await step('DM party short rest → phone spends a hit die and finishes → DM card', async () => {
+      await dm.ev("const i = " + pidx('zoey') + "; state.party[i] = { ...state.party[i], hp: 5, deathSaves: null, stable: false }; state.party[i].hitDice = { ...state.party[i].hitDice, current: state.party[i].hitDice.max }; save(); panelDefs.party._shortRestAll(); return 1");
+      const t = await W(pl, "return !!document.querySelector('.pa-rest-card')", 15000);
+      if (t == null) return { ok: false, why: 'the phone never opened its rest' };
+      await pl.ev("document.querySelector('.pa-rest-card [data-rest=\"spend\"]').click(); await new Promise(r=>setTimeout(r,300)); document.querySelector('.pa-rest-card [data-rest=\"finish\"]').click(); return 1");
+      const want = await pl.ev("const z = state.party.find(p=>p.id==='zoey'); return JSON.stringify({ hp: z.hp, hd: z.hitDice.current })");
+      if (JSON.parse(want).hp <= 5) return { ok: false, why: 'the hit die healed nothing on the phone ' + want };
+      return lat(await W(dm, "const z = state.party.find(p=>p.id==='zoey'); return JSON.stringify({ hp: z.hp, hd: z.hitDice.current }) === " + JSON.stringify(want)));
+    });
+    await step('DM ends the rage and the wild shape → phones', async () => {
+      await dm.ev("panelDefs.party._setRage(" + pidx('ulrick') + ", false); panelDefs.party._endWildShape(" + pidx('namroc') + "); const i = " + pidx('zoey') + "; state.party[i] = { ...state.party[i], exhaustion: 0, bardicInspiration: false }; save(); return 1");
+      return lat(await W(p2, "return !state.party.find(p=>p.id==='ulrick').rage && !state.party.find(p=>p.id==='namroc').wildshape && !state.party.find(p=>p.id==='zoey').exhaustion"));
     });
 
     // ── Combat ──────────────────────────────────────────────────────────────

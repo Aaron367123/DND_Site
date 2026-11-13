@@ -20856,6 +20856,46 @@ for (const cls of Object.keys(rule)) for (let L = 1; L <= 20; L++) for (const sc
       } catch(e){ ok('round 348 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
       finally { state.party = JSON.parse(keepP); state.combatants = JSON.parse(keepC); save(); if (P._body) P._render(); }
     }
+    // -- Round 349: the party card's clicks can be undone; Deafened and Invisible can be applied; a 2024 form's chip has no beast HP --
+    if (!PLAYER){
+      const keepP = JSON.stringify(state.party), keepC = JSON.stringify(state.combatants); const P = panelDefs.party;
+      const oConf = window.showConfirm, oToast = window.showToast;
+      try {
+        openPanel('party'); await sleep(200);
+        state.combatants = [];
+        state.party = [{ id: 'r349b', name: 'r349 Barb', cls: 'barbarian', level: 5, hp: 40, hpMax: 55, ac: 15, tempHp: 0, abilities: { con: 14 }, hitDice: { current: 5, max: 5, dieType: 'd12' },
+                         resources: [{ name: 'Rage', type: 'pool', current: 2, max: 3, recharge: 'long' }], sheet: {} }];
+        save(); P._render(); await sleep(50);
+        const card = () => P._body.querySelector('[data-cidx="0"]');
+        card().querySelector('[data-act="rage-on"]').click(); await sleep(30);
+        ok('rage on: one use spent', state.party[0].rage === true && state.party[0].resources[0].current === 1);
+        card().querySelector('[data-act="rage-off"]').click(); await sleep(30);
+        ok('a click on the pill ends it', !state.party[0].rage);
+        sktUndo(); await sleep(30);
+        ok('undo: raging again, and no use spent for it', state.party[0].rage === true && state.party[0].resources[0].current === 1, JSON.stringify(state.party[0].resources));
+        sktUndo(); await sleep(30);
+        ok('undo again: before the rage, the use back', !state.party[0].rage && state.party[0].resources[0].current === 2);
+        P._render(); card().querySelector('[data-act="pip"]').click(); await sleep(30);
+        const afterPip = state.party[0].resources[0].current;
+        sktUndo(); await sleep(30);
+        ok('a resource pip undoes', afterPip !== 2 && state.party[0].resources[0].current === 2);
+        window.showConfirm = () => Promise.resolve(6); window.showToast = () => {};
+        P._spendHitDie(0); await sleep(50);
+        ok('a hit die spent heals', state.party[0].hitDice.current === 4 && state.party[0].hp === 48, JSON.stringify([state.party[0].hp, state.party[0].hitDice]));
+        sktUndo(); await sleep(30);
+        ok('…and undoes: the die back, the healing gone', state.party[0].hitDice.current === 5 && state.party[0].hp === 40);
+        ok('Deafened and Invisible are conditions to apply', ['Deafened', 'Invisible'].every(n => SEARCH_DATA.some(d => d.cat === 'condition' && d.name === n)));
+        P._toggleCondition(0, 'Invisible');
+        ok('…and the card shows one', [...card().querySelectorAll('.status-badge.cond')].some(b => b.textContent === 'Invisible'));
+        // The sheet's chip: a 2024 form has the druid's own hit points.
+        state.party = [{ id: 'r349d', name: 'r349 Druid', cls: 'druid', level: 5, hp: 30, hpMax: 30, ac: 13, rules: '2024', resources: [], sheet: {}, wildshape: { name: 'Wolf', hp: 0, hpMax: 0, ac: 13, tempModel: true } }];
+        save(); openCharSheet('r349d'); await sleep(250);
+        const chip = [...document.querySelectorAll('#cs-root .cs-chip')].map(x => x.textContent).find(t => /Wild Shape/.test(t)) || '';
+        ok('a 2024 form on the sheet: "Wild Shape: Wolf", no 0/0 HP', /Wild Shape: Wolf/.test(chip) && !/0\/0/.test(chip), chip);
+        if (typeof csClose === 'function') csClose(); else document.getElementById('cs-root')?.remove();
+      } catch(e){ ok('round 349 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
+      finally { window.showConfirm = oConf; window.showToast = oToast; state.party = JSON.parse(keepP); state.combatants = JSON.parse(keepC); save(); if (P._body) P._render(); }
+    }
     // -- Class features: represented, not just text ------------------------
     {
       try {
