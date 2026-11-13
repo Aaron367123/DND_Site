@@ -999,8 +999,26 @@ const PA_DRAW = [
   { act:'tool-draw',  icon:'i-pencil', label:'Draw',  tool:'draw'  },
   { act:'tool-erase', icon:'i-trash',  label:'Erase', tool:'erase' },
   { act:'tool-ruler', icon:'i-ruler',  label:'Ruler', tool:'ruler' },
+  // A spell's area, laid on the map by the player casting it — where the
+  // fireball goes is theirs to show. Their own areas only: the DM's stay put.
+  { act:'tool-area',  icon:'i-burst',  label:'Area',  tool:'area'  },
   { act:'undo',       icon:'i-undo',   label:'Undo'                },
 ];
+const PA_AREA_SHAPES = [['circle', 'Sphere'], ['cone', 'Cone'], ['line', 'Line'], ['cube', 'Cube']];
+// Shape and size of the next area: kept on the panel, and in its own
+// (hidden) toolbar controls, which the area tool reads.
+function paAreaSet(shape, dSize){
+  const B = panelDefs.battlemap; if (!B) return;
+  if (shape) B._tplShape = shape;
+  if (dSize) B._tplSize = Math.max(5, Math.min(300, (+B._tplSize || 20) + dSize));
+  const sel = document.querySelector('.pa-mount #tpl-shape'), sz = document.querySelector('.pa-mount #tpl-size');
+  if (sel) sel.value = B._tplShape;
+  if (sz) sz.value = B._tplSize;
+  const host = document.getElementById('pa-screen');
+  const old = host && host.querySelector('.pa-draw');
+  if (old) old.remove();
+  if (host) paAddDrawBar(host);
+}
 // A class as a name: "rogue" is how it's stored.
 function paClsName(c){ return String(c || '').replace(/\b\w/g, ch => ch.toUpperCase()); }
 function paAddDrawBar(host){
@@ -1008,7 +1026,7 @@ function paAddDrawBar(host){
   const bar = document.createElement('div');
   bar.className = 'pa-draw';
   bar.innerHTML = (paMyToken() ? `<button class="pa-draw-b" data-pa-me="1">${typeof ICO === 'function' ? ICO('i-target') : ''}<span>Me</span></button>` : '') + PA_DRAW.map(d =>
-    `<button class="pa-draw-b ${d.tool && B && B._tool === d.tool ? 'on' : ''}" data-pa-draw="${d.act}">
+    `<button class="pa-draw-b ${d.tool && B && B._tool === d.tool ? 'on' : ''}" data-pa-draw="${d.act}" title="${d.label}" aria-label="${d.label}">
        ${typeof ICO === 'function' ? ICO(d.icon) : ''}<span>${d.label}</span>
      </button>`).join('');
   // With the pencil on, its widths sit just above the bar: a dot each, drawn
@@ -1023,6 +1041,17 @@ function paAddDrawBar(host){
          <i style="width:${s.dot}px;height:${s.dot}px;background:${B._drawColor || '#ff4040'}"></i>
        </button>`).join('');
     bar.appendChild(sizes);
+  }
+  // With the area tool on: its shape, and its size in feet.
+  if (B && B._tool === 'area'){
+    const ctl = document.createElement('div');
+    ctl.className = 'pa-draw-sizes pa-area-ctl';
+    ctl.setAttribute('role', 'group');
+    ctl.setAttribute('aria-label', 'Area shape and size');
+    const cur = B._tplShape || 'circle', ft = +B._tplSize || 20;
+    ctl.innerHTML = PA_AREA_SHAPES.map(([v, l]) => `<button class="pa-area-b ${cur === v ? 'on' : ''}" data-pa-shape="${v}" aria-pressed="${cur === v}">${l}</button>`).join('')
+      + `<button class="pa-area-b" data-pa-asize="-5" aria-label="5 ft smaller">−</button><b class="pa-area-ft">${ft} ft</b><button class="pa-area-b" data-pa-asize="5" aria-label="5 ft bigger">+</button>`;
+    bar.appendChild(ctl);
   }
   host.appendChild(bar);
 }
@@ -2264,6 +2293,10 @@ function paOnClick(e){
   }
   const drawSz = e.target.closest('[data-pa-size]');
   if (drawSz){ paDrawSize(+drawSz.dataset.paSize); return; }
+  const ashape = e.target.closest('[data-pa-shape]');
+  if (ashape){ paAreaSet(ashape.dataset.paShape, 0); return; }
+  const asize = e.target.closest('[data-pa-asize]');
+  if (asize){ paAreaSet(null, +asize.dataset.paAsize); return; }
   const draw = e.target.closest('[data-pa-draw]');
   if (draw){ paDraw(draw.dataset.paDraw); return; }
   const react = e.target.closest('[data-pa-react]');

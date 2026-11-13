@@ -24101,6 +24101,55 @@ for (const cls of Object.keys(rule)) for (let L = 1; L <= 20; L++) for (const sc
       } catch(e){ ok('round 357 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
       finally { if (fogSaved) B._fog = keepF; if (keepT){ B._tokens = keepT; try { B._saveMap(); } catch(e){} } state.combatants = JSON.parse(keepC); try { B._renderTokens(); } catch(e){} paTab = keepTab; paRender(); }
     }
+    // -- Round 359: a player lays a spell's area from the phone — shape and size; theirs to move and remove, the DM's left alone --
+    if (PLAYER){
+      const keepTab = paTab; const B = panelDefs.battlemap;
+      let keepD = null; const keepShape = B._tplShape, keepSize = B._tplSize;
+      try {
+        if (paMyIdx() < 0) paSetPc(state.party[0].id);
+        const me = paPc();
+        paTab = 'map'; paRender(); await sleep(900);
+        keepD = B._drawings.slice();
+        const cs = B._csScreen();
+        const dmArea = { k: 'tpl', id: 'r359dm', shape: 'circle', x: cs * 6, y: cs * 6, ang: 0, ft: 20, c: '#ff0000' };
+        B._drawings.push(dmArea); B._renderAreas();
+        const scr = document.getElementById('pa-screen');
+        const btn = scr.querySelector('[data-pa-draw="tool-area"]');
+        ok('phone map: an Area tool', !!btn);
+        if (btn){ btn.click(); await sleep(250); }
+        ok('…with its shapes and a size', scr.querySelectorAll('.pa-area-ctl [data-pa-shape]').length === 4 && !!scr.querySelector('.pa-area-ctl [data-pa-asize]'));
+        scr.querySelector('.pa-area-ctl [data-pa-shape="line"]').click(); await sleep(80);
+        scr.querySelector('.pa-area-ctl [data-pa-asize="5"]').click(); await sleep(80);
+        const sz = B._tplSize;
+        const bar = scr.querySelector('.pa-draw').getBoundingClientRect(), ctl = scr.querySelector('.pa-area-ctl').getBoundingClientRect();
+        ok('…on the screen', bar.left >= 0 && bar.right <= innerWidth + 1 && ctl.left >= 0 && ctl.right <= innerWidth + 1, [bar.left, bar.right, ctl.left, ctl.right].map(Math.round).join(','));
+        // Press inside the DM's area and drag: a new area of the player's, the DM's unmoved.
+        const n0 = B._areas().length;
+        B._areaPointerDown(dmArea.x, dmArea.y, 100, 100, false); await sleep(20);
+        document.dispatchEvent(new MouseEvent('mousemove', { bubbles: true, clientX: 160, clientY: 100 })); await sleep(20);
+        document.dispatchEvent(new MouseEvent('mouseup', { bubbles: true, clientX: 160, clientY: 100 })); await sleep(80);
+        const mine = B._areas().find(a => a.id !== 'r359dm' && !keepD.includes(a));
+        ok('a player’s area: laid as a line of the size picked, marked as theirs', mine && mine.shape === 'line' && mine.ft === sz && mine.by === me.id, JSON.stringify(mine));
+        const dmNow = B._areas().find(a => a.id === 'r359dm');
+        ok('the DM’s area under the finger isn’t moved', dmNow && dmNow.x === cs * 6 && dmNow.y === cs * 6 && B._areas().length === n0 + 1);
+        // Their own: moved by a drag
+        const mx = mine.x;
+        B._areaPointerDown(mine.x + 2, mine.y, 100, 100, false); await sleep(20);
+        document.dispatchEvent(new MouseEvent('mousemove', { bubbles: true, clientX: 140, clientY: 100 })); await sleep(20);
+        document.dispatchEvent(new MouseEvent('mouseup', { bubbles: true, clientX: 140, clientY: 100 })); await sleep(80);
+        ok('their own area moves with a drag', mine.x !== mx && B._areas().length === n0 + 1);
+        // Its menu: remove this one, not everyone's
+        B._areaMenu(mine, 100, 100); await sleep(60);
+        const items = [...document.querySelectorAll('.ctx-menu .ctx-menu-item')].map(x => x.textContent.trim());
+        ok('a player’s area menu: remove this one, not every area', items.some(t => /Remove this area/.test(t)) && !items.some(t => /Remove all areas/.test(t)), JSON.stringify(items));
+        document.querySelectorAll('.ctx-menu').forEach(e => e.remove());
+      } catch(e){ ok('round 359 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
+      finally {
+        if (keepD){ B._drawings = keepD; try { B._saveMap(); } catch(e){} }
+        B._tplShape = keepShape; B._tplSize = keepSize; B._tool = '';
+        paTab = keepTab; paRender();
+      }
+    }
   }
 
   // ══════════════════════════════════════════════════════════ mobile / phone

@@ -848,6 +848,17 @@ input[type="checkbox"], input[type="radio"] { accent-color: var(--accent); }
   border-radius: 50%; border: 1px solid transparent; background: none; cursor: pointer; }
 .pa-draw-sz i { display: block; border-radius: 50%; box-shadow: 0 0 0 1px rgba(0,0,0,.35); }
 .pa-draw-sz.on { border-color: var(--accent); background: color-mix(in srgb, var(--accent) 16%, transparent); }
+/* The area tool's shape and size, in the same pill above the bar. */
+.pa-area-ctl { align-items: center; white-space: nowrap; }
+.pa-area-b { min-height: 40px; padding: 0 10px; border-radius: var(--r-pill); border: 1px solid transparent;
+  background: none; color: var(--text-muted); font: inherit; font-size: var(--fs-sm); cursor: pointer; }
+.pa-area-b.on { border-color: var(--accent); color: var(--text); background: color-mix(in srgb, var(--accent) 16%, transparent); }
+.pa-area-ft { min-width: 46px; text-align: center; font-size: var(--fs-sm); }
+/* Six tools on a phone: icons, the words in their titles. */
+@media (max-width: 440px){
+  .pa-draw-b { padding: 8px 11px; }
+  .pa-draw-b span { display: none; }
+}
 
 /* ── 39. Toasts let taps through ─────────────────────────── */
 /* A toast caught every tap on its patch of screen — over the phone's map

@@ -2319,7 +2319,10 @@ registerPanel('battlemap',{
   // board looking for the best angle, so shuffling it is the common case and
   // adding another is the rare one.
   _areaPointerDown(x, y, cx, cy, touch){
-    const stack = this._areas().slice().reverse();
+    // A player handles only the areas they laid (t.by), never the DM's.
+    const isPlayer = document.body.classList.contains('player-mode');
+    const me = isPlayer && typeof paPc === 'function' ? paPc() : null;
+    const stack = this._areas().slice().reverse().filter(t => !isPlayer || (me && t.by === me.id));
     const turning = stack.find(t => this._nearHandle(t, x, y));
     const hit = turning || stack.find(t => this._inArea(t, x, y));
     const shape = (this._body.querySelector('#tpl-shape') || {}).value || this._tplShape;
@@ -2327,6 +2330,7 @@ registerPanel('battlemap',{
     const col = (this._body.querySelector('#tpl-color') || {}).value || this._tplColor;
     this._tplShape = shape; this._tplSize = ft; this._tplColor = col;
     const draft = { k: 'tpl', id: 'tpl_' + (typeof uid === 'function' ? uid() : Date.now().toString(36)), shape, x, y, ang: 0, ft, c: col };
+    if (me) draft.by = me.id;
     const stage = this._body.querySelector('#map-stage');
     // Where the pressed area sat when the press landed, so a move follows the
     // finger instead of jumping the shape's origin under it.
@@ -2388,7 +2392,7 @@ registerPanel('battlemap',{
       this._drawings = this._drawings.filter(s => s !== t && !(s && s.k === 'tpl' && s.id === t.id));
       this._saveMap(); this._renderAreas();
     }});
-    items.push({ label: '✕ Remove all areas', onClick: () => {
+    if (!isPlayer) items.push({ label: '✕ Remove all areas', onClick: () => {
       this._drawings = this._drawings.filter(s => !(s && s.k === 'tpl'));
       this._saveMap(); this._render();
     }});
