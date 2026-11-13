@@ -20523,6 +20523,51 @@ for (const cls of Object.keys(rule)) for (let L = 1; L <= 20; L++) for (const sc
       finally { state.combatants = JSON.parse(keepC); state.activeCombatantId = keepA; save(); TV && TV._body && TV._render(); }
     }
 
+    // -- Round 338: Sentinel — an enemy beside the sentinel hits someone else, the sentinel attacks it; a Disengage doesn't stop the sentinel; an opportunity attack's hit halts; a reaction's attack spends no Action --
+    if (!PLAYER){
+      const keepP = JSON.stringify(state.party), keepC = JSON.stringify(state.combatants), keepA = state.activeCombatantId; const TV = panelDefs.turnview; const d0 = TV._d, cv0 = TV._coverFor, tf0 = TV._tokenFor, ef0 = TV._edgeFeet, af0 = TV._attacksFor;
+      try {
+        TV._coverFor = () => ({ ac: 0 });
+        const atk = [{ name: 'Spear', atkBonus: '+6', damage: '1d6+3 piercing', str: true }];
+        state.party = [{ id: 'r338s', name: 'r338s', cls: 'monk', level: 6, hp: 40, hpMax: 40, ac: 15, sheet: { featureList: [{ name: 'Sentinel', text: '' }], attacks: atk } },
+                       { id: 'r338a', name: 'r338a', cls: 'fighter', level: 6, hp: 40, hpMax: 40, ac: 10, sheet: { attacks: atk } }];
+        const pc = id => ({ id, name: id, isPC: true, hp: 40, hpMax: 40, ac: id === 'r338a' ? 10 : 15, initiative: 10, conditions: [] });
+        state.combatants = [{ id: 'r338o', name: 'r338o', isPC: false, hp: 300, hpMax: 300, ac: 5, initiative: 20, initBonus: 0, conditions: [] }, pc('r338s'), pc('r338a')];
+        state.activeCombatantId = 'r338o'; TV._armed = 'r338a'; TV._sentinel = null; save();
+        const orig = TV._attacksFor; const claw = { name: 'Claw', toHit: '+5', parts: [{ dice: '1d6+3', type: 'slashing', avg: 6 }] };
+        TV._attacksFor = c => c.id === 'r338o' ? [claw] : orig.call(TV, c);
+        openPanel('turnview'); await sleep(200); TV._render(); await sleep(30);
+        const s = () => state.combatants.find(x => x.id === 'r338s'), o = () => state.combatants.find(x => x.id === 'r338o');
+        TV._d = n => n === 20 ? 2 : 1;
+        await TV._rollAttack(0, {}); await sleep(40); if (TV._pending) TV._commit(TV._pending, null);
+        ok('sentinel (2024): a miss on someone else offers nothing', !TV._body.querySelector('[data-tv="sentinel"]'));
+        o().actionUsed = false; TV._d = n => n === 20 ? 15 : 1;
+        await TV._rollAttack(0, {}); await sleep(40); if (TV._pending) TV._commit(TV._pending, null);
+        const btn = TV._body.querySelector('[data-tv="sentinel"][data-id="r338s"]');
+        ok('sentinel: the orc hits someone else — the sentinel can attack it', !!btn);
+        s().reactionUsed = true; TV._render(); await sleep(20);
+        ok('sentinel: not with its reaction already spent', !TV._body.querySelector('[data-tv="sentinel"][data-id="r338s"]'));
+        s().reactionUsed = false; TV._render(); await sleep(20);
+        const hp0 = o().hp; const b2 = TV._body.querySelector('[data-tv="sentinel"][data-id="r338s"]'); b2 && b2.click(); await sleep(60); if (TV._pending) TV._commit(TV._pending, null);
+        ok('sentinel: the attack lands on the orc, the reaction spent and not the Action', o().hp < hp0 && s().reactionUsed === true && !s().actionUsed, JSON.stringify([hp0, o().hp, s().reactionUsed, s().actionUsed]));
+        ok('sentinel: its hit stops the orc for the rest of the turn', typeof sktMoveKey === 'function' && o().halted === sktMoveKey() && sktMoveBudget(30, o()) === 0, JSON.stringify([o().halted, sktMoveKey()]));
+        ok('sentinel: offered once — the sentinel has reacted', !TV._body.querySelector('[data-tv="sentinel"]'));
+        // A Disengage doesn't stop the sentinel's opportunity attack, only everyone else's.
+        s().reactionUsed = false; state.combatants.find(x => x.id === 'r338a').reactionUsed = false; o().disengaged = true;
+        const pos = { r338o: { x: 100, y: 100, size: 1 }, r338s: { x: 150, y: 100, size: 1 }, r338a: { x: 50, y: 100, size: 1 } };
+        TV._tokenFor = c => c && pos[c.id] ? Object.assign({ id: c.id }, pos[c.id]) : null;
+        TV._edgeFeet = (a, b) => Math.round(Math.max(Math.abs(a.x - b.x), Math.abs(a.y - b.y)) / 50) * 5;
+        const by = TV._provokedBy(o(), { x: 100, y: 100 }).map(x => x.id);
+        pos.r338o = { x: 400, y: 100, size: 1 };
+        const by2 = TV._provokedBy(o(), { x: 100, y: 100 }).map(x => x.id);
+        ok('sentinel: a disengaged orc walking off provokes the sentinel only', by2.join() === 'r338s', JSON.stringify([by, by2]));
+        o().disengaged = false;
+        ok('sentinel: not disengaged, both', TV._provokedBy(o(), { x: 100, y: 100 }).map(x => x.id).sort().join() === 'r338a,r338s');
+        TV._attacksFor = orig;
+      } catch(e){ ok('round 338 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
+      finally { TV._d = d0; TV._coverFor = cv0; TV._tokenFor = tf0; TV._edgeFeet = ef0; TV._attacksFor = af0; TV._sentinel = null; state.party = JSON.parse(keepP); state.combatants = JSON.parse(keepC); state.activeCombatantId = keepA; save(); TV && TV._body && TV._render(); }
+    }
+
     // -- Class features: represented, not just text ------------------------
     {
       try {

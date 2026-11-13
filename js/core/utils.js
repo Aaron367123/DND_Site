@@ -2977,6 +2977,8 @@ function sktDragHeld(tokens, tok, dx, dy){
 function sktMoveBudget(speed, c){
   // Steady Aim: Speed 0 until the end of the turn it was used in.
   if (speed != null && c && c.aimed && c.aimed.k && c.aimed.k === sktMoveKey()) return 0;
+  // Sentinel's Halt: an opportunity attack hit it — Speed 0 for the rest of the turn.
+  if (speed != null && c && c.halted && c.halted === sktMoveKey()) return 0;
   return speed == null ? null : speed * (1 + Math.max(0, +(c && c.dashes) || 0));
 }
 

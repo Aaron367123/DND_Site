@@ -2063,7 +2063,7 @@ registerPanel('turnview', {
       ['.tv-init-tools', () => this._renderInitTools()],
       ['.tv-headwrap',   () => this._renderActorHead(c)],
       ['.tv-actbody',    () => this._renderActions(c)],
-      ['.tv-legendary',  () => this._renderLegendary() + this._renderLair() + this._renderOnHits() + this._renderPcExtras() + this._renderPcMiss()],
+      ['.tv-legendary',  () => this._renderLegendary() + this._renderLair() + this._renderOnHits() + this._renderPcExtras() + this._renderPcMiss() + this._renderSentinel()],
       // Beside a result, the way to take it back: the app's one history, so
       // it is the same step Ctrl+Z would undo.
       ['.tv-result',     () => !this._result ? '' : this._result
@@ -3163,6 +3163,7 @@ registerPanel('turnview', {
       if (o.pcAtk && o.nat != null) this._lastPcMiss = { turn: this._turnKey(), used: [], o: Object.assign({}, o, { parts: (o.parts || []).map(x => ({ ...x })) }) };
       this._setResult(`<span class="miss">Miss</span> — ${esc(o.label)} vs ${esc(t.name)}:${vs}${tag}`, true);
       this._log.unshift(`<strong>${esc(o.attacker)}</strong> missed <strong>${esc(t.name)}</strong> with ${esc(o.label)}${usedName ? ' — ' + esc(usedName) : ''}`);
+      this._sentinelCheck(o, t);
       save();
       if (o.queued && this._queue){ this._queue.misses++; this._advanceQueue(); return; }
       this._render(); return;
@@ -3220,6 +3221,9 @@ registerPanel('turnview', {
     else this._log.unshift(`<strong>${esc(o.attacker)}</strong> hit <strong>${esc(t.name)}</strong> for <strong>${dmgText}</strong>${o.crit ? ' (crit)' : ''}${rollTxt}${usedName ? ' — ' + esc(usedName) : ''}${notes ? ' <span style="opacity:.85">· ' + esc(notes) + '</span>' : ''}${appliedTxt}${soakTxt} <span style="opacity:.7">· ${before} → ${after}</span>`);
     if (o.onHit && !o.save) this._queueOnHit(o);
     if (before > 0 && after <= 0) this._darkBlessing(o.attackerId, t);
+    // Sentinel's Halt: an opportunity attack's hit stops the creature.
+    if (o.halt && typeof sktMoveKey === 'function'){ t.halted = sktMoveKey(); this._setResultAppend(` <span class="tv-dmg-note">Sentinel: ${esc(t.name)}’s Speed is 0 for the rest of this turn</span>`); }
+    this._sentinelCheck(o, t);
     if (before > 0 && after <= 0) this._hexCurseEnds(t);
     // A character's hit: the damage their features add, one click away.
     if (o.pcAtk || o.wsAtk) this._lastPcHit = { turn: this._turnKey(), atkId: o.attackerId, tgtId: t.id, crit: !!o.crit, mode: o.mode || 0,
@@ -3576,7 +3580,9 @@ registerPanel('turnview', {
       hitNote = (hitNote ? hitNote + ' · ' : '') + (nick ? 'Nick: part of the Attack action' : a.offhand ? 'off-hand: its Bonus Action' : 'its Bonus Action')
         + (after || a.feature ? '' : a.offhand ? ' (after the Attack action with a light weapon)' : ' (after an attack with the first)');
     }
-    else if (!o.queued || (this._queue && this._queue.i === 0 && !this._queue.legendary && !this._queue.bonus)) this._spend(c, this._econFor(a));
+    // (a reaction's attack — an opportunity attack, Sentinel's — spends the
+    // reaction, already, and not the creature's Action)
+    else if (!o.reaction && (!o.queued || (this._queue && this._queue.i === 0 && !this._queue.legendary && !this._queue.bonus))) this._spend(c, this._econFor(a));
     const bonus = a.pc ? a.bonus : (parseInt(String(a.toHit || '').replace(/[^\d+-]/g, ''), 10) || 0);
     // Dice a state adds to the roll (Bless's d4).
     const extra = (pcSheet.rollDice || []).filter(x => (x.on || []).some(k => atkTags.includes(k))).map(x => ({ label: x.label, n: this._d(x.die) }));
@@ -3677,7 +3683,7 @@ registerPanel('turnview', {
       }
     }
     const dmg = parts.reduce((s, x) => s + x.amt, 0);
-    this._resolve({ attackerId: c.id, attacker: c.name, label: o.label || a.name, target: t,
+    this._resolve({ attackerId: c.id, attacker: c.name, label: o.label || a.name, target: t, halt: !!o.halt,
                     total, crit, hit, dmg, parts, queued: !!o.queued, nat, bonus, hitNote, onHit: a.pc ? null : (a.onHit || null), acBonus: cov.ac || 0,
                     type: parts.length ? parts[0].type : '', detail,
                     pcAtk: !!a.pc, critAt, wDice, wSum, mode, brutal, str: !!a.str,
@@ -5264,14 +5270,53 @@ registerPanel('turnview', {
     // and logged the action since the economy bar existed, but never
     // connected the two — so a creature that disengaged was still
     // attacked for walking away.
-    if (mover.disengaged) return [];
+    // (Sentinel: "even if they take the Disengage action")
     return this._order().filter(c => {
+      if (mover.disengaged && !this._hasSentinel(c)) return false;
       if (c.id === mover.id || (c.hp || 0) <= 0 || c.reactionUsed || this._incap(c) || this._surprisedNow(c)) return false;
       if (this._sideOf(c) === this._sideOf(mover)) return false;
       const t = this._tokenFor(c); if (!t) return false;
       const reach = this._reachOf(c);
       return ft(t, at) <= reach && ft(t, now) > reach;   // had them, doesn't now
     });
+  },
+  // Sentinel (the feat): a character who has it.
+  _hasSentinel(c){
+    const p = c && c.isPC ? this._partyOf(c) : null; if (!p) return false;
+    return (((p.sheet || {}).featureList) || []).some(f => f && f.name === 'Sentinel' && !f.info) || (p.feats || []).some(f => /^Sentinel$/i.test(String((f && f.name) || f)));
+  },
+  // Sentinel's Guardian: a creature within 5 ft of the sentinel attacks
+  // someone else — 2024, and hits them; 2014, hit or miss — and the sentinel
+  // can answer with an opportunity attack. Offered under the result; it was
+  // listed among Creambak's reactions and did nothing.
+  _sentinelCheck(o, t){
+    const atk = this._order().find(x => x.id === o.attackerId);
+    if (!atk || !t || o.save) return;
+    const ids = this._order().filter(s => s.id !== atk.id && s.id !== t.id && !s.reactionUsed && (s.hp || 0) > 0 && !this._incap(s)
+      && this._hasSentinel(s) && this._sideOf(s) !== this._sideOf(atk) && (o.hit || this._edOf(s) === '2014')
+      && (f => f == null || f <= 5)(this._ftBetween(s, atk))).map(s => s.id);
+    this._sentinel = ids.length ? { turn: this._turnKey(), atkId: atk.id, ids } : null;
+  },
+  _renderSentinel(){
+    const s = this._sentinel; if (!s || s.turn !== this._turnKey()) return '';
+    const atk = this._order().find(x => x.id === s.atkId); if (!atk || (atk.hp || 0) <= 0) return '';
+    const who = s.ids.map(id => this._order().find(x => x.id === id)).filter(w => w && !w.reactionUsed && (w.hp || 0) > 0);
+    if (!who.length) return '';
+    return `<div class="tv-onhit tv-sentinel"><span class="tv-onhit-l"><b>Sentinel</b> — ${esc(atk.name)} attacked someone else:</span>`
+      + who.map(w => `<button class="btn" data-tv="sentinel" data-id="${esc(w.id)}" title="${esc(w.name)}’s reaction: an opportunity attack against ${esc(atk.name)} — a hit stops it for the turn">${esc(w.name)} attacks</button>`).join('')
+      + `<button class="tv-manual-x" data-tv="sentx" title="No reaction" aria-label="Dismiss">✕</button></div>`;
+  },
+  _useSentinel(id){
+    const s = this._sentinel, who = this._order().find(x => x.id === id), atk = s && this._order().find(x => x.id === s.atkId);
+    // (another sentinel beside it can still answer)
+    if (s) s.ids = s.ids.filter(x => x !== id);
+    if (!who || !atk || who.reactionUsed){ this._render(); return; }
+    who.reactionUsed = true;
+    const list = this._attacksFor(who);
+    const melee = list.find(a => !a.save && !a.ranged && !a.spell && (a.pc ? a.dmgText : (a.parts || []).length));
+    this._log.unshift(`<strong>${esc(who.name)}</strong> — Sentinel: an opportunity attack on <strong>${esc(atk.name)}</strong> <span style="opacity:.7">· reaction spent</span>`);
+    if (melee){ this._rollAttack(list.indexOf(melee), { attacker: who, target: atk, label: melee.name + ' (Sentinel)', reaction: true, halt: true }); return; }
+    save(); this._render();
   },
   _useOA(whoId){
     const o = this._pending; if (!o || o.kind !== 'move') return;
@@ -5286,7 +5331,7 @@ registerPanel('turnview', {
       // nobody's turn, so the turn pointer must not move even for an instant —
       // _applyHpDelta saves, and a borrowed pointer got written to storage.
       this._rollAttack(list.indexOf(melee),
-        { attacker: who, target: o.mover, label: melee.name + ' (opportunity attack)' });
+        { attacker: who, target: o.mover, label: melee.name + ' (opportunity attack)', reaction: true, halt: this._hasSentinel(who) });
       return;
     }
     this._setResult(`<strong>${esc(who.name)}</strong> takes an opportunity attack on
@@ -5428,6 +5473,8 @@ registerPanel('turnview', {
       // the panel doesn't draw. What they cast comes back here.
       else if (act === 'state'){ this._toggleState(el.dataset.id, el.dataset.k); }
       else if (act === 'mheal'){ this._monsterHeal(+el.dataset.ai); }
+      else if (act === 'sentinel'){ this._useSentinel(el.dataset.id); }
+      else if (act === 'sentx'){ this._sentinel = null; this._render(); }
       else if (act === 'brutal'){ const k = this._turnKey() + '|' + state.activeCombatantId; this._brutal = this._brutal === k ? null : k; this._render(); }
       else if (act === 'sheet'){ if (typeof openCharSheet === 'function') openCharSheet(el.dataset.id, el.dataset.tab ? { tab: el.dataset.tab } : {}); }
       else if (act === 'cover'){
