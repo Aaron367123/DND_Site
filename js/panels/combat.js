@@ -1731,11 +1731,33 @@ registerPanel('combat',{
     if (c.shieldAc){ c.ac = Math.max(0, (+c.ac || 0) - c.shieldAc); c.shieldAc = undefined; }
     if (c.isPC){
       const p = typeof _findPartyMemberForCombatant === 'function' ? state.party[_findPartyMemberForCombatant(c)] : null;
+      this._turnStartFeatures(c, p);
       if (p && p.active && (p.active['Reckless Attack'] || p.active.Shield)){
         const a = Object.assign({}, p.active); delete a['Reckless Attack']; delete a.Shield;
         p.active = Object.keys(a).length ? a : null;
       }
     }
+  },
+
+  // What a character's features do as their turn starts, in a fight: a
+  // Champion's Survivor (bloodied and still up: 5 + CON back) and Heroic
+  // Warrior (Heroic Inspiration, if they haven't one). Both were a line on
+  // the sheet that nobody applied.
+  _turnStartFeatures(c, p){
+    if (!c || !p || !p.sheet) return;
+    const has = n => (p.sheet.featureList || []).some(f => f && f.name === n && !f.info);
+    const said = [];
+    if (has('Survivor') && (c.hp || 0) > 0 && (c.hp || 0) <= Math.floor((c.hpMax || 0) / 2)){
+      const n = Math.max(0, 5 + Math.floor((((p.abilities || {}).con || 10) - 10) / 2)), i = state.combatants.indexOf(c), was = c.hp || 0;
+      if (n && i >= 0){ this._applyHpDelta(i, n, null); said.push('Survivor: +' + Math.max(0, ((state.combatants[i] || c).hp || 0) - was) + ' hit points'); }
+    }
+    // (the heal can write a new party record: the one there now)
+    p = (state.party || []).find(x => x && x.id === p.id) || p;
+    if (has('Heroic Warrior') && !p.inspiration){ p.inspiration = true; said.push('Heroic Warrior: Heroic Inspiration'); }
+    if (!said.length) return;
+    const TV = panelDefs.turnview;
+    if (TV && Array.isArray(TV._log)) TV._log.unshift('<strong>' + esc(c.name) + '</strong> — ' + esc(said.join(' · ')));
+    if (typeof showToast === 'function') showToast(c.name + ' — ' + said.join(' · '));
   },
 
   // Dodge lasts "until the start of your next turn", so it is cleared when

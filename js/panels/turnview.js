@@ -3099,6 +3099,7 @@ registerPanel('turnview', {
     const rollTxt = rollRaw ? ` <span style="opacity:.6">[${esc(rollRaw)}]</span>` : '';
     this._log.unshift(`<strong>${esc(o.attacker)}</strong> hit <strong>${esc(t.name)}</strong> for <strong>${dmgText}</strong>${o.crit ? ' (crit)' : ''}${rollTxt}${usedName ? ' — ' + esc(usedName) : ''}${notes ? ' <span style="opacity:.85">· ' + esc(notes) + '</span>' : ''}${appliedTxt}${soakTxt} <span style="opacity:.7">· ${before} → ${after}</span>`);
     if (o.onHit && !o.save) this._queueOnHit(o);
+    if (before > 0 && after <= 0) this._darkBlessing(o.attackerId, t);
     // A character's hit: the damage their features add, one click away.
     if (o.pcAtk || o.wsAtk) this._lastPcHit = { turn: this._turnKey(), atkId: o.attackerId, tgtId: t.id, crit: !!o.crit, mode: o.mode || 0,
       ranged: !!o.ranged, spell: !!o.spellAtk, props: o.props || null, type: o.type || '', magical: !!o.magical, label: o.label, used: [], mastery: o.mastery || '',
@@ -3110,6 +3111,23 @@ registerPanel('turnview', {
       flurry: !!(o.queued && this._queue && this._queue.label === 'Flurry of Blows') };
     if (o.queued && this._queue){ this._queue.hits++; this._advanceQueue(); return; }
     this._render();
+  },
+  // Dark One's Blessing (a Fiend warlock): an enemy dropped to 0 — by the
+  // warlock, or (2024) by anyone while it is within 10 ft of them — gives
+  // temporary hit points, CHA + warlock level (at least 1).
+  _darkBlessing(atkId, t){
+    (state.party || []).forEach(p => {
+      if (!((p.sheet || {}).featureList || []).some(f => f && f.name === 'Dark One\'s Blessing' && !f.info)) return;
+      const w = this._order().find(x => x.isPC && this._partyOf(x) === p); if (!w || w.id === t.id || (w.hp || 0) <= 0 || this._sideOf(w) === this._sideOf(t)) return;
+      const near = this._edOf(w) !== '2014' && (() => { const ft = this._ftBetween(w, t); return ft != null && ft <= 10; })();
+      if (w.id !== atkId && !near) return;
+      const lvl = ((p.sheet.classLevels || []).find(x => x && x.cls === 'warlock') || {}).level || +p.level || 1;
+      const n = Math.max(1, Math.floor((((p.abilities || {}).cha || 10) - 10) / 2) + lvl);
+      if ((+p.tempHp || 0) >= n) return;
+      p.tempHp = n;
+      this._log.unshift(`<strong>${esc(p.name)}</strong> — Dark One’s Blessing: ${n} temporary hit points (${esc(t.name)} dropped)`);
+      this._setResultAppend(` <span class="tv-dmg-note">${esc(p.name)} — Dark One’s Blessing: ${n} temporary hit points</span>`);
+    });
   },
   // Straight through the Combat Tracker, so resistances, immunities,
   // concentration checks, death saves and the party write-back all happen

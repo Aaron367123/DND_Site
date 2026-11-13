@@ -1006,6 +1006,10 @@ registerPanel('party',{
     const c = state.party[i]; if (!c) return;
     if (on && !c.rage && !(opts && opts.paid) && !this._spendUse(c, 'Rage', 'rages')) return;
     const next = {...c, rage: !!on};
+    // Vitality of the Tree (World Tree): entering the rage gives temporary hit
+    // points equal to the barbarian level.
+    if (on && !c.rage && ((c.sheet || {}).featureList || []).some(f => f && f.name === 'Vitality of the Tree' && !f.info))
+      next.tempHp = Math.max(+c.tempHp || 0, this._classLevel(c, 'barbarian') || +c.level || 1);
     next.rageRounds = on ? (this._rulesOf(c) === '2024' ? this.RAGE_ROUNDS_2024 : this.RAGE_ROUNDS) : null;
     let dropped = null;
     if (on && c.concentration){ dropped = c.concentration; next.concentration = null; }
