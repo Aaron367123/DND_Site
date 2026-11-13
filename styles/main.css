@@ -2760,6 +2760,11 @@ body.player-mode #campaign-btn{display:none !important}
   .map-toolbar > #map-size,
   .map-toolbar > #map-size-preset,
   .map-toolbar > #map-bg-color{order:5}
+  /* The token panel: 164px wide, with the 44px touch buttons either side,
+     left its Size and Facing sliders 0px wide — a thumb with no track that
+     couldn't be dragged — and pushed the value past the panel's edge. */
+  #token-panel{width:min(300px, calc(100% - 16px)) !important; max-height:calc(100% - 60px); overflow-y:auto; box-sizing:border-box}
+  #token-panel input[type=range]{min-width:90px}
   /* Same for the party bar, minus the "Party:" caption — the row of character
      chips is self-evident and the label cost a chip's worth of width. */
   .map-party-bar{flex-wrap:nowrap; overflow-x:auto; overflow-y:hidden}

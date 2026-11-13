@@ -10624,7 +10624,10 @@
         ok('map sync: but not someone else’s', spec.playerWritable('tokens/t3', prev, JSON.stringify({ id: 't3', label: 'Namroc', isPC: true })) === false);
         ok('map sync: nor a monster', spec.playerWritable('tokens/t4', prev, JSON.stringify({ id: 't4', label: 'Zoey', isPC: false })) === false);
         ok('map sync: nor a second copy of their own', spec.playerWritable('tokens/t5', Object.assign({ 'tokens/t2': JSON.stringify({ id: 't2', label: 'Zoey', isPC: true }) }, prev), JSON.stringify({ id: 't5', label: 'Zoey', isPC: true })) === false);
-        ok('map sync: moving a token that exists is still allowed', spec.playerWritable('tokens/t1', prev, prev['tokens/t1']) === true);
+        // Moving one that exists: their own (and their companions, round 357) — not a monster.
+        const own = JSON.stringify({ id: 't2', label: 'Zoey', isPC: true });
+        ok('map sync: moving their own token that exists is still allowed', spec.playerWritable('tokens/t2', Object.assign({ 'tokens/t2': own }, prev), own) === true);
+        ok('map sync: but not moving the DM’s ogre', spec.playerWritable('tokens/t1', prev, prev['tokens/t1']) === false);
       } catch(e){ ok('round 104 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
       finally { window.paPc = pa0; }
     }
@@ -23571,10 +23574,14 @@ for (const cls of Object.keys(rule)) for (let L = 1; L <= 20; L++) for (const sc
       const wr = spec && spec.playerWritable;
       ok('player: map has a write allowlist', typeof wr === 'function');
       if (typeof wr === 'function'){
-        // The rule is `node in prev`: a player may MOVE a token the server
-        // already knows about, but may not conjure one the DM never placed.
-        const prev = { 'tokens/abc': '{}' };
-        ok('player: may move an existing token', wr('tokens/abc', prev) === true);
+        // A player may MOVE a token of theirs the server already knows about
+        // (their character, a companion), not a monster, and may not conjure
+        // one the DM never placed.
+        const meNow = typeof paPc === 'function' ? paPc() : null;
+        const mineTok = JSON.stringify({ id: 'abc', isPC: true, label: meNow ? meNow.name : 'x', cid: meNow ? meNow.id : 'x' });
+        const prev = { 'tokens/abc': mineTok };
+        ok('player: may move an existing token of their own', !meNow || wr('tokens/abc', prev, mineTok) === true);
+        ok('player: not an existing monster', wr('tokens/ogre', { 'tokens/ogre': JSON.stringify({ id: 'ogre', label: 'Ogre', isPC: false }) }, '{}') === false);
         ok('player: may NOT create a new token', wr('tokens/zzz', prev) !== true);
         ok('player: may draw', wr('drawings', prev) === true);
         ok('player: may NOT overwrite map meta', wr('meta', prev) !== true);
@@ -24321,6 +24328,25 @@ for (const cls of Object.keys(rule)) for (let L = 1; L <= 20; L++) for (const sc
          && document.getElementById('drawer-campaign-name').textContent.trim() === sktActiveCampaignName());
     }
     closePanel('party');
+    // -- Round 358: the battle map's token panel on a phone — sliders wide enough to use, nothing past its edge --
+    {
+      const B = panelDefs.battlemap;
+      try {
+        openPanel('battlemap'); await sleep(700);
+        let t = (B._tokens || [])[0];
+        if (!t){ t = { id: 'r358t', label: 'r358 Token', x: 100, y: 100, size: 1, color: '#993333' }; B._tokens.push(t); B._renderTokens(); }
+        B._showPanel(t); await sleep(150);
+        const tp = B._body.querySelector('#token-panel'), pr = tp.getBoundingClientRect();
+        const w = id => B._body.querySelector(id).getBoundingClientRect().width;
+        ok('mobile map: the token panel’s size and facing sliders can be dragged (wider than a thumb)', w('#tp-size') >= 60 && w('#tp-rot') >= 60, w('#tp-size') + ' / ' + w('#tp-rot'));
+        const over = [...tp.querySelectorAll('*')].filter(e => { const q = e.getBoundingClientRect(); return q.width && q.right > pr.right + 1; }).map(e => e.id || e.className);
+        ok('mobile map: nothing in it runs past its edge', !over.length, over.join(', '));
+        ok('mobile map: and it stays on the screen', pr.left >= 0 && pr.right <= innerWidth + 1, Math.round(pr.left) + '..' + Math.round(pr.right));
+        B._closePanel();
+        if (t.id === 'r358t'){ B._tokens = B._tokens.filter(x => x !== t); B._renderTokens(); }
+        closePanel('battlemap');
+      } catch(e){ ok('round 358 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
+    }
   }
 
   restore();
