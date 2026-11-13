@@ -222,7 +222,7 @@ registerPanel('turnview', {
     // To-hit side: these can turn a hit into a miss, so the roll is re-tested.
     'Cutting Words':    { when:'tohit',  die:8 },
     'Defensive Duelist':{ when:'tohit',  pb:true },
-    'Shield':           { when:'tohit',  ac:5 },
+    'Shield':           { when:'tohit',  ac:5, shield:true },
     'Arcane Deflection':{ when:'tohit',  ac:2 },
     // Disadvantage: reroll the d20 and keep the lower. Modelled rather than
     // approximated as a flat penalty because the two aren't the same shape —
@@ -245,6 +245,10 @@ registerPanel('turnview', {
   _statBlockMech(r){
     const m = /adds? (\d+) to its AC/i.exec(String(r.note || ''));
     if (m) return { when:'tohit', ac: parseInt(m[1], 10) };
+    // A 2024 mage's or lich's Protective Magic: "casts Counterspell or Shield
+    // in response to the spell's trigger" — against a hit, the Shield. It
+    // was offered with nothing to it.
+    if (/\bcasts?\b[^.]*\bShield\b/.test(String(r.note || ''))) return { when:'tohit', ac: 5, shield: true };
     return null;
   },
   // What a reaction spends, named to match the party tracker's own pools. In
@@ -3291,7 +3295,7 @@ registerPanel('turnview', {
       // produce, so the rule has to be applied here and not only at roll time.
       o.hit = o.crit || (o.nat !== 1 && o.total >= ac);
       this._commit(o, desc);
-      if (r.ac != null && /^Shield$/i.test(r.name) && who.id === o.target.id){ this._keepShield(who, r.ac); save(); panelDefs.combat?._render?.(); this._render(); }
+      if (r.ac != null && r.shield && who.id === o.target.id){ this._keepShield(who, r.ac); save(); panelDefs.combat?._render?.(); this._render(); }
       return;
     }
     this._commit(o, by);   // no mechanics: spent, logged, the DM adjudicates

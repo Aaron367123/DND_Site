@@ -1636,7 +1636,7 @@ function sktOnHitCondition(desc){
   // maximum is reduced by an amount equal to the damage taken"; a vampire's
   // bite, with no save: "the target's hit point maximum is reduced by an
   // amount equal to the necrotic damage taken".
-  const drainRe = /\b(?:DC (\d+) (Strength|Dexterity|Constitution|Intelligence|Wisdom|Charisma) saving throw,? or (?:have )?|(?:the target['’]s|its) )(?:its )?hit point maximum (?:is )?reduced by an amount equal to the (?:(acid|bludgeoning|cold|fire|force|lightning|necrotic|piercing|poison|psychic|radiant|slashing|thunder) )?damage (?:taken|dealt)/i;
+  const drainRe = /\b(?:DC (\d+) (Strength|Dexterity|Constitution|Intelligence|Wisdom|Charisma) saving throw,? or (?:have )?|(?:the target['’]s|its) )(?:its )?hit point maximum (?:is )?(?:reduced|decreases?) by an amount equal to the (?:(acid|bludgeoning|cold|fire|force|lightning|necrotic|piercing|poison|psychic|radiant|slashing|thunder) )?damage (?:taken|dealt)/i;
   const flatRe = new RegExp('\\b(?:the target|it|the creature) (?:is|has the) (?:also )?(?:knocked )?(' + SKT_HIT_CONDS + ')\\b(?: condition)?(?:[^.(]*?\\(escape DC (\\d+)\\))?', 'i');
   const alsoRe = new RegExp('\\buntil (?:this|the) grapple ends, the (?:target|creature) (?:is|has the) (' + SKT_HIT_CONDS + ')\\b', 'i');
   const alsoAfterRe = new RegExp('\\bthe (?:target|creature) (?:is|has the) (' + SKT_HIT_CONDS + ')\\b(?: condition)? until (?:this|the) grapple ends', 'i');

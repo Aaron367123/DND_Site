@@ -20159,6 +20159,34 @@ for (const cls of Object.keys(rule)) for (let L = 1; L <= 20; L++) for (const sc
       ok('2024 hit: a mind flayer’s Tentacles grapple, and stun while the grapple lasts', !!tn && tn.cond === 'Grappled' && tn.escape === 14 && tn.also === 'Stunned', JSON.stringify(tn));
     }
 
+    // -- Round 325: a 2024 mage's Protective Magic is its Shield against a hit, held to its next turn; the 2024 "Hit Point maximum decreases" is a life drain --
+    if (!PLAYER){
+      const dr = sktOnHitCondition('Melee Attack Roll: +4, reach 5 ft. Hit: 7 (2d6) Necrotic damage. If the target is a creature, its Hit Point maximum decreases by an amount equal to the damage taken.');
+      ok('life drain (2024): "its Hit Point maximum decreases by an amount equal to the damage taken"', !!dr && !!dr.drain, JSON.stringify(dr));
+      const keepP = JSON.stringify(state.party), keepC = JSON.stringify(state.combatants), keepA = state.activeCombatantId; const TV = panelDefs.turnview; const d0 = TV._d;
+      try {
+        for (let i = 0; i < 100 && !(typeof _5eLoaded !== 'undefined' && _5eLoaded); i++) await sleep(100);
+        const mg = _5eData.find(x => x.cat === 'monster' && x.name === 'Mage' && x._source === 'XMM');
+        state.party = [{ id: 'r325h', name: 'r325h', cls: 'fighter', level: 5, hp: 40, hpMax: 40, ac: 16, sheet: { attacks: [{ name: 'Longsword', atkBonus: '+7', damage: '1d8+4 slashing', str: true }] } }];
+        state.combatants = [{ id: 'r325h', name: 'r325h', isPC: true, hp: 40, hpMax: 40, ac: 16, initiative: 20, conditions: [] },
+          { id: 'r325m', name: 'Mage', baseName: 'Mage', _slug: mg._slug, _source: 'XMM', isPC: false, hp: 81, hpMax: 81, ac: 15, initiative: 10, initBonus: 0, conditions: [] }];
+        state.activeCombatantId = 'r325h'; TV._armed = 'r325m'; TV._pending = null; save();
+        openPanel('turnview'); await sleep(300); TV._render(); await sleep(30);
+        const pm = TV._reactionsFor(state.combatants[1]).find(r => r.name === 'Protective Magic');
+        ok('protective magic: a Shield against a hit, +5 AC', !!pm && pm.when === 'tohit' && pm.ac === 5, JSON.stringify(pm));
+        TV._d = n => n === 20 ? 15 - 7 + 1 : 3;     // 16: a hit on AC 15, a miss on 20
+        await TV._rollAttack(0, {}); await sleep(60);
+        const btn = [...TV._body.querySelectorAll('.tv-pendingwrap button')].find(b => /^Protective Magic/.test(b.textContent.trim()));
+        ok('protective magic: offered against the hit', !!btn);
+        btn && btn.click(); await sleep(100);
+        const m = state.combatants.find(c => c.id === 'r325m');
+        ok('protective magic: the hit misses, and the mage’s AC stays up until its turn', /^Miss/.test(String(TV._result).replace(/<[^>]+>/g, '').trim()) && m.ac === 20 && m.shieldAc === 5, JSON.stringify([m.ac, m.shieldAc]));
+        panelDefs.combat._nextTurn(); await sleep(150);
+        ok('protective magic: gone as the mage’s turn starts', state.activeCombatantId === 'r325m' && m.ac === 15 && !m.shieldAc, JSON.stringify([state.activeCombatantId, m.ac]));
+      } catch(e){ ok('round 325 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
+      finally { TV._d = d0; TV._pending = null; state.party = JSON.parse(keepP); state.combatants = JSON.parse(keepC); state.activeCombatantId = keepA; save(); TV && TV._body && TV._render(); }
+    }
+
     // -- Class features: represented, not just text ------------------------
     {
       try {
