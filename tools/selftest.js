@@ -21057,6 +21057,39 @@ for (const cls of Object.keys(rule)) for (let L = 1; L <= 20; L++) for (const sc
         if (keepMap != null){ localStorage.setItem('skt-battlemap-v1', keepMap); B.applyMapState(JSON.parse(keepMap)); }
       }
     }
+    // -- Round 356: 5-10-5 diagonals count across the whole turn's move, not each drag --
+    if (!PLAYER){
+      const B = panelDefs.battlemap, keepC = JSON.stringify(state.combatants), keepA = state.activeCombatantId, keepR = state.combatRound;
+      let keepT = null, keepG = null, keepD = null;
+      try {
+        openPanel('battlemap'); await sleep(500);
+        keepT = B._tokens.slice(); keepG = B._gridType; keepD = B._diagRule; B._gridType = 'square'; B._diagRule = 'alt';
+        const cs = B._csScreen();
+        state.combatants = [{ id: 'r356a', name: 'r356 Runner', hp: 10, hpMax: 10, ac: 10, conditions: [] }];
+        state.activeCombatantId = 'r356a'; state.combatRound = 3;
+        const t = { id: 'tr', cid: 'r356a', label: 'r356 Runner', x: 5.5 * cs, y: 5.5 * cs, size: 1 };
+        B._tokens = [t];
+        const step = () => { const from = { x: t.x, y: t.y }; t.x += cs; t.y += cs; B._noteTurnMove(t, from); };
+        step();
+        ok('5-10-5: the first diagonal square, 5 ft', sktTurnMoved(t) === 5, sktTurnMoved(t));
+        step();
+        ok('…the second, dragged on its own, 10 ft (15 in all)', sktTurnMoved(t) === 15, sktTurnMoved(t));
+        step();
+        ok('…the third, 5 (20 in all)', sktTurnMoved(t) === 20, sktTurnMoved(t));
+        // The ruler on the next drag counts on from there: one more diagonal is the fourth, 10 ft.
+        const ft = B._measureMove(t, t.x, t.y, t.x + cs, t.y + cs); B._measureHide();
+        ok('the ruler for the next diagonal says 10 ft', ft === 10, ft);
+        // A new turn starts the count again.
+        state.combatRound = 4;
+        step();
+        ok('a new turn: the first diagonal is 5 again', sktTurnMoved(t) === 5, sktTurnMoved(t));
+        ok('one drag of two diagonals is still 15', sktGridFeet(2, 2, 'alt', 5) === 15 && sktGridFeet(2, 2, 'alt', 5, 1) === 15 && sktGridFeet(1, 1, 'alt', 5, 1) === 10);
+      } catch(e){ ok('round 356 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
+      finally {
+        if (keepT) B._tokens = keepT; if (keepG) B._gridType = keepG; if (keepD) B._diagRule = keepD;
+        state.combatants = JSON.parse(keepC); state.activeCombatantId = keepA; state.combatRound = keepR; save();
+      }
+    }
     // -- Class features: represented, not just text ------------------------
     {
       try {

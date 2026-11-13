@@ -1931,14 +1931,21 @@ registerPanel('battlemap',{
   // squares the larger of the two cell deltas (5e's "every square is 5 ft",
   // diagonals included — the Turn View's reach and opportunity attacks use the
   // same), on hexes the straight-line distance in hex steps.
-  _feetBetweenPts(x0, y0, x1, y1){
+  // prevDiag: diagonals already moved this turn (5-10-5 counts on from them).
+  _feetBetweenPts(x0, y0, x1, y1, prevDiag){
     const ft = this._ftPerCell || 5;
     if (this._gridType === 'hex'){
       const cs = this._csScreen() || 50, o = this._gridOffPx();
       return sktHexSteps(x0, y0, x1, y1, cs, o.x, o.y) * ft;
     }
     const cs = this._csScreen() || 50;
-    return sktGridFeet((x1 - x0) / cs, (y1 - y0) / cs, this._diagRule, ft);
+    return sktGridFeet((x1 - x0) / cs, (y1 - y0) / cs, this._diagRule, ft, prevDiag);
+  },
+  // Diagonal squares in a move between two points (none on a hex grid).
+  _diagBetweenPts(x0, y0, x1, y1){
+    if (this._gridType === 'hex') return 0;
+    const cs = this._csScreen() || 50;
+    return sktGridDiag((x1 - x0) / cs, (y1 - y0) / cs);
   },
   // A token's speed in feet, when it's known: the character's, or the
   // monster's stat block. Null when it isn't. A flyer's is the better of its
@@ -1998,7 +2005,7 @@ registerPanel('battlemap',{
   // turn's movement against what it has.
   _measureMove(t, x0, y0, x1, y1){
     const mi = this._moveInfo(t);
-    return this._measureShow(x0, y0, x1, y1, mi ? mi.budget : this._tokenSpeed(t), mi ? mi.moved : 0, mi && mi.cost);
+    return this._measureShow(x0, y0, x1, y1, mi ? mi.budget : this._tokenSpeed(t), mi ? mi.moved : 0, mi && mi.cost, mi && typeof sktTurnDiag === 'function' ? sktTurnDiag(t) : 0);
   },
   // A drop: the feet walked go on the turn's count.
   // A grappler brings what it holds along.
@@ -2008,12 +2015,13 @@ registerPanel('battlemap',{
     // A held creature moved out of its grappler's reach is free.
     if (!document.body.classList.contains('player-mode') && panelDefs.combat?._releaseGrapples?.()){ panelDefs.combat._render?.(); panelDefs.turnview?._render?.(); }
     if (typeof sktNoteMove !== 'function') return;
-    if (sktNoteMove(this._tokens, t, this._feetBetweenPts(from.x, from.y, t.x, t.y))) panelDefs.turnview?._syncMoved?.();
+    const prev = typeof sktTurnDiag === 'function' ? sktTurnDiag(t) : 0;
+    if (sktNoteMove(this._tokens, t, this._feetBetweenPts(from.x, from.y, t.x, t.y, prev), this._diagBetweenPts(from.x, from.y, t.x, t.y))) panelDefs.turnview?._syncMoved?.();
   },
   // The measuring line: dashed, from (x0,y0) to (x1,y1) in stage pixels, the
   // distance on a pill at the far end. Sized in screen pixels, so it reads
   // the same at any zoom. `speed` adds "of N ft" and turns red past it.
-  _measureShow(x0, y0, x1, y1, speed, moved, extra){
+  _measureShow(x0, y0, x1, y1, speed, moved, extra, prevDiag){
     const stage = this._body && this._body.querySelector('#map-stage'); if (!stage) return;
     let m = stage.querySelector('.bm-measure');
     if (!m){ m = document.createElement('div'); m.className = 'bm-measure'; m.innerHTML = '<svg><line class="bm-measure-line"/><circle class="bm-measure-a"/><circle class="bm-measure-b"/></svg><span class="bm-measure-l"></span>'; stage.appendChild(m); }
@@ -2025,7 +2033,7 @@ registerPanel('battlemap',{
     ln.setAttribute('x1', x0); ln.setAttribute('y1', y0); ln.setAttribute('x2', x1); ln.setAttribute('y2', y1);
     ln.setAttribute('stroke-width', 2.5 * k); ln.setAttribute('stroke-dasharray', (8 * k) + ' ' + (5 * k));
     [['.bm-measure-a', x0, y0], ['.bm-measure-b', x1, y1]].forEach(([sel, x, y]) => { const c = m.querySelector(sel); c.setAttribute('cx', x); c.setAttribute('cy', y); c.setAttribute('r', 4 * k); });
-    const ft = this._feetBetweenPts(x0, y0, x1, y1);
+    const ft = this._feetBetweenPts(x0, y0, x1, y1, prevDiag);
     // `moved`: already walked this turn, so the limit is on the sum.
     const before = moved > 0 ? moved : 0;
     // `extra`: crawling, or dragging a creature — each foot costs more.

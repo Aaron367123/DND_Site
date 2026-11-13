@@ -5806,10 +5806,12 @@ registerPanel('turnview', {
       // A grappler brings what it holds along.
       const held = d.from && typeof sktDragHeld === 'function' ? sktDragHeld(this._map().tokens, tok, tok.x - d.from.x, tok.y - d.from.y) : [];
       if (d.from && typeof sktNoteMove === 'function' && (tok.x !== d.from.x || tok.y !== d.from.y)){
-        const cs = this._cs() || 50;
-        const ft = B && B._body && typeof B._feetBetweenPts === 'function' ? B._feetBetweenPts(d.from.x, d.from.y, tok.x, tok.y)
-          : sktGridFeet((tok.x - d.from.x) / cs, (tok.y - d.from.y) / cs, this._diagRule(), this._ftPerCell());
-        sktNoteMove(this._map().tokens, tok, ft);
+        const cs = this._cs() || 50, prev = typeof sktTurnDiag === 'function' ? sktTurnDiag(tok) : 0;
+        const ft = B && B._body && typeof B._feetBetweenPts === 'function' ? B._feetBetweenPts(d.from.x, d.from.y, tok.x, tok.y, prev)
+          : sktGridFeet((tok.x - d.from.x) / cs, (tok.y - d.from.y) / cs, this._diagRule(), this._ftPerCell(), prev);
+        const dg = B && B._body && typeof B._diagBetweenPts === 'function' ? B._diagBetweenPts(d.from.x, d.from.y, tok.x, tok.y)
+          : (this._map().gridType === 'hex' ? 0 : sktGridDiag((tok.x - d.from.x) / cs, (tok.y - d.from.y) / cs));
+        sktNoteMove(this._map().tokens, tok, ft, dg);
       }
       if (B && B._body){
         const live = (B._tokens || []).find(x => x && x.id === tok.id);

@@ -2012,14 +2012,19 @@ function sktHexSteps(x0, y0, x1, y1, cs, offX, offY){
   const a = cube(sktHexAt(x0, y0, cs, offX, offY)), b = cube(sktHexAt(x1, y1, cs, offX, offY));
   return Math.max(Math.abs(a[0] - b[0]), Math.abs(a[1] - b[1]), Math.abs(a[2] - b[2]));
 }
-function sktGridFeet(dx, dy, rule, ftPerCell){
+// prevDiag: diagonal squares already moved this turn. Under 5-10-5 every
+// second diagonal of the whole move costs 10 ft, not of each drag — a token
+// walked one diagonal square at a time paid 5 ft for every one of them.
+function sktGridFeet(dx, dy, rule, ftPerCell, prevDiag){
   const ft = +ftPerCell > 0 ? +ftPerCell : 5;
   const a = Math.abs(+dx || 0), b = Math.abs(+dy || 0);
   if (rule === 'euclid') return Math.round(Math.hypot(a, b)) * ft;
   const x = Math.round(a), y = Math.round(b);
-  if (rule === 'alt') return (Math.max(x, y) + Math.floor(Math.min(x, y) / 2)) * ft;
+  if (rule === 'alt'){ const d = Math.min(x, y), p = Math.max(0, Math.round(+prevDiag || 0)); return (Math.max(x, y) + Math.floor((p + d) / 2) - Math.floor(p / 2)) * ft; }
   return Math.max(x, y) * ft;
 }
+// The diagonal squares in a move of (dx, dy) squares.
+function sktGridDiag(dx, dy){ return Math.min(Math.round(Math.abs(+dx || 0)), Math.round(Math.abs(+dy || 0))); }
 
 // A stat block's Regeneration, read: "The troll regains 10 hit points at the
 // start of its turn. If the troll takes acid or fire damage, this trait
@@ -2954,13 +2959,18 @@ function sktTurnMoved(tok){
   const k = sktMoveKey();
   return k && tok && tok.mv && tok.mv.k === k ? (+tok.mv.ft || 0) : 0;
 }
+// Diagonal squares it has moved this turn (for 5-10-5, see sktGridFeet).
+function sktTurnDiag(tok){
+  const k = sktMoveKey();
+  return k && tok && tok.mv && tok.mv.k === k ? (+tok.mv.dg || 0) : 0;
+}
 // A move of `ft` feet by token `tok`: counted when it is the turn of the
 // creature it stands for. → the creature, or null when it wasn't counted.
 // Prone, it crawls: "each foot of movement costs 1 extra foot".
-function sktNoteMove(tokens, tok, ft){
+function sktNoteMove(tokens, tok, ft, diag){
   const c = sktMoverOf(tokens, tok);
   if (!c || !(ft > 0)) return null;
-  tok.mv = { k: sktMoveKey(), ft: sktTurnMoved(tok) + Math.round(ft) * sktMoveCost(c).mult };
+  tok.mv = { k: sktMoveKey(), ft: sktTurnMoved(tok) + Math.round(ft) * sktMoveCost(c).mult, dg: sktTurnDiag(tok) + Math.max(0, Math.round(+diag || 0)) };
   return c;
 }
 function sktProne(c){ return !!(c && (c.conditions || []).some(x => /^prone\b/i.test(String(x)))); }
