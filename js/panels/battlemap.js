@@ -1940,15 +1940,22 @@ registerPanel('battlemap',{
     const cs = this._csScreen() || 50;
     return sktGridFeet((x1 - x0) / cs, (y1 - y0) / cs, this._diagRule, ft);
   },
-  // A token's walking speed in feet, when it's known: the character's, or the
-  // monster's stat block. Null when it isn't.
+  // A token's speed in feet, when it's known: the character's, or the
+  // monster's stat block. Null when it isn't. A flyer's is the better of its
+  // walking and flying speeds — on a flat map a move doesn't say which it
+  // used, and a giant eagle (walk 10, fly 80) went red after two squares
+  // while a ghost (walk 0, fly 40) had no limit at all. Swimming, climbing
+  // and burrowing need the ground for it, so they stay the table's call.
   _tokenSpeed(t){
     if (!t) return null;
     const pc = (state.party || []).find(p => p && (p.id === t.cid || (t.isPC && p.name === t.label)));
     // As it stands: a grappled or exhausted character's, which can be 0.
     if (pc){
-      const v = +(pc.speeds && pc.speeds.walk) || +pc.spd; if (!(v > 0)) return null;
-      const now = typeof sktSpeedNow === 'function' ? sktSpeedNow(Object.assign({}, pc, { spd: v })).ft : v;
+      const v = +(pc.speeds && pc.speeds.walk) || +pc.spd, fly = +(pc.speeds && pc.speeds.fly) || 0;
+      if (!(v > 0) && !(fly > 0)) return null;
+      const walkNow = v > 0 ? (typeof sktSpeedNow === 'function' ? sktSpeedNow(Object.assign({}, pc, { spd: v })).ft : v) : 0;
+      const flyNow = fly > 0 ? (typeof sktSpeedNow === 'function' ? sktSpeedNow(pc, 'fly').ft : fly) : 0;
+      const now = Math.max(walkNow, flyNow);
       // A Gloom Stalker's Dread Ambusher: 10 ft more on its first turn of a
       // fight ("at the start of your first turn of each combat").
       const leap = now > 0 && (state.combatRound || 0) === 1 && state.activeCombatantId === pc.id
@@ -1957,8 +1964,18 @@ registerPanel('battlemap',{
     }
     const c = (state.combatants || []).find(x => x && x.id === t.cid);
     const m = c && c._slug && typeof _5eData !== 'undefined' ? _5eData.find(r => r && r.cat === 'monster' && r._slug === c._slug) : null;
-    const v = m ? parseInt(String(m.speed || '').match(/\d+/) || '', 10) : NaN;
-    if (!(v > 0)) return null;
+    const sp0 = m && m._raw && m._raw.speed, num = x => parseInt(String(x && typeof x === 'object' ? (x.number ?? '') : (x ?? '')).match(/\d+/) || '', 10);
+    const walkV = m ? (sp0 && typeof sp0 === 'object' ? num(sp0.walk) : num(m.speed)) : NaN;
+    const flyV = m ? (sp0 && typeof sp0 === 'object' ? num(sp0.fly) : num((String(m.speed || '').match(/fly\s*(\d+)/i) || [])[1])) : NaN;
+    let v = Math.max(walkV > 0 ? walkV : 0, flyV > 0 ? flyV : 0);
+    // Nothing on land or in the air: a creature that only swims (a giant
+    // eel) is in its water, and one with no movement at all (a guardian
+    // portrait, a tentacle) has 0 — both had no limit.
+    if (!(v > 0) && sp0 && typeof sp0 === 'object'){
+      v = Math.max(0, ...['swim', 'climb', 'burrow'].map(k => num(sp0[k]) || 0));
+      if (!(v > 0) && Object.keys(sp0).length) v = 0;
+      else if (!(v > 0)) return null;
+    } else if (!(v > 0)) return null;
     // As it stands, like a character's: 0 grappled, restrained… (2014: stunned too), 10 less slowed.
     const conds = ((c && c.conditions) || []).map(x => String(x).toLowerCase());
     const ed = (state.settings && state.settings.builderEdition) || '2024';
@@ -2260,15 +2277,28 @@ registerPanel('battlemap',{
       + (preview ? this._areaSvg(preview, 'stroke-dasharray="6 4"') : '');
     this._markTokensInAreas(preview);
   },
+  // Whether a creature is in an area: any square of its space whose centre
+  // the area covers — the Dungeon Master's Guide's "an area covers at least
+  // half a square". Only the token's centre was tested, so a Large or Huge
+  // creature with half its space in a fireball was left out of the saves.
+  _tokenInArea(a, tok){
+    if (!tok || tok.x == null) return false;
+    const s = Math.max(1, Math.round(+tok.size || 1));
+    if (s === 1) return this._inArea(a, tok.x, tok.y);
+    const u = this._tokenUnitScreen() || this._csScreen() || 50;
+    for (let i = 0; i < s; i++) for (let j = 0; j < s; j++)
+      if (this._inArea(a, tok.x + (i - (s - 1) / 2) * u, tok.y + (j - (s - 1) / 2) * u)) return true;
+    return false;
+  },
   _tokensInArea(t){
-    return (this._tokens || []).filter(tok => tok && tok.x != null && this._inArea(t, tok.x, tok.y));
+    return (this._tokens || []).filter(tok => this._tokenInArea(t, tok));
   },
   _markTokensInAreas(preview){
     const b = this._body; if (!b) return;
     const areas = this._areas().concat(preview ? [preview] : []);
     b.querySelectorAll('.map-token').forEach(el => {
       const tok = (this._tokens || []).find(t => String(t.id) === el.dataset.tid);
-      el.classList.toggle('in-area', !!tok && areas.some(a => this._inArea(a, tok.x, tok.y)));
+      el.classList.toggle('in-area', !!tok && areas.some(a => this._tokenInArea(a, tok)));
     });
   },
   // Press on an area and drag: the area MOVES. Press its handle and drag:

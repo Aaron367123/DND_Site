@@ -20965,6 +20965,47 @@ for (const cls of Object.keys(rule)) for (let L = 1; L <= 20; L++) for (const sc
       } catch(e){ ok('round 353 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
       finally { state.party = JSON.parse(keepP); state.combatants = JSON.parse(keepC); save(); if (P._body) P._render(); }
     }
+    // -- Round 354: battle map — a Large creature half in an area is in it; a flyer's move counts against its flying speed --
+    if (!PLAYER){
+      const B = panelDefs.battlemap, keepC = JSON.stringify(state.combatants), keepP = JSON.stringify(state.party);
+      let keepT = null, keepG = null;
+      try {
+        for (let i = 0; i < 100 && !_5eLoaded; i++) await sleep(100);
+        openPanel('battlemap'); await sleep(600);
+        keepT = B._tokens.slice(); keepG = B._gridType; B._gridType = 'square';
+        const cs = B._csScreen();
+        const fb = { k: 'tpl', shape: 'circle', x: 10 * cs, y: 10 * cs, ft: 20, ang: 0 };
+        // A Large creature, squares (13,10)-(14,11): the near two inside a 20 ft sphere at (10,10), its centre outside.
+        const big = { id: 'r354L', x: 14 * cs, y: 11 * cs, size: 2 }, far = { id: 'r354F', x: 15 * cs, y: 11 * cs, size: 2 }, med = { id: 'r354M', x: 14.5 * cs, y: 10.5 * cs, size: 1 };
+        B._tokens = [big, far, med];
+        const ids = B._tokensInArea(fb).map(t => t.id);
+        ok('a Large creature with half its space in a fireball is in it', ids.includes('r354L'), JSON.stringify(ids));
+        ok('…one a square further out is not, nor a Medium one whose square is out', !ids.includes('r354F') && !ids.includes('r354M'), JSON.stringify(ids));
+        const cone = { k: 'tpl', shape: 'cone', x: 2 * cs, y: 10 * cs, ft: 15, ang: 0 };
+        B._tokens = [{ id: 'r354C', x: 5 * cs, y: 9 * cs, size: 2 }];
+        ok('a cone reaching a Large creature’s near squares catches it', B._tokensInArea(cone).length === 1);
+        // Flyers
+        const slug = n => (_5eData.find(d => d.cat === 'monster' && d.name === n) || {})._slug;
+        state.combatants = [{ id: 'r354e', name: 'Giant Eagle', _slug: slug('Giant Eagle'), hp: 26, hpMax: 26, ac: 13, conditions: [] },
+                            { id: 'r354g', name: 'Ghost', _slug: slug('Ghost'), hp: 45, hpMax: 45, ac: 11, conditions: [] },
+                            { id: 'r354o', name: 'Octopus', _slug: slug('Octopus'), hp: 3, hpMax: 3, ac: 12, conditions: [] }];
+        const sp = id => B._tokenSpeed({ id: 't' + id, cid: id });
+        ok('a giant eagle: 80 ft (its flying speed), not 10', sp('r354e') === 80, sp('r354e'));
+        ok('a ghost (walk 0, fly 40): 40, not unlimited', sp('r354g') === 40, sp('r354g'));
+        ok('an octopus: its 5 ft on land — swimming is the table’s call', sp('r354o') === 5, sp('r354o'));
+        state.combatants.push({ id: 'r354s', name: 'Giant Sea Eel', _slug: slug('Giant Sea Eel'), hp: 30, hpMax: 30, ac: 12, conditions: [] },
+                              { id: 'r354p0', name: 'Guardian Portrait', _slug: slug('Guardian Portrait'), hp: 22, hpMax: 22, ac: 5, conditions: [] });
+        ok('a giant sea eel (walk 0, swim 40): 40 — it only swims', sp('r354s') === 40, sp('r354s'));
+        ok('a guardian portrait (walk 0, nothing else): 0, not unlimited', sp('r354p0') === 0, sp('r354p0'));
+        state.combatants[0].conditions = ['Grappled'];
+        ok('a grappled eagle: 0', sp('r354e') === 0);
+        state.party = [{ id: 'r354p', name: 'r354 Aarakocra', spd: 30, speeds: { walk: 30, fly: 50 }, hp: 10, hpMax: 10, sheet: {} }];
+        ok('a character with a flying speed: 50', B._tokenSpeed({ id: 'tp', cid: 'r354p', isPC: true }) === 50);
+        state.party[0].exhaustion = 2; state.party[0].rules = '2024';
+        ok('…less 10 ft at exhaustion 2 (2024)', B._tokenSpeed({ id: 'tp', cid: 'r354p', isPC: true }) === 40, B._tokenSpeed({ id: 'tp', cid: 'r354p', isPC: true }));
+      } catch(e){ ok('round 354 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
+      finally { if (keepT) B._tokens = keepT; if (keepG) B._gridType = keepG; state.combatants = JSON.parse(keepC); state.party = JSON.parse(keepP); save(); }
+    }
     // -- Class features: represented, not just text ------------------------
     {
       try {
