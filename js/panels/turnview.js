@@ -355,6 +355,11 @@ registerPanel('turnview', {
         out.push({ name: r.name.replace(/\s*\(.*\)$/, ''), note: r.text, from:'stat block',
                    scope: this._scopeOf(r.text), range: this._rangeOf(r.text) });
       });
+      // A spellcaster whose list has Shield (a 2014 mage's "1st level (4
+      // slots): … shield"): its reaction, as a character's is. It had none.
+      const sc = this._rawList(raw, ['special_abilities', 'trait']).concat(this._rawList(raw, ['actions', 'action'])).filter(t => /^(?:Innate )?Spellcasting\b/i.test(String(t.name || '')));
+      if (sc.some(t => /\bshield\b(?!\s+of\b)/i.test(String(t.text || ''))) && !out.some(r => r.name === 'Shield'))
+        out.push({ name: 'Shield', note: 'When it is hit by an attack: +5 AC until the start of its next turn, including against the triggering attack (a 1st-level slot).', from: 'spell', scope: 'self', range: null });
     }
     // Everyone has these, monsters included.
     (T.universal || []).forEach(r => out.push({ ...r, from:'always', scope:'self' }));

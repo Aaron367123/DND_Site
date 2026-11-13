@@ -20187,6 +20187,20 @@ for (const cls of Object.keys(rule)) for (let L = 1; L <= 20; L++) for (const sc
       finally { TV._d = d0; TV._pending = null; state.party = JSON.parse(keepP); state.combatants = JSON.parse(keepC); state.activeCombatantId = keepA; save(); TV && TV._body && TV._render(); }
     }
 
+    // -- Round 326: a monster whose spell list has Shield can cast it as its reaction (a 2014 mage); Shield of Faith is no Shield --
+    if (!PLAYER && typeof _5eData !== 'undefined' && typeof _5eLoaded !== 'undefined' && _5eLoaded){
+      const keepC = JSON.stringify(state.combatants), TV = panelDefs.turnview;
+      try {
+        const mk = (nm, src) => { const d = _5eData.find(x => x.cat === 'monster' && x.name === nm && x._source === src); return d && { id: 'r326', name: d.name, baseName: d.name, _slug: d._slug, _source: src, isPC: false, hp: 40, hpMax: 40, ac: 12, conditions: [] }; };
+        const mage = mk('Mage', 'MM'), cf = mk('Cult Fanatic', 'MM');
+        state.combatants = [mage];
+        const sh = TV._reactionsFor(mage).find(r => r.name === 'Shield');
+        ok('monster shield: a 2014 mage can cast Shield as its reaction — +5 AC against the hit, kept', !!sh && sh.when === 'tohit' && sh.ac === 5 && sh.shield === true, JSON.stringify(sh));
+        state.combatants = [cf];
+        ok('monster shield: a cult fanatic’s Shield of Faith is no Shield reaction', !!cf && !TV._reactionsFor(cf).some(r => r.name === 'Shield'));
+      } finally { state.combatants = JSON.parse(keepC); }
+    }
+
     // -- Class features: represented, not just text ------------------------
     {
       try {
