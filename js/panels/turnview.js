@@ -1597,7 +1597,7 @@ registerPanel('turnview', {
       }
       const p = this._partyOf(c);
       const rows = (p && p.sheet && Array.isArray(p.sheet.attacks)) ? p.sheet.attacks : [];
-      return rows.filter(a => a && a.name).map(a => {
+      const pcRows = rows.filter(a => a && a.name).map(a => {
         const row = {
           name: typeof sktAtkLabel === 'function' ? sktAtkLabel(a) : a.name, pc: true, str: !!a.str, spell: !!a.spell,
           mastery: typeof sktMasteryOf === 'function' ? sktMasteryOf(p, a) : (a.mastery || ''),
@@ -1634,6 +1634,7 @@ registerPanel('turnview', {
         }
         return row;
       });
+      return pcRows.concat(this._featureAttackRows(p));
     }
     const entry = this._entryOf(c);
     const raw = entry && entry._raw;
@@ -1642,6 +1643,27 @@ registerPanel('turnview', {
     // Multiattack plan holds are untouched.
     // Then its lair's effects (spent from the Lair bar, not listed as actions).
     return this._summonAttacks(c, panelDefs.attacks._parsed(raw).attacks || []).concat(this._spellRowsFor(entry, raw), this._lairRowsFor(raw));
+  },
+  // A feature's own attack, as a row of its own: a Stars druid's Archer ("you
+  // can make a ranged spell attack… Radiant damage equal to 1d8 plus your
+  // Wisdom modifier"), its Bonus Action. Using the feature spent the Bonus
+  // Action and made no attack. Its spell attack modifier is the sheet's.
+  _featureAttackRows(p){
+    const sh = (p && p.sheet) || {}, out = [], AB = { strength: 'str', dexterity: 'dex', constitution: 'con', intelligence: 'int', wisdom: 'wis', charisma: 'cha' };
+    const atk = parseInt(String(sh.spellAtkBonus || '').replace(/[^\d+-]/g, ''), 10);
+    if (!(atk >= -5)) return out;
+    (typeof sktShownActivations === 'function' ? sktShownActivations(sh.activations || []) : (sh.activations || [])).forEach(a => {
+      const f = (sh.featureList || []).find(x => x && (x.name === a.name || x.name === a.feature));
+      const t = String(a.desc || '') + ' ' + String((f && f.text) || '');
+      if (!a || !/\bmake a (ranged|melee) spell attack\b/i.test(t)) return;
+      const m = /(acid|bludgeoning|cold|fire|force|lightning|necrotic|piercing|poison|psychic|radiant|slashing|thunder) damage equal to (\d*d\d+) plus your (\w+) modifier/i.exec(t);
+      if (!m || !AB[m[3].toLowerCase()] || out.some(r => r.name === a.name)) return;
+      const md = Math.floor((((p.abilities || {})[AB[m[3].toLowerCase()]] || 10) - 10) / 2);
+      out.push({ name: a.name, pc: true, spell: true, str: false, mastery: '', masteryText: '', bonus: atk,
+        dmgText: m[2] + (md ? (md > 0 ? '+' : '') + md : '') + ' ' + m[1].toLowerCase(), magical: true, props: null, offhand: false,
+        bonusAction: a.action === 'Bonus Action', ranged: /ranged/i.test(/\bmake a (ranged|melee) spell attack/i.exec(t)[1]), closeOk: false, feature: true });
+    });
+    return out;
   },
   // A monster's spells as rows (sktMonsterSpellRows), from the rules data of
   // its edition — loaded on first need, the panel drawn again once it is.
@@ -3456,7 +3478,7 @@ registerPanel('turnview', {
       if (nick){ c.onceTurn = Object.assign({}, c.onceTurn, { Nick: this._turnKey() }); this._spend(c, 'actionUsed'); }
       else this._spend(c, 'bonusUsed');
       hitNote = (hitNote ? hitNote + ' · ' : '') + (nick ? 'Nick: part of the Attack action' : a.offhand ? 'off-hand: its Bonus Action' : 'its Bonus Action')
-        + (after ? '' : a.offhand ? ' (after the Attack action with a light weapon)' : ' (after an attack with the first)');
+        + (after || a.feature ? '' : a.offhand ? ' (after the Attack action with a light weapon)' : ' (after an attack with the first)');
     }
     else if (!o.queued || (this._queue && this._queue.i === 0 && !this._queue.legendary && !this._queue.bonus)) this._spend(c, 'actionUsed');
     const bonus = a.pc ? a.bonus : (parseInt(String(a.toHit || '').replace(/[^\d+-]/g, ''), 10) || 0);

@@ -20239,6 +20239,29 @@ for (const cls of Object.keys(rule)) for (let L = 1; L <= 20; L++) for (const sc
       finally { TV._d = d0; TV._coverFor = cv0; if (document.getElementById('cb-root') && typeof cbClose === 'function') cbClose(); state.party = JSON.parse(keepP); state.combatants = JSON.parse(keepC); state.activeCombatantId = keepA; save(); TV && TV._body && TV._render(); }
     }
 
+    // -- Round 328: a feature's own attack is a row — a Stars druid's Archer: a ranged spell attack, 1d8 + WIS radiant, its Bonus Action --
+    if (!PLAYER){
+      const keepP = JSON.stringify(state.party), keepC = JSON.stringify(state.combatants), keepA = state.activeCombatantId; const TV = panelDefs.turnview; const d0 = TV._d; const cv0 = TV._coverFor; TV._coverFor = () => ({ ac: 0 });
+      try {
+        const R = await sktRulesLoad('2024');
+        await openCharBuilder({}); for (let i = 0; i < 80 && !CB.R; i++) await sleep(100);
+        CB.build = Object.assign(sktBlankBuild('2024'), { cls: 'Druid', level: 3, subclass: 'Stars', species: 'Human', name: 'r328', sources: SKT_ALL_SOURCES }); cbQuickBuild();
+        const dr = sktComputeCharacter(CB.build, R); dr.id = 'r328d'; cbClose();
+        state.party = [dr];
+        state.combatants = [{ id: 'r328d', name: 'r328d', isPC: true, hp: dr.hpMax, hpMax: dr.hpMax, ac: dr.ac, initiative: 20, conditions: [] }, { id: 'r328o', name: 'r328o', isPC: false, hp: 100, hpMax: 100, ac: 5, initiative: 1, initBonus: 0, conditions: [] }];
+        state.activeCombatantId = 'r328d'; TV._armed = 'r328o'; save();
+        openPanel('turnview'); await sleep(300); TV._render(); await sleep(30);
+        const c = state.combatants[0], list = TV._attacksFor(c), ai = list.findIndex(a => a.name === 'Archer');
+        const wis = Math.floor((dr.abilities.wis - 10) / 2), atk = parseInt(String(dr.sheet.spellAtkBonus).replace(/[^\d+-]/g, ''), 10);
+        ok('archer: a row of its own — the spell attack modifier, 1d8 + WIS radiant, ranged, a Bonus Action', ai >= 0 && list[ai].bonus === atk && list[ai].dmgText === '1d8+' + wis + ' radiant' && list[ai].ranged && list[ai].bonusAction && list[ai].spell, JSON.stringify(list[ai]));
+        TV._d = n => n === 20 ? 15 : 1;
+        await TV._rollAttack(ai, {}); await sleep(40);
+        ok('archer: it hits for radiant, spending the Bonus Action and not the Action', state.combatants[1].hp < 100 && c.bonusUsed === true && !c.actionUsed && /radiant/.test(TV._log[0] || '') && !/after an attack with the first/.test(String(TV._result)), JSON.stringify([state.combatants[1].hp, c.bonusUsed, c.actionUsed, String(TV._result).replace(/<[^>]+>/g, '').slice(0, 140)]));
+        ok('archer: not one of the Attack action’s choices', !(TV._multiOf(c) || { plan: [] }).plan.some(p => (p.choice || [p.ai]).includes(ai)));
+      } catch(e){ ok('round 328 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
+      finally { TV._d = d0; TV._coverFor = cv0; if (document.getElementById('cb-root') && typeof cbClose === 'function') cbClose(); state.party = JSON.parse(keepP); state.combatants = JSON.parse(keepC); state.activeCombatantId = keepA; save(); TV && TV._body && TV._render(); }
+    }
+
     // -- Class features: represented, not just text ------------------------
     {
       try {
