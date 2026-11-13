@@ -20502,6 +20502,27 @@ for (const cls of Object.keys(rule)) for (let L = 1; L <= 20; L++) for (const sc
       finally { TV._roll = r0; TV._queue = null; state.combatants = JSON.parse(keepC); state.activeCombatantId = keepA; save(); TV && TV._body && TV._render(); }
     }
 
+    // -- Round 337: a legendary action that casts a spell off its list runs that spell — a 2024 white dragon's Frightful Presence casts Fear at DC 14 --
+    if (!PLAYER && typeof _5eData !== 'undefined' && typeof _5eLoaded !== 'undefined' && _5eLoaded){
+      const keepC = JSON.stringify(state.combatants), keepA = state.activeCombatantId, TV = panelDefs.turnview;
+      try {
+        await sktRulesLoad('2024');
+        const mk = (nm, id) => { const d = _5eData.find(x => x.cat === 'monster' && x.name === nm && x._source === 'XMM'); return d && { id, name: d.name, baseName: d.name, _slug: d._slug, _source: 'XMM', isPC: false, hp: 200, hpMax: 200, ac: 18, initiative: 10, initBonus: 0, conditions: [], legendaryMax: 3, legendaryUsed: 0 }; };
+        const wd = mk('Adult White Dragon', 'r337w'), li = mk('Lich', 'r337l');
+        state.combatants = [wd, li]; state.activeCombatantId = 'r337w'; save();
+        openPanel('turnview'); await sleep(200);
+        const stepFor = (c, nm) => { const acts = TV._rawList((TV._entryOf(c) || {})._raw, ['legendary_actions', 'legendary']); const a = acts.find(x => x.name.indexOf(nm) === 0); return a ? TV._legendarySteps(c, a) : null; };
+        const s1 = stepFor(state.combatants[0], 'Frightful Presence');
+        const row1 = s1 && s1[0] && TV._attacksFor(state.combatants[0])[s1[0].ai];
+        ok('legendary cast: Frightful Presence runs Fear — a DC 14 Wisdom save, frightened', !!row1 && row1.save && row1.save.dc === 14 && /wis/i.test(row1.save.ability) && row1.cond && row1.cond.cond === 'Frightened', JSON.stringify(row1 && [row1.name, row1.save, row1.cond]));
+        ok('legendary cast: not a row on its own turn', !TV._body.querySelector('.tv-act') || ![...TV._body.querySelectorAll('.tv-act')].some(x => /Frightful Presence/.test(x.textContent)));
+        const s2 = stepFor(state.combatants[1], 'Frightening Gaze');
+        const row2 = s2 && s2[0] && TV._attacksFor(state.combatants[1])[s2[0].ai];
+        ok('legendary cast: a lich’s Frightening Gaze — Fear at its Spellcasting’s DC', !!row2 && row2.save && row2.save.dc === 20 && row2.cond && row2.cond.cond === 'Frightened', JSON.stringify(row2 && [row2.name, row2.save]));
+      } catch(e){ ok('round 337 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
+      finally { state.combatants = JSON.parse(keepC); state.activeCombatantId = keepA; save(); TV && TV._body && TV._render(); }
+    }
+
     // -- Class features: represented, not just text ------------------------
     {
       try {

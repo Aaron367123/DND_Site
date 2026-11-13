@@ -1672,11 +1672,34 @@ registerPanel('turnview', {
     if (!raw || typeof sktMonsterSpellRows !== 'function') return [];
     const hit = this._spellRowCache.get(raw);
     if (hit) return hit;
-    if (!/spellcasting/i.test(JSON.stringify([].concat(raw.special_abilities || [], raw.actions || [], raw.bonus_actions || []).map(a => a && a.name)))){ this._spellRowCache.set(raw, []); return []; }
+    if (!/spellcasting/i.test(JSON.stringify([].concat(raw.special_abilities || [], raw.actions || [], raw.bonus_actions || []).map(a => a && a.name)))
+        && !(raw.legendary_actions || []).some(la => /\bcasts?\s+(?:the\s+)?[A-Z]/.test(String((la && la.desc) || '')))){ this._spellRowCache.set(raw, []); return []; }
     const ed = typeof SKT_2024_ERA !== 'undefined' && SKT_2024_ERA.has((entry && entry._source) || raw._source) ? '2024' : '2014';
     const R = typeof _sktRulesReady !== 'undefined' ? _sktRulesReady[ed] : null;
     if (!R){ if (typeof sktRulesLoad === 'function') sktRulesLoad(ed).then(() => this._body && this._render(), () => {}); return []; }
     const rows = sktMonsterSpellRows(raw, R);
+    // A legendary action that casts a spell not on its list — a 2024 white
+    // dragon's Frightful Presence ("casts Fear… (spell save DC 14)"), a
+    // lich's Frightening Gaze, a vampire's Beguile ("casts Command"): that
+    // spell as the legendary action's own row, at the DC its text gives (or
+    // its Spellcasting's). It ran nothing.
+    const sc0 = typeof sktMonsterSpellcasting === 'function' ? sktMonsterSpellcasting(raw) : null;
+    (raw.legendary_actions || []).forEach(la => {
+      const t = String((la && la.desc) || ''), m0 = /\bcasts?\s+(?:the\s+)?([A-Z][\w'’]*(?:\s+[\w'’]+){0,3})/.exec(t);
+      if (!m0) return;
+      // The longest run of words that names a spell: "Stinking cloud",
+      // "Phantasmal killer" (older blocks lowercase the rest), "Fear".
+      const ws = m0[1].split(/\s+/);
+      let m = null;
+      for (let k = ws.length; k > 0 && !m; k--){ const nm = ws.slice(0, k).join(' '); const s = typeof sktRulesSpell === 'function' ? sktRulesSpell(R, nm) : null; if (s) m = [null, s.name]; }
+      if (!m) return;
+      const dc = (/spell save DC\s*(\d+)/i.exec(t) || [])[1] || (sc0 && sc0.dc);
+      if (!dc || rows.some(r => r.spellName === m[1] && r.group !== 'legendary')) return;
+      const at = /\(level\s+(\d+)\s+version\)/i.exec(t);
+      const synth = { challenge_rating: raw.challenge_rating, special_abilities: [{ name: 'Spellcasting', desc: 'spell save DC ' + dc + '\nAt will: ' + m[1] + (at ? ' (level ' + at[1] + ' version)' : '') }] };
+      const r = sktMonsterSpellRows(synth, R)[0];
+      if (r) rows.push(Object.assign(r, { name: String(la.name || m[1]), group: 'legendary', legendarySpell: true }));
+    });
     this._spellRowCache.set(raw, rows);
     return rows;
   },
