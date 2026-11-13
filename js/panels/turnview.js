@@ -3789,7 +3789,7 @@ registerPanel('turnview', {
     // Cover from the creature to its target counts against a Dexterity save
     // (a ray, a line — it starts at the creature).
     const cov = eff.save && /^dex/i.test(String(eff.save.ability || '')) ? this._coverFor(c, t) : null;
-    const sv = eff.save && C && typeof C.rollSave === 'function' ? C.rollSave(t, eff.save.ability, eff.save.dc, { cover: cov && cov.ac || 0 }) : null;
+    const sv = eff.save && C && typeof C.rollSave === 'function' ? C.rollSave(t, eff.save.ability, eff.save.dc, { cover: cov && cov.ac || 0, cond: eff.cond && eff.cond.cond }) : null;
     const passed = !!(sv && sv.passed), half = passed && !!(eff.save && eff.save.half);
     let detail = sv ? String(eff.save.ability).slice(0, 3).toUpperCase() + ' save ' + (sv.auto ? sv.detail : sv.total + ' vs DC ' + eff.save.dc + ' (' + sv.detail + ')') : '';
     const parts = passed && !half ? [] : (eff.parts || []).map(pt => {
@@ -4255,7 +4255,7 @@ registerPanel('turnview', {
       }
       fail = false; why = key === 'lr' ? 'Legendary Resistance (' + x.ability + ' ' + x.rolled.total + ' vs DC ' + x.dc + ')' : x.ability + ' save ' + x.rolled.detail.split(' · ').pop() + ' vs DC ' + x.dc;
     } else if (kind === 'roll'){
-      const sv = C && typeof C.rollSave === 'function' ? C.rollSave(t, x.ability, x.dc, {}) : null;
+      const sv = C && typeof C.rollSave === 'function' ? C.rollSave(t, x.ability, x.dc, { cond: x.cond }) : null;
       if (!sv){ this._render(); return; }
       fail = !sv.passed;
       why = x.ability + ' save ' + (sv.auto ? sv.detail : sv.total + ' vs DC ' + x.dc + ' (' + sv.detail + ')');

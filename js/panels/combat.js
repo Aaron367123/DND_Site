@@ -2643,6 +2643,11 @@ registerPanel('combat',{
       if (typeof sktMonsterExh === 'function'){ const ex = sktMonsterExh(c, 'save'); extra += ex.bonus; if (ex.dis) dis.push('exhaustion'); }
     }
     if (auto) return { total: null, nat: null, passed: false, auto, detail: auto + ' — fails automatically' };
+    // A save against a condition (opts.cond): advantage the creature has
+    // against that one — Fey Ancestry against being charmed, a halfling's
+    // Brave against fright, a dwarf's against poison.
+    const ca = opts && opts.cond ? this._condSaveAdv(c, p, opts.cond) : '';
+    if (ca) adv.push(ca);
     const mode = adv.length && !dis.length ? 1 : dis.length && !adv.length ? -1 : 0;
     const a = sktD(20), b = mode ? sktD(20) : null;
     const nat = b == null ? a : mode > 0 ? Math.max(a, b) : Math.min(a, b);
@@ -2653,6 +2658,19 @@ registerPanel('combat',{
     const why = [adv.length ? 'advantage: ' + adv.join(', ') : '', dis.length ? 'disadvantage: ' + dis.join(', ') : '', extra ? 'exhaustion ' + extra : ''].filter(Boolean).join('; ');
     return { total, nat, passed: total >= dc, auto: '',
       detail: 'd20 ' + (b == null ? a : a + '/' + b) + (bonus ? (bonus > 0 ? ' + ' : ' − ') + Math.abs(bonus) : '') + (extra ? ' ' + extra : '') + (cov ? ' + ' + cov + ' (' + (cov >= 5 ? '¾' : '½') + ' cover)' : '') + (why ? ' (' + why + ')' : '') };
+  },
+  // What gives a creature advantage on a save against a condition, read off
+  // its own features or traits: "advantage on saving throws to avoid or end
+  // the Charmed condition", "…against being frightened", "…against poison".
+  // The name of the first that does, or ''.
+  _condSaveAdv(c, p, cond){
+    const k = String(cond || '').toLowerCase(); if (!k) return '';
+    const stem = k.replace(/ed$/, '(?:ed)?');   // ("poison" for poisoned too)
+    const re = new RegExp('advantage on saving throws?[^.]*?\\b(?:to avoid or end (?:the )?|against (?:being )?|against (?:the )?)(?:[a-z]+ (?:or|and) )?' + stem + '\\b', 'i');
+    const list = p ? (((p.sheet || {}).featureList) || []).filter(f => f && !f.info).map(f => ({ name: f.name, text: String(f.text || '') }))
+      : (() => { const e = this.statBlockFor(c), raw = e && (e._raw || e); return [].concat((raw && raw.special_abilities) || [], (raw && raw.trait) || []).map(t => ({ name: t && t.name, text: String((t && (t.desc || t.text)) || '') })); })();
+    const hit = list.find(f => re.test(f.text));
+    return hit ? String(hit.name || 'trait') : '';
   },
   // ─── A character's failed save, and what might still turn it ───────────────
   // The dice a character holds for exactly this: a bard's die added to the
@@ -3091,7 +3109,7 @@ registerPanel('combat',{
     } else if ((how === 'roll' || how === 'answer') && c){
       // 'answer': the total the player rolled (`key`).
       const r = how === 'answer' ? { total: +key, nat: null, passed: +key >= p.dc, auto: '', detail: 'their roll' }
-        : this.rollSave(c, p.ab, p.dc, { spell: !!p.spell });
+        : this.rollSave(c, p.ab, p.dc, { spell: !!p.spell, cond: p.cond });
       p.asked = null;
       passed = r.passed;
       this._log(`${c.name} ${String(p.ab).toUpperCase()} save vs ${p.cond}: ${r.auto ? 'fails' : r.total} (${r.detail}) — ${passed ? 'saved' : 'failed'}`);
@@ -3266,7 +3284,7 @@ registerPanel('combat',{
     const rollRow = (id, ab, dc) => {
       const c = state.combatants.find(x => x.id === id);
       const cover = /^dex/i.test(ab) ? covers[id] || 0 : 0;
-      const r = this.rollSave(c, ab, dc, { spell: $('#as-spell') ? $('#as-spell').checked : !!pre.spell, cover });
+      const r = this.rollSave(c, ab, dc, { spell: $('#as-spell') ? $('#as-spell').checked : !!pre.spell, cover, cond: pre.cond && pre.cond.cond });
       return { id, total: r.auto ? '—' : r.total, nat: r.nat, detail: r.detail, passed: r.passed, lr: false, cover: r.auto ? 0 : cover };
     };
     const close = () => {

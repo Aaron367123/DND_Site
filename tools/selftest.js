@@ -20602,6 +20602,33 @@ for (const cls of Object.keys(rule)) for (let L = 1; L <= 20; L++) for (const sc
       finally { TV._d = d0; TV._coverFor = cv0; TV._attacksFor = af0; TV._pending = null; state.party = JSON.parse(keepP); state.combatants = JSON.parse(keepC); state.activeCombatantId = keepA; save(); TV && TV._body && TV._render(); }
     }
 
+    // -- Round 340: a save against a condition counts the creature's own advantage on it — Fey Ancestry against being charmed, Brave against fright --
+    if (!PLAYER){
+      const keepP = JSON.stringify(state.party), keepC = JSON.stringify(state.combatants); const C = panelDefs.combat, TV = panelDefs.turnview;
+      try {
+        state.party = [{ id: 'r340e', name: 'r340e', cls: 'bard', level: 6, hp: 40, hpMax: 40, ac: 14, abilities: { wis: 12 },
+          sheet: { featureList: [{ name: 'Fey Ancestry', from: 'species', text: 'You have Advantage on saving throws you make to avoid or end the Charmed condition.' }] } }];
+        state.combatants = [{ id: 'r340e', name: 'r340e', isPC: true, hp: 40, hpMax: 40, ac: 14, conditions: [] }];
+        const e = state.combatants[0];
+        const r1 = C.rollSave(e, 'wis', 15, { cond: 'Charmed' });
+        ok('condition save: Fey Ancestry gives advantage against being charmed', /advantage: [^;)]*Fey Ancestry/.test(r1.detail), r1.detail);
+        const r2 = C.rollSave(e, 'wis', 15, { cond: 'Frightened' });
+        ok('condition save: not against fright', !/Fey Ancestry/.test(r2.detail), r2.detail);
+        const r3 = C.rollSave(e, 'wis', 15, {});
+        ok('condition save: nor with no condition named', !/Fey Ancestry/.test(r3.detail), r3.detail);
+        ok('condition save: a halfling’s Brave — "against being frightened"', C._condSaveAdv(null, { sheet: { featureList: [{ name: 'Brave', text: 'You have advantage on saving throws against being frightened.' }] } }, 'Frightened') === 'Brave');
+        ok('condition save: a dwarf’s resilience — "against poison" counts for poisoned', C._condSaveAdv(null, { sheet: { featureList: [{ name: 'Dwarven Resilience', text: 'You have advantage on saving throws against poison, and you have resistance against poison damage.' }] } }, 'Poisoned') === 'Dwarven Resilience');
+        // Through the hit's save: a monster's charm on Fey Ancestry.
+        state.combatants.push({ id: 'r340m', name: 'r340m', isPC: false, hp: 30, hpMax: 30, ac: 12, conditions: [] });
+        TV._onHits = [{ turn: TV._turnKey(), srcId: 'r340m', srcName: 'r340m', tgtId: 'r340e', tgtName: 'r340e', name: 'Charm', cond: 'Charmed', ability: 'WIS', dc: 30 }];
+        const rs0 = C.rollSave; let seen = null; C.rollSave = function(c, ab, dc, o){ seen = o; return rs0.call(this, c, ab, dc, o); };
+        try { await TV._onHitAct('roll', 0); } finally { C.rollSave = rs0; }
+        await sleep(30);
+        ok('condition save: the hit’s save is rolled against its condition', !!seen && seen.cond === 'Charmed', JSON.stringify(seen));
+      } catch(e){ ok('round 340 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
+      finally { TV._onHits = []; state.party = JSON.parse(keepP); state.combatants = JSON.parse(keepC); save(); TV && TV._body && TV._render(); }
+    }
+
     // -- Class features: represented, not just text ------------------------
     {
       try {
