@@ -431,8 +431,12 @@ function _fromFields(f){
   // Shape against the sheet's and the 2024 rules' 3.
   const declared = (typeof sktDeclaredPools === 'function')
     ? sktDeclaredPools(bio.features) : {};
+  // The edition, where the sheet says (see sktPdfEdition). Without it every
+  // import was read as 2024 — a 2014 character got all hit dice back on a
+  // long rest and a Rage back on every short one.
+  const edition = typeof sktPdfEdition === 'function' ? sktPdfEdition(bio.features) : null;
   const resources = _deriveResources(
-    classLevels || (cls && level ? [{ cls, level }] : []), abilities);
+    classLevels || (cls && level ? [{ cls, level }] : []), abilities, edition);
   resources.forEach(r => {
     const n = declared[r.name];
     // Only ever corrects a pool that was already derived. Turning every
@@ -457,6 +461,7 @@ function _fromFields(f){
 
   return {
     name: String(name||''),
+    ...(edition ? { rules: edition } : {}),
     cls, level, subclass, feats, resources,
     race: String(race||''),
     background: String(background||''),
@@ -665,7 +670,11 @@ function _matchFeats(text){
 // two numbers it does carry. Names match the ones the party tracker and the
 // Turn View's reaction costs already use ("Rage", "Bardic Inspiration"), so a
 // derived pool is spendable the moment it appears.
-function _deriveResources(pairs, abilities){
+// ed: '2024' where the sheet says so — Second Wind and Channel Divinity have
+// more uses in those rules. The sheet's own "N / Long Rest" corrects any of
+// these after (sktDeclaredPools), when it states one.
+function _deriveResources(pairs, abilities, ed){
+  const r24 = ed === '2024';
   const mod = k => (abilities && typeof abilities[k] === 'number') ? Math.floor((abilities[k] - 10) / 2) : 0;
   const out = [];
   const pool   = (name, n) => { if (n > 0) out.push({ name, type:'pool',   current:n, max:n }); };
@@ -681,11 +690,11 @@ function _deriveResources(pairs, abilities){
     } else if (c === 'bard'){
       pool('Bardic Inspiration', Math.max(1, mod('cha')));
     } else if (c === 'cleric'){
-      pool('Channel Divinity', band(L, [[2,1],[6,2],[18,3]]));
+      pool('Channel Divinity', band(L, r24 ? [[2,2],[6,3],[18,4]] : [[2,1],[6,2],[18,3]]));
     } else if (c === 'druid'){
       pool('Wild Shape', band(L, [[2,2],[6,3],[17,4]]));
     } else if (c === 'fighter'){
-      pool('Second Wind', 1);
+      pool('Second Wind', r24 ? band(L, [[1,2],[4,3],[10,4]]) : 1);
       if (L >= 2) pool('Action Surge', L >= 17 ? 2 : 1);
       if (L >= 9) pool('Indomitable', band(L, [[9,1],[13,2],[17,3]]));
     } else if (c === 'monk'){
@@ -694,7 +703,7 @@ function _deriveResources(pairs, abilities){
       if (L >= 2) pool('Focus Points', L);
     } else if (c === 'paladin'){
       pool('Lay on Hands', L * 5);
-      if (L >= 3) pool('Channel Divinity', 1);
+      if (L >= 3) pool('Channel Divinity', r24 ? (L >= 11 ? 3 : 2) : 1);
     } else if (c === 'rogue'){
       toggle('Sneak Attack');
     } else if (c === 'sorcerer'){

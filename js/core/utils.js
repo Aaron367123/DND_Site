@@ -2445,6 +2445,15 @@ function sktMergeResources(list){
 // Wild Shape; the 2024 rules and the sheet both say 3. Rather than carry a
 // table that has to be right for every class in two rule sets, the number the
 // sheet states wins wherever it states one.
+// Which rules a D&D Beyond PDF was made from. Its feature list names the
+// book of each feature — "Rage • PHB-2024 51" against "Rage • PHB 48" — and
+// that is the only place the export says. null when it doesn't say.
+function sktPdfEdition(featuresText){
+  const t = String(featuresText || '');
+  if (/•\s*(PHB-2024|XPHB|DMG-2024|XDMG)\b/.test(t)) return '2024';
+  if (/•\s*PHB\s+\d/.test(t)) return '2014';
+  return null;
+}
 function sktDeclaredPools(featuresText){
   const text = String(featuresText || '');
   const out = {};

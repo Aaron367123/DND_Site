@@ -20828,6 +20828,34 @@ for (const cls of Object.keys(rule)) for (let L = 1; L <= 20; L++) for (const sc
       } catch(e){ ok('round 347 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
       finally { window.showConfirm = oConf; window.showModal = oModal; window.showToast = oToast; if (document.getElementById('cb-root') && typeof cbClose === 'function') cbClose(); state.party = JSON.parse(keepP); state.combatants = JSON.parse(keepC); save(); if (P._body) P._render(); }
     }
+    // -- Round 348: a character read from a PDF keeps its edition — the rests follow it --
+    if (!PLAYER){
+      const keepP = JSON.stringify(state.party), keepC = JSON.stringify(state.combatants); const P = panelDefs.party;
+      try {
+        ok('the edition from the feature list: PHB-2024', sktPdfEdition('* Rage • PHB-2024 51\n* Unarmored Defense • PHB-2024 51') === '2024');
+        ok('…PHB (2014)', sktPdfEdition('* Rage • PHB 48\n* Unarmored Defense • PHB 48') === '2014');
+        ok('…and nothing when it doesn’t say', sktPdfEdition('Rage, Unarmored Defense') === null);
+        const fig24 = _deriveResources([{ cls: 'fighter', level: 6 }], {}, '2024'), fig14 = _deriveResources([{ cls: 'fighter', level: 6 }], {}, '2014');
+        const n = (l, k) => (l.find(r => r.name === k) || {}).max;
+        ok('2024 import: Second Wind 3 at 6th level, 2014: 1', n(fig24, 'Second Wind') === 3 && n(fig14, 'Second Wind') === 1);
+        ok('2024 cleric 6: Channel Divinity 3; 2014: 2', n(_deriveResources([{ cls: 'cleric', level: 6 }], {}, '2024'), 'Channel Divinity') === 3 && n(_deriveResources([{ cls: 'cleric', level: 6 }], {}, '2014'), 'Channel Divinity') === 2);
+        ok('2024 paladin 11: Channel Divinity 3; 2014: 1', n(_deriveResources([{ cls: 'paladin', level: 11 }], {}, '2024'), 'Channel Divinity') === 3 && n(_deriveResources([{ cls: 'paladin', level: 11 }], {}, '2014'), 'Channel Divinity') === 1);
+        const fromPdf = ed => _fromFields({ CharacterName: 'r348 pdf', ClassLevel: 'Fighter 6', CON: '14', 'Features and Traits': '* Second Wind • ' + (ed === '2024' ? 'PHB-2024 91' : 'PHB 72') });
+        const p24 = fromPdf('2024'), p14 = fromPdf('2014');
+        ok('a PDF import keeps the edition it was made from, with its pools', p24.rules === '2024' && p14.rules === '2014' && n(p24.resources, 'Second Wind') === 3 && n(p14.resources, 'Second Wind') === 1, JSON.stringify([p24.rules, p14.rules, p24.resources]));
+        // An import saved before: the edition is worked out on load.
+        const imp = (id, f) => ({ id, name: id, cls: 'barbarian', level: 6, hp: 10, hpMax: 60, resources: [{ name: 'Rage', type: 'pool', current: 0, max: 4 }], hitDice: { current: 0, max: 6, dieType: 'd12' }, sheet: { bio: { features: f } } });
+        state.combatants = [];
+        state.party = [imp('r348a', '* Rage • PHB 48'), imp('r348b', '* Rage • PHB-2024 51'), imp('r348c', '')];
+        migratePartyEdition();
+        ok('migrated: 2014, 2024, and unknown left alone', state.party[0].rules === '2014' && state.party[1].rules === '2024' && state.party[2].rules === undefined);
+        state.party.forEach((p, i) => P._shortRestOne(p, i));
+        ok('2014 Rage: nothing back on a short rest; 2024: one', state.party[0].resources[0].current === 0 && state.party[1].resources[0].current === 1);
+        state.party.forEach((p, i) => P._longRestOne(p, i));
+        ok('2014 long rest: half the hit dice; 2024: all', state.party[0].hitDice.current === 3 && state.party[1].hitDice.current === 6, JSON.stringify(state.party.map(p => p.hitDice.current)));
+      } catch(e){ ok('round 348 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
+      finally { state.party = JSON.parse(keepP); state.combatants = JSON.parse(keepC); save(); if (P._body) P._render(); }
+    }
     // -- Class features: represented, not just text ------------------------
     {
       try {

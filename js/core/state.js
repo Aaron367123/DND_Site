@@ -140,6 +140,7 @@ function loadDomain(domain){
       migratePartyResourceAliases();
       migratePartyHpManual();
       migratePartyDetailTraits();
+      migratePartyEdition();
       reconcilePcHp();
     }else if(domain==='combat'){
       const r=localStorage.getItem(COMBAT_KEY);
@@ -241,6 +242,16 @@ function reconcilePcHp(){
 // an edit) would have dropped him to 39. The sheet's number is the one the
 // table has been using: the build follows it. Not while a drain has lowered
 // the maximum (hpMaxNormal): that number is meant to differ.
+// A character read from a PDF before the import kept its edition: worked
+// out from the feature list it saved (sktPdfEdition), once.
+function migratePartyEdition(){
+  if (typeof sktPdfEdition !== 'function') return;
+  (state.party || []).forEach(p => {
+    if (!p || p.build || p.rules) return;
+    const ed = sktPdfEdition(p.sheet && p.sheet.bio && p.sheet.bio.features);
+    if (ed) p.rules = ed;
+  });
+}
 function migratePartyHpManual(){
   (state.party || []).forEach(p => {
     const hp = p && p.build && p.build.hp;
