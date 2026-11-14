@@ -22104,7 +22104,7 @@ for (const cls of Object.keys(rule)) for (let L = 1; L <= 20; L++) for (const sc
         B._tool = 'area'; B._tplShape = 'circle'; B._render(); await sleep(100);
         const sel = B._body.querySelector('#tpl-shape');
         const shown = id => { const e = B._body.querySelector(id); return !!e && getComputedStyle(e).display !== 'none'; };
-        const pick = async v => { sel.value = v; sel.dispatchEvent(new Event('change')); await sleep(30); };
+        const pick = async v => { if (B._isBuildShape(v) !== B._isBuildShape(B._tplShape)){ B._tplShape = v; B._render(); await sleep(60); } /* walls and lights are on the Build tool's list */ const sl = B._body.querySelector('#tpl-shape'); sl.value = v; sl.dispatchEvent(new Event('change')); await sleep(30); };
         ok('a sphere: size and colour', shown('#tpl-wrap-s') && shown('#tpl-color'));
         await pick('wall');
         ok('a wall: no size, no colour', !shown('#tpl-wrap-s') && !shown('#tpl-color'));
@@ -22232,6 +22232,58 @@ for (const cls of Object.keys(rule)) for (let L = 1; L <= 20; L++) for (const sc
         B._tool = keepTool;
         if (keepT){ B._tokens = keepT; B._drawings = keepD; try { B._saveMap(); } catch(e){} }
         try { B._closePanel(); B._render(); } catch(e){}
+        closePanel('battlemap');
+      }
+    }
+    // -- Round 385: the Area tool is for spell and ability areas; walls, doors, lights and difficult terrain are the DM's Build tool --
+    {
+      const B = panelDefs.battlemap;
+      let keepT = null, keepD = null, keepF, fogSaved = false;
+      const keepTool = B._tool, keepShape = B._tplShape, keepA = B._aoeShape, keepBl = B._bldShape;
+      try {
+        openPanel('battlemap'); await sleep(700);
+        keepT = B._tokens.slice(); keepD = B._drawings.slice();
+        keepF = B._fog; fogSaved = true; B._fog = null;
+        B._tokens = []; B._drawings = [{ k: 'tpl', id: 'r385s', shape: 'circle', x: 300, y: 300, ft: 10, c: '#ff0000' }]; B._tool = ''; B._tplShape = 'circle'; B._aoeShape = 'circle'; B._bldShape = 'wall'; B._render(); await sleep(150);
+        const btn = a => B._body.querySelector('[data-mact="' + a + '"]');
+        const shapes = () => [...B._body.querySelectorAll('#tpl-shape option')].map(o => o.value);
+        const on = a => !!btn(a) && btn(a).classList.contains('active');
+        ok('the DM’s toolbar has a Build button beside Area', !!btn('tool-build') && !!btn('tool-area'));
+        btn('tool-area').click(); await sleep(80);
+        ok('Area: the shapes spells and abilities cover, and nothing built', B._tool === 'area' && on('tool-area') && !on('tool-build')
+          && ['circle', 'cyl', 'cone', 'line', 'cube', 'aura', 'darkness'].every(v => shapes().includes(v))
+          && !shapes().some(v => /^(wall|door|lamp|terrain)$/.test(v)), JSON.stringify(shapes()));
+        const sel = B._body.querySelector('#tpl-shape'); sel.value = 'cone'; sel.onchange(); await sleep(30);
+        btn('tool-build').click(); await sleep(80);
+        ok('Build: wall, door, light source and difficult terrain — and only those', B._tool === 'area' && on('tool-build') && !on('tool-area')
+          && JSON.stringify(shapes()) === JSON.stringify(['wall', 'door', 'lamp', 'terrain']) && B._tplShape === 'wall', JSON.stringify([shapes(), B._tplShape]));
+        const sz = B._body.querySelector('#tpl-wrap-s'), cc = B._body.querySelector('#tpl-color');
+        ok('…with no size in feet, no colour and no “Clear areas”', (!sz || getComputedStyle(sz).display === 'none') && (!cc || getComputedStyle(cc).display === 'none') && !btn('clear-areas'));
+        // A wall drawn with it
+        const stage = B._body.querySelector('#map-stage'), cs = B._csScreen();
+        const cl = (sx, sy) => { const r = stage.getBoundingClientRect(), z = B._screenScale(); return { x: Math.round(r.left + sx * z), y: Math.round(r.top + sy * z) }; };
+        const p0 = cl(2 * cs, 2 * cs), p1 = cl(6 * cs, 2 * cs);
+        const a0 = B._stagePoint(p0.x, p0.y, stage);
+        B._areaPointerDown(a0.x, a0.y, p0.x, p0.y, false);
+        document.dispatchEvent(new MouseEvent('mousemove', { bubbles: true, clientX: p1.x, clientY: p1.y }));
+        document.dispatchEvent(new MouseEvent('mouseup', { bubbles: true, clientX: p1.x, clientY: p1.y }));
+        await sleep(80);
+        ok('…and it builds: a wall drawn across the map', B._walls().length === 1 && !B._walls()[0].door && B._areas().length === 1, JSON.stringify(B._drawings));
+        const s2 = B._body.querySelector('#tpl-shape'); s2.value = 'door'; s2.onchange(); await sleep(30);
+        btn('tool-area').click(); await sleep(80);
+        ok('back to Area: the cone it was left on', on('tool-area') && B._tplShape === 'cone' && B._body.querySelector('#tpl-shape').value === 'cone', B._tplShape);
+        btn('tool-build').click(); await sleep(80);
+        ok('back to Build: the door it was left on', on('tool-build') && B._tplShape === 'door' && B._body.querySelector('#tpl-shape').value === 'door', B._tplShape);
+        btn('tool-build').click(); await sleep(80);
+        ok('Build pressed again puts the tool away', B._tool === '' && !on('tool-build') && !on('tool-area'));
+        btn('tool-area').click(); await sleep(80); btn('tool-area').click(); await sleep(80);
+        ok('…as Area does', B._tool === '' && !B._body.querySelector('#tpl-shape'));
+      } catch(e){ ok('round 385 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
+      finally {
+        if (fogSaved) B._fog = keepF;
+        B._tool = keepTool; B._tplShape = keepShape; B._aoeShape = keepA; B._bldShape = keepBl;
+        if (keepT){ B._tokens = keepT; B._drawings = keepD; try { B._saveMap(); } catch(e){} }
+        try { B._render(); } catch(e){}
         closePanel('battlemap');
       }
     }
@@ -25565,6 +25617,19 @@ for (const cls of Object.keys(rule)) for (let L = 1; L <= 20; L++) for (const sc
         if (keepT){ B._tokens = keepT; B._drawings = keepD; try { B._saveMap(); } catch(e){} }
         paTab = keepTab; try { paRender(); } catch(e){}
       }
+    }
+    // -- Round 386: a player's map has the Area tool and no Build: walls, doors and lights are the DM's --
+    if (PLAYER){
+      const keepTab = paTab; const B = panelDefs.battlemap; const keepTool = B._tool, keepShape = B._tplShape;
+      try {
+        if (paMyIdx() < 0) paSetPc(state.party[0].id);
+        paTab = 'map'; paRender(); await sleep(900);
+        ok('player: no Build tool', !document.querySelector('[data-mact="tool-build"]') && !document.querySelector('[data-pa-draw="tool-build"]'));
+        B._tool = 'area'; B._tplShape = 'circle'; B._render(); await sleep(150);
+        const opts = [...document.querySelectorAll('.pa-mount #tpl-shape option')].map(o => o.value);
+        ok('…and their Area shapes have nothing built in them', opts.length > 0 && !opts.some(v => /^(wall|door|lamp|terrain)$/.test(v)), JSON.stringify(opts));
+      } catch(e){ ok('round 386 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
+      finally { B._tool = keepTool; B._tplShape = keepShape; try { B._render(); } catch(e){} paTab = keepTab; try { paRender(); } catch(e){} }
     }
   }
 

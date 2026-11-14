@@ -2475,6 +2475,13 @@ registerPanel('battlemap',{
   // middle of one face. Sizes are FEET, converted with the map's own
   // ft-per-cell and cell spacing, so a 20 ft sphere is 4 squares on any map.
   _tplShape: 'circle', _tplSize: 20, _tplWidth: 5, _tplHeight: 40, _tplColor: '#ff7a3d', _tplLamp: 'torch',
+  // The Area tool measures what a spell or ability covers; the DM's Build
+  // tool lays the map's own fittings — walls, doors, lights, rough ground.
+  // Both run on the same machinery (tool 'area'); which one is up is which
+  // kind of shape is chosen, and each remembers its last choice.
+  _aoeShape: 'circle', _bldShape: 'wall',
+  _isBuildShape(s){ return /^(terrain|wall|door|lamp)$/.test(s || ''); },
+  _areaBuild(){ return this._tool === 'area' && this._isBuildShape(this._tplShape); },
   // A CYLINDER (Moonbeam, Flame Strike, Ice Storm) is a circle on the map, as
   // a sphere is, but a column in the air: {shape:'cyl', ft: radius, h: height}
   // from its base up. With heights on the map the difference is who is in it —
@@ -2607,10 +2614,12 @@ registerPanel('battlemap',{
   },
   _areaControlsHtml(){
     const opt = (v, l) => '<option value="' + v + '"' + (this._tplShape === v ? ' selected' : '') + '>' + l + '</option>';
-    return '<select id="tpl-shape" title="Shape" style="width:78px;font-size:var(--fs-sm);padding:2px 4px;flex:0 0 auto">'
-        + opt('circle', 'Sphere') + opt('cyl', 'Cylinder') + opt('cone', 'Cone') + opt('line', 'Line') + opt('cube', 'Cube') + opt('aura', 'Emanation')
-        + opt('darkness', 'Magical darkness')
-        + (document.body.classList.contains('player-mode') ? '' : opt('terrain', 'Difficult terrain') + opt('wall', 'Wall (blocks sight)') + opt('door', 'Door') + opt('lamp', 'Light source')) + '</select>'
+    const build = this._isBuildShape(this._tplShape) && !document.body.classList.contains('player-mode');
+    return '<select id="tpl-shape" title="' + (build ? 'What to build' : 'Shape') + '" style="width:' + (build ? 'auto' : '78px') + ';font-size:var(--fs-sm);padding:2px 4px;flex:0 0 auto">'
+        + (build
+          ? opt('wall', 'Wall') + opt('door', 'Door') + opt('lamp', 'Light source') + opt('terrain', 'Difficult terrain')
+          : opt('circle', 'Sphere') + opt('cyl', 'Cylinder') + opt('cone', 'Cone') + opt('line', 'Line') + opt('cube', 'Cube') + opt('aura', 'Emanation')
+            + opt('darkness', 'Magical darkness')) + '</select>'
       + '<span id="tpl-wrap-s" style="display:' + (this._tplHas(this._tplShape, 'size') ? 'inline-flex' : 'none') + ';align-items:center;gap:3px;flex-shrink:0">'
       + '<input type="number" id="tpl-size" min="5" step="5" value="' + this._tplSize + '" style="width:52px;font-size:var(--fs-sm);padding:2px 4px;flex-shrink:0" title="Size in feet (radius for a sphere or cylinder, length for a cone or line, side for a cube, how far an emanation reaches from its creature)">'
       + '<span class="bt-l" style="font-size:var(--fs-xs);color:var(--text-muted)">ft</span></span>'
@@ -2633,7 +2642,7 @@ registerPanel('battlemap',{
       +   '<span style="font-size:var(--fs-xs);color:var(--text-muted)">ft</span>'
       + '</span>'
       + '<input type="color" id="tpl-color" value="' + this._tplColor + '" style="width:24px;height:22px;padding:1px;border-radius:3px;flex-shrink:0;cursor:pointer;display:' + (this._tplHas(this._tplShape, 'colour') ? '' : 'none') + '" title="Colour">'
-      + (this._areas().length ? '<button class="btn" data-mact="clear-areas" style="flex-shrink:0" title="Remove every area from the map">Clear areas</button>' : '');
+      + (!build && this._areas().length ? '<button class="btn" data-mact="clear-areas" style="flex-shrink:0" title="Remove every area from the map">Clear areas</button>' : '');
   },
   // Outline in stage px: {circle:{x,y,r}} or {poly:[[x,y]…]}.
   _areaGeom(t){
@@ -2720,7 +2729,7 @@ registerPanel('battlemap',{
     // Handles only while the Area tool is up: the rest of the time an area
     // is scenery, and a row of dots over the battlefield is noise.
     const vs = this._screenScale ? (this._screenScale() || 1) : 1;
-    const handles = this._tool === 'area' ? this._areas().map(t => {
+    const handles = this._tool === 'area' && !this._areaBuild() ? this._areas().map(t => {
       const h = this._areaHandle(t); if (!h) return '';
       return '<circle cx="' + h.x.toFixed(1) + '" cy="' + h.y.toFixed(1) + '" r="' + (7 / vs).toFixed(1) + '"'
         + ' fill="' + (t.c || '#ff7a3d') + '" fill-opacity=".9" stroke="#fff" stroke-width="' + (1.5 / vs).toFixed(2) + '"'
@@ -2990,10 +2999,10 @@ registerPanel('battlemap',{
   },
   // Walls and lights, drawn on the DM's map (a player sees the light they
   // give, not the fittings): a wall a thick line, a light a small sun with
-  // its bright and dim reach dotted round it while the Area tool is up.
+  // its bright and dim reach dotted round it while the Build tool is up.
   _fixturesSvg(preview, vs){
     if (document.body.classList.contains('player-mode')) return '';
-    const up = this._tool === 'area', ppf = this._ppf();
+    const up = this._areaBuild(), ppf = this._ppf();
     // A wall orange; a door wood-brown, and dashed and faint while it stands open.
     const line = (p, extra, door) => { let o = ''; for (let i = 0; i + 3 < p.length; i += 2) o += '<line x1="' + (+p[i]).toFixed(1) + '" y1="' + (+p[i + 1]).toFixed(1) + '" x2="' + (+p[i + 2]).toFixed(1) + '" y2="' + (+p[i + 3]).toFixed(1) + '" stroke="' + (door ? '#b07a3a' : '#e8643c') + '" stroke-linecap="round" stroke-width="' + ((up ? 5 : 3) * (door ? 1.4 : 1) / vs).toFixed(2) + '" stroke-opacity="' + (door === 'open' ? '.45' : up ? '.95' : '.6') + '" ' + (extra || '') + '/>'; return o; };
     const dash = 'stroke-dasharray="' + (6 / vs) + ' ' + (4 / vs) + '"';
@@ -3903,7 +3912,7 @@ registerPanel('battlemap',{
         +'<option value="16"'+(this._drawSize===16?' selected':'')+'>Huge</option>'
       +'</select>' : '')
       +'<button class="btn '+(this._tool==='erase'?'active':'')+'" data-mact="tool-erase" title="Erase drawings">'+ICO('i-trash')+'<span class="bt-l">Erase</span></button>'
-      +'<button class="btn '+(this._tool==='area'?'active':'')+'" data-mact="tool-area" title="Area of effect — drop a sphere, cone, line or cube on the map, or press a creature to start it there; an emanation goes round a creature and moves with it. Drag an area to move it, drag its dot to turn it.">◎<span class="bt-l">Area</span></button>'
+      +'<button class="btn '+(this._tool==='area'&&!this._areaBuild()?'active':'')+'" data-mact="tool-area" title="Area of effect — drop a sphere, cone, line or cube on the map, or press a creature to start it there; an emanation goes round a creature and moves with it. Drag an area to move it, drag its dot to turn it.">◎<span class="bt-l">Area</span></button>'
       +'<button class="btn '+(this._tool==='ruler'?'active':'')+'" data-mact="tool-ruler" title="Ruler — drag across the map to measure a distance">'+ICO('i-ruler')+'<span class="bt-l">Ruler</span></button>'
       +(this._tool==='area' ? this._areaControlsHtml() : '')
       // Zoom — the bg-scale slider + % display + Fit, only when a map is loaded.
@@ -3933,7 +3942,8 @@ registerPanel('battlemap',{
         +'<option value="8"'+(this._drawSize===8?' selected':'')+'>Thick</option>'
         +'<option value="16"'+(this._drawSize===16?' selected':'')+'>Huge</option>'
       +'</select>' : '')
-      +'<button class="btn '+(this._tool==='area'?'active':'')+'" data-mact="tool-area" title="Area of effect — drop a sphere, cone, line or cube on the map, or press a creature to start it there; an emanation goes round a creature and moves with it. Drag an area to move it, drag its dot to turn it.">◎<span class="bt-l">Area</span></button>'
+      +'<button class="btn '+(this._tool==='area'&&!this._areaBuild()?'active':'')+'" data-mact="tool-area" title="Area of effect — drop a sphere, cone, line or cube on the map, or press a creature to start it there; an emanation goes round a creature and moves with it. Drag an area to move it, drag its dot to turn it.">◎<span class="bt-l">Area</span></button>'
+      +'<button class="btn '+(this._areaBuild()?'active':'')+'" data-mact="tool-build" title="Build the map — walls and doors that block light and sight, light sources, difficult terrain. Only you see the walls and doors; the players see what they do.">▦<span class="bt-l">Build</span></button>'
       +'<button class="btn '+(this._tool==='ruler'?'active':'')+'" data-mact="tool-ruler" title="Ruler — drag across the map to measure a distance">'+ICO('i-ruler')+'<span class="bt-l">Ruler</span></button>'
       +(this._tool==='area' ? this._areaControlsHtml() : '')
       // Fog cluster — only the toggle is visible by default. When fog is on,
@@ -4156,7 +4166,23 @@ registerPanel('battlemap',{
     b.querySelectorAll('[data-mact]').forEach(btn=>btn.addEventListener('click',e=>{
       e.stopPropagation();
       const act=btn.dataset.mact;
-      if(act.startsWith('tool-')){
+      // Area and Build share the tool: each turns it off if it's the one up,
+      // and otherwise brings back its own last shape.
+      if(act==='tool-area' || act==='tool-build'){
+        const toBuild = act==='tool-build', was = this._tool==='area' ? this._isBuildShape(this._tplShape) : null;
+        if (was !== null) this[was ? '_bldShape' : '_aoeShape'] = this._tplShape;
+        if (was === toBuild) this._tool = '';
+        else {
+          this._measureHide();
+          this._alignFirstClick = null; this._removeAlignMarker();
+          this._tool = 'area';
+          const cur = this._tplShape, isB = s => this._isBuildShape(s);
+          this._tplShape = toBuild ? (isB(cur) ? cur : isB(this._bldShape) ? this._bldShape : 'wall')
+                                   : (!isB(cur) && cur ? cur : (!isB(this._aoeShape) && this._aoeShape) || 'circle');
+        }
+        this._render();
+      }
+      else if(act.startsWith('tool-')){
         const t=act.slice(5);
         // Toggle off if already active
         this._tool=this._tool===t?'':t;
