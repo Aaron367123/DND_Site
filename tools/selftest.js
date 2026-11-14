@@ -21451,6 +21451,113 @@ for (const cls of Object.keys(rule)) for (let L = 1; L <= 20; L++) for (const sc
         closePanel('battlemap');
       }
     }
+    // -- Round 368: opportunity attacks with height — flying straight up out of reach provokes; a flyer high above moving away doesn't --
+    {
+      openPanel('turnview'); await sleep(700);
+      openPanel('battlemap'); await sleep(700);
+      const T = panelDefs.turnview, B = panelDefs.battlemap;
+      const tokOf = id => T._tokenFor(T._order().find(c => c.id === id));
+      const live = id => { const t = tokOf(id); return t && (B._tokens || []).find(x => x.id === t.id); };
+      const wolf = T._order().find(c => c.id === 'wolf');
+      const tok0 = JSON.stringify(B._tokens), keepA = state.activeCombatantId;
+      try {
+        const cs = B._csScreen();
+        const z = live('zoey'), w = live('wolf');
+        ok('oa height: the bench has Zoey and the wolf', !!z && !!w && !!wolf);
+        if (z && w && wolf){
+          delete wolf.reactionUsed; wolf.hp = Math.max(1, wolf.hp || 58);
+          w.x = 200; w.y = 200; delete w.elev;
+          z.x = 200 + cs; z.y = 200; delete z.elev;
+          state.activeCombatantId = 'zoey';
+          T._pending = null;
+          B._setElev(z, 10);
+          ok('flying straight up out of the wolf’s reach: its opportunity attack', !!(T._pending && T._pending.kind === 'move' && (T._pending.rows || []).some(r => r && r.id === 'wolf')), JSON.stringify(T._pending && { k: T._pending.kind, ft: T._pending.moved }));
+          ok('…for 10 ft of movement', T._pending && T._pending.moved === 10, T._pending && T._pending.moved);
+          T._pending = null;
+          B._setElev(z, 5);
+          ok('coming down within reach: none', !T._pending);
+          // High above, moving away: it never had them
+          T._pending = null; z.elev = 30; z.x = 200 + cs; z.y = 200;
+          const from = { x: z.x, y: z.y };
+          z.x = 200 + 4 * cs;
+          T._checkProvoke(z, from);
+          ok('30 ft up and moving away across: no opportunity attack (never in reach)', !T._pending || !(T._pending.rows || []).some(r => r && r.id === 'wolf'), JSON.stringify(T._pending && T._pending.moved));
+          T._pending = null;
+        }
+      } catch(e){ ok('round 368 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
+      finally {
+        T._pending = null; state.activeCombatantId = keepA;
+        B._tokens = JSON.parse(tok0); try { B._saveMap(); B._renderTokens(); } catch(e){}
+        closePanel('battlemap'); closePanel('turnview');
+      }
+    }
+    // -- Round 369: a token dragged around something counts the way it walked, not the straight line; wiggling it back costs nothing; the line follows the squares --
+    {
+      const B = panelDefs.battlemap;
+      let keepT = null, keepD = null, keepF, fogSaved = false; const keepC = JSON.stringify(state.combatants), keepA = state.activeCombatantId, keepR = state.combatRound, keepSnap = B._snapToGrid, keepRule = B._diagRule;
+      try {
+        openPanel('battlemap'); await sleep(700);
+        keepT = B._tokens.slice(); keepD = B._drawings.slice();
+        keepF = B._fog; fogSaved = true; B._fog = null;
+        const cs = B._csScreen(), o = B._gridOffPx();
+        state.combatants = [{ id: 'r369r', name: 'r369 Runner', hp: 20, hpMax: 20, ac: 12, conditions: [] }];
+        state.activeCombatantId = 'r369r'; state.combatRound = 1;
+        const tk = { id: 'r369t', cid: 'r369r', label: 'r369 Runner', x: o.x + 2.5 * cs, y: o.y + 2.5 * cs, size: 1 };
+        B._tokens = [tk]; B._drawings = []; B._snapToGrid = true; B._diagRule = 'five'; B._tool = ''; B._render(); await sleep(150);
+        // A drag along a list of squares (relative to the start), a quarter square at a time
+        const walk = async (legs, peek) => {
+          const el = B._body.querySelector('.map-token[data-tid="r369t"]'), r = el.getBoundingClientRect(), z = B._screenScale();
+          const sx = r.left + r.width / 2, sy = r.top + r.height / 2;
+          el.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, cancelable: true, clientX: sx, clientY: sy, button: 0 }));
+          let cx = 0, cy = 0, seen = null;
+          for (const [tx, ty] of legs){
+            while (cx !== tx || cy !== ty){
+              cx += Math.sign(tx - cx) * Math.min(0.25, Math.abs(tx - cx)); cy += Math.sign(ty - cy) * Math.min(0.25, Math.abs(ty - cy));
+              document.dispatchEvent(new MouseEvent('mousemove', { bubbles: true, clientX: sx + cx * cs * z, clientY: sy + cy * cs * z })); await sleep(4);
+            }
+          }
+          if (peek) seen = peek();
+          document.dispatchEvent(new MouseEvent('mouseup', { bubbles: true, clientX: sx + cx * cs * z, clientY: sy + cy * cs * z })); await sleep(60);
+          return seen;
+        };
+        // Round a pillar: 4 right, 4 down, 4 back left — ends 4 squares below the start
+        delete tk.mv;
+        const label = await walk([[4, 0], [4, 4], [0, 4]], () => {
+          const l = B._body.querySelector('.bm-measure-l'), pl = B._body.querySelector('.bm-measure-path');
+          return { text: l && l.textContent, path: pl && pl.style.display !== 'none' && (pl.getAttribute('points') || '').split(' ').length };
+        });
+        ok('dragged round a pillar: it ends 4 squares below where it started', Math.abs(tk.x - (o.x + 2.5 * cs)) < 1 && Math.abs(tk.y - (o.y + 6.5 * cs)) < 1, (tk.x - o.x) / cs + ',' + (tk.y - o.y) / cs);
+        ok('…and the walk counts 50 ft (corners cut on the diagonal), not the 20 ft straight line', sktTurnMoved(tk) === 50, sktTurnMoved(tk));
+        ok('…the limit line said so while dragging, and followed the squares', label && /^50 ft/.test(label.text || '') && label.path > 4, JSON.stringify(label));
+        // Wiggle: 3 right and back, then 1 right — one square
+        delete tk.mv;
+        await walk([[3, 0], [0, 0], [1, 0]]);
+        ok('wiggled out and back, then a square on: 5 ft, the loop not counted', sktTurnMoved(tk) === 5, sktTurnMoved(tk));
+        // A plain diagonal drag is the diagonal, not a staircase
+        delete tk.mv;
+        await walk([[3, 3]]);
+        ok('3 squares diagonally: 15 ft (5-5-5), not 30', sktTurnMoved(tk) === 15, sktTurnMoved(tk));
+        // 5-10-5: the same diagonal is 20
+        B._diagRule = 'alt'; delete tk.mv;
+        await walk([[3, 3]]);
+        ok('…on 5-10-5: 20 ft', sktTurnMoved(tk) === 20, sktTurnMoved(tk));
+        B._diagRule = 'five';
+        // Through difficult terrain on the way, even when it ends outside it
+        tk.x = o.x + 2.5 * cs; tk.y = o.y + 2.5 * cs; B._renderTokens(); delete tk.mv;
+        B._drawings = [{ k: 'tpl', id: 'r369dt', shape: 'terrain', x: o.x + 4 * cs, y: o.y, x2: o.x + 6 * cs, y2: o.y + 4 * cs }];
+        await walk([[4, 0], [4, 2]]);
+        ok('through 2 squares of rubble on the way (4 across, 2 down, the corner cut): 25 + 10 = 35 ft', sktTurnMoved(tk) === 35, sktTurnMoved(tk));
+      } catch(e){ ok('round 369 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
+      finally {
+        if (fogSaved) B._fog = keepF;
+        if (keepT){ B._tokens = keepT; B._drawings = keepD; try { B._saveMap(); } catch(e){} }
+        state.combatants = JSON.parse(keepC); state.activeCombatantId = keepA; state.combatRound = keepR;
+        B._snapToGrid = keepSnap; B._diagRule = keepRule;
+        B._measureHide();
+        try { B._render(); } catch(e){}
+        closePanel('battlemap');
+      }
+    }
     // -- Class features: represented, not just text ------------------------
     {
       try {

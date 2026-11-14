@@ -5276,9 +5276,12 @@ registerPanel('turnview', {
   // Safe to call with no combatant, no movement or a prompt already open; it
   // decides. A token with no combatant can be moved but cannot provoke —
   // there is nobody in the order for the reaction to belong to.
+  // `from.elev`: its height before, when the move was up or down — flying
+  // straight up out of a giant's reach provokes like walking away does.
   _checkProvoke(tok, from){
     if (!this._body || !tok || !from) return;
-    if (tok.x === from.x && tok.y === from.y) return;
+    const dz = from.elev != null ? Math.abs((+tok.elev || 0) - (+from.elev || 0)) : 0;
+    if (tok.x === from.x && tok.y === from.y && !dz) return;
     if (this._pending) return;
     const mover = this._order().find(c => this._tokenFor(c) === tok)
       || (tok.cid && this._order().find(c => c.id === tok.cid));
@@ -5286,7 +5289,8 @@ registerPanel('turnview', {
     const rows = this._provokedBy(mover, from);
     if (!rows.length) return;
     const cs = this._cs() || 50;
-    const ft = sktGridFeet((tok.x - from.x) / cs, (tok.y - from.y) / cs, this._diagRule(), this._ftPerCell());
+    const per = this._ftPerCell(), flat = sktGridFeet((tok.x - from.x) / cs, (tok.y - from.y) / cs, this._diagRule(), per);
+    const ft = dz ? sktGridFeet(flat / per, dz / per, this._diagRule(), per) : flat;
     this._pending = { kind:'move', mover, rows, moved: ft };
     this._render();
   },
@@ -5295,7 +5299,9 @@ registerPanel('turnview', {
     const now = this._tokenFor(mover);
     if (!now) return [];
     // Edge to edge, so a giant's reach is counted from its side, not its middle.
-    const at = { x: fromXY.x, y: fromXY.y, size: now.size };
+    // …and at the height it was (unchanged by a move across: a flyer 30 ft
+    // up moving away from the fighter below never had it in reach).
+    const at = { x: fromXY.x, y: fromXY.y, size: now.size, elev: fromXY.elev != null ? fromXY.elev : now.elev };
     const ft = (t, q) => this._edgeFeet(t, q);
     // The entire purpose of the Disengage action. The panel has detected
     // opportunity attacks since it could read token positions, and spent

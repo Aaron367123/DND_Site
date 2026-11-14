@@ -812,7 +812,7 @@ registerPanel('battlemap',{
   // up costs 30 ft), and everyone's distances and reach see it.
   _setElev(t, v){
     v = Math.max(-1000, Math.min(10000, Math.round(+v || 0)));
-    const dz = v - (+t.elev || 0); if (!dz) return;
+    const was = +t.elev || 0, dz = v - was; if (!dz) return;
     if (v) t.elev = v; else delete t.elev;
     if (typeof sktDragHeld === 'function') sktDragHeld(this._tokens, t, 0, 0, dz);
     if (typeof sktNoteMove === 'function' && sktNoteMove(this._tokens, t, Math.abs(dz), 0)) panelDefs.turnview?._syncMoved?.();
@@ -820,6 +820,9 @@ registerPanel('battlemap',{
     this._saveMap();
     this._renderTokens();
     panelDefs.turnview?._render?.();
+    // Up or down out of someone's reach: their opportunity attack.
+    const _tv = panelDefs.turnview;
+    if (_tv && typeof _tv._checkProvoke === 'function'){ try { _tv._checkProvoke(t, { x: t.x, y: t.y, elev: was }); } catch(err){} }
   },
   // One square (one hex sideways on a hex map) in a direction, as a drop.
   _keyMove(t, dx, dy){
@@ -2084,30 +2087,89 @@ registerPanel('battlemap',{
     // (+ what standing up from prone cost, kept on the creature)
     return { c, moved: sktTurnMoved(t) + (+c.stood || 0), budget: sktMoveBudget(this._tokenSpeed(t), c), cost: sktMoveCost(c) };
   },
+  // THE WAY WALKED. A drag around a pillar or down a corridor and back was
+  // counted as the straight line from where it started to where it ended —
+  // 10 ft for a walk of 30. While a token is dragged on a square grid the
+  // squares it passes through are kept, a step at a time:
+  //   - back onto a square already on the way, the loop is dropped (wiggling
+  //     the token costs nothing);
+  //   - a square that is one step from the one before last replaces the last
+  //     (a diagonal drag clips the corner of the square beside it, which is
+  //     not a two-square detour).
+  // Costed step by step, 5-10-5 diagonals and difficult terrain included.
+  _tokCell(t, x, y){
+    const cs = this._csScreen() || 50, o = this._gridOffPx(), s = Math.max(1, Math.round(+t.size || 1));
+    return [Math.round((x - s * cs / 2 - o.x) / cs), Math.round((y - s * cs / 2 - o.y) / cs)];
+  },
+  _pathTo(path, t, x, y){
+    if (!path) return;
+    const to = this._tokCell(t, x, y), cells = path.cells;
+    let guard = 0;
+    for (let cur = cells[cells.length - 1]; (cur[0] !== to[0] || cur[1] !== to[1]) && guard++ < 2000; cur = cells[cells.length - 1]){
+      const nx = cur[0] + Math.sign(to[0] - cur[0]), ny = cur[1] + Math.sign(to[1] - cur[1]);
+      const back = cells.findIndex(c => c[0] === nx && c[1] === ny);
+      if (back >= 0){ cells.length = back + 1; continue; }
+      const prev = cells[cells.length - 2];
+      if (prev && Math.max(Math.abs(prev[0] - nx), Math.abs(prev[1] - ny)) <= 1) cells.pop();
+      cells.push([nx, ny]);
+    }
+  },
+  // What the walk cost: {ft, dg, rough, pts} — pts in stage px for the line.
+  _pathCost(t, path, prevDiag){
+    const cs = this._csScreen() || 50, o = this._gridOffPx(), per = this._ftPerCell || 5, s = Math.max(1, Math.round(+t.size || 1));
+    const ctr = c => [o.x + (c[0] + s / 2) * cs, o.y + (c[1] + s / 2) * cs];
+    let ft = 0, dg = 0, rough = 0, eu = 0, p = Math.max(0, Math.round(+prevDiag || 0));
+    const cells = path.cells;
+    for (let i = 1; i < cells.length; i++){
+      const a = cells[i - 1], b = cells[i], diag = a[0] !== b[0] && a[1] !== b[1];
+      if (diag){ ft += this._diagRule === 'alt' && p % 2 === 1 ? 2 * per : per; p++; dg++; eu += Math.SQRT2; }
+      else { ft += per; eu += 1; }
+      const [cx, cy] = ctr(b);
+      rough += this._terrainExtra(t, cx, cy, cx, cy, true);
+    }
+    if (this._diagRule === 'euclid') ft = Math.round(eu) * per;
+    return { ft, dg, rough, pts: cells.map(ctr) };
+  },
   // The ruler on a token being dragged: this drag, and on its turn the whole
   // turn's movement against what it has.
   _measureMove(t, x0, y0, x1, y1){
     const mi = this._moveInfo(t);
-    return this._measureShow(x0, y0, x1, y1, mi ? mi.budget : this._tokenSpeed(t), mi ? mi.moved : 0, mi && mi.cost, mi && typeof sktTurnDiag === 'function' ? sktTurnDiag(t) : 0, this._terrainExtra(t, x0, y0, x1, y1));
+    const prev = mi && typeof sktTurnDiag === 'function' ? sktTurnDiag(t) : 0;
+    // Dragged on squares: along the way walked.
+    const d = this._drag;
+    if (d && this._gridType !== 'hex'){
+      if (!d.path) d.path = { cells: [this._tokCell(t, x0, y0)] };
+      this._pathTo(d.path, t, x1, y1);
+      const pc = this._pathCost(t, d.path, prev);
+      return this._measureShow(x0, y0, x1, y1, mi ? mi.budget : this._tokenSpeed(t), mi ? mi.moved : 0, mi && mi.cost, prev, pc.rough, pc);
+    }
+    return this._measureShow(x0, y0, x1, y1, mi ? mi.budget : this._tokenSpeed(t), mi ? mi.moved : 0, mi && mi.cost, prev, this._terrainExtra(t, x0, y0, x1, y1));
   },
   // A drop: the feet walked go on the turn's count.
   // A grappler brings what it holds along.
-  _noteTurnMove(t, from){
+  _noteTurnMove(t, from, path){
     if (!from || (t.x === from.x && t.y === from.y)) return;
     if (typeof sktDragHeld === 'function') sktDragHeld(this._tokens, t, t.x - from.x, t.y - from.y);
     // A held creature moved out of its grappler's reach is free.
     if (!document.body.classList.contains('player-mode') && panelDefs.combat?._releaseGrapples?.()){ panelDefs.combat._render?.(); panelDefs.turnview?._render?.(); }
     if (typeof sktNoteMove !== 'function') return;
     const prev = typeof sktTurnDiag === 'function' ? sktTurnDiag(t) : 0;
+    // The way it was dragged, to where it landed (snapped or set beside).
+    if (path && path.cells && this._gridType !== 'hex'){
+      this._pathTo(path, t, t.x, t.y);
+      const pc = this._pathCost(t, path, prev);
+      if (pc.ft > 0 && sktNoteMove(this._tokens, t, pc.ft, pc.dg, pc.rough)) panelDefs.turnview?._syncMoved?.();
+      return;
+    }
     if (sktNoteMove(this._tokens, t, this._feetBetweenPts(from.x, from.y, t.x, t.y, prev), this._diagBetweenPts(from.x, from.y, t.x, t.y), this._terrainExtra(t, from.x, from.y, t.x, t.y))) panelDefs.turnview?._syncMoved?.();
   },
   // The measuring line: dashed, from (x0,y0) to (x1,y1) in stage pixels, the
   // distance on a pill at the far end. Sized in screen pixels, so it reads
   // the same at any zoom. `speed` adds "of N ft" and turns red past it.
-  _measureShow(x0, y0, x1, y1, speed, moved, extra, prevDiag, rough){
+  _measureShow(x0, y0, x1, y1, speed, moved, extra, prevDiag, rough, walked){
     const stage = this._body && this._body.querySelector('#map-stage'); if (!stage) return;
     let m = stage.querySelector('.bm-measure');
-    if (!m){ m = document.createElement('div'); m.className = 'bm-measure'; m.innerHTML = '<svg><line class="bm-measure-line"/><circle class="bm-measure-a"/><circle class="bm-measure-b"/></svg><span class="bm-measure-l"></span>'; stage.appendChild(m); }
+    if (!m){ m = document.createElement('div'); m.className = 'bm-measure'; m.innerHTML = '<svg><line class="bm-measure-line"/><polyline class="bm-measure-line bm-measure-path" fill="none"/><circle class="bm-measure-a"/><circle class="bm-measure-b"/></svg><span class="bm-measure-l"></span>'; stage.appendChild(m); }
     clearTimeout(this._measureT); m.classList.remove('fading');
     const k = 1 / (this._screenScale() || 1);
     const W = this._cols * this._csScreen(), H = this._rows * this._csScreen();
@@ -2116,7 +2178,12 @@ registerPanel('battlemap',{
     ln.setAttribute('x1', x0); ln.setAttribute('y1', y0); ln.setAttribute('x2', x1); ln.setAttribute('y2', y1);
     ln.setAttribute('stroke-width', 2.5 * k); ln.setAttribute('stroke-dasharray', (8 * k) + ' ' + (5 * k));
     [['.bm-measure-a', x0, y0], ['.bm-measure-b', x1, y1]].forEach(([sel, x, y]) => { const c = m.querySelector(sel); c.setAttribute('cx', x); c.setAttribute('cy', y); c.setAttribute('r', 4 * k); });
-    const ft = this._feetBetweenPts(x0, y0, x1, y1, prevDiag);
+    // A walked way (a token dragged around something): through its squares.
+    const pl = m.querySelector('.bm-measure-path');
+    const bent = !!(walked && walked.pts && walked.pts.length > 2);
+    if (pl){ pl.setAttribute('points', bent ? walked.pts.map(p => p[0].toFixed(1) + ',' + p[1].toFixed(1)).join(' ') : ''); pl.setAttribute('stroke-width', 2.5 * k); pl.setAttribute('stroke-dasharray', (8 * k) + ' ' + (5 * k)); pl.style.display = bent ? '' : 'none'; }
+    ln.style.display = bent ? 'none' : '';
+    const ft = walked ? walked.ft : this._feetBetweenPts(x0, y0, x1, y1, prevDiag);
     // `moved`: already walked this turn, so the limit is on the sum.
     const before = moved > 0 ? moved : 0;
     // `extra`: crawling, or dragging a creature — each foot costs more.
@@ -2317,8 +2384,11 @@ registerPanel('battlemap',{
   },
   // The extra feet a move from (x0,y0) to (x1,y1) costs `tok` in difficult
   // terrain: a square at a time along the way, its whole space at each.
-  _terrainExtra(tok, x0, y0, x1, y1){
+  _terrainExtra(tok, x0, y0, x1, y1, one){
     if (!tok || +tok.elev > 0 || !this._terrain().length) return 0;
+    if (one){ const s = Math.max(1, Math.round(+tok.size || 1)), u = this._tokenUnitScreen() || this._csScreen() || 50;
+      for (let a = 0; a < s; a++) for (let b = 0; b < s; b++) if (this._inTerrain(x1 + (a - (s - 1) / 2) * u, y1 + (b - (s - 1) / 2) * u)) return this._ftPerCell || 5;
+      return 0; }
     const cs = this._csScreen() || 50, per = this._ftPerCell || 5;
     const n = this._gridType === 'hex' ? sktHexSteps(x0, y0, x1, y1, cs, this._gridOffPx().x, this._gridOffPx().y)
       : Math.round(Math.max(Math.abs(x1 - x0), Math.abs(y1 - y0)) / cs);
@@ -6026,7 +6096,7 @@ registerPanel('battlemap',{
             if (this._fearBlocks(t, land, _oaFrom)){ land.x = _oaFrom.x; land.y = _oaFrom.y; land.moved = false; }
             t.x = land.x; t.y = land.y;
             if (land.moved) this._landingNote();
-            this._noteTurnMove(t, _oaFrom);
+            this._noteTurnMove(t, _oaFrom, this._drag && this._drag.path);
             this._saveMap();
             this._renderTokens();
             // Opportunity attacks. The prompt lives in the Turn View — it owns
@@ -6146,7 +6216,7 @@ registerPanel('battlemap',{
             if (this._fearBlocks(t, land, _oaFrom)){ land.x = _oaFrom.x; land.y = _oaFrom.y; land.moved = false; }
             t.x = land.x; t.y = land.y;
             if (land.moved) this._landingNote();
-            this._noteTurnMove(t, _oaFrom);
+            this._noteTurnMove(t, _oaFrom, this._drag && this._drag.path);
             this._saveMap();
             this._renderTokens();
             // Opportunity attacks. The prompt lives in the Turn View — it owns
