@@ -22196,12 +22196,14 @@ for (const cls of Object.keys(rule)) for (let L = 1; L <= 20; L++) for (const sc
         await hold(8 * cs, 6 * cs, 250);
         ok('a short click is not a ping', !pings().length && !sent.length);
         await hold(8 * cs, 6 * cs, 750);
+        // (the spot under the pointer, as the map itself reads it — zoomed or turned)
+        const at = (q => B._stagePoint(q.x, q.y, B._body.querySelector('#map-stage')))(cl(8 * cs, 6 * cs));
         const pg = pings()[0];
         const mid = pg ? { x: pg.offsetLeft + pg.offsetWidth / 2, y: pg.offsetTop + pg.offsetHeight / 2 } : null;
-        ok('held still: a ping where it was held', pings().length === 1 && Math.abs(mid.x - 8 * cs) < 2 && Math.abs(mid.y - 6 * cs) < 2, JSON.stringify(mid));
+        ok('held still: a ping where it was held', pings().length === 1 && Math.abs(mid.x - at.x) < 1.5 && Math.abs(mid.y - at.y) < 1.5 && Math.abs(at.x - 8 * cs) < cs / 4, JSON.stringify([mid, at]));
         ok('…saying who: the DM, in gold', /DM/.test(pg.textContent) && /#ffd36b/i.test(pg.style.getPropertyValue('--ping')));
-        ok('…sent to the other devices on this one’s own channel', sent.length === 1 && /^ping_/.test(sent[0][0]) && sent[0][1].x === Math.round(8 * cs) && sent[0][1].by === 'DM' && !!sent[0][1].n, JSON.stringify(sent));
-        ok('…and to this browser’s other tabs', posted.some(m => m.kind === 'ping' && m.x === 8 * cs));
+        ok('…sent to the other devices on this one’s own channel', sent.length === 1 && /^ping_/.test(sent[0][0]) && sent[0][1].x === Math.round(at.x) && sent[0][1].by === 'DM' && !!sent[0][1].n, JSON.stringify(sent));
+        ok('…and to this browser’s other tabs', posted.some(m => m.kind === 'ping' && m.x === at.x));
         await sleep(3200);
         ok('…gone after a few seconds', !pings().length);
         await hold(8 * cs, 6 * cs, 750, 40);
