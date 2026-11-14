@@ -21984,9 +21984,11 @@ for (const cls of Object.keys(rule)) for (let L = 1; L <= 20; L++) for (const sc
         const gob = { id: 't380g', label: 'r380 Goblin', x: 6.5 * cs, y: 6.5 * cs, size: 1 };
         B._tokens = [gob]; B._drawings = [];
         B._tool = 'area'; B._tplShape = 'circle'; B._tplSize = 20; B._render(); await sleep(150);
-        const stage = B._body.querySelector('#map-stage'), z = B._screenScale(), sr = stage.getBoundingClientRect();
-        const cl = (sx, sy) => ({ x: sr.left + sx * z, y: sr.top + sy * z });
-        const press = (el, p) => el.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, cancelable: true, clientX: p.x, clientY: p.y, button: 0 }));
+        // (where the map is now: a small panel scrolls it as things are laid)
+        const cl = (sx, sy) => { const r = B._body.querySelector('#map-stage').getBoundingClientRect(), z = B._screenScale(); return { x: r.left + sx * z, y: r.top + sy * z }; };
+        // (a point off the screen or under another panel, on a small map panel:
+        // the map's own surface — the clicks are read by their coordinates)
+        const press = (el, p) => (el && B._body.querySelector('#map-stage').contains(el) ? el : B._body.querySelector('#draw-canvas')).dispatchEvent(new MouseEvent('mousedown', { bubbles: true, cancelable: true, clientX: p.x, clientY: p.y, button: 0 }));
         const mv = p => document.dispatchEvent(new MouseEvent('mousemove', { bubbles: true, clientX: p.x, clientY: p.y }));
         const up = p => document.dispatchEvent(new MouseEvent('mouseup', { bubbles: true, clientX: p.x, clientY: p.y }));
         const menuPick = async re => {
@@ -21996,7 +21998,7 @@ for (const cls of Object.keys(rule)) for (let L = 1; L <= 20; L++) for (const sc
         const closeMenus = () => document.querySelectorAll('.ctx-menu, .context-menu').forEach(m => m.remove());
         // A Fireball on the goblin (pressed on its token)
         const g = cl(gob.x, gob.y);
-        press(document.elementFromPoint(g.x, g.y), g); await sleep(20); up(g); await sleep(60);
+        press(B._body.querySelector('.map-token[data-tid="t380g"]'), g); await sleep(20); up(g); await sleep(60);
         const fb = B._areas()[0];
         ok('a sphere laid on the goblin', fb && Math.abs(fb.x - gob.x) < 1 && Math.abs(fb.y - gob.y) < 1, JSON.stringify(fb));
         // Its menu (a tap inside it, off the goblin) offers Move
@@ -22017,7 +22019,7 @@ for (const cls of Object.keys(rule)) for (let L = 1; L <= 20; L++) for (const sc
         press(document.elementFromPoint(m1.x, m1.y), m1); await sleep(20); up(m1); await sleep(80);
         await menuPick(/Move this area/);
         const g2 = cl(gob.x, gob.y);
-        press(document.elementFromPoint(g2.x, g2.y), g2); await sleep(20); up(g2); await sleep(80);
+        press(B._body.querySelector('.map-token[data-tid="t380g"]'), g2); await sleep(20); up(g2); await sleep(80);
         ok('…a click on a creature with it moving: one area, moved, the goblin where it stood', B._areas().length === 1 && gob.x === 6.5 * cs && gob.y === 6.5 * cs && fb.x < want.x - cs, JSON.stringify([fb.x / cs, B._areas().length, gob.x / cs]));
         // Esc puts it back
         const was = [fb.x, fb.y];
@@ -22070,8 +22072,7 @@ for (const cls of Object.keys(rule)) for (let L = 1; L <= 20; L++) for (const sc
         const a0 = B._hexAtQR(2, 2), a1 = B._hexAtQR(5, 3);
         B._terrainMenu(hx, 100, 100, a0[0], a0[1]); await sleep(40);
         await menuPick(/Move this difficult terrain/);
-        const sr2 = B._body.querySelector('#map-stage').getBoundingClientRect(), z2 = B._screenScale();
-        const h1 = { x: sr2.left + a1[0] * z2, y: sr2.top + a1[1] * z2 };
+        const h1 = cl(a1[0], a1[1]);
         press(document.elementFromPoint(h1.x, h1.y), h1); await sleep(20); up(h1); await sleep(60);
         // (2,2)→(5,3): three columns over, from an even column to an odd one; cube-wise
         // the others keep their places beside it — (2,3) below it, (3,2) down to its right.
