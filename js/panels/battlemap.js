@@ -2216,10 +2216,22 @@ registerPanel('battlemap',{
   // Measure from (ax, ay) to wherever the pointer goes, until it's let go.
   // Shared by a press on the map and a press on a token (with the ruler out,
   // pressing a token measures from it instead of moving it).
-  _rulerDrag(ax, ay, touch){
+  // `from`: the token it started on. Brought onto another creature, the
+  // ruler snaps to it and reads what reach and range are measured by — from
+  // the edge of one's space to the edge of the other's, height included (the
+  // Turn View's measure, the one its attacks use). Middle to middle put a
+  // Large ogre beside the fighter at 10 ft and ignored the eagle overhead.
+  _rulerDrag(ax, ay, touch, from){
     const ref = this._body && (this._body.querySelector('#draw-canvas') || this._body.querySelector('#map-stage')); if (!ref) return;
     this._measureShow(ax, ay, ax, ay);
-    const to = (cx, cy) => { const p = this._stagePoint(cx, cy, ref), b = this._rulerPoint(p.x, p.y); this._measureShow(ax, ay, b.x, b.y); };
+    const T = panelDefs.turnview;
+    if (from && T) T._mapCache = null;
+    const to = (cx, cy) => {
+      const p = this._stagePoint(cx, cy, ref);
+      const on = from && T && typeof T._edgeFeet === 'function' ? this._tokenAt(p.x, p.y, from) : null;
+      if (on){ this._measureShow(ax, ay, on.x, on.y, null, 0, null, 0, 0, { ft: T._edgeFeet(from, on), pts: [] }); return; }
+      const b = this._rulerPoint(p.x, p.y); this._measureShow(ax, ay, b.x, b.y);
+    };
     if (touch){
       const onMove = ev => { if (ev.touches.length !== 1) return; ev.preventDefault(); to(ev.touches[0].clientX, ev.touches[0].clientY); };
       const onEnd = () => { document.removeEventListener('touchmove', onMove); document.removeEventListener('touchend', onEnd); document.removeEventListener('touchcancel', onEnd); };
@@ -2229,6 +2241,14 @@ registerPanel('battlemap',{
       const onUp = () => { document.removeEventListener('mousemove', onMove); document.removeEventListener('mouseup', onUp); };
       document.addEventListener('mousemove', onMove); document.addEventListener('mouseup', onUp);
     }
+  },
+  // The creature whose space (x, y) is in, other than `not` — one this screen
+  // shows (a player's ruler doesn't find the hidden ones).
+  _tokenAt(x, y, not){
+    const pl = document.body.classList.contains('player-mode'), u = this._tokenUnitScreen() || this._csScreen() || 50;
+    return (this._tokens || []).slice().reverse().find(t => t && t !== not && t.id !== (not && not.id) && t.x != null
+      && (!pl || this._shownToPlayers(t))
+      && Math.abs(x - t.x) <= Math.max(1, +t.size || 1) * u / 2 && Math.abs(y - t.y) <= Math.max(1, +t.size || 1) * u / 2) || null;
   },
   // A ruler point snapped to the middle of its square when snap is on.
   _rulerPoint(x, y){
@@ -2758,17 +2778,21 @@ registerPanel('battlemap',{
     ];
     if (typeof showContextMenu === 'function') showContextMenu(cx, cy, items);
   },
+  // The fighters an area holds: its tokens, matched to the fight by cid or by
+  // name like the rest of the map. Its menu and the save dialog's "In the …"
+  // buttons both ask this.
+  _areaTargets(t){
+    return this._tokensInArea(t).map(tok => {
+      const c = (state.combatants || []).find(c => (tok.cid != null && c.id === tok.cid)
+        || (typeof sktNormName === 'function' && sktNormName(c.name) === sktNormName(tok.label)));
+      return c ? c.id : null;
+    }).filter(Boolean);
+  },
   _areaMenu(t, cx, cy){
-    const inside = this._tokensInArea(t);
     const isPlayer = document.body.classList.contains('player-mode');
     const items = [];
     if (!isPlayer && panelDefs.combat && typeof panelDefs.combat.openAreaSave === 'function'){
-      // Map tokens to fighters: linked by cid, or by name like the rest of the map.
-      const ids = inside.map(tok => {
-        const c = (state.combatants || []).find(c => (tok.cid != null && c.id === tok.cid)
-          || (typeof sktNormName === 'function' && sktNormName(c.name) === sktNormName(tok.label)));
-        return c ? c.id : null;
-      }).filter(Boolean);
+      const ids = this._areaTargets(t);
       items.push({ label: '💥 Roll saves for the ' + ids.length + ' creature' + (ids.length === 1 ? '' : 's') + ' inside', disabled: !ids.length,
         onClick: () => panelDefs.combat.openAreaSave({ targets: ids, name: this._areaName(t) }) });
     }
@@ -6048,7 +6072,7 @@ registerPanel('battlemap',{
 
         // With the ruler out, a token is where a measurement starts, not
         // something to move.
-        if (this._tool === 'ruler'){ this._rulerDrag(t.x, t.y, false); return; }
+        if (this._tool === 'ruler'){ this._rulerDrag(t.x, t.y, false, t); return; }
         if (this._tool === 'area'){ const p = this._stagePoint(e.clientX, e.clientY, stage); this._areaPointerDown(p.x, p.y, e.clientX, e.clientY, false, t); return; }
         // A player moves (or rubs out) only what is theirs.
         if (isPlayer && !sktPlayerMayMoveToken(t)) return;
@@ -6160,7 +6184,7 @@ registerPanel('battlemap',{
         e.stopPropagation(); e.preventDefault();
         const touch = e.touches[0];
 
-        if (this._tool === 'ruler'){ this._rulerDrag(t.x, t.y, true); return; }
+        if (this._tool === 'ruler'){ this._rulerDrag(t.x, t.y, true, t); return; }
         if (this._tool === 'area'){ const p = this._stagePoint(touch.clientX, touch.clientY, stage); this._areaPointerDown(p.x, p.y, touch.clientX, touch.clientY, true, t); return; }
         if (isPlayer && !sktPlayerMayMoveToken(t)) return;
 

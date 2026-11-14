@@ -3189,6 +3189,11 @@ registerPanel('combat',{
     const partsText = (pre.parts || []).map(p => p.dice + (p.type ? ' ' + p.type : '')).join(' + ');
     const askShowDc = (state.settings || {}).saveShowDc !== false;
     const want = new Set(pre.targets || []);
+    // The areas on the battle map (the newest few): one press ticks who is in
+    // one, by the map's own rule — big creatures, heights and all — instead of
+    // reading the board and ticking them by hand.
+    const B = panelDefs.battlemap;
+    const mapAreas = B && typeof B._areas === 'function' && typeof B._areaTargets === 'function' ? B._areas().slice(-4) : [];
     const back = document.createElement('div');
     back.className = 'modal-backdrop'; back.id = 'area-save-back';
     back.innerHTML = `<div class="modal area-save" role="dialog" aria-modal="true" aria-label="Area save">
@@ -3203,6 +3208,7 @@ registerPanel('combat',{
         <button class="btn small" data-as="all-npc">All monsters</button>
         <button class="btn small" data-as="all-pc">All characters</button>
         <button class="btn small" data-as="none">None</button>
+        ${mapAreas.map(a => `<button class="btn small" data-as="area" data-aid="${esc(a.id)}" title="Tick the creatures inside it on the battle map">◎ In the ${esc(B._areaName(a))}</button>`).join('')}
       </div>
       <div class="as-targets" id="as-targets"></div>
       <div class="as-result" id="as-result"></div>
@@ -3309,6 +3315,12 @@ registerPanel('combat',{
       const b = e.target.closest('[data-as]'); if (!b) return;
       const act = b.dataset.as;
       if (act === 'cancel') return close();
+      if (act === 'area'){
+        const a = mapAreas.find(x => x.id === b.dataset.aid);
+        const ids = new Set(a ? B._areaTargets(a) : []);
+        back.querySelectorAll('#as-targets input').forEach(i => { i.checked = ids.has(i.value); });
+        return;
+      }
       if (act === 'all-npc' || act === 'all-pc' || act === 'none'){
         back.querySelectorAll('#as-targets input').forEach(i => {
           const c = state.combatants.find(x => x.id === i.value);

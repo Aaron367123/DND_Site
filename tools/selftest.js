@@ -21645,6 +21645,88 @@ for (const cls of Object.keys(rule)) for (let L = 1; L <= 20; L++) for (const sc
         closePanel('battlemap');
       }
     }
+    // -- Round 373: the ruler from one creature to another reads edge to edge, height included --
+    {
+      const B = panelDefs.battlemap;
+      let keepT = null, keepF, fogSaved = false; const keepTool = B._tool, keepSnap = B._snapToGrid;
+      try {
+        openPanel('battlemap'); await sleep(700);
+        keepT = B._tokens.slice();
+        keepF = B._fog; fogSaved = true; B._fog = null;
+        const cs = B._csScreen();
+        const og = { id: 'r373o', label: 'r373 Ogre', x: 4 * cs, y: 4 * cs, size: 2 };
+        const fi = { id: 'r373f', label: 'r373 Fighter', x: 5.5 * cs, y: 3.5 * cs, size: 1 };
+        const eg = { id: 'r373e', label: 'r373 Eagle', x: 5.5 * cs, y: 4.5 * cs, size: 1, elev: 20 };
+        B._tokens = [og, fi, eg]; B._snapToGrid = false; B._tool = 'ruler'; B._render(); await sleep(150);
+        const ctr = id => { const r = B._body.querySelector('.map-token[data-tid="' + id + '"]').getBoundingClientRect(); return [r.left + r.width / 2, r.top + r.height / 2]; };
+        const measure = async (fromId, x, y) => {
+          const [sx, sy] = ctr(fromId);
+          B._body.querySelector('.map-token[data-tid="' + fromId + '"]').dispatchEvent(new MouseEvent('mousedown', { bubbles: true, cancelable: true, button: 0, clientX: sx, clientY: sy }));
+          document.dispatchEvent(new MouseEvent('mousemove', { bubbles: true, clientX: x, clientY: y })); await sleep(20);
+          const t = (B._body.querySelector('.bm-measure-l') || {}).textContent || '';
+          document.dispatchEvent(new MouseEvent('mouseup', { bubbles: true, clientX: x, clientY: y })); await sleep(20);
+          return t;
+        };
+        const [fx, fy] = ctr('r373f'), [ex, ey] = ctr('r373e');
+        const t1 = await measure('r373o', fx + 2, fy + 2);
+        ok('ruler from the Large ogre onto the fighter beside it: 5 ft (edge to edge), not 10', /^5 ft/.test(t1), t1);
+        const t2 = await measure('r373o', ex, ey);
+        ok('…onto the eagle 20 ft up beside it (the ogre is 10 ft tall): 15 ft', /^15 ft/.test(t2), t2);
+        const z = B._screenScale();
+        const t3 = await measure('r373f', fx + 3 * cs * z, fy);
+        ok('…onto empty ground: the plain distance', /^15 ft/.test(t3), t3);
+        // A hidden creature isn't found by a player's ruler
+        eg.hidden = true;
+        document.body.classList.add('player-mode');
+        const hid = B._tokenAt(eg.x, eg.y, og);
+        document.body.classList.remove('player-mode');
+        ok('a player’s ruler doesn’t snap to a creature hidden from them', !hid || hid.id !== 'r373e');
+      } catch(e){ ok('round 373 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
+      finally {
+        document.body.classList.remove('player-mode');
+        if (fogSaved) B._fog = keepF;
+        if (keepT){ B._tokens = keepT; try { B._saveMap(); } catch(e){} }
+        B._tool = keepTool; B._snapToGrid = keepSnap; B._measureHide();
+        try { B._render(); } catch(e){}
+        closePanel('battlemap');
+      }
+    }
+    // -- Round 374: the area-save dialog offers the areas on the map — one press ticks who is inside, by the map's rule (big creatures, heights) --
+    {
+      const B = panelDefs.battlemap;
+      let keepT = null, keepD = null, keepF, fogSaved = false; const keepC = JSON.stringify(state.combatants);
+      try {
+        openPanel('battlemap'); await sleep(700);
+        keepT = B._tokens.slice(); keepD = B._drawings.slice();
+        keepF = B._fog; fogSaved = true; B._fog = null;
+        const cs = B._csScreen();
+        state.combatants = [{ id: 'r374a', name: 'r374 Goblin A', hp: 7, hpMax: 7, ac: 15, conditions: [] },
+                            { id: 'r374b', name: 'r374 Goblin B', hp: 7, hpMax: 7, ac: 15, conditions: [] },
+                            { id: 'r374o', name: 'r374 Ogre', hp: 59, hpMax: 59, ac: 11, conditions: [] },
+                            { id: 'r374e', name: 'r374 Eagle', hp: 26, hpMax: 26, ac: 13, conditions: [] }];
+        B._tokens = [{ id: 't374a', cid: 'r374a', label: 'r374 Goblin A', x: 5.5 * cs, y: 5.5 * cs, size: 1 },
+                     { id: 't374b', cid: 'r374b', label: 'r374 Goblin B', x: 12.5 * cs, y: 5.5 * cs, size: 1 },
+                     { id: 't374o', cid: 'r374o', label: 'r374 Ogre', x: 10 * cs, y: 5 * cs, size: 2 },     // its near squares 3½ and 4½ squares off
+                     { id: 't374e', cid: 'r374e', label: 'r374 Eagle', x: 6.5 * cs, y: 5.5 * cs, size: 1, elev: 40 }];
+        B._drawings = [{ k: 'tpl', id: 'r374f', shape: 'circle', x: 6 * cs, y: 6 * cs, ft: 20, c: '#f00' }];
+        B._render(); await sleep(100);
+        panelDefs.combat.openAreaSave({ name: 'Fireball' }); await sleep(100);
+        const btn = document.querySelector('#area-save-back [data-as="area"][data-aid="r374f"]');
+        ok('the save dialog offers the area on the map, by name', btn && /In the 20 ft sphere/.test(btn.textContent), btn && btn.textContent);
+        if (btn) btn.click(); await sleep(50);
+        const ticked = [...document.querySelectorAll('#area-save-back #as-targets input')].filter(i => i.checked).map(i => i.value).sort().join(',');
+        ok('…pressed: the goblin in it and the Large ogre whose near squares are, not the goblin outside nor the eagle 40 ft over it', ticked === 'r374a,r374o', ticked);
+        document.querySelector('#area-save-back [data-as="cancel"]').click(); await sleep(50);
+      } catch(e){ ok('round 374 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
+      finally {
+        document.getElementById('area-save-back')?.remove();
+        if (fogSaved) B._fog = keepF;
+        if (keepT){ B._tokens = keepT; B._drawings = keepD; try { B._saveMap(); } catch(e){} }
+        state.combatants = JSON.parse(keepC);
+        try { B._render(); } catch(e){}
+        closePanel('battlemap');
+      }
+    }
     // -- Class features: represented, not just text ------------------------
     {
       try {
