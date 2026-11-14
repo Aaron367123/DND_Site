@@ -4,6 +4,119 @@
 // Image stored in memory only — never localStorage (avoids freeze/quota)
 let _mapBgImage = null; // holds the Image object
 
+// ─── The squares printed on a map picture ───────────────────────────────────
+// An uploaded map kept the previous map's square size, so its printed grid and
+// ours rarely lined up until the DM aligned them by hand. This looks for the
+// printed grid: how strongly each column (and each row) of the picture holds a
+// thin line, the spacing that repeats in both directions (squares are square),
+// then the exact spacing and where the lines fall, by folding the line signal
+// at fractional spacings round it. Measured on 120 of the adventures' maps
+// with their known grids: when it answers (its thresholds below), the printed
+// grid or a whole multiple of the listed one — some listings count three
+// printed squares as one — far more often than not; on maps with no printed
+// grid it finds texture, so the caller shows what it found, with Undo.
+// Returns { size, ox, oy } in the picture's own pixels, or null.
+function sktDetectGrid(img){
+  const W0 = img && img.naturalWidth, H0 = img && img.naturalHeight;
+  if (!W0 || !H0) return null;
+  const k = Math.min(1, 2000 / Math.max(W0, H0));
+  const W = Math.max(1, Math.round(W0 * k)), H = Math.max(1, Math.round(H0 * k));
+  if (Math.min(W, H) < 60) return null;
+  const c = document.createElement('canvas'); c.width = W; c.height = H;
+  const g = c.getContext('2d', { willReadFrequently: true });
+  g.drawImage(img, 0, 0, W, H);
+  let d; try { d = g.getImageData(0, 0, W, H).data; } catch(e){ return null; }
+  const L = new Float32Array(W * H);
+  for (let i = 0, j = 0; i < L.length; i++, j += 4) L[i] = 0.299 * d[j] + 0.587 * d[j + 1] + 0.114 * d[j + 2];
+  // A thin line, light or dark: how far a pixel stands out from its two
+  // neighbours across the line, summed along it.
+  const lineSig = (vertical, from, to) => {
+    const len = vertical ? W : H, sig = new Float64Array(len), st = vertical ? 1 : W;
+    for (let t = Math.max(1, from); t < Math.min(to, (vertical ? H : W) - 1); t++)
+      for (let u = 1; u < len - 1; u++){ const i = vertical ? t * W + u : u * W + t; sig[u] += Math.abs(2 * L[i] - L[i - st] - L[i + st]); }
+    return sig;
+  };
+  // Each value less its neighbourhood's mean: the lines, not the shading.
+  const prep = s0 => {
+    const n = s0.length, w = 15, s = new Float64Array(n), pre = new Float64Array(n + 1);
+    for (let i = 0; i < n; i++) pre[i + 1] = pre[i] + s0[i];
+    for (let i = 0; i < n; i++){ const a = Math.max(0, i - w), b = Math.min(n, i + w + 1); s[i] = Math.max(0, s0[i] - (pre[b] - pre[a]) / (b - a)); }
+    let mean = 0; for (let i = 0; i < n; i++) mean += s[i]; mean /= n;
+    return mean > 0 ? { s, mean, n } : null;
+  };
+  const acf = (s, maxP) => {
+    const n = s.length, r = new Float64Array(maxP + 2);
+    for (let q = 0; q <= maxP + 1; q++){ let acc = 0; for (let i = 0; i + q < n; i++) acc += s[i] * s[i + q]; r[q] = acc / (n - q); }
+    return r;
+  };
+  const fold = (h, bl) => {
+    const { s, mean, n } = h; let top = null;
+    for (let P = bl - 1.5; P <= bl + 1.5; P += 0.02){
+      if (P < minP) continue;
+      const B = Math.max(8, Math.round(P * 4)), bins = new Float64Array(B), cnt = new Float64Array(B);
+      for (let i = 0; i < n; i++){ const b = Math.floor((i % P) / P * B) % B; bins[b] += s[i]; cnt[b]++; }
+      const span = Math.max(1, Math.round(B / P * 1.5));
+      let mb = 0, mi = 0;
+      for (let b = 0; b < B; b++){ let v = 0, c2 = 0; for (let t = 0; t < span; t++){ const q = (b + t) % B; v += bins[q]; c2 += cnt[q]; } const val = c2 ? v / c2 : 0; if (val > mb){ mb = val; mi = b + span / 2; } }
+      if (!top || mb > top.mb) top = { mb, P, ph: (mi / B) * P };
+    }
+    return top && { p: top.P, ph: top.ph % top.P, sharp: top.mb / mean, n: n / top.P };
+  };
+  // Do the found lines stand out in each sixth of the map, not just overall?
+  // (Texture repeats in patches; a printed grid runs everywhere.)
+  const bands = (vertical, P, ph) => {
+    const nb = 6, span = vertical ? H : W, len = vertical ? W : H, out = [];
+    for (let b = 0; b < nb; b++){
+      const h = prep(lineSig(vertical, Math.floor(span * b / nb), Math.floor(span * (b + 1) / nb)));
+      if (!h){ out.push(0); continue; }
+      let on = 0, cn = 0;
+      for (let x = ph; x < len; x += P) for (let dd = -1; dd <= 1; dd++){ const q = Math.round(x + dd); if (q >= 0 && q < len){ on += h.s[q]; cn++; } }
+      out.push(cn ? (on / cn) / h.mean : 0);
+    }
+    return out.sort((p, q) => p - q)[2];
+  };
+  const minP = 8;
+  const hx = prep(lineSig(true, 0, H)), hy = prep(lineSig(false, 0, W));
+  if (!hx || !hy) return null;
+  const maxP = Math.min(Math.floor(Math.min(W, H) / 3), 600);
+  if (maxP <= minP) return null;
+  const rx = acf(hx.s, maxP), ry = acf(hy.s, maxP), Rr = new Float64Array(maxP + 2);
+  for (let i = 0; i < Rr.length; i++) Rr[i] = rx[i] / (rx[0] || 1) + ry[i] / (ry[0] || 1);
+  let best = -1, bl = 0;
+  for (let q = minP; q <= maxP; q++) if (Rr[q] > Rr[q - 1] && Rr[q] >= Rr[q + 1] && Rr[q] > best){ best = Rr[q]; bl = q; }
+  if (!bl) return null;
+  // The spacing itself, not a multiple of it: a strong peak at a whole fraction.
+  for (let dv = 5; dv >= 2; dv--){
+    const q = Math.round(bl / dv); if (q < minP) continue;
+    let m = 0; for (let t = q - 1; t <= q + 1; t++) if (t >= minP && Rr[t] > m) m = Rr[t];
+    if (m >= 0.8 * best){ bl = q; break; }
+  }
+  const ax = fold(hx, bl), ay = fold(hy, bl);
+  if (!ax || !ay) return null;
+  if (Math.abs(ax.p - ay.p) / Math.max(ax.p, ay.p) >= 0.03) return null;
+  const size = (ax.p * ax.n + ay.p * ay.n) / (ax.n + ay.n);
+  // Sure enough to offer: sharp lines, in every part of the map, and at
+  // least eight squares across its short side.
+  if (Math.min(ax.sharp, ay.sharp) < 5) return null;
+  if (Math.min(W, H) / size < 8) return null;
+  if (Math.min(bands(true, ax.p, ax.ph), bands(false, ay.p, ay.ph)) < 3) return null;
+  return { size: size / k, ox: ax.ph / k, oy: ay.ph / k };
+}
+// A map file often says its size in squares in its name — "Tavern 30x20.jpg",
+// "[22x30]" — which settles the square size exactly. Width × height, or the
+// other way round if that's the one the picture's shape agrees with.
+function sktGridFromName(name, w, h){
+  const m = String(name || '').match(/(?:^|[^0-9])(\d{1,3})\s*[x×X]\s*(\d{1,3})(?![0-9])/);
+  if (!m || !w || !h) return null;
+  const a = +m[1], b = +m[2];
+  if (a < 4 || b < 4 || a > 200 || b > 200) return null;
+  for (const [nx, ny] of [[a, b], [b, a]]){
+    const sx = w / nx, sy = h / ny;
+    if (Math.abs(sx - sy) / Math.max(sx, sy) < 0.04) return { size: (sx + sy) / 2, ox: 0, oy: 0, nx, ny };
+  }
+  return null;
+}
+
 // Cached average luminance of the map art, used to pick a grid colour that
 // contrasts with it. Computing it means resampling the whole image (3000x1905
 // on the current map) down to 4x4 and reading it back — measured at 0.887ms,
@@ -986,12 +1099,39 @@ registerPanel('battlemap',{
         // few megabytes takes a moment, and the DM should not be looking
         // at a spinner in the meantime.
         this._shareUploadedMap(img, replacedPath);
+        // Then line our grid up with the squares printed on it (after a
+        // paint, so the new map is on screen first).
+        setTimeout(() => this._autoGrid(img, file.name), 60);
       };
       img.onerror = () => showToast('Could not load image');
       img.src = ev.target.result;
     };
     reader.onerror = () => showToast('Could not read file');
     reader.readAsDataURL(file);
+  },
+  // The new map's squares: from its file name, or found on the picture —
+  // applied at once, so the DM sees whether they line up, with Undo. If
+  // neither, it says so and offers Align (two clicks on a printed square).
+  _autoGrid(img, name){
+    if (_mapBgImage !== img) return;   // another map since
+    const W = img.naturalWidth, H = img.naturalHeight;
+    let found = sktGridFromName(name, W, H), how;
+    if (found) how = 'from its name (' + found.nx + '×' + found.ny + ' squares)';
+    else { try { found = sktDetectGrid(img); } catch(e){ found = null; } how = 'found on the picture'; }
+    const align = { label: 'Align', run: () => { this._tool = 'align'; this._alignFirstClick = null; this._render(); showToast('Align: click two grid intersections. Span MULTIPLE cells for accuracy.'); } };
+    if (!found){
+      showToast('No squares found on this map. To line the grid up with it, use Align and click two corners of a printed square.', { action: align });
+      return;
+    }
+    const was = { cs: this._cellSize, ox: this._gridOffsetX, oy: this._gridOffsetY };
+    const sz = Math.max(8, found.size), mod = v => ((v % sz) + sz) % sz;
+    this._cellSize = sz; this._gridOffsetX = mod(found.ox); this._gridOffsetY = mod(found.oy);
+    this._fitGridToBg(); this._saveMap(); this._render();
+    showToast('Grid matched to the map’s squares, ' + how + '.', { action: { label: 'Undo', run: () => {
+      if (_mapBgImage !== img) return;
+      this._cellSize = was.cs; this._gridOffsetX = was.ox; this._gridOffsetY = was.oy;
+      this._fitGridToBg(); this._saveMap(); this._render();
+    } } });
   },
   // Re-encode an uploaded image small enough to share.
   //
@@ -6414,7 +6554,7 @@ registerPanel('battlemap',{
       + '</div>'
       + '<div class="bm-set-tiles">'
       +   tile('snap',  'Snap', 'tokens to cells', !!this._snapToGrid, {title:'Snap tokens to the grid when dropped (Shift inverts)'})
-      +   tile('align', 'Align', 'to a printed grid', this._tool === 'align', {disabled: !this._bgMapPath, title: this._bgMapPath ? 'Click two opposite corners of one printed cell' : 'Choose a map first'})
+      +   tile('align', 'Align', 'to a printed grid', this._tool === 'align', {disabled: !(this._bgMapPath || _mapBgImage), title: (this._bgMapPath || _mapBgImage) ? 'Click two opposite corners of one printed cell' : 'Choose a map first'})
       +   tile('reset-align', 'Reset', 'alignment', false, {disabled: !(this._gridOffsetX || this._gridOffsetY), title:'Put the grid offset back to 0,0'})
       + '</div>'
       + slider('cellsize', 'Cell Size', this._cellSize,   'px', 16, 200)

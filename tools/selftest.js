@@ -22409,6 +22409,77 @@ for (const cls of Object.keys(rule)) for (let L = 1; L <= 20; L++) for (const sc
         closePanel('battlemap');
       }
     }
+    // -- Round 391: an uploaded map's squares — from a printed grid, from the file's name, or "none found" with Align; Undo puts the grid back --
+    {
+      const B = panelDefs.battlemap;
+      const S0 = localStorage.getItem('skt-battlemap-v1'), P0 = B._bgMapPath, I0 = _mapBgImage, W0 = B._bgMapNaturalW, H0 = B._bgMapNaturalH;
+      const putReal = window.sktMapBlobPut, readyReal = window.sktMapBlobReady;
+      const keep = { cs: B._cellSize, ox: B._gridOffsetX, oy: B._gridOffsetY, cols: B._cols, rows: B._rows, tool: B._tool, sc: B._bgMapScale, lts: B._lastTokenScale };
+      let keepT = null, keepD = null, keepF, fogSaved = false;
+      // A made-up map: mottled ground, some walls, and (optionally) grid lines.
+      const mkMap = async (w, h, grid, name, type) => {
+        const c = document.createElement('canvas'); c.width = w; c.height = h;
+        const g = c.getContext('2d');
+        let seed = 7; const rnd = () => (seed = (seed * 16807) % 2147483647) / 2147483647;
+        g.fillStyle = '#6b5a45'; g.fillRect(0, 0, w, h);
+        for (let i = 0; i < 2500; i++){ g.fillStyle = 'rgba(' + (60 + rnd() * 80 | 0) + ',' + (50 + rnd() * 60 | 0) + ',' + (40 + rnd() * 40 | 0) + ',.5)'; g.beginPath(); g.arc(rnd() * w, rnd() * h, 4 + rnd() * 30, 0, 7); g.fill(); }
+        g.fillStyle = '#222'; for (let i = 0; i < 12; i++) g.fillRect(rnd() * w, rnd() * h, 20 + rnd() * 300, 18);
+        if (grid){ g.strokeStyle = 'rgba(0,0,0,.55)'; g.lineWidth = 2;
+          for (let x = grid.ox; x < w; x += grid.size){ g.beginPath(); g.moveTo(x, 0); g.lineTo(x, h); g.stroke(); }
+          for (let y = grid.oy; y < h; y += grid.size){ g.beginPath(); g.moveTo(0, y); g.lineTo(w, y); g.stroke(); } }
+        const blob = await new Promise(r => c.toBlob(r, type || 'image/png', .9));
+        return new File([blob], name, { type: type || 'image/png' });
+      };
+      const lastToast = () => { const t = [...document.querySelectorAll('#toast-host .toast-item')].pop(); return t; };
+      const upload = async file => { document.querySelectorAll('#toast-host .toast-item').forEach(t => t.remove()); B._useImageFile(file); for (let i = 0; i < 60; i++){ await sleep(100); const t = lastToast(); if (t && /Grid matched|No squares/.test(t.textContent)) break; } };
+      try {
+        openPanel('battlemap'); await sleep(600);
+        keepT = B._tokens.slice(); keepD = B._drawings.slice();
+        keepF = B._fog; fogSaved = true;
+        B._tokens = []; B._drawings = []; B._fog = null;
+        window.sktMapBlobPut = () => Promise.resolve(false); window.sktMapBlobReady = () => false;   // (stays on this device)
+        // 1. A printed grid
+        B._cellSize = 50; B._gridOffsetX = 0; B._gridOffsetY = 0;
+        await upload(await mkMap(2100, 1400, { size: 70.3, ox: 23, oy: 41 }, 'cave.png'));
+        const t1 = lastToast();
+        const offOk = (v, want, p) => { const d = Math.abs(((v - want) % p + p) % p); return Math.min(d, p - d) < 2; };
+        ok('an uploaded map with a printed grid: our squares match it', Math.abs(B._cellSize - 70.3) < 0.35 && offOk(B._gridOffsetX, 23, 70.3) && offOk(B._gridOffsetY, 41, 70.3), JSON.stringify([B._cellSize, B._gridOffsetX, B._gridOffsetY]));
+        ok('…and the grid covers the map in those squares', B._cols === Math.ceil(2100 / B._cellSize) && B._rows === Math.ceil(1400 / B._cellSize), B._cols + 'x' + B._rows);
+        ok('…said, with Undo', !!t1 && /found on the picture/.test(t1.textContent) && !!t1.querySelector('button'), t1 && t1.textContent);
+        t1.querySelector('button').click(); await sleep(150);
+        ok('Undo puts the grid back as it was', B._cellSize === 50 && B._gridOffsetX === 0 && B._gridOffsetY === 0, JSON.stringify([B._cellSize, B._gridOffsetX]));
+        // 2. Its size in squares in the file name (no grid printed)
+        await upload(await mkMap(2100, 1400, null, 'Old Tavern 30x20.jpg', 'image/jpeg'));
+        const t2 = lastToast();
+        ok('a map named “… 30x20”: 70 px squares, from its name', Math.abs(B._cellSize - 70) < 0.01 && B._gridOffsetX === 0 && /from its name \(30×20/.test(t2 && t2.textContent || ''), JSON.stringify([B._cellSize, t2 && t2.textContent]));
+        // …height × width works too, and a screen size isn't taken for squares
+        ok('…“20x30” on a wide map reads the other way round; “800x600” isn’t squares', Math.abs(sktGridFromName('map 20x30.png', 2100, 1400).size - 70) < 0.01 && sktGridFromName('shot 800x600.png', 800, 600) === null && sktGridFromName('shot 1920x1080.png', 1920, 1080) === null && sktGridFromName('cave.png', 2100, 1400) === null);
+        // 3. Nothing to go on
+        B._cellSize = 50; B._gridOffsetX = 0; B._gridOffsetY = 0;
+        await upload(await mkMap(1800, 1200, null, 'painting.png'));
+        const t3 = lastToast();
+        ok('no grid printed and no size in the name: the grid is left, and it says so, offering Align', B._cellSize === 50 && !!t3 && /No squares found/.test(t3.textContent) && /Align/.test((t3.querySelector('button') || {}).textContent || ''), t3 && t3.textContent);
+        t3.querySelector('button').click(); await sleep(150);
+        ok('…Align starts lining it up', B._tool === 'align');
+        B._tool = ''; B._removeAlignMarker(); B._alignFirstClick = null;
+        // Align, from the map's settings, on an upload that hasn't reached the server
+        B._bgMapPath = null; B._settingsOpen = true; B._render(); await sleep(150);
+        const tile = B._body.querySelector('[data-bmset="align"]');
+        ok('Align works on an upload that hasn’t been shared yet', !!tile && !tile.disabled);
+        B._settingsOpen = false;
+      } catch(e){ ok('round 391 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
+      finally {
+        document.querySelectorAll('#toast-host .toast-item').forEach(t => t.remove());
+        window.sktMapBlobPut = putReal; window.sktMapBlobReady = readyReal;
+        if (fogSaved) B._fog = keepF;
+        B._cellSize = keep.cs; B._gridOffsetX = keep.ox; B._gridOffsetY = keep.oy; B._cols = keep.cols; B._rows = keep.rows; B._tool = keep.tool; B._bgMapScale = keep.sc; B._lastTokenScale = keep.lts;
+        _mapBgImage = I0; B._bgMapPath = P0; B._bgMapNaturalW = W0; B._bgMapNaturalH = H0;
+        if (keepT){ B._tokens = keepT; B._drawings = keepD; }
+        if (S0 != null) localStorage.setItem('skt-battlemap-v1', S0);
+        try { B._render(); } catch(e){}
+        closePanel('battlemap');
+      }
+    }
     // -- Class features: represented, not just text ------------------------
     {
       try {
