@@ -4815,6 +4815,10 @@ registerPanel('battlemap',{
       if (this._tool || this._fogTool || this._movingEntry) return;
       if (target && target.closest && (target.closest('.map-token') || target.closest('button'))) return;
       clearTimeout(this._holdT);
+      // The spot pressed, read now: where the finger went down, even if the
+      // view is still settling from a zoom when the half second is up.
+      const stage0 = b.querySelector('#map-stage'), at = stage0 && this._stagePoint(cx, cy, stage0);
+      if (!at) return;
       const mvEv = touch ? 'touchmove' : 'mousemove', upEv = touch ? 'touchend' : 'mouseup';
       const stop = () => {
         clearTimeout(this._holdT);
@@ -4830,8 +4834,7 @@ registerPanel('battlemap',{
       if (touch) document.addEventListener('touchcancel', stop);
       this._holdT = setTimeout(() => {
         stop();
-        const stage = b.querySelector('#map-stage'); if (!stage) return;
-        const p = this._stagePoint(cx, cy, stage); if (p) this._ping(p.x, p.y);
+        this._ping(at.x, at.y);
       }, 550);
     };
     scrollEl.addEventListener('mousedown', e => { if (e.button === 0) holdStart(e.clientX, e.clientY, e.target, false); });

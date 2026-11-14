@@ -22184,8 +22184,11 @@ for (const cls of Object.keys(rule)) for (let L = 1; L <= 20; L++) for (const sc
         const bcWas = B._bc; B._bc = { postMessage: m => posted.push(m), onmessage: bcWas && bcWas.onmessage };
         const cl = (sx, sy) => { const r = B._body.querySelector('#map-stage').getBoundingClientRect(), z = B._screenScale(); return { x: r.left + sx * z, y: r.top + sy * z }; };
         const scroll = B._body.querySelector('#map-scroll');
+        let at = null;
         const hold = async (sx, sy, ms, moveBy, target) => {
           const p = cl(sx, sy), el = target || scroll;
+          // (the spot under the pointer as the map itself reads it, at the press — zoomed or turned)
+          at = B._stagePoint(p.x, p.y, B._body.querySelector('#map-stage'));
           el.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, cancelable: true, clientX: p.x, clientY: p.y, button: 0 }));
           if (moveBy){ await sleep(100); document.dispatchEvent(new MouseEvent('mousemove', { bubbles: true, clientX: p.x + moveBy, clientY: p.y })); }
           await sleep(ms);
@@ -22196,8 +22199,6 @@ for (const cls of Object.keys(rule)) for (let L = 1; L <= 20; L++) for (const sc
         await hold(8 * cs, 6 * cs, 250);
         ok('a short click is not a ping', !pings().length && !sent.length);
         await hold(8 * cs, 6 * cs, 750);
-        // (the spot under the pointer, as the map itself reads it — zoomed or turned)
-        const at = (q => B._stagePoint(q.x, q.y, B._body.querySelector('#map-stage')))(cl(8 * cs, 6 * cs));
         const pg = pings()[0];
         const mid = pg ? { x: pg.offsetLeft + pg.offsetWidth / 2, y: pg.offsetTop + pg.offsetHeight / 2 } : null;
         ok('held still: a ping where it was held', pings().length === 1 && Math.abs(mid.x - at.x) < 1.5 && Math.abs(mid.y - at.y) < 1.5 && Math.abs(at.x - 8 * cs) < cs / 4, JSON.stringify([mid, at]));
