@@ -22258,8 +22258,8 @@ for (const cls of Object.keys(rule)) for (let L = 1; L <= 20; L++) for (const sc
           && !shapes().some(v => /^(wall|door|lamp|terrain)$/.test(v)), JSON.stringify(shapes()));
         const sel = B._body.querySelector('#tpl-shape'); sel.value = 'cone'; sel.onchange(); await sleep(30);
         btn('tool-build').click(); await sleep(80);
-        ok('Build: wall, door, light source and difficult terrain — and only those', B._tool === 'area' && on('tool-build') && !on('tool-area')
-          && JSON.stringify(shapes()) === JSON.stringify(['wall', 'door', 'lamp', 'terrain']) && B._tplShape === 'wall', JSON.stringify([shapes(), B._tplShape]));
+        ok('Build: wall, door, light source, difficult terrain and notes — and only those', B._tool === 'area' && on('tool-build') && !on('tool-area')
+          && JSON.stringify(shapes()) === JSON.stringify(['wall', 'door', 'lamp', 'terrain', 'note']) && B._tplShape === 'wall', JSON.stringify([shapes(), B._tplShape]));
         const sz = B._body.querySelector('#tpl-wrap-s'), cc = B._body.querySelector('#tpl-color');
         ok('…with no size in feet, no colour and no “Clear areas”', (!sz || getComputedStyle(sz).display === 'none') && (!cc || getComputedStyle(cc).display === 'none') && !btn('clear-areas'));
         // A wall drawn with it
