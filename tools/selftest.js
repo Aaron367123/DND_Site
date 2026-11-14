@@ -25355,7 +25355,7 @@ for (const cls of Object.keys(rule)) for (let L = 1; L <= 20; L++) for (const sc
         const it = [...document.querySelectorAll('button')].find(x => /Move this area/.test(x.textContent));
         ok('phone: tapping it, its menu offers Move', !!it);
         if (it) it.click(); await sleep(80);
-        ok('…and the hint says to tap', /Tap where the area goes/.test((B._body.querySelector('.map-place-hint') || {}).textContent || ''));
+        ok('…and the hint says to tap (to click, with a mouse)', new RegExp((matchMedia('(pointer: coarse)').matches ? 'Tap' : 'Click') + ' where the area goes').test((B._body.querySelector('.map-place-hint') || {}).textContent || ''));
         const x0 = a.x, y0 = a.y;
         // tap 3 squares lower and drag 1 more to the right before letting go
         const ty = my + 3 * cs * z, el = document.elementFromPoint(mx - cs * z * 0.8, ty);
