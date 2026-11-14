@@ -4024,6 +4024,8 @@ registerPanel('battlemap',{
       // hint spent a row of a 390px screen telling you to do something you
       // can't.
       +'<span class="map-foot-hint" style="font-size:var(--fs-2xs);color:var(--text-dim)">Drag tokens · Right-click for options · Hold to ping</span>'
+      // …and the one a phone can do, which nobody would find on their own.
+      +'<span class="map-foot-touch" style="font-size:var(--fs-2xs);color:var(--text-dim)">Hold a finger on the map to ping</span>'
     +'</div>';
 
     html+='<div id="token-panel" style="position:absolute;right:8px;top:52px;width:164px;background:var(--panel);border:1px solid var(--border);border-radius:5px;padding:10px;font-size:var(--fs-sm);z-index:20;display:none;box-shadow:0 4px 16px rgba(0,0,0,.5)">'

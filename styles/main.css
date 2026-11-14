@@ -2773,7 +2773,10 @@ body.player-mode #campaign-btn{display:none !important}
   /* Footer keeps the scale readout; the grid dimensions and the
      right-click hint go. */
   .map-foot .bt-l, .map-foot-hint{display:none}
+  .map-foot .map-foot-touch{display:inline}
 }
+/* A ping by finger: said on a phone's map, not on a computer's. */
+.map-foot-touch{display:none}
 #map-scroll.map-drop-active{outline:2px dashed var(--accent);outline-offset:-4px;background:rgba(212,165,116,.06)}
 .map-container{flex:1;overflow:hidden;position:relative;cursor:crosshair}
 #battle-map-canvas{display:block;image-rendering:pixelated}

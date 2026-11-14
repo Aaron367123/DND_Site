@@ -22250,6 +22250,8 @@ for (const cls of Object.keys(rule)) for (let L = 1; L <= 20; L++) for (const sc
         const shapes = () => [...B._body.querySelectorAll('#tpl-shape option')].map(o => o.value);
         const on = a => !!btn(a) && btn(a).classList.contains('active');
         ok('the DM’s toolbar has a Build button beside Area', !!btn('tool-build') && !!btn('tool-area'));
+        const ftt = B._body.querySelector('.map-foot-touch');
+        ok('a computer’s map footer has no “hold a finger” hint', !!ftt && ftt.offsetWidth === 0 && getComputedStyle(B._body.querySelector('.map-foot-hint')).display !== 'none');
         btn('tool-area').click(); await sleep(80);
         ok('Area: the shapes spells and abilities cover, and nothing built', B._tool === 'area' && on('tool-area') && !on('tool-build')
           && ['circle', 'cyl', 'cone', 'line', 'cube', 'aura', 'darkness'].every(v => shapes().includes(v))
@@ -25631,6 +25633,37 @@ for (const cls of Object.keys(rule)) for (let L = 1; L <= 20; L++) for (const sc
         ok('…and their Area shapes have nothing built in them', opts.length > 0 && !opts.some(v => /^(wall|door|lamp|terrain)$/.test(v)), JSON.stringify(opts));
       } catch(e){ ok('round 386 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
       finally { B._tool = keepTool; B._tplShape = keepShape; try { B._render(); } catch(e){} paTab = keepTab; try { paRender(); } catch(e){} }
+    }
+    // -- Round 387: a phone's map keeps settling on the player's own token while the view refits (the map's picture arriving), until they touch it --
+    if (PLAYER){
+      const keepTab = paTab; const B = panelDefs.battlemap;
+      let keepT = null, keepVs = B._viewScale;
+      try {
+        if (paMyIdx() < 0) paSetPc(state.party[0].id);
+        const me = paPc();
+        paTab = 'map'; paRender(); await sleep(700);
+        keepT = B._tokens.slice(); const cs0 = B._csScreen();
+        // Our token in the middle of the map, away from its edges
+        B._tokens = [{ id: 't387me', cid: me.id, label: me.name, isPC: true, x: Math.round(B._cols / 2) * cs0 + cs0 / 2, y: Math.round(B._rows / 2) * cs0 + cs0 / 2, size: 1 }];
+        B._applyViewScale(2.5); B._render(); await sleep(1200);   // (bigger than the screen, so there's room to centre)
+        const off0 = paMyOffset();
+        // The picture arrives and the view refits: a different scale
+        B._applyViewScale(1.5); await sleep(500);
+        const off1 = paMyOffset();
+        ok('phone: the map opens on your token, and stays on it when the view refits', off0 != null && off0 < 8 && off1 != null && off1 < 8, JSON.stringify([off0, off1, B._viewScale]));
+        const ft = document.querySelector('.pa-mount .map-foot-touch');
+        ok('…and its footer says how to ping', !!ft && ft.offsetWidth > 0 && /Hold a finger/.test(ft.textContent));
+        // Once you've touched the map, it's yours
+        document.querySelector('.pa-mount').dispatchEvent(new TouchEvent('touchstart', { bubbles: true, touches: [] }));
+        const sc = document.querySelector('.pa-mount #map-scroll'); sc.scrollLeft += 150; await sleep(200);
+        B._applyViewScale(2); await sleep(500);
+        ok('…but not once you’ve touched it: the map stays where you put it', (paMyOffset() || 0) > 30, paMyOffset());
+      } catch(e){ ok('round 387 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
+      finally {
+        if (keepT){ B._tokens = keepT; try { B._render(); } catch(e){} }
+        try { B._applyViewScale(keepVs || 1); } catch(e){}
+        paTab = keepTab; try { paRender(); } catch(e){}
+      }
     }
   }
 

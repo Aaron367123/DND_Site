@@ -921,6 +921,21 @@ function paUnmountCurrent(host){
 // something and the map stays where you put it until your token goes
 // somewhere. "Me" in the bar brings you back.
 let paMapObs = null, paMapLast = null;
+// Until the player first touches the map, it keeps settling on them: the
+// map's picture arrives after the tab opens and the view refits to it, which
+// left their token off to one side (or off the screen) of a map that had
+// centred on it a moment before.
+let paMapHeld = false, paMapOpened = 0;
+// How far (screen px) your token sits from the middle of the map's view.
+function paMyOffset(){
+  const t = paMyToken(); if (!t) return null;
+  const host = document.getElementById('pa-screen');
+  const sc = host && host.querySelector('.pa-mount #map-scroll');
+  const el = host && host.querySelector('.pa-mount .map-token[data-tid="' + CSS.escape(String(t.id)) + '"]');
+  if (!el || !sc) return null;
+  const r = el.getBoundingClientRect(), s = sc.getBoundingClientRect();
+  return Math.hypot(r.left + r.width / 2 - s.left - s.width / 2, r.top + r.height / 2 - s.top - s.height / 2);
+}
 function paMyToken(){
   const pc = paPc(), B = panelDefs.battlemap;
   if (!pc || !B || !Array.isArray(B._tokens)) return null;
@@ -955,8 +970,10 @@ function paCenterOnMe(smooth, zoomIn){
 }
 function paWatchMap(host){
   if (paMapObs) paMapObs.disconnect();
-  paMapLast = null;
+  paMapLast = null; paMapHeld = false; paMapOpened = Date.now();
   const box = host.querySelector('.pa-mount'); if (!box || typeof MutationObserver !== 'function') return;
+  const held = () => { paMapHeld = true; };
+  ['touchstart', 'mousedown', 'wheel'].forEach(ev => box.addEventListener(ev, held, { passive: true, capture: true }));
   let pend = null;
   paMapObs = new MutationObserver(() => {
     clearTimeout(pend);
@@ -968,6 +985,7 @@ function paWatchMap(host){
       if (!document.querySelector('[data-pa-me]')){ document.querySelector('#pa-screen .pa-draw')?.remove(); paAddDrawBar(document.getElementById('pa-screen')); }
       const k = t.x + ',' + t.y;
       if (k !== paMapLast) paCenterOnMe(paMapLast != null);
+      else if (!paMapHeld && Date.now() - paMapOpened < 15000 && (paMyOffset() || 0) > 8) paCenterOnMe(false);
     }, 120);
   });
   paMapObs.observe(box, { subtree: true, childList: true, attributes: true, attributeFilter: ['style'] });
