@@ -21542,6 +21542,11 @@ for (const cls of Object.keys(rule)) for (let L = 1; L <= 20; L++) for (const sc
         await walk([[3, 3]]);
         ok('…on 5-10-5: 20 ft', sktTurnMoved(tk) === 20, sktTurnMoved(tk));
         B._diagRule = 'five';
+        // Snap off, the token between squares: 1.4 squares is one square, as the straight line says
+        B._snapToGrid = false; tk.x = o.x + 2.95 * cs; tk.y = o.y + 2.5 * cs; B._renderTokens(); delete tk.mv;
+        await walk([[1.4, 0]]);
+        ok('snap off, a token between squares dragged 1.4 squares: 5 ft, not 10', sktTurnMoved(tk) === 5, sktTurnMoved(tk));
+        B._snapToGrid = true;
         // Through difficult terrain on the way, even when it ends outside it
         tk.x = o.x + 2.5 * cs; tk.y = o.y + 2.5 * cs; B._renderTokens(); delete tk.mv;
         B._drawings = [{ k: 'tpl', id: 'r369dt', shape: 'terrain', x: o.x + 4 * cs, y: o.y, x2: o.x + 6 * cs, y2: o.y + 4 * cs }];

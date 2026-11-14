@@ -2097,13 +2097,17 @@ registerPanel('battlemap',{
   //     (a diagonal drag clips the corner of the square beside it, which is
   //     not a two-square detour).
   // Costed step by step, 5-10-5 diagonals and difficult terrain included.
-  _tokCell(t, x, y){
-    const cs = this._csScreen() || 50, o = this._gridOffPx(), s = Math.max(1, Math.round(+t.size || 1));
-    return [Math.round((x - s * cs / 2 - o.x) / cs), Math.round((y - s * cs / 2 - o.y) / cs)];
+  // Squares counted from where the drag started (path.ox, oy), not from the
+  // grid lines: a token sitting between squares on an unsnapped map moved
+  // 1.4 squares is one square, as the straight-line measure says — rounding
+  // each end to the grid made it two.
+  _pathCell(path, x, y){
+    const cs = this._csScreen() || 50;
+    return [Math.round((x - path.ox) / cs), Math.round((y - path.oy) / cs)];
   },
   _pathTo(path, t, x, y){
     if (!path) return;
-    const to = this._tokCell(t, x, y), cells = path.cells;
+    const to = this._pathCell(path, x, y), cells = path.cells;
     let guard = 0;
     for (let cur = cells[cells.length - 1]; (cur[0] !== to[0] || cur[1] !== to[1]) && guard++ < 2000; cur = cells[cells.length - 1]){
       const nx = cur[0] + Math.sign(to[0] - cur[0]), ny = cur[1] + Math.sign(to[1] - cur[1]);
@@ -2116,8 +2120,8 @@ registerPanel('battlemap',{
   },
   // What the walk cost: {ft, dg, rough, pts} — pts in stage px for the line.
   _pathCost(t, path, prevDiag){
-    const cs = this._csScreen() || 50, o = this._gridOffPx(), per = this._ftPerCell || 5, s = Math.max(1, Math.round(+t.size || 1));
-    const ctr = c => [o.x + (c[0] + s / 2) * cs, o.y + (c[1] + s / 2) * cs];
+    const cs = this._csScreen() || 50, per = this._ftPerCell || 5;
+    const ctr = c => [path.ox + c[0] * cs, path.oy + c[1] * cs];   // the token's middle at that step
     let ft = 0, dg = 0, rough = 0, eu = 0, p = Math.max(0, Math.round(+prevDiag || 0));
     const cells = path.cells;
     for (let i = 1; i < cells.length; i++){
@@ -2138,7 +2142,7 @@ registerPanel('battlemap',{
     // Dragged on squares: along the way walked.
     const d = this._drag;
     if (d && this._gridType !== 'hex'){
-      if (!d.path) d.path = { cells: [this._tokCell(t, x0, y0)] };
+      if (!d.path) d.path = { ox: x0, oy: y0, cells: [[0, 0]] };
       this._pathTo(d.path, t, x1, y1);
       const pc = this._pathCost(t, d.path, prev);
       return this._measureShow(x0, y0, x1, y1, mi ? mi.budget : this._tokenSpeed(t), mi ? mi.moved : 0, mi && mi.cost, prev, pc.rough, pc);
