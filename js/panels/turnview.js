@@ -1085,11 +1085,27 @@ registerPanel('turnview', {
     const m = this._map();
     if (m.gridType === 'hex' && typeof sktHexSteps === 'function'){
       const sc = m.bgPath ? (m.bgScale || 1) : 1, wrap = v => (((v || 0) * sc) % cs + cs) % cs;
-      return Math.max(0, sktHexSteps(ta.x, ta.y, tb.x, tb.y, cs, wrap(m.gridOffsetX), wrap(m.gridOffsetY)) - Math.max(0, Math.round(span))) * this._ftPerCell();
+      return this._withHeight(Math.max(0, sktHexSteps(ta.x, ta.y, tb.x, tb.y, cs, wrap(m.gridOffsetX), wrap(m.gridOffsetY)) - Math.max(0, Math.round(span))) * this._ftPerCell(), ta, tb, span, 'five');
     }
     const ax = Math.max(0, Math.abs(ta.x - tb.x) / cs - Math.max(0, span));
     const ay = Math.max(0, Math.abs(ta.y - tb.y) / cs - Math.max(0, span));
-    return sktGridFeet(ax, ay, this._diagRule(), this._ftPerCell());
+    return this._withHeight(sktGridFeet(ax, ay, this._diagRule(), this._ftPerCell()), ta, tb, span, this._diagRule());
+  },
+  // A flyer 30 ft up is 30 ft from the fighter under it, not 0: the height
+  // between two creatures is one more axis, counted the map's way (5-5-5: the
+  // longer of the two; 5-10-5: every second diagonal 10; or straight).
+  // Creatures are as tall as they are wide, so a Large one's span counts up
+  // as it does across.
+  _withHeight(ft, ta, tb, span, rule){
+    const per = this._ftPerCell();
+    if (!(+ta.elev || +tb.elev) || !(per > 0)) return ft;
+    // Between the middles of the two (a creature stands on its height and
+    // reaches up its size), less the span as across: an ogre on the ground
+    // and a hawk 10 ft up over it are touching.
+    const mid = t => (+t.elev || 0) / per + (+t.size || 1) / 2;
+    const az = Math.max(0, Math.abs(mid(ta) - mid(tb)) - Math.max(0, span));
+    if (!az) return ft;
+    return sktGridFeet(ft / per, az, rule, per);
   },
   // Conditions that change an attack roll, and nothing else. The panel has
   // tracked and displayed twelve of them for a long time while every roll
@@ -5811,7 +5827,9 @@ registerPanel('turnview', {
           : sktGridFeet((tok.x - d.from.x) / cs, (tok.y - d.from.y) / cs, this._diagRule(), this._ftPerCell(), prev);
         const dg = B && B._body && typeof B._diagBetweenPts === 'function' ? B._diagBetweenPts(d.from.x, d.from.y, tok.x, tok.y)
           : (this._map().gridType === 'hex' ? 0 : sktGridDiag((tok.x - d.from.x) / cs, (tok.y - d.from.y) / cs));
-        sktNoteMove(this._map().tokens, tok, ft, dg);
+        // Difficult terrain is the battle map's: what it adds on the way.
+        const rough = B && B._body && typeof B._terrainExtra === 'function' ? B._terrainExtra(tok, d.from.x, d.from.y, tok.x, tok.y) : 0;
+        sktNoteMove(this._map().tokens, tok, ft, dg, rough);
       }
       if (B && B._body){
         const live = (B._tokens || []).find(x => x && x.id === tok.id);

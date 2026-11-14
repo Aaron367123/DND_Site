@@ -491,6 +491,7 @@ registerPanel('battlemap',{
     if (this._bgMapPath) this._loadBgFromPath(this._bgMapPath, this._pendingRefit);
     this._startBroadcast();
     this._startUndoKeys();
+    this._startMapKeys();
     // Watch the panel body for size changes (window resize). When the map is
     // currently in "fit" mode, re-fit on resize so it always fills the new
     // viewport. Doesn't interfere with manual wheel/slider zoom — _isFitted
@@ -518,6 +519,7 @@ registerPanel('battlemap',{
     this._saveMap();
     this._stopBroadcast();
     this._stopUndoKeys();
+    this._stopMapKeys();
     // Would otherwise fire against a torn-down body.
     clearTimeout(this._requalityTimer); this._requalityTimer = null;
     if (this._scrollRaf){
@@ -759,6 +761,85 @@ registerPanel('battlemap',{
       if (e.shiftKey) this._redo(); else this._undo();
     };
     document.addEventListener('keydown', this._undoKeyHandler);
+  },
+  // The keyboard, on the map window when it's the focused one (or the phone
+  // app's map tab): the arrows move the selected token a square at a time —
+  // the turn's movement, the limit line and opportunity attacks counted as for
+  // a drag; Delete removes it (the DM's, and Ctrl+Z brings it back); Escape
+  // puts the tool down and lets go of the token.
+  _startMapKeys(){
+    this._stopMapKeys();
+    this._mapKeyHandler = (e) => {
+      if (e.ctrlKey || e.metaKey || e.altKey) return;
+      const tg = e.target;
+      if (tg && (tg.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(tg.tagName || ''))) return;
+      if (document.querySelector('.modal-backdrop')) return;
+      const isPlayer = document.body.classList.contains('player-mode');
+      if (isPlayer){ if (typeof paTab === 'undefined' || paTab !== 'map') return; }
+      else { const win = this._body && this._body.closest('.window'); if (!win || !win.classList.contains('focused')) return; }
+      if (e.key === 'Escape'){
+        if (!this._tool && !this._selected) return;
+        if (this._tool){ this._tool = ''; this._measureHide(); }
+        this._selected = null; this._closePanel();
+        this._render();
+        return;
+      }
+      const t = this._selected && (this._tokens || []).find(x => x && x.id === this._selected);
+      if (!t) return;
+      const dir = { ArrowLeft: [-1, 0], ArrowRight: [1, 0], ArrowUp: [0, -1], ArrowDown: [0, 1] }[e.key];
+      if (dir){
+        if (isPlayer && !sktPlayerMayMoveToken(t)) return;
+        e.preventDefault();
+        this._keyMove(t, dir[0], dir[1]);
+        return;
+      }
+      if ((e.key === 'Delete' || e.key === 'Backspace') && !isPlayer){
+        e.preventDefault();
+        const wasPC = !!t.isPC;
+        this._tokens = this._tokens.filter(x => x !== t);
+        this._selected = null; this._closePanel(); this._saveMap();
+        if (wasPC) this._render(); else this._renderTokens();
+      }
+    };
+    document.addEventListener('keydown', this._mapKeyHandler);
+  },
+  _stopMapKeys(){
+    if (this._mapKeyHandler){ document.removeEventListener('keydown', this._mapKeyHandler); this._mapKeyHandler = null; }
+  },
+  // A token's height above (or below) the ground, in feet: "↑30 ft", "↓10 ft".
+  _elevText(t){ const e = +(t && t.elev) || 0; return e ? (e > 0 ? '↑' : '↓') + Math.abs(e) + ' ft' : ''; },
+  // Up or down: what it holds goes with it, on its turn it is movement (30 ft
+  // up costs 30 ft), and everyone's distances and reach see it.
+  _setElev(t, v){
+    v = Math.max(-1000, Math.min(10000, Math.round(+v || 0)));
+    const dz = v - (+t.elev || 0); if (!dz) return;
+    if (v) t.elev = v; else delete t.elev;
+    if (typeof sktDragHeld === 'function') sktDragHeld(this._tokens, t, 0, 0, dz);
+    if (typeof sktNoteMove === 'function' && sktNoteMove(this._tokens, t, Math.abs(dz), 0)) panelDefs.turnview?._syncMoved?.();
+    if (!document.body.classList.contains('player-mode') && panelDefs.combat?._releaseGrapples?.()){ panelDefs.combat._render?.(); }
+    this._saveMap();
+    this._renderTokens();
+    panelDefs.turnview?._render?.();
+  },
+  // One square (one hex sideways on a hex map) in a direction, as a drop.
+  _keyMove(t, dx, dy){
+    if (this._gridType === 'hex' && dy) return;   // a hex row isn't a straight line down
+    const cs = this._csScreen() || 50, from = { x: t.x, y: t.y };
+    const half = (t.size || 1) * this._tokenUnitScreen() / 2, W = this._cols * cs, H = this._rows * cs;
+    const nx = Math.max(half, Math.min(W - half, t.x + dx * cs)), ny = Math.max(half, Math.min(H - half, t.y + dy * cs));
+    if (nx === t.x && ny === t.y) return;
+    const land = this._landing(t, nx, ny, from, false);
+    if (this._fearBlocks(t, land, from)) return;
+    if (land.x === from.x && land.y === from.y) return;
+    // The ruler shows this step against the turn's total before it's added.
+    this._measureMove(t, from.x, from.y, land.x, land.y); this._measureLinger();
+    t.x = land.x; t.y = land.y;
+    if (land.moved) this._landingNote();
+    this._noteTurnMove(t, from);
+    this._saveMap();
+    this._renderTokens();
+    const _tv = (typeof panelDefs !== 'undefined') && panelDefs.turnview;
+    if (_tv && typeof _tv._checkProvoke === 'function'){ try { _tv._checkProvoke(t, from); } catch(err){} }
   },
   _stopUndoKeys(){
     if (this._undoKeyHandler){
@@ -1834,7 +1915,7 @@ registerPanel('battlemap',{
     }
     // Drawings live in stage pixels too — scale them in lockstep.
     (this._drawings||[]).forEach(s => {
-      if (s && s.k === 'tpl'){ s.x *= ratio; s.y *= ratio; return; }   // areas: origin only; size is in feet
+      if (s && s.k === 'tpl'){ s.x *= ratio; s.y *= ratio; if (s.x2 != null){ s.x2 *= ratio; s.y2 *= ratio; } return; }   // areas: origin only, size in feet; terrain: both corners
       if (!s.p) return;
       for (let i = 0; i < s.p.length; i++) s.p[i] *= ratio;
     });
@@ -2007,7 +2088,7 @@ registerPanel('battlemap',{
   // turn's movement against what it has.
   _measureMove(t, x0, y0, x1, y1){
     const mi = this._moveInfo(t);
-    return this._measureShow(x0, y0, x1, y1, mi ? mi.budget : this._tokenSpeed(t), mi ? mi.moved : 0, mi && mi.cost, mi && typeof sktTurnDiag === 'function' ? sktTurnDiag(t) : 0);
+    return this._measureShow(x0, y0, x1, y1, mi ? mi.budget : this._tokenSpeed(t), mi ? mi.moved : 0, mi && mi.cost, mi && typeof sktTurnDiag === 'function' ? sktTurnDiag(t) : 0, this._terrainExtra(t, x0, y0, x1, y1));
   },
   // A drop: the feet walked go on the turn's count.
   // A grappler brings what it holds along.
@@ -2018,12 +2099,12 @@ registerPanel('battlemap',{
     if (!document.body.classList.contains('player-mode') && panelDefs.combat?._releaseGrapples?.()){ panelDefs.combat._render?.(); panelDefs.turnview?._render?.(); }
     if (typeof sktNoteMove !== 'function') return;
     const prev = typeof sktTurnDiag === 'function' ? sktTurnDiag(t) : 0;
-    if (sktNoteMove(this._tokens, t, this._feetBetweenPts(from.x, from.y, t.x, t.y, prev), this._diagBetweenPts(from.x, from.y, t.x, t.y))) panelDefs.turnview?._syncMoved?.();
+    if (sktNoteMove(this._tokens, t, this._feetBetweenPts(from.x, from.y, t.x, t.y, prev), this._diagBetweenPts(from.x, from.y, t.x, t.y), this._terrainExtra(t, from.x, from.y, t.x, t.y))) panelDefs.turnview?._syncMoved?.();
   },
   // The measuring line: dashed, from (x0,y0) to (x1,y1) in stage pixels, the
   // distance on a pill at the far end. Sized in screen pixels, so it reads
   // the same at any zoom. `speed` adds "of N ft" and turns red past it.
-  _measureShow(x0, y0, x1, y1, speed, moved, extra, prevDiag){
+  _measureShow(x0, y0, x1, y1, speed, moved, extra, prevDiag, rough){
     const stage = this._body && this._body.querySelector('#map-stage'); if (!stage) return;
     let m = stage.querySelector('.bm-measure');
     if (!m){ m = document.createElement('div'); m.className = 'bm-measure'; m.innerHTML = '<svg><line class="bm-measure-line"/><circle class="bm-measure-a"/><circle class="bm-measure-b"/></svg><span class="bm-measure-l"></span>'; stage.appendChild(m); }
@@ -2039,12 +2120,15 @@ registerPanel('battlemap',{
     // `moved`: already walked this turn, so the limit is on the sum.
     const before = moved > 0 ? moved : 0;
     // `extra`: crawling, or dragging a creature — each foot costs more.
-    const mult = (extra && extra.mult) || 1, cost = ft * mult;
+    // `rough`: the extra feet difficult terrain costs on the way.
+    const dt = +rough > 0 ? +rough : 0;
+    const mult = (extra && extra.mult) || 1, cost = ft * mult + dt;
     const over = speed != null && cost + before > speed;
     const l = m.querySelector('.bm-measure-l');
     const unit = (this._ftPerCell || 5) >= 5280 ? ' mi' : ' ft';
     const show = n => unit === ' mi' ? +(n / 5280).toFixed(1) : n;
-    const crawlNote = extra && extra.why ? ' ' + extra.why + (mult > 1 ? ' (costs ' + show(cost) + ')' : '') : '';
+    const crawlNote = (extra && extra.why ? ' ' + extra.why : '') + (dt ? (extra && extra.why ? ',' : '') + ' through difficult terrain' : '')
+      + ((extra && extra.why && mult > 1) || dt ? ' (costs ' + show(cost) + ')' : '');
     l.textContent = before || crawlNote ? show(ft) + unit + crawlNote + ' · ' + show(cost + before) + (speed != null ? ' / ' + show(speed) : '') + unit + ' this turn'
       : show(ft) + (speed != null ? ' / ' + show(speed) : '') + unit;
     l.classList.toggle('over', !!over);
@@ -2218,11 +2302,71 @@ registerPanel('battlemap',{
     return { tok: k, x: live ? live.x : k.x, y: live ? live.y : k.y, h: Math.max(1, Math.round(+k.size || 1)) * (this._tokenUnitScreen() || this._csScreen() || 50) / 2 };
   },
   _ppf(){ return (this._tokenUnitScreen() || this._csScreen() || 50) / (this._ftPerCell || 5); },
-  _areas(){ return (this._drawings || []).filter(s => s && s.k === 'tpl'); },
+  // A player's screen leaves out what the DM keeps to themselves (t.dm).
+  _areas(){ const pl = document.body.classList.contains('player-mode'); return (this._drawings || []).filter(s => s && s.k === 'tpl' && s.shape !== 'terrain' && !(pl && s.dm)); },
+  // DIFFICULT TERRAIN: rectangles on the grid ({shape:'terrain', x, y, x2, y2},
+  // stage px, on grid lines), laid by the DM with the Area tool. Kept with the
+  // areas so they sync, undo and save with the map, but not one of them: no
+  // saves to roll, and "Clear areas" leaves the rubble where it is. Every
+  // square entered whose middle is in one costs 1 extra foot a foot — on the
+  // limit line while dragging and on the turn's movement. Not for a creature
+  // in the air (its height above 0).
+  _terrain(){ return (this._drawings || []).filter(s => s && s.k === 'tpl' && s.shape === 'terrain'); },
+  _inTerrain(x, y){
+    return this._terrain().some(r => x >= Math.min(r.x, r.x2) && x <= Math.max(r.x, r.x2) && y >= Math.min(r.y, r.y2) && y <= Math.max(r.y, r.y2));
+  },
+  // The extra feet a move from (x0,y0) to (x1,y1) costs `tok` in difficult
+  // terrain: a square at a time along the way, its whole space at each.
+  _terrainExtra(tok, x0, y0, x1, y1){
+    if (!tok || +tok.elev > 0 || !this._terrain().length) return 0;
+    const cs = this._csScreen() || 50, per = this._ftPerCell || 5;
+    const n = this._gridType === 'hex' ? sktHexSteps(x0, y0, x1, y1, cs, this._gridOffPx().x, this._gridOffPx().y)
+      : Math.round(Math.max(Math.abs(x1 - x0), Math.abs(y1 - y0)) / cs);
+    const s = Math.max(1, Math.round(+tok.size || 1)), u = this._tokenUnitScreen() || cs;
+    let extra = 0;
+    for (let i = 1; i <= n; i++){
+      const px = x0 + (x1 - x0) * i / n, py = y0 + (y1 - y0) * i / n;
+      let rough = false;
+      for (let a = 0; a < s && !rough; a++) for (let b = 0; b < s && !rough; b++)
+        if (this._inTerrain(px + (a - (s - 1) / 2) * u, py + (b - (s - 1) / 2) * u)) rough = true;
+      if (rough) extra += per;
+    }
+    return extra;
+  },
+  // A drag from corner to corner, onto the grid lines around it.
+  _terrainRect(x0, y0, x1, y1){
+    const cs = this._csScreen() || 50, o = this._gridOffPx();
+    const lo = (v, off) => Math.floor((v - off) / cs) * cs + off, hi = (v, off) => Math.ceil((v - off) / cs) * cs + off;
+    let ax = lo(Math.min(x0, x1), o.x), ay = lo(Math.min(y0, y1), o.y), bx = hi(Math.max(x0, x1), o.x), by = hi(Math.max(y0, y1), o.y);
+    if (bx - ax < cs) bx = ax + cs;
+    if (by - ay < cs) by = ay + cs;
+    return { x: ax, y: ay, x2: bx, y2: by };
+  },
+  // What an area is, in words: "20 ft sphere", "60 ft line, 10 ft wide".
+  _areaName(t){
+    const nm = { circle: 'sphere', aura: 'emanation' }[t.shape] || t.shape;
+    return (+t.ft || 0) + ' ft ' + nm + (t.shape === 'line' && +t.w > 5 ? ', ' + t.w + ' ft wide' : '');
+  },
+  // Where its label sits: the middle of it (above an emanation's creature).
+  _areaMid(t){
+    const g = this._areaGeom(t); if (!g) return null;
+    if (g.circle) return { x: g.circle.x, y: g.circle.y };
+    if (g.aura) return { x: g.aura.x, y: g.aura.y - g.aura.h - g.aura.r * 0.55 };
+    return { x: g.poly.reduce((s, p) => s + p[0], 0) / g.poly.length, y: g.poly.reduce((s, p) => s + p[1], 0) / g.poly.length };
+  },
+  // With snap on, an area's point of origin goes to the nearest grid
+  // intersection, as the DMG lays templates on a grid — a 20 ft sphere then
+  // covers the same squares wherever it's dropped. (Squares only.)
+  _areaSnap(x, y){
+    if (!this._snapToGrid || this._gridType === 'hex') return { x, y };
+    const cs = this._csScreen() || 50, o = this._gridOffPx();
+    return { x: Math.round((x - o.x) / cs) * cs + o.x, y: Math.round((y - o.y) / cs) * cs + o.y };
+  },
   _areaControlsHtml(){
     const opt = (v, l) => '<option value="' + v + '"' + (this._tplShape === v ? ' selected' : '') + '>' + l + '</option>';
     return '<select id="tpl-shape" title="Shape" style="width:78px;font-size:var(--fs-sm);padding:2px 4px;flex:0 0 auto">'
-        + opt('circle', 'Sphere') + opt('cone', 'Cone') + opt('line', 'Line') + opt('cube', 'Cube') + opt('aura', 'Emanation') + '</select>'
+        + opt('circle', 'Sphere') + opt('cone', 'Cone') + opt('line', 'Line') + opt('cube', 'Cube') + opt('aura', 'Emanation')
+        + (document.body.classList.contains('player-mode') ? '' : opt('terrain', 'Difficult terrain')) + '</select>'
       + '<input type="number" id="tpl-size" min="5" step="5" value="' + this._tplSize + '" style="width:52px;font-size:var(--fs-sm);padding:2px 4px;flex-shrink:0" title="Size in feet (radius for a sphere, length for a cone or line, side for a cube, how far an emanation reaches from its creature)">'
       + '<span class="bt-l" style="font-size:var(--fs-xs);color:var(--text-muted)">ft</span>'
       // A line is 5 ft wide unless the spell says otherwise (Gust of Wind: 10).
@@ -2263,11 +2407,23 @@ registerPanel('battlemap',{
     const r = Math.max(11, 15 / (this._screenScale ? (this._screenScale() || 1) : 1));
     return Math.hypot(x - h.x, y - h.y) <= r;
   },
-  _inArea(t, x, y){
+  // `z`: how far above the area's point of origin the point is, in feet
+  // (a creature's height less the area's). A sphere and an emanation reach up
+  // as far as across; a line is as tall as it is wide; a cone as tall as it is
+  // wide at that point; a cube is its own height, standing on the ground or
+  // centred on a point in the air.
+  _inArea(t, x, y, z){
     const g = this._areaGeom(t);
     if (!g) return false;
-    if (g.circle) return Math.hypot(x - g.circle.x, y - g.circle.y) <= g.circle.r;
-    if (g.aura) return Math.hypot(Math.max(0, Math.abs(x - g.aura.x) - g.aura.h), Math.max(0, Math.abs(y - g.aura.y) - g.aura.h)) <= g.aura.r + 0.5;
+    const zp = (+z || 0) * this._ppf();
+    if (g.circle) return Math.hypot(x - g.circle.x, y - g.circle.y, zp) <= g.circle.r;
+    if (g.aura) return Math.hypot(Math.max(0, Math.abs(x - g.aura.x) - g.aura.h), Math.max(0, Math.abs(y - g.aura.y) - g.aura.h), zp) <= g.aura.r + 0.5;
+    if (zp){
+      const L = (+t.ft || 0) * this._ppf();
+      if (t.shape === 'line' && Math.abs(zp) > Math.max(1, +t.w || 5) * this._ppf() / 2 + 0.5) return false;
+      if (t.shape === 'cube'){ const lo = (+t.z || 0) > 0 ? -L / 2 : 0; if (zp < lo - 0.5 || zp > lo + L + 0.5) return false; }
+      if (t.shape === 'cone'){ const a = +t.ang || 0, s = (x - t.x) * Math.cos(a) + (y - t.y) * Math.sin(a); if (Math.abs(zp) > s / 2 + 0.5) return false; }
+    }
     let inside = false;
     for (let i = 0, j = g.poly.length - 1; i < g.poly.length; j = i++){
       const [xi, yi] = g.poly[i], [xj, yj] = g.poly[j];
@@ -2308,9 +2464,25 @@ registerPanel('battlemap',{
         + ' fill="' + (t.c || '#ff7a3d') + '" fill-opacity=".9" stroke="#fff" stroke-width="' + (1.5 / vs).toFixed(2) + '"'
         + ' data-tplrot="' + t.id + '"><title>Drag to turn it</title></circle>';
     }).join('') : '';
-    svg.innerHTML = this._areas().map(t => this._areaSvg(t, 'data-tpl="' + t.id + '"')).join('')
+    // Each area says what it is, at a size that reads at any zoom.
+    const labels = this._areas().map(t => {
+      const p = this._areaMid(t); if (!p) return '';
+      const txt = this._areaName(t) + (t.dm ? ' · hidden' : '');
+      return '<text x="' + p.x.toFixed(1) + '" y="' + p.y.toFixed(1) + '" text-anchor="middle" dominant-baseline="middle" font-size="' + (11 / vs).toFixed(1) + '"'
+        + ' fill="#fff" stroke="rgba(0,0,0,.65)" stroke-width="' + (3 / vs).toFixed(2) + '" paint-order="stroke" font-weight="600" data-tpll="' + t.id + '">'
+        + txt.replace(/&/g, '&amp;').replace(/</g, '&lt;') + '</text>';
+    }).join('');
+    const hatch = '<defs><pattern id="bm-dt-hatch" patternUnits="userSpaceOnUse" width="' + (cs / 3).toFixed(1) + '" height="' + (cs / 3).toFixed(1) + '" patternTransform="rotate(45)">'
+      + '<line x1="0" y1="0" x2="0" y2="' + (cs / 3).toFixed(1) + '" stroke="#7a5230" stroke-opacity=".55" stroke-width="' + Math.max(1.5, cs / 18).toFixed(1) + '"/></pattern></defs>';
+    const rough = this._terrain().map(r => {
+      const x = Math.min(r.x, r.x2), y = Math.min(r.y, r.y2), w = Math.abs(r.x2 - r.x), h = Math.abs(r.y2 - r.y);
+      return '<rect x="' + x.toFixed(1) + '" y="' + y.toFixed(1) + '" width="' + w.toFixed(1) + '" height="' + h.toFixed(1) + '" fill="url(#bm-dt-hatch)" stroke="#7a5230" stroke-opacity=".7" stroke-width="' + (1.5 / vs).toFixed(2) + '" data-dt="' + r.id + '"><title>Difficult terrain</title></rect>';
+    }).join('') + (preview && preview.shape === 'terrain' ? (() => { const x = Math.min(preview.x, preview.x2), y = Math.min(preview.y, preview.y2);
+      return '<rect x="' + x + '" y="' + y + '" width="' + Math.abs(preview.x2 - preview.x) + '" height="' + Math.abs(preview.y2 - preview.y) + '" fill="url(#bm-dt-hatch)" stroke="#7a5230" stroke-dasharray="6 4" stroke-width="' + (1.5 / vs).toFixed(2) + '"/>'; })() : '');
+    svg.innerHTML = hatch + rough + this._areas().map(t => this._areaSvg(t, 'data-tpl="' + t.id + '"' + (t.dm ? ' stroke-dasharray="' + (6 / vs).toFixed(1) + ' ' + (4 / vs).toFixed(1) + '"' : ''))).join('')
+      + labels
       + handles
-      + (preview ? this._areaSvg(preview, 'stroke-dasharray="6 4"') : '');
+      + (preview && preview.shape !== 'terrain' ? this._areaSvg(preview, 'stroke-dasharray="6 4"') : '');
     this._markTokensInAreas(preview);
   },
   // Whether a creature is in an area: any square of its space whose centre
@@ -2320,11 +2492,15 @@ registerPanel('battlemap',{
   _tokenInArea(a, tok){
     if (!tok || tok.x == null) return false;
     if (a.shape === 'aura' && tok.id === a.tok && !a.self) return false;   // its own creature, unless chosen
+    // Height above the area's origin: an emanation's is its creature's.
+    const o = a.shape === 'aura' ? this._auraTok(a) : null;
+    const z = (+tok.elev || 0) - (o ? (+o.tok.elev || 0) : (+a.z || 0));
     const s = Math.max(1, Math.round(+tok.size || 1));
-    if (s === 1) return this._inArea(a, tok.x, tok.y);
-    const u = this._tokenUnitScreen() || this._csScreen() || 50;
-    for (let i = 0; i < s; i++) for (let j = 0; j < s; j++)
-      if (this._inArea(a, tok.x + (i - (s - 1) / 2) * u, tok.y + (j - (s - 1) / 2) * u)) return true;
+    if (s === 1) return this._inArea(a, tok.x, tok.y, z);
+    const u = this._tokenUnitScreen() || this._csScreen() || 50, per = this._ftPerCell || 5;
+    // A big creature is as tall as it is wide: any of its cubes will do.
+    for (let k = 0; k < s; k++) for (let i = 0; i < s; i++) for (let j = 0; j < s; j++)
+      if (this._inArea(a, tok.x + (i - (s - 1) / 2) * u, tok.y + (j - (s - 1) / 2) * u, z + k * per)) return true;
     return false;
   },
   _tokensInArea(t){
@@ -2332,7 +2508,7 @@ registerPanel('battlemap',{
   },
   _markTokensInAreas(preview){
     const b = this._body; if (!b) return;
-    const areas = this._areas().concat(preview ? [preview] : []);
+    const areas = this._areas().concat(preview && preview.shape !== 'terrain' ? [preview] : []);
     b.querySelectorAll('.map-token').forEach(el => {
       const tok = (this._tokens || []).find(t => String(t.id) === el.dataset.tid);
       el.classList.toggle('in-area', !!tok && areas.some(a => this._tokenInArea(a, tok)));
@@ -2367,12 +2543,45 @@ registerPanel('battlemap',{
     // a fireball dropped inside a paladin's aura would open the aura's menu.
     const stack = this._areas().slice().reverse().filter(t => (!isPlayer || (me && t.by === me.id)) && (t.shape !== 'aura' || shape === 'aura'));
     const turning = stack.find(t => this._nearHandle(t, x, y));
-    let hit = turning || (from && shape === 'aura'
-      ? stack.find(t => t.shape === 'aura' && t.tok === from.id && +t.ft === ft)   // the same one again: its menu
-      : stack.find(t => this._inArea(t, x, y) && !(from && t.shape === 'aura')));
+    // A creature pressed starts a new area from it, even inside another one
+    // (a second Fireball on the ogre); its own emanation of that size again
+    // opens that emanation's menu. Ground pressed inside an area moves it.
+    let hit = turning || (from
+      ? (shape === 'aura' ? stack.find(t => t.shape === 'aura' && t.tok === from.id && +t.ft === ft) : null)
+      : stack.find(t => this._inArea(t, x, y)));
     const draft = { k: 'tpl', id: 'tpl_' + (typeof uid === 'function' ? uid() : Date.now().toString(36)), shape, x, y, ang: 0, ft, c: col };
     if (shape === 'line' && wd !== 5) draft.w = wd;
+    if (from && +from.elev) draft.z = +from.elev;
     if (me) draft.by = me.id;
+    if (shape === 'terrain'){
+      if (isPlayer) return;
+      const on = this._terrain().slice().reverse().find(r => x >= Math.min(r.x, r.x2) && x <= Math.max(r.x, r.x2) && y >= Math.min(r.y, r.y2) && y <= Math.max(r.y, r.y2));
+      const stage = this._body.querySelector('#map-stage');
+      const box = Object.assign({ k: 'tpl', id: draft.id, shape: 'terrain' }, this._terrainRect(x, y, x, y));
+      let movedT = false;
+      const mv = ev => {
+        const p = ev.touches ? ev.touches[0] : ev;
+        if (Math.hypot(p.clientX - cx, p.clientY - cy) > 6) movedT = true;
+        if (!movedT) return;
+        if (ev.cancelable) ev.preventDefault();
+        const q = this._stagePoint(p.clientX, p.clientY, stage);
+        Object.assign(box, this._terrainRect(x, y, q.x, q.y));
+        this._renderAreas(box);
+      };
+      const upT = () => {
+        document.removeEventListener(touch ? 'touchmove' : 'mousemove', mv);
+        document.removeEventListener(touch ? 'touchend' : 'mouseup', upT);
+        if (touch) document.removeEventListener('touchcancel', upT);
+        if (on && !movedT){ this._renderAreas(); this._terrainMenu(on, cx, cy); return; }
+        this._drawings.push(box);
+        this._saveMap();
+        this._renderAreas();
+      };
+      document.addEventListener(touch ? 'touchmove' : 'mousemove', mv, { passive: false });
+      document.addEventListener(touch ? 'touchend' : 'mouseup', upT);
+      if (touch) document.addEventListener('touchcancel', upT);
+      return;
+    }
     if (shape === 'aura' && !hit){
       // On a creature: tied to it (a player, to their own or their companion's).
       if (!from || (isPlayer && !(typeof sktPlayerMayMoveToken === 'function' && sktPlayerMayMoveToken(from)))){
@@ -2395,7 +2604,7 @@ registerPanel('battlemap',{
     if (from && !hit){
       if (edge){ const e0 = edge(from.x + 1, from.y); draft.x = e0.x; draft.y = e0.y; }
       else { draft.x = from.x; draft.y = from.y; }
-    }
+    } else if (!hit){ const s0 = this._areaSnap(x, y); draft.x = s0.x; draft.y = s0.y; }
     const stage = this._body.querySelector('#map-stage');
     // Where the pressed area sat when the press landed, so a move follows the
     // finger instead of jumping the shape's origin under it.
@@ -2411,14 +2620,15 @@ registerPanel('battlemap',{
       if (hit && moved){
         if (hit.shape === 'aura') return;   // it goes where its creature goes
         if (turning) hit.ang = Math.atan2(q.y - hit.y, q.x - hit.x);
-        else { hit.x = was.x + (q.x - x); hit.y = was.y + (q.y - y); }
+        else { const s1 = this._areaSnap(was.x + (q.x - x), was.y + (q.y - y)); hit.x = s1.x; hit.y = s1.y; }
         this._renderAreas();
         return;
       }
       if (hit) return;
       if (edge){ const e1 = edge(q.x, q.y); draft.x = e1.x; draft.y = e1.y; draft.ang = e1.ang; }
-      else if (shape !== 'circle') draft.ang = Math.atan2(q.y - y, q.x - x);
-      else { draft.x = q.x; draft.y = q.y; }
+      else if (shape !== 'circle') draft.ang = Math.atan2(q.y - draft.y, q.x - draft.x);
+      else if (from){ draft.x = q.x; draft.y = q.y; }
+      else { const s2 = this._areaSnap(q.x, q.y); draft.x = s2.x; draft.y = s2.y; }
       this._renderAreas(draft);
     };
     const up = ev => {
@@ -2441,6 +2651,13 @@ registerPanel('battlemap',{
     if (touch) document.addEventListener('touchcancel', up);
     if (!hit) this._renderAreas(draft);
   },
+  _terrainMenu(r, cx, cy){
+    const items = [
+      { label: '✕ Remove this difficult terrain', onClick: () => { this._drawings = this._drawings.filter(s => s !== r); this._saveMap(); this._renderAreas(); } },
+      { label: '✕ Remove all difficult terrain', onClick: () => { this._drawings = this._drawings.filter(s => !(s && s.k === 'tpl' && s.shape === 'terrain')); this._saveMap(); this._renderAreas(); } },
+    ];
+    if (typeof showContextMenu === 'function') showContextMenu(cx, cy, items);
+  },
   _areaMenu(t, cx, cy){
     const inside = this._tokensInArea(t);
     const isPlayer = document.body.classList.contains('player-mode');
@@ -2453,7 +2670,7 @@ registerPanel('battlemap',{
         return c ? c.id : null;
       }).filter(Boolean);
       items.push({ label: '💥 Roll saves for the ' + ids.length + ' creature' + (ids.length === 1 ? '' : 's') + ' inside', disabled: !ids.length,
-        onClick: () => panelDefs.combat.openAreaSave({ targets: ids, name: t.ft + ' ft ' + ({circle:'sphere', aura:'emanation'}[t.shape] || t.shape) }) });
+        onClick: () => panelDefs.combat.openAreaSave({ targets: ids, name: this._areaName(t) }) });
     }
     const o = this._auraTok(t);
     if (o){
@@ -2463,12 +2680,16 @@ registerPanel('battlemap',{
         this._saveMap(); this._renderAreas();
       }});
     }
+    if (!isPlayer) items.push({ label: t.dm ? '👁 Show it to the players' : '🙈 Hide it from the players', onClick: () => {
+      if (t.dm) delete t.dm; else t.dm = true;
+      this._saveMap(); this._renderAreas();
+    }});
     items.push({ label: '✕ Remove this area', onClick: () => {
       this._drawings = this._drawings.filter(s => s !== t && !(s && s.k === 'tpl' && s.id === t.id));
       this._saveMap(); this._renderAreas();
     }});
     if (!isPlayer) items.push({ label: '✕ Remove all areas', onClick: () => {
-      this._drawings = this._drawings.filter(s => !(s && s.k === 'tpl'));
+      this._drawings = this._drawings.filter(s => !(s && s.k === 'tpl' && s.shape !== 'terrain'));
       this._saveMap(); this._render();
     }});
     if (typeof showContextMenu === 'function') showContextMenu(cx, cy, items);
@@ -2630,7 +2851,7 @@ registerPanel('battlemap',{
           // this instant, so the role gate below — which exists to stop a
           // stale player payload overwriting fog or the map — does not apply.
           if (msg.kind === 'tokenTick'){ this._applyLiveToken(msg.id, msg.x, msg.y); return; }
-          if (msg.kind === 'tokenEnd') return;
+          if (msg.kind === 'tokenEnd'){ this._liveTok = null; return; }
           if (msg.kind === 'strokeTick' || msg.kind === 'strokeEnd') return;
           if (msg.role !== 'player') return;
           let touched = false;
@@ -2656,7 +2877,7 @@ registerPanel('battlemap',{
         if (msg.kind === 'strokeTick'){ this._applyPreviewStroke(msg.stroke, 'tab'); return; }
         if (msg.kind === 'strokeEnd'){ this._clearPreviewStroke('tab'); return; }
         if (msg.kind === 'tokenTick'){ this._applyLiveToken(msg.id, msg.x, msg.y); return; }
-        if (msg.kind === 'tokenEnd'){ return; }   // the real position follows
+        if (msg.kind === 'tokenEnd'){ this._liveTok = null; return; }   // the real position follows
         // Everything else is a full state snapshot. Hand it to the one
         // applier so this route can't drift from the Firebase one again.
         this.applyMapState(msg, { source: 'bc' });
@@ -3055,6 +3276,11 @@ registerPanel('battlemap',{
     if (nm){ nm.style.left = x + 'px'; nm.style.top = (y + (+nm.dataset.dy || 0)) + 'px'; }
     const cd = b.querySelector('.map-token-conds[data-tid="' + CSS.escape(String(id)) + '"]');
     if (cd){ cd.style.left = (x + (+cd.dataset.dx || 0)) + 'px'; cd.style.top = (y + (+cd.dataset.dy || 0)) + 'px'; }
+    const ev = b.querySelector('.map-token-elev[data-tid="' + CSS.escape(String(id)) + '"]');
+    if (ev){ ev.style.left = (x + (+ev.dataset.dx || 0)) + 'px'; ev.style.top = (y + (+ev.dataset.dy || 0)) + 'px'; }
+    // Its emanation, if it has one, comes along.
+    const tk = (this._tokens || []).find(t => t && t.id === id);
+    if (tk) this._auraFollow(tk, x, y);
     // The Turn View draws the same creature; let it follow too.
     const T = (typeof panelDefs !== 'undefined') && panelDefs.turnview;
     if (T && T._body && typeof T._syncFromMap === 'function'){
@@ -3295,6 +3521,12 @@ registerPanel('battlemap',{
         +'<button class="btn icon-btn" id="tp-size-up" title="Bigger (¼ cell)" style="padding:1px 6px;font-size:var(--fs-lg)">+</button>'
         +'<span id="tp-size-val" style="font-size:var(--fs-sm);color:var(--text-muted);min-width:52px;text-align:right">1.00 cells</span>'
       +'</div>'
+      +'<label class="field-label">Height (flying, or below ground)</label>'
+      +'<div style="display:flex;gap:4px;margin-bottom:6px;align-items:center">'
+        +'<button class="btn icon-btn" id="tp-elev-down" title="5 ft lower" style="padding:1px 6px;font-size:var(--fs-lg)">−</button>'
+        +'<span id="tp-elev-val" style="flex:1;text-align:center;font-size:var(--fs-sm)">0 ft</span>'
+        +'<button class="btn icon-btn" id="tp-elev-up" title="5 ft higher" style="padding:1px 6px;font-size:var(--fs-lg)">+</button>'
+      +'</div>'
       +'<label class="field-label">Facing</label>'
       +'<div style="display:flex;gap:3px;margin-bottom:6px;align-items:center">'
         +'<button class="btn icon-btn" id="tp-rot-left" title="Rotate -45°" style="padding:1px 6px;font-size:var(--fs-sm)">↺</button>'
@@ -3423,8 +3655,8 @@ registerPanel('battlemap',{
       }
       else if(act==='sync-combat') this._syncParty();
       else if(act==='clear-areas'){
-        if (!this._drawings.some(s => s && s.k === 'tpl')) return;
-        this._drawings = this._drawings.filter(s => !(s && s.k === 'tpl'));
+        if (!this._areas().length) return;
+        this._drawings = this._drawings.filter(s => !(s && s.k === 'tpl' && s.shape !== 'terrain'));
         this._saveMap(); this._render();
       }
       else if(act==='toggle-settings'){
@@ -5550,7 +5782,7 @@ registerPanel('battlemap',{
     // Facing divs (.map-token-facing) are appended per rotated token below;
     // if they aren't cleared here they accumulate every _renderTokens() call
     // (fog paint, drag, zoom all re-render) and pile up as z-fighting clones.
-    stage.querySelectorAll('.map-token, .map-token-name, .map-token-facing, .map-token-conds').forEach(el=>el.remove());
+    stage.querySelectorAll('.map-token, .map-token-name, .map-token-facing, .map-token-conds, .map-token-elev').forEach(el=>el.remove());
 
     const tokScale = this._bgMapScale || 1;
     // Player view: hide non-PC tokens that sit in unrevealed cells. The DM
@@ -5677,6 +5909,17 @@ registerPanel('battlemap',{
         // wide enough to read), so two side by side don't overlap.
         ce.style.cssText = `left:${px}px;top:${py - dim / 2}px;font-size:${(nameFs * 0.8).toFixed(1)}px;max-width:${Math.max(dim, 56 / (this._viewScale || 1)).toFixed(0)}px;position:absolute;transform:translate(-50%,-50%);z-index:3;pointer-events:none;overflow:hidden;text-overflow:ellipsis`;
         frag.appendChild(ce);
+      }
+      // Its height, a pill at the token's right edge: "↑30 ft".
+      if (+t.elev){
+        const ev = document.createElement('div');
+        ev.className = 'map-token-elev';
+        ev.dataset.tid = t.id;
+        ev.dataset.dx = (dim / 2).toFixed(1); ev.dataset.dy = '0';
+        ev.textContent = this._elevText(t);
+        ev.title = (t.elev > 0 ? 'Flying ' + t.elev + ' ft up' : t.elev * -1 + ' ft below the ground');
+        ev.style.cssText = `left:${px + dim / 2}px;top:${py}px;font-size:${(nameFs * 0.8).toFixed(1)}px;position:absolute;transform:translate(-25%,-50%);z-index:3;pointer-events:none;white-space:nowrap`;
+        frag.appendChild(ev);
       }
       // _fitTokenNames may have shortened it to fit beside a neighbour.
       el.addEventListener('mouseenter', () => nameEl.classList.add('full'));
@@ -6063,6 +6306,10 @@ registerPanel('battlemap',{
       showContextMenu(r.left, r.bottom + 4, items);
     });
 
+    const elevShow = () => { const v = b.querySelector('#tp-elev-val'); if (v) v.textContent = this._elevText(t) || '0 ft (on the ground)'; };
+    elevShow();
+    rewire('#tp-elev-down','click',()=>{ this._setElev(t, (+t.elev || 0) - 5); elevShow(); });
+    rewire('#tp-elev-up','click',()=>{ this._setElev(t, (+t.elev || 0) + 5); elevShow(); });
     rewire('#tp-kill','click',()=>{t.dead=!t.dead;this._saveMap();this._renderTokens();});
     rewire('#tp-del','click',()=>{
       const i=this._tokens.findIndex(x=>x.id===t.id);

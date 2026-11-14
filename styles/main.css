@@ -2783,6 +2783,7 @@ body.player-mode #campaign-btn{display:none !important}
    SIBLING element precisely because the clip used to be here. Measured across
    glyph, portrait and long-name tokens — scrollWidth equals clientWidth in
    every case. Dropping it is what lets ::after below escape the box. */
+.map-token-elev{color:#fff;background:rgba(40,90,160,.85);padding:0 5px;border-radius:8px;font-weight:600;line-height:1.35;text-shadow:0 1px 2px rgba(0,0,0,.6)}
 .map-token{position:absolute;width:40px;height:40px;border-radius:50%;border:2px solid var(--accent);display:flex;align-items:center;justify-content:center;font-size:var(--fs-sm);font-weight:600;cursor:pointer;user-select:none;transform:translate(-50%,-50%);transition:box-shadow .1s;z-index:2;text-align:center;line-height:1.1;overflow:visible;word-break:break-word}
 /* Hit area, not size. A transparent disc centred on the token, at least
    --bm-hit screen px across, so a token that is legitimately 12px on screen at

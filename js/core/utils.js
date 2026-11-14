@@ -2967,10 +2967,12 @@ function sktTurnDiag(tok){
 // A move of `ft` feet by token `tok`: counted when it is the turn of the
 // creature it stands for. → the creature, or null when it wasn't counted.
 // Prone, it crawls: "each foot of movement costs 1 extra foot".
-function sktNoteMove(tokens, tok, ft, diag){
+// `extra`: feet on top that crawling doesn't multiply — difficult terrain's
+// extra foot a foot (crawling through rubble is 3 ft a foot, not 4).
+function sktNoteMove(tokens, tok, ft, diag, extra){
   const c = sktMoverOf(tokens, tok);
   if (!c || !(ft > 0)) return null;
-  tok.mv = { k: sktMoveKey(), ft: sktTurnMoved(tok) + Math.round(ft) * sktMoveCost(c).mult, dg: sktTurnDiag(tok) + Math.max(0, Math.round(+diag || 0)) };
+  tok.mv = { k: sktMoveKey(), ft: sktTurnMoved(tok) + Math.round(ft) * sktMoveCost(c).mult + Math.max(0, Math.round(+extra || 0)), dg: sktTurnDiag(tok) + Math.max(0, Math.round(+diag || 0)) };
   return c;
 }
 function sktProne(c){ return !!(c && (c.conditions || []).some(x => /^prone\b/i.test(String(x)))); }
@@ -3013,11 +3015,12 @@ function sktMoveCost(c){
 }
 // The grappler moved (dx, dy) on the map: the creatures it holds come with it.
 // → the tokens moved.
-function sktDragHeld(tokens, tok, dx, dy){
-  if (!tok || !(dx || dy) || !Array.isArray(tokens)) return [];
+function sktDragHeld(tokens, tok, dx, dy, dz){
+  if (!tok || !(dx || dy || dz) || !Array.isArray(tokens)) return [];
   const c = (state.combatants || []).find(x => { const m = x && sktTokenForCombatant(tokens, x); return m && (m === tok || (m.id != null && m.id === tok.id)); });
   const out = [];
-  sktHeldBy(c).forEach(o => { const ot = sktTokenForCombatant(tokens, o); if (ot && ot !== tok){ ot.x += dx; ot.y += dy; out.push(ot); } });
+  sktHeldBy(c).forEach(o => { const ot = sktTokenForCombatant(tokens, o); if (ot && ot !== tok){ ot.x += dx || 0; ot.y += dy || 0;
+    if (dz){ const e = (+ot.elev || 0) + dz; if (e) ot.elev = e; else delete ot.elev; } out.push(ot); } });
   return out;
 }
 // How far it may go this turn: its Speed, once more for each Dash.

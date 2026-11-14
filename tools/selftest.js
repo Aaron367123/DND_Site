@@ -21202,6 +21202,255 @@ for (const cls of Object.keys(rule)) for (let L = 1; L <= 20; L++) for (const sc
         closePanel('battlemap');
       }
     }
+    // -- Round 363: areas say what they are, snap to grid corners with snap on, can be kept from the players, and an emanation follows a token another screen drags --
+    {
+      const B = panelDefs.battlemap;
+      let keepT = null, keepD = null, keepF, fogSaved = false; const keepTool = B._tool, keepShape = B._tplShape, keepSize = B._tplSize, keepSnap = B._snapToGrid;
+      try {
+        openPanel('battlemap'); await sleep(700);
+        keepT = B._tokens.slice(); keepD = B._drawings.slice();
+        keepF = B._fog; fogSaved = true; B._fog = null;
+        const cs = B._csScreen(), o = B._gridOffPx();
+        const pal = { id: 'r363p', label: 'r363 Paladin', x: 4.5 * cs, y: 4.5 * cs, size: 1, isPC: true };
+        B._tokens = [pal];
+        B._drawings = [{ k: 'tpl', id: 'r363a', shape: 'aura', tok: 'r363p', ft: 10, x: 0, y: 0, c: '#e8c547' },
+                       { k: 'tpl', id: 'r363l', shape: 'line', x: cs * 2, y: cs * 10, ang: 0, ft: 60, w: 10, c: '#5fb0ff' }];
+        B._tool = ''; B._render(); await sleep(200);
+        const lab = id => { const e = B._body.querySelector('#tpl-layer text[data-tpll="' + id + '"]'); return e ? e.textContent : null; };
+        ok('an area says what it is on the map', lab('r363a') === '10 ft emanation' && lab('r363l') === '60 ft line, 10 ft wide', lab('r363a') + ' / ' + lab('r363l'));
+        // Another screen drags the paladin: the aura comes along before the drop
+        B._applyLiveToken('r363p', 8.5 * cs, 4.5 * cs); await sleep(30);
+        const rc = () => { const r = B._body.querySelector('#tpl-layer rect[data-tpl="r363a"]'); return r ? +r.getAttribute('x') + +r.getAttribute('width') / 2 : null; };
+        ok('a token dragged on another screen: its emanation follows it there', Math.abs(rc() - 8.5 * cs) < 1, rc());
+        B._liveTok = null; B._renderAreas();
+        ok('…and goes back to the saved place when that drag is over', Math.abs(rc() - 4.5 * cs) < 1, rc());
+        // Snap on: a new sphere's centre goes to a grid corner
+        B._snapToGrid = true; B._tool = 'area'; B._tplShape = 'circle'; B._tplSize = 20; B._render(); await sleep(100);
+        B._areaPointerDown(o.x + cs * 6.3, o.y + cs * 7.8, 100, 100, false); await sleep(10);
+        document.dispatchEvent(new MouseEvent('mouseup', { bubbles: true, clientX: 100, clientY: 100 })); await sleep(50);
+        const sp = B._areas().find(a => a.shape === 'circle');
+        ok('snap on: a sphere is centred on a grid corner', sp && Math.abs(sp.x - (o.x + 6 * cs)) < 0.5 && Math.abs(sp.y - (o.y + 8 * cs)) < 0.5, sp && sp.x + ',' + sp.y);
+        // …and moved, it lands on one too
+        const cr = B._body.querySelector('#tpl-layer circle[data-tpl="' + sp.id + '"]').getBoundingClientRect(), ccx = cr.left + cr.width / 2, ccy = cr.top + cr.height / 2;
+        B._areaPointerDown(sp.x, sp.y, ccx, ccy, false); await sleep(10);
+        const z = B._screenScale();
+        for (let i = 1; i <= 3; i++){ document.dispatchEvent(new MouseEvent('mousemove', { bubbles: true, clientX: ccx + i * cs * z * 0.7, clientY: ccy })); await sleep(10); }
+        document.dispatchEvent(new MouseEvent('mouseup', { bubbles: true, clientX: ccx + 2.1 * cs * z, clientY: ccy })); await sleep(50);
+        ok('…and dragged, it lands on one', Math.abs(sp.x - (o.x + 8 * cs)) < 0.5 && Math.abs(sp.y - (o.y + 8 * cs)) < 0.5, sp.x + ',' + sp.y);
+        B._snapToGrid = false;
+        B._areaPointerDown(o.x + cs * 3.3, o.y + cs * 3.3, 100, 100, false); await sleep(10);
+        document.dispatchEvent(new MouseEvent('mouseup', { bubbles: true, clientX: 100, clientY: 100 })); await sleep(50);
+        const sp2 = B._areas().filter(a => a.shape === 'circle')[1];
+        ok('snap off: it goes where it is put', sp2 && Math.abs(sp2.x - (o.x + 3.3 * cs)) < 0.5, sp2 && sp2.x);
+        // Hidden from the players
+        B._areaMenu(sp, 100, 100); await sleep(60);
+        const hide = [...document.querySelectorAll('.ctx-menu .ctx-menu-item')].find(x => /Hide it from the players/.test(x.textContent));
+        ok('the DM’s area menu: hide it from the players', !!hide);
+        if (hide) hide.click(); await sleep(60);
+        document.querySelectorAll('.ctx-menu').forEach(e => e.remove());
+        ok('…then it is marked hidden, and still on the DM’s map', sp.dm === true && !!B._body.querySelector('#tpl-layer [data-tpl="' + sp.id + '"]') && /hidden/.test(lab(sp.id) || ''));
+        document.body.classList.add('player-mode');
+        const seen = B._areas().map(a => a.id);
+        document.body.classList.remove('player-mode');
+        ok('…and a player’s map leaves it out (the others still there)', !seen.includes(sp.id) && seen.includes(sp2.id), seen.join(','));
+      } catch(e){ ok('round 363 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
+      finally {
+        document.body.classList.remove('player-mode');
+        B._liveTok = null; B._snapToGrid = keepSnap;
+        if (fogSaved) B._fog = keepF;
+        if (keepT){ B._tokens = keepT; B._drawings = keepD; try { B._saveMap(); } catch(e){} }
+        B._tool = keepTool; B._tplShape = keepShape; B._tplSize = keepSize;
+        document.querySelectorAll('.ctx-menu').forEach(e => e.remove());
+        try { B._render(); } catch(e){}
+        closePanel('battlemap');
+      }
+    }
+    // -- Round 364: the keyboard on the map — arrows move the selected token a square, Delete removes it (Ctrl+Z back), Escape puts the tool down; not while typing, not when another window has focus --
+    {
+      const B = panelDefs.battlemap;
+      let keepT = null, keepF, fogSaved = false; const keepTool = B._tool;
+      const key = (k, opts) => document.dispatchEvent(new KeyboardEvent('keydown', Object.assign({ key: k, bubbles: true, cancelable: true }, opts || {})));
+      try {
+        openPanel('battlemap'); await sleep(700);
+        keepT = B._tokens.slice();
+        keepF = B._fog; fogSaved = true; B._fog = null;
+        const cs = B._csScreen();
+        const tk = { id: 'r364t', label: 'r364 Scout', x: 5.5 * cs, y: 5.5 * cs, size: 1 };
+        B._tokens = [tk]; B._tool = ''; B._render(); await sleep(150);
+        // Selected the way a person does: a press on it
+        const el = B._body.querySelector('.map-token[data-tid="r364t"]'), r = el.getBoundingClientRect();
+        // (a real press: pointerdown first, which is what focuses a window)
+        el.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, cancelable: true, clientX: r.left + r.width / 2, clientY: r.top + r.height / 2, button: 0 }));
+        el.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, cancelable: true, clientX: r.left + r.width / 2, clientY: r.top + r.height / 2, button: 0 }));
+        document.dispatchEvent(new MouseEvent('mouseup', { bubbles: true, clientX: r.left + r.width / 2, clientY: r.top + r.height / 2 })); await sleep(60);
+        const win = B._body.closest('.window');
+        ok('a press on a token selects it and gives the map window the keyboard', B._selected === 'r364t' && win && win.classList.contains('focused'));
+        key('ArrowRight'); await sleep(40);
+        ok('→ moves it one square right', Math.abs(tk.x - 6.5 * cs) < 0.5 && Math.abs(tk.y - 5.5 * cs) < 0.5, tk.x / cs + ',' + tk.y / cs);
+        key('ArrowDown'); await sleep(40);
+        ok('↓ one square down', Math.abs(tk.y - 6.5 * cs) < 0.5);
+        // Typing in a box: the arrows are the box's
+        const inp = document.createElement('input'); document.body.appendChild(inp); inp.focus();
+        inp.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowLeft', bubbles: true, cancelable: true })); await sleep(30);
+        inp.remove();
+        ok('not while typing in a box', Math.abs(tk.x - 6.5 * cs) < 0.5);
+        // Another window has the focus: not the map's keys
+        const other = document.querySelector('.window:not([data-panel="battlemap"])');
+        if (other){ win.classList.remove('focused'); other.classList.add('focused'); key('ArrowLeft'); await sleep(30);
+          ok('not when another window has the focus', Math.abs(tk.x - 6.5 * cs) < 0.5); other.classList.remove('focused'); win.classList.add('focused'); }
+        // The edge of the map stops it
+        tk.x = cs * 0.5; B._renderTokens(); key('ArrowLeft'); await sleep(30);
+        ok('the edge of the map stops it', Math.abs(tk.x - 0.5 * cs) < 0.5, tk.x);
+        // Delete, and back
+        key('Delete'); await sleep(60);
+        ok('Delete removes the selected token', !B._tokens.some(t => t.id === 'r364t'));
+        if (typeof sktUndo === 'function'){ sktUndo(); await sleep(150); ok('…and Ctrl+Z brings it back', B._tokens.some(t => t.id === 'r364t')); }
+        // Escape: the tool down
+        B._tool = 'ruler'; B._render(); await sleep(60);
+        key('Escape'); await sleep(60);
+        ok('Escape puts the tool down', !B._tool);
+      } catch(e){ ok('round 364 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
+      finally {
+        if (fogSaved) B._fog = keepF;
+        if (keepT){ B._tokens = keepT; try { B._saveMap(); } catch(e){} }
+        B._tool = keepTool; B._selected = null;
+        try { B._render(); } catch(e){}
+        closePanel('battlemap');
+      }
+    }
+    // -- Round 365: height on the map — a flyer's elevation set on its token, counted in distance and reach, in areas, on its turn's movement, and carried with what it holds --
+    {
+      const B = panelDefs.battlemap, T = panelDefs.turnview;
+      let keepT = null, keepD = null, keepF, fogSaved = false; const keepC = JSON.stringify(state.combatants), keepA = state.activeCombatantId, keepR = state.combatRound;
+      try {
+        openPanel('battlemap'); await sleep(700);
+        keepT = B._tokens.slice(); keepD = B._drawings.slice();
+        keepF = B._fog; fogSaved = true; B._fog = null;
+        const cs = B._csScreen();
+        state.combatants = [{ id: 'r365e', name: 'r365 Eagle', hp: 26, hpMax: 26, ac: 13, conditions: [] },
+                            { id: 'r365k', name: 'r365 Knight', hp: 52, hpMax: 52, ac: 18, conditions: ['Grappled'], grappledBy: { id: 'r365e', name: 'r365 Eagle' } },
+                            { id: 'r365o', name: 'r365 Ogre', hp: 59, hpMax: 59, ac: 11, conditions: [] }];
+        const eg = { id: 'r365te', cid: 'r365e', label: 'r365 Eagle', x: 4.5 * cs, y: 4.5 * cs, size: 1 };
+        const kn = { id: 'r365tk', cid: 'r365k', label: 'r365 Knight', x: 5.5 * cs, y: 4.5 * cs, size: 1 };
+        const og = { id: 'r365to', cid: 'r365o', label: 'r365 Ogre', x: 9 * cs, y: 9 * cs, size: 2 };
+        B._tokens = [eg, kn, og]; B._drawings = []; B._render(); await sleep(150);
+        const ft = (a, b) => { T._mapCache = null; return T._edgeFeet(a, b); };
+        ok('side by side on the ground: 5 ft', ft(eg, kn) === 5, ft(eg, kn));
+        // Up with the token panel, on the eagle's turn: the knight it holds comes too
+        state.activeCombatantId = 'r365e'; state.combatRound = 1; delete eg.mv;
+        B._showPanel(eg); await sleep(100);
+        const up = B._body.querySelector('#tp-elev-up');
+        ok('the token panel: a height', !!up);
+        for (let i = 0; i < 6; i++){ up.click(); await sleep(15); }
+        ok('6 × up: 30 ft up, and it says so on the map', eg.elev === 30 && /↑30 ft/.test((B._body.querySelector('.map-token-elev[data-tid="r365te"]') || {}).textContent || ''), eg.elev);
+        ok('…the knight it holds is carried up with it', kn.elev === 30, kn.elev);
+        ok('…and going up was movement on its turn (carrying the knight: 2 ft a foot)', typeof sktTurnMoved === 'function' && sktTurnMoved(eg) === 60, eg.mv && JSON.stringify(eg.mv));
+        B._closePanel();
+        // Distance with height
+        kn.elev = 0;
+        ok('an eagle 30 ft over the knight beside it: 30 ft away', ft(eg, kn) === 30, ft(eg, kn));
+        eg.elev = 5;
+        ok('5 ft up beside it: still within 5 ft (one square up and over)', ft(eg, kn) === 5, ft(eg, kn));
+        eg.elev = 10; eg.x = 7.5 * cs; eg.y = 8.5 * cs;   // beside the Large ogre, 10 ft up
+        ok('a Medium flyer 10 ft up beside a Large ogre: touching (5 ft)', ft(eg, og) === 5, ft(eg, og));
+        eg.elev = 25;
+        ok('25 ft up beside it: 20 ft', ft(eg, og) === 20, ft(eg, og));
+        // Areas are round in the air too
+        eg.x = 4.5 * cs; eg.y = 4.5 * cs; eg.elev = 30; kn.elev = 0;
+        const ball = { k: 'tpl', id: 'r365b', shape: 'circle', x: 4.5 * cs, y: 4.5 * cs, ft: 20, c: '#f00' };
+        B._drawings = [ball];
+        ok('a 20 ft sphere on the ground misses the eagle 30 ft over it', !B._tokenInArea(ball, eg) && B._tokenInArea(ball, kn));
+        eg.elev = 15;
+        ok('…and catches it 15 ft up', B._tokenInArea(ball, eg));
+        const line = { k: 'tpl', id: 'r365l', shape: 'line', x: 2 * cs, y: 4.5 * cs, ang: 0, ft: 60, c: '#00f' };
+        ok('a 5 ft line along the ground passes under the eagle', !B._tokenInArea(line, eg) && B._tokenInArea(line, kn));
+        // An area started on a creature in the air starts at its height
+        B._tool = 'area'; B._tplShape = 'circle'; B._tplSize = 10; B._render(); await sleep(80);
+        const el = B._body.querySelector('.map-token[data-tid="r365te"]'), r = el.getBoundingClientRect();
+        el.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, cancelable: true, clientX: r.left + r.width / 2, clientY: r.top + r.height / 2, button: 0 }));
+        document.dispatchEvent(new MouseEvent('mouseup', { bubbles: true, clientX: r.left + r.width / 2, clientY: r.top + r.height / 2 })); await sleep(60);
+        document.querySelectorAll('.ctx-menu').forEach(e => e.remove());
+        const sky = B._areas().find(a => a.id !== 'r365b');
+        ok('a sphere pressed on the flying eagle is at its height: the eagle in, the knight below out', sky && sky.z === 15 && B._tokenInArea(sky, eg) && !B._tokenInArea(sky, kn), sky && JSON.stringify(sky));
+      } catch(e){ ok('round 365 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
+      finally {
+        if (fogSaved) B._fog = keepF;
+        if (keepT){ B._tokens = keepT; B._drawings = keepD; try { B._saveMap(); } catch(e){} }
+        state.combatants = JSON.parse(keepC); state.activeCombatantId = keepA; state.combatRound = keepR;
+        B._tool = ''; B._closePanel();
+        try { B._render(); } catch(e){}
+        closePanel('battlemap');
+      }
+    }
+    // -- Round 366: difficult terrain — the DM drags it onto the grid; each square of it entered costs 5 ft more, on the limit line and the turn (crawling too), not for a flyer; "Clear areas" leaves it --
+    {
+      const B = panelDefs.battlemap;
+      let keepT = null, keepD = null, keepF, fogSaved = false; const keepC = JSON.stringify(state.combatants), keepA = state.activeCombatantId, keepR = state.combatRound, keepTool = B._tool, keepShape = B._tplShape;
+      try {
+        openPanel('battlemap'); await sleep(700);
+        keepT = B._tokens.slice(); keepD = B._drawings.slice();
+        keepF = B._fog; fogSaved = true; B._fog = null;
+        const cs = B._csScreen(), o = B._gridOffPx();
+        state.combatants = [{ id: 'r366f', name: 'r366 Fighter', hp: 30, hpMax: 30, ac: 16, conditions: [] }];
+        const fi = { id: 'r366t', cid: 'r366f', label: 'r366 Fighter', x: o.x + 0.5 * cs, y: o.y + 2.5 * cs, size: 1 };
+        B._tokens = [fi]; B._drawings = []; B._tool = 'area'; B._tplShape = 'terrain'; B._render(); await sleep(150);
+        ok('the DM’s area tool: Difficult terrain', !!B._body.querySelector('#tpl-shape option[value="terrain"]'));
+        // A drag from inside one square to inside another: the squares between, on the grid lines
+        const stage = B._body.querySelector('#map-stage');
+        const cl = (sx, sy) => { const r = stage.getBoundingClientRect(), z = B._screenScale(); return { x: r.left + sx * z, y: r.top + sy * z }; };
+        const a0 = cl(o.x + 2.2 * cs, o.y + 2.2 * cs), a1 = cl(o.x + 4.6 * cs, o.y + 3.4 * cs);
+        B._areaPointerDown(o.x + 2.2 * cs, o.y + 2.2 * cs, a0.x, a0.y, false); await sleep(10);
+        for (let i = 1; i <= 4; i++){ document.dispatchEvent(new MouseEvent('mousemove', { bubbles: true, clientX: a0.x + (a1.x - a0.x) * i / 4, clientY: a0.y + (a1.y - a0.y) * i / 4 })); await sleep(10); }
+        document.dispatchEvent(new MouseEvent('mouseup', { bubbles: true, clientX: a1.x, clientY: a1.y })); await sleep(60);
+        const dt = B._terrain()[0];
+        const eq = (a, b) => Math.abs(a - b) < 0.6;
+        ok('dragged: a block of squares on the grid lines (3 × 2)', dt && eq(Math.min(dt.x, dt.x2), o.x + 2 * cs) && eq(Math.max(dt.x, dt.x2), o.x + 5 * cs) && eq(Math.min(dt.y, dt.y2), o.y + 2 * cs) && eq(Math.max(dt.y, dt.y2), o.y + 4 * cs), dt && JSON.stringify(dt));
+        ok('…drawn hatched on the map', !!B._body.querySelector('#tpl-layer rect[data-dt]'));
+        ok('…and it isn’t a spell area', !B._areas().length);
+        // Across it: 6 squares, 3 of them rough
+        ok('6 squares through 3 of it: 15 ft more', B._terrainExtra(fi, fi.x, fi.y, fi.x + 6 * cs, fi.y) === 15, B._terrainExtra(fi, fi.x, fi.y, fi.x + 6 * cs, fi.y));
+        ok('…leaving it costs nothing more (only squares entered)', B._terrainExtra(fi, o.x + 4.5 * cs, fi.y, o.x + 6.5 * cs, fi.y) === 0);
+        ok('…a flyer above it pays nothing', B._terrainExtra(Object.assign({}, fi, { elev: 10 }), fi.x, fi.y, fi.x + 6 * cs, fi.y) === 0);
+        ok('…a Large creature whose space brushes it pays', B._terrainExtra({ size: 2, x: o.x + 1 * cs, y: o.y + 4.4 * cs }, o.x + 1 * cs, o.y + 4.4 * cs, o.x + 3 * cs, o.y + 4.4 * cs) === 10);
+        // On its turn: the walk and the rough
+        state.activeCombatantId = 'r366f'; state.combatRound = 1; delete fi.mv;
+        const from = { x: fi.x, y: fi.y };
+        fi.x += 6 * cs; B._noteTurnMove(fi, from);
+        ok('on its turn: 30 ft walked through it is 45 ft of movement', sktTurnMoved(fi) === 45, sktTurnMoved(fi));
+        delete fi.mv; fi.x = from.x; state.combatants[0].conditions = ['Prone'];
+        fi.x += 6 * cs; B._noteTurnMove(fi, from);
+        ok('crawling through it: 3 ft a foot (30 + 30 + 15)', sktTurnMoved(fi) === 75, sktTurnMoved(fi));
+        state.combatants[0].conditions = []; delete fi.mv; fi.x = from.x;
+        // The limit line says so
+        B._measureShow(fi.x, fi.y, fi.x + 6 * cs, fi.y, 40, 0, null, 0, B._terrainExtra(fi, fi.x, fi.y, fi.x + 6 * cs, fi.y));
+        const lab = B._body.querySelector('.bm-measure-l');
+        ok('the limit line: difficult terrain, what it costs, and red past the speed', lab && /difficult terrain/.test(lab.textContent) && /45/.test(lab.textContent) && lab.classList.contains('over'), lab && lab.textContent);
+        B._measureHide();
+        // Clear areas leaves it; its own menu removes it
+        B._drawings.push({ k: 'tpl', id: 'r366s', shape: 'circle', x: cs * 8, y: cs * 8, ft: 10, c: '#f00' });
+        B._render(); await sleep(60);
+        const clr = B._body.querySelector('[data-mact="clear-areas"]');
+        if (clr) clr.click(); await sleep(60);
+        ok('“Clear areas” takes the spells, leaves the rubble', !B._areas().length && B._terrain().length === 1);
+        const c2 = cl(o.x + 3.5 * cs, o.y + 2.5 * cs);
+        B._areaPointerDown(o.x + 3.5 * cs, o.y + 2.5 * cs, c2.x, c2.y, false); await sleep(10);
+        document.dispatchEvent(new MouseEvent('mouseup', { bubbles: true, clientX: c2.x, clientY: c2.y })); await sleep(60);
+        const it = [...document.querySelectorAll('.ctx-menu .ctx-menu-item')].find(x => /Remove this difficult terrain/.test(x.textContent));
+        ok('a press on it: its menu, to remove it', !!it);
+        if (it) it.click(); await sleep(60);
+        document.querySelectorAll('.ctx-menu').forEach(e => e.remove());
+        ok('…and it’s gone', !B._terrain().length);
+      } catch(e){ ok('round 366 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
+      finally {
+        if (fogSaved) B._fog = keepF;
+        if (keepT){ B._tokens = keepT; B._drawings = keepD; try { B._saveMap(); } catch(e){} }
+        state.combatants = JSON.parse(keepC); state.activeCombatantId = keepA; state.combatRound = keepR;
+        B._tool = keepTool; B._tplShape = keepShape;
+        document.querySelectorAll('.ctx-menu').forEach(e => e.remove());
+        try { B._render(); } catch(e){}
+        closePanel('battlemap');
+      }
+    }
     // -- Class features: represented, not just text ------------------------
     {
       try {
@@ -24226,7 +24475,7 @@ for (const cls of Object.keys(rule)) for (let L = 1; L <= 20; L++) for (const sc
         const btn = scr.querySelector('[data-pa-draw="tool-area"]');
         ok('phone map: an Area tool', !!btn);
         if (btn){ btn.click(); await sleep(250); }
-        ok('…with its shapes and a size', scr.querySelectorAll('.pa-area-ctl [data-pa-shape]').length === 4 && !!scr.querySelector('.pa-area-ctl [data-pa-asize]'));
+        ok('…with its shapes and a size', scr.querySelectorAll('.pa-area-ctl [data-pa-shape]').length === PA_AREA_SHAPES.length && !!scr.querySelector('.pa-area-ctl [data-pa-asize]'));
         scr.querySelector('.pa-area-ctl [data-pa-shape="line"]').click(); await sleep(80);
         scr.querySelector('.pa-area-ctl [data-pa-asize="5"]').click(); await sleep(80);
         const sz = B._tplSize;
@@ -24340,6 +24589,40 @@ for (const cls of Object.keys(rule)) for (let L = 1; L <= 20; L++) for (const sc
         if (keepT){ B._tokens = keepT; B._drawings = keepD; try { B._saveMap(); } catch(e){} }
         B._tplShape = keepShape; B._tplSize = keepSize; B._tplWidth = keepW; B._tool = '';
         document.querySelectorAll('.ctx-menu').forEach(e => e.remove());
+        paTab = keepTab; paRender();
+      }
+    }
+    // -- Round 367: on the phone, a player sets how high their character flies; the bar still fits; no Difficult terrain for them --
+    if (PLAYER){
+      const keepTab = paTab; const B = panelDefs.battlemap;
+      let keepT = null;
+      try {
+        if (paMyIdx() < 0) paSetPc(state.party[0].id);
+        const me = paPc();
+        paTab = 'map'; paRender(); await sleep(900);
+        keepT = B._tokens.slice();
+        const cs = B._csScreen();
+        const mine = { id: 'r367p', cid: me.id, label: me.name, x: 3.5 * cs, y: 3.5 * cs, size: 1, isPC: true };
+        B._tokens = [mine]; B._renderTokens(); await sleep(40);
+        const scr = document.getElementById('pa-screen');
+        const old = scr.querySelector('.pa-draw'); if (old) old.remove(); paAddDrawBar(scr);
+        const hb = scr.querySelector('[data-pa-draw="height"]');
+        ok('phone map: a Height button', !!hb);
+        hb.click(); await sleep(120);
+        const upB = scr.querySelector('.pa-height-ctl [data-pa-draw="elev-up"]');
+        ok('…it opens up and down', !!upB && !!scr.querySelector('.pa-height-ctl [data-pa-draw="elev-down"]'));
+        for (let i = 0; i < 4; i++){ scr.querySelector('.pa-height-ctl [data-pa-draw="elev-up"]').click(); await sleep(30); }
+        ok('…4 × up: my character is 20 ft up, and the control says so', mine.elev === 20 && /↑20 ft/.test(scr.querySelector('.pa-elev-v').textContent), mine.elev);
+        const bar = scr.querySelector('.pa-draw').getBoundingClientRect(), hc = scr.querySelector('.pa-height-ctl').getBoundingClientRect();
+        ok('…the bar and the control fit the screen', bar.left >= 0 && bar.right <= innerWidth + 1 && hc.left >= 0 && hc.right <= innerWidth + 1, [bar.left, bar.right, hc.left, hc.right].map(Math.round).join(','));
+        scr.querySelector('[data-pa-draw="tool-area"]').click(); await sleep(150);
+        ok('picking a tool closes it', !scr.querySelector('.pa-height-ctl'));
+        ok('a player’s area shapes: no Difficult terrain', !scr.querySelector('.pa-area-ctl [data-pa-shape="terrain"]') && !(document.querySelector('.pa-mount #tpl-shape option[value="terrain"]')));
+        B._tool = '';
+      } catch(e){ ok('round 367 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
+      finally {
+        if (keepT){ B._tokens = keepT; try { B._saveMap(); } catch(e){} }
+        B._tool = ''; paHeightOpen = false;
         paTab = keepTab; paRender();
       }
     }

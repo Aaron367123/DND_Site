@@ -1002,8 +1002,11 @@ const PA_DRAW = [
   // A spell's area, laid on the map by the player casting it — where the
   // fireball goes is theirs to show. Their own areas only: the DM's stay put.
   { act:'tool-area',  icon:'i-burst',  label:'Area',  tool:'area'  },
+  // How high their character is flying (the Fly spell, wings, a broom).
+  { act:'height',     icon:'i-up',     label:'Height', mine:true    },
   { act:'undo',       icon:'i-undo',   label:'Undo'                },
 ];
+let paHeightOpen = false;
 // An emanation is laid by pressing the creature it comes from.
 const PA_AREA_SHAPES = [['circle', 'Sphere'], ['cone', 'Cone'], ['line', 'Line'], ['cube', 'Cube'], ['aura', 'Emanation']];
 // Shape, size and (a line's) width of the next area: kept on the panel, and
@@ -1028,8 +1031,10 @@ function paAddDrawBar(host){
   const B = panelDefs.battlemap;
   const bar = document.createElement('div');
   bar.className = 'pa-draw';
-  bar.innerHTML = (paMyToken() ? `<button class="pa-draw-b" data-pa-me="1">${typeof ICO === 'function' ? ICO('i-target') : ''}<span>Me</span></button>` : '') + PA_DRAW.map(d =>
-    `<button class="pa-draw-b ${d.tool && B && B._tool === d.tool ? 'on' : ''}" data-pa-draw="${d.act}" title="${d.label}" aria-label="${d.label}">
+  const myTok = paMyToken();
+  if (!myTok) paHeightOpen = false;
+  bar.innerHTML = (myTok ? `<button class="pa-draw-b" data-pa-me="1">${typeof ICO === 'function' ? ICO('i-target') : ''}<span>Me</span></button>` : '') + PA_DRAW.filter(d => !d.mine || myTok).map(d =>
+    `<button class="pa-draw-b ${(d.tool && B && B._tool === d.tool) || (d.act === 'height' && paHeightOpen) ? 'on' : ''}" data-pa-draw="${d.act}" title="${d.label}" aria-label="${d.label}">
        ${typeof ICO === 'function' ? ICO(d.icon) : ''}<span>${d.label}</span>
      </button>`).join('');
   // With the pencil on, its widths sit just above the bar: a dot each, drawn
@@ -1044,6 +1049,18 @@ function paAddDrawBar(host){
          <i style="width:${s.dot}px;height:${s.dot}px;background:${B._drawColor || '#ff4040'}"></i>
        </button>`).join('');
     bar.appendChild(sizes);
+  }
+  // Height open: up and down 5 ft at a time.
+  if (paHeightOpen && myTok && B){
+    const hc = document.createElement('div');
+    hc.className = 'pa-draw-sizes pa-area-ctl pa-height-ctl';
+    hc.setAttribute('role', 'group');
+    hc.setAttribute('aria-label', 'Height');
+    hc.innerHTML = '<div class="pa-area-row"><span class="pa-area-l">Height</span>'
+      + '<button class="pa-area-b" data-pa-draw="elev-down" aria-label="5 ft lower">−</button>'
+      + '<b class="pa-area-ft pa-elev-v">' + (B._elevText(myTok) || 'ground') + '</b>'
+      + '<button class="pa-area-b" data-pa-draw="elev-up" aria-label="5 ft higher">+</button></div>';
+    bar.appendChild(hc);
   }
   // With the area tool on: its shape, and its size in feet.
   if (B && B._tool === 'area'){
@@ -1078,6 +1095,16 @@ function paDrawSize(v){
 }
 function paDraw(act){
   const B = panelDefs.battlemap; if (!B) return;
+  if (act === 'height' || act === 'elev-up' || act === 'elev-down'){
+    const me = paMyToken();
+    if (act === 'height'){ paHeightOpen = !paHeightOpen; if (paHeightOpen && B._tool){ B._tool = ''; try { B._render(); } catch(e){} } }
+    else if (me) B._setElev(me, (+me.elev || 0) + (act === 'elev-up' ? 5 : -5));
+    const host = document.getElementById('pa-screen'), old = host && host.querySelector('.pa-draw');
+    if (old) old.remove();
+    if (host) paAddDrawBar(host);
+    return;
+  }
+  paHeightOpen = false;
   // Straight through the panel's own toolbar handler, so a player's stroke is
   // the same object the DM's is and lands in the same undo stack.
   const btn = document.querySelector('.pa-mount [data-mact="' + act + '"]');
