@@ -1107,6 +1107,7 @@ registerPanel('battlemap',{
         this._lastTokenScale = 1;
         this._gridOffsetX = 0;
         this._gridOffsetY = 0;
+        this._fitGridToBg();
         this._saveMap();
         // Full re-render rebuilds the stage from scratch so the new image's
         // dimensions, the grid, and the bg URL are all consistent. Then a
@@ -1141,19 +1142,73 @@ registerPanel('battlemap',{
     if (found) how = 'from its name (' + found.nx + '×' + found.ny + ' squares)';
     else { try { found = sktDetectGrid(img); } catch(e){ found = null; } how = 'found on the picture'; }
     const align = { label: 'Align', run: () => { this._tool = 'align'; this._alignFirstClick = null; this._render(); showToast('Align: click two grid intersections. Span MULTIPLE cells for accuracy.'); } };
+    // (Said in the grid's own message: a note of its own would be replaced by it at once.)
+    const moved = n => n ? ' ' + (n === 1 ? 'A token past its edge is on it now.' : n + ' tokens past its edge are on it now.') : '';
     if (!found){
-      showToast('No squares found on this map. To line the grid up with it, use Align and click two corners of a printed square.', { action: align });
+      const n = this._pullTokensOnto(true);
+      if (n){ this._saveMap(); this._render(); }
+      showToast('No squares found on this map. To line the grid up with it, use Align and click two corners of a printed square.' + moved(n), { action: align });
       return;
     }
     const was = { cs: this._cellSize, ox: this._gridOffsetX, oy: this._gridOffsetY };
     const sz = Math.max(8, found.size), mod = v => ((v % sz) + sz) % sz;
     this._cellSize = sz; this._gridOffsetX = mod(found.ox); this._gridOffsetY = mod(found.oy);
-    this._fitGridToBg(); this._saveMap(); this._render();
-    showToast('Grid matched to the map’s squares, ' + how + '.', { action: { label: 'Undo', run: () => {
+    this._fitGridToBg(); const n = this._pullTokensOnto(true); this._saveMap(); this._render();
+    showToast('Grid matched to the map’s squares, ' + how + '.' + moved(n), { action: { label: 'Undo', run: () => {
       if (_mapBgImage !== img) return;
       this._cellSize = was.cs; this._gridOffsetX = was.ox; this._gridOffsetY = was.oy;
       this._fitGridToBg(); this._saveMap(); this._render();
     } } });
+  },
+  // The grid an adventure's own data gives one of its maps — { size, ox, oy,
+  // w } in the listed picture's pixels — or null (no grid, or hexes).
+  _advGrid(path){
+    const m = /^adventure\/([^/]+)\//.exec(path || '');
+    if (!m) return Promise.resolve(null);
+    const id = m[1].toLowerCase(), cache = this._advGridCache || (this._advGridCache = {});
+    if (!cache[id]) cache[id] = fetch('data/adventure/adventure-' + id + '.json').then(r => r.ok ? r.json() : null).then(j => {
+      const out = {};
+      const walk = o => { if (Array.isArray(o)) return o.forEach(walk); if (o && typeof o === 'object'){ if (o.href && o.href.path && o.grid) out[o.href.path] = { grid: o.grid, w: o.width }; for (const k in o) walk(o[k]); } };
+      walk(j);
+      return out;
+    }).catch(() => ({}));
+    return cache[id].then(all => {
+      const e = all && all[path], g = e && e.grid;
+      return g && g.type === 'square' && +g.size > 0 ? { size: +g.size, ox: +g.offsetX || 0, oy: +g.offsetY || 0, w: +e.w || 0 } : null;
+    });
+  },
+  // Once the picked map's picture is in (its size is what the grid scales
+  // by): our squares on its squares. Not if another map has been picked.
+  _useAdvGrid(path, g, tries){
+    if (!g || this._bgMapPath !== path) return;
+    if (this._bgLoadedPath !== path || !this._bgMapNaturalW){
+      if (tries < 150) setTimeout(() => this._useAdvGrid(path, g, tries + 1), 200);
+      return;
+    }
+    const sc = g.w ? this._bgMapNaturalW / g.w : 1, sz = Math.max(8, g.size * sc), mod = v => ((v % sz) + sz) % sz;
+    this._cellSize = sz; this._gridOffsetX = mod(g.ox * sc); this._gridOffsetY = mod(g.oy * sc);
+    this._fitGridToBg(); this._pullTokensOnto(); this._saveMap(); this._render(); this._fitMapToView();
+  },
+  // A new map smaller than the last left tokens past its edge — drawn
+  // nowhere, and no way to reach them. Each comes onto the map at the
+  // nearest free square inside it. The DM's map only (a player's screen
+  // never moves anyone).
+  _pullTokensOnto(quiet){
+    if (document.body.classList.contains('player-mode')) return 0;
+    const cs = this._csScreen() || 50, W = this._cols * cs, H = this._rows * cs;
+    let n = 0;
+    (this._tokens || []).forEach(t => {
+      if (!t || t.x == null) return;
+      const half = Math.max(1, +t.size || 1) * cs / 2;
+      if (t.x >= half - 1 && t.x <= W - half + 1 && t.y >= half - 1 && t.y <= H - half + 1) return;
+      let x = Math.max(half, Math.min(W - half, t.x)), y = Math.max(half, Math.min(H - half, t.y));
+      if (this._tokens.some(o => o !== t && Math.abs((o.x || 0) - x) < cs / 2 && Math.abs((o.y || 0) - y) < cs / 2)){
+        const spot = this._freeCellNear(x, y); if (spot){ x = spot.x; y = spot.y; }
+      }
+      t.x = x; t.y = y; n++;
+    });
+    if (n && !quiet && typeof showToast === 'function') showToast(n === 1 ? 'A token was off the new map: it’s on its edge now.' : n + ' tokens were off the new map: they’re on its edge now.');
+    return n;
   },
   // Re-encode an uploaded image small enough to share.
   //
@@ -1264,6 +1319,7 @@ registerPanel('battlemap',{
       if (seq !== this._bgLoadSeq) return;
       this._bgFailedUrl = null;
       _mapBgImage = img;
+      this._bgLoadedPath = this._bgMapPath;
       // A shared upload is a shrunk copy: lay it out at the original's size.
       const orig = this._isSharedUpload(this._bgMapPath) && this._bgMapSize && this._bgMapSize.w > 0 ? this._bgMapSize : null;
       this._bgMapNaturalW = orig ? orig.w : img.naturalWidth;
@@ -5921,6 +5977,9 @@ registerPanel('battlemap',{
           this._gridOffsetY = 0;
           this._saveMap();
           this._loadBgFromPath(path, /*autoFit=*/true);
+          // The adventure's own data says where its map's squares are; the
+          // previous map's grid stayed, and the DM lined it up by hand.
+          this._advGrid(path).then(g => this._useAdvGrid(path, g, 0));
           close();
         });
       });
@@ -5983,6 +6042,9 @@ registerPanel('battlemap',{
           this._gridOffsetY = 0;
           this._saveMap();
           this._loadBgFromPath(path, /*autoFit=*/true);
+          // The adventure's own data says where its map's squares are; the
+          // previous map's grid stayed, and the DM lined it up by hand.
+          this._advGrid(path).then(g => this._useAdvGrid(path, g, 0));
           close();
         });
       });

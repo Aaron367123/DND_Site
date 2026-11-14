@@ -22553,6 +22553,69 @@ for (const cls of Object.keys(rule)) for (let L = 1; L <= 20; L++) for (const sc
       } catch(e){ ok('round 393 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
       finally { document.querySelectorAll('#toast-host .toast-item').forEach(t => t.remove()); }
     }
+    // -- Round 394: a new map — tokens past its edge come onto it; the footer counts its squares; an adventure's map takes the grid its data gives --
+    {
+      const B = panelDefs.battlemap;
+      const S0 = localStorage.getItem('skt-battlemap-v1'), P0 = B._bgMapPath, I0 = _mapBgImage, W0 = B._bgMapNaturalW, H0 = B._bgMapNaturalH, L0 = B._bgLoadedPath;
+      const putReal = window.sktMapBlobPut, readyReal = window.sktMapBlobReady;
+      const keep = { cs: B._cellSize, ox: B._gridOffsetX, oy: B._gridOffsetY, cols: B._cols, rows: B._rows, sc: B._bgMapScale, lts: B._lastTokenScale, size: B._bgMapSize };
+      let keepT = null, keepD = null, keepF, fogSaved = false;
+      try {
+        openPanel('battlemap'); await sleep(600);
+        keepT = B._tokens.slice(); keepD = B._drawings.slice(); keepF = B._fog; fogSaved = true;
+        B._drawings = []; B._fog = null;
+        window.sktMapBlobPut = () => Promise.resolve(true); window.sktMapBlobReady = () => true;
+        B._cellSize = 50; B._gridOffsetX = 0; B._gridOffsetY = 0;
+        const cs = B._csScreen();
+        const near = { id: 't394n', label: 'r394 Near', x: 2.5 * cs, y: 2.5 * cs, size: 1, isPC: true };
+        const far = { id: 't394f', label: 'r394 Far', x: 30.5 * cs, y: 20.5 * cs, size: 1, isPC: true };
+        const far2 = { id: 't394g', label: 'r394 Far too', x: 31.5 * cs, y: 20.5 * cs, size: 1 };
+        B._tokens = [near, far, far2]; B._cols = 40; B._rows = 30; B._render(); await sleep(150);
+        document.querySelectorAll('#toast-host .toast-item').forEach(t => t.remove());
+        const c = document.createElement('canvas'); c.width = 600; c.height = 400; const g = c.getContext('2d'); g.fillStyle = '#386'; g.fillRect(0, 0, 600, 400);
+        const blob = await new Promise(r => c.toBlob(r, 'image/png'));
+        B._useImageFile(new File([blob], 'r394-small.png', { type: 'image/png' }));
+        let tt = null; for (let i = 0; i < 60 && !tt; i++){ await sleep(100); tt = [...document.querySelectorAll('#toast-host .toast-item')].find(t => /past its edge/.test(t.textContent)); }
+        const W = B._cols * B._csScreen(), H = B._rows * B._csScreen(), inside = t => t.x > 0 && t.x < W && t.y > 0 && t.y < H;
+        ok('a smaller new map: tokens past its edge come onto it, on squares of their own', inside(far) && inside(far2) && (Math.abs(far.x - far2.x) >= B._csScreen() / 2 || Math.abs(far.y - far2.y) >= B._csScreen() / 2), JSON.stringify([far.x, far.y, far2.x, far2.y, W, H]));
+        ok('…the ones on it stay put, and it says so', near.x === 2.5 * cs && near.y === 2.5 * cs && !!tt && /2 tokens/.test(tt.textContent), tt && tt.textContent);
+        const foot = B._body.querySelector('.map-foot');
+        ok('…and the footer counts the new map’s squares', !!foot && foot.textContent.includes(B._cols + '×' + B._rows) && B._cols === 12, foot && foot.textContent);
+        // …even when nobody needed moving (nothing redraws for that)
+        B._tokens = [near]; document.querySelectorAll('#toast-host .toast-item').forEach(t => t.remove());
+        const c2 = document.createElement('canvas'); c2.width = 300; c2.height = 200; c2.getContext('2d').fillStyle = '#638'; c2.getContext('2d').fillRect(0, 0, 300, 200);
+        B._useImageFile(new File([await new Promise(r => c2.toBlob(r, 'image/png'))], 'r394-tiny.png', { type: 'image/png' }));
+        for (let i = 0; i < 60 && ![...document.querySelectorAll('#toast-host .toast-item')].some(t => /No squares|Grid matched/.test(t.textContent)); i++) await sleep(100);
+        const foot2 = B._body.querySelector('.map-foot');
+        ok('…a smaller map again, nobody to move: the footer still counts its squares', !!foot2 && B._cols === 8 && foot2.textContent.includes('8×6'), foot2 && foot2.textContent);
+        // An adventure's map, picked from the list: the grid its data gives
+        const path = 'adventure/SKT/044-308.webp';
+        const want = await B._advGrid(path);
+        ok('an adventure map’s grid, from the adventure’s data', !!want && want.size === 96, JSON.stringify(want));
+        B._cellSize = 50; B._gridOffsetX = 0; B._gridOffsetY = 0;
+        B._openMapPicker();
+        let sel = null; for (let i = 0; i < 50 && !(sel = document.querySelector('#mapsel-adv')) ; i++) await sleep(100);
+        for (let i = 0; i < 50 && sel && sel.disabled; i++) await sleep(100);
+        sel.value = 'SKT'; sel.dispatchEvent(new Event('change', { bubbles: true }));
+        let card = null; for (let i = 0; i < 80 && !(card = document.querySelector('.mapsel-card[data-path="' + path + '"]')); i++) await sleep(100);
+        if (card) card.click();
+        for (let i = 0; i < 100 && !(B._bgLoadedPath === path && Math.abs(B._cellSize - 96) < 0.5); i++) await sleep(100);
+        const sc = B._bgMapNaturalW / (want ? 1600 : 1), md = (v, p) => ((v % p) + p) % p;
+        ok('…picked from the list: our squares are its squares', !!card && B._bgLoadedPath === path && Math.abs(B._cellSize - 96) < 0.5 && Math.abs(B._gridOffsetX - md(want.ox, 96)) < 0.5 && Math.abs(B._gridOffsetY - md(want.oy, 96)) < 0.5, JSON.stringify([!!card, B._bgLoadedPath, B._cellSize, B._gridOffsetX, B._gridOffsetY, want]));
+      } catch(e){ ok('round 394 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
+      finally {
+        document.querySelectorAll('.modal-backdrop').forEach(m => m.remove());
+        document.querySelectorAll('#toast-host .toast-item').forEach(t => t.remove());
+        window.sktMapBlobPut = putReal; window.sktMapBlobReady = readyReal;
+        if (fogSaved) B._fog = keepF;
+        B._cellSize = keep.cs; B._gridOffsetX = keep.ox; B._gridOffsetY = keep.oy; B._cols = keep.cols; B._rows = keep.rows; B._bgMapScale = keep.sc; B._lastTokenScale = keep.lts; B._bgMapSize = keep.size;
+        _mapBgImage = I0; B._bgMapPath = P0; B._bgMapNaturalW = W0; B._bgMapNaturalH = H0; B._bgLoadedPath = L0;
+        if (keepT){ B._tokens = keepT; B._drawings = keepD; }
+        if (S0 != null) localStorage.setItem('skt-battlemap-v1', S0);
+        try { B._render(); } catch(e){}
+        closePanel('battlemap');
+      }
+    }
     // -- Class features: represented, not just text ------------------------
     {
       try {
