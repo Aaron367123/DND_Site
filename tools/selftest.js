@@ -25641,6 +25641,8 @@ for (const cls of Object.keys(rule)) for (let L = 1; L <= 20; L++) for (const sc
       try {
         if (paMyIdx() < 0) paSetPc(state.party[0].id);
         const me = paPc();
+        // A fresh opening of the Map tab (an earlier round may have left it open, and touched)
+        paTab = 'you'; paRender(); await sleep(150);
         paTab = 'map'; paRender(); await sleep(700);
         keepT = B._tokens.slice(); const cs0 = B._csScreen();
         // Our token in the middle of the map, away from its edges
@@ -25652,7 +25654,8 @@ for (const cls of Object.keys(rule)) for (let L = 1; L <= 20; L++) for (const sc
         const off1 = paMyOffset();
         ok('phone: the map opens on your token, and stays on it when the view refits', off0 != null && off0 < 8 && off1 != null && off1 < 8, JSON.stringify([off0, off1, B._viewScale]));
         const ft = document.querySelector('.pa-mount .map-foot-touch');
-        ok('…and its footer says how to ping', !!ft && ft.offsetWidth > 0 && /Hold a finger/.test(ft.textContent));
+        const phone = matchMedia('(max-width: 768px) and (pointer: coarse)').matches;
+        ok('…and its footer says how to ping (on a phone; a computer has its own hint)', !!ft && (phone ? ft.offsetWidth > 0 : ft.offsetWidth === 0) && /Hold a finger/.test(ft.textContent));
         // Once you've touched the map, it's yours
         document.querySelector('.pa-mount').dispatchEvent(new TouchEvent('touchstart', { bubbles: true, touches: [] }));
         const sc = document.querySelector('.pa-mount #map-scroll'); sc.scrollLeft += 150; await sleep(200);
