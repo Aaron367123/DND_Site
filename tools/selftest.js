@@ -22090,6 +22090,80 @@ for (const cls of Object.keys(rule)) for (let L = 1; L <= 20; L++) for (const sc
         closePanel('battlemap');
       }
     }
+    // -- Round 382: doors — drawn with the Area tool, opened and closed from their menu (light and sight go through an open one); a wall made a door; the size and colour boxes only for shapes that use them --
+    {
+      const B = panelDefs.battlemap;
+      let keepT = null, keepD = null, keepF, fogSaved = false;
+      const keepTool = B._tool, keepShape = B._tplShape, keepL = B._light, keepP = JSON.stringify(state.party);
+      try {
+        openPanel('battlemap'); await sleep(700);
+        keepT = B._tokens.slice(); keepD = B._drawings.slice();
+        keepF = B._fog; fogSaved = true; B._fog = null;
+        const cs = B._csScreen();
+        // The toolbar's boxes
+        B._tool = 'area'; B._tplShape = 'circle'; B._render(); await sleep(100);
+        const sel = B._body.querySelector('#tpl-shape');
+        const shown = id => { const e = B._body.querySelector(id); return !!e && getComputedStyle(e).display !== 'none'; };
+        const pick = async v => { sel.value = v; sel.dispatchEvent(new Event('change')); await sleep(30); };
+        ok('a sphere: size and colour', shown('#tpl-wrap-s') && shown('#tpl-color'));
+        await pick('wall');
+        ok('a wall: no size, no colour', !shown('#tpl-wrap-s') && !shown('#tpl-color'));
+        await pick('lamp');
+        ok('a light source: its light, no size or colour', shown('#tpl-wrap-l') && !shown('#tpl-wrap-s') && !shown('#tpl-color'));
+        await pick('darkness');
+        ok('magical darkness: a size, no colour', shown('#tpl-wrap-s') && !shown('#tpl-color'));
+        await pick('cone');
+        ok('…and back to a cone: both again', shown('#tpl-wrap-s') && shown('#tpl-color'));
+        B._tplShape = 'terrain'; B._render(); await sleep(60);
+        ok('drawn fresh on difficult terrain: no size or colour', !shown('#tpl-wrap-s') && !shown('#tpl-color'));
+        // A dark room, a human with a torch, a goblin behind where the door goes
+        state.party.push({ id: 'r382h', name: 'r382 Human', hp: 20, hpMax: 20, ac: 14, sheet: { senses: '' } });
+        const hu = { id: 't382h', cid: 'r382h', label: 'r382 Human', isPC: true, x: 2.5 * cs, y: 5.5 * cs, size: 1, lt: { b: 20, d: 20 } };
+        const gb = { id: 't382g', label: 'r382 Goblin', x: 6.5 * cs, y: 5.5 * cs, size: 1 };
+        B._tokens = [hu, gb]; B._drawings = []; B._light = 'dark';
+        B._tplShape = 'door'; B._render(); await sleep(80);
+        const cl = (sx, sy) => { const r = B._body.querySelector('#map-stage').getBoundingClientRect(), z = B._screenScale(); return { x: r.left + sx * z, y: r.top + sy * z }; };
+        const p0 = cl(5 * cs, 3 * cs), p1 = cl(5 * cs, 8 * cs);
+        B._areaPointerDown(5 * cs, 3 * cs, p0.x, p0.y, false); await sleep(10);
+        for (let i = 1; i <= 4; i++){ document.dispatchEvent(new MouseEvent('mousemove', { bubbles: true, clientX: p0.x, clientY: p0.y + (p1.y - p0.y) * i / 4 })); await sleep(10); }
+        document.dispatchEvent(new MouseEvent('mouseup', { bubbles: true, clientX: p1.x, clientY: p1.y })); await sleep(60);
+        const dr = B._walls()[0];
+        ok('the Area tool draws a door with a drag', dr && dr.door === true && !dr.open, JSON.stringify(dr));
+        ok('…drawn as a door on the DM’s map', !!B._body.querySelector('#tpl-layer [data-door]') && !B._body.querySelector('#tpl-layer [data-wall]'));
+        let S = B._sightSrc();
+        ok('a closed door: the human doesn’t see the goblin past it', !sktCanSee(S, hu, gb));
+        // Its menu: open it
+        const menuPick = async re => { const it = [...document.querySelectorAll('button')].find(x => re.test(x.textContent)); if (it) it.click(); await sleep(80); return !!it; };
+        const m = cl(5 * cs, 5 * cs);
+        B._areaPointerDown(5 * cs, 5 * cs, m.x, m.y, false); await sleep(10);
+        document.dispatchEvent(new MouseEvent('mouseup', { bubbles: true, clientX: m.x, clientY: m.y })); await sleep(60);
+        ok('a press on the door: “Open the door”', await menuPick(/Open the door/));
+        S = B._sightSrc();
+        ok('…opened: the torch lights the goblin and the human sees it', dr.open === true && sktCanSee(S, hu, gb) && sktLightAt(S, gb.x, gb.y) >= 1);
+        ok('…kept, and drawn open', JSON.parse(localStorage.getItem('skt-battlemap-v1')).drawings.some(s => s.id === dr.id && s.open) && !!B._body.querySelector('#tpl-layer [data-door] line[stroke-dasharray]'));
+        B._areaPointerDown(5 * cs, 5 * cs, m.x, m.y, false); await sleep(10);
+        document.dispatchEvent(new MouseEvent('mouseup', { bubbles: true, clientX: m.x, clientY: m.y })); await sleep(60);
+        ok('…and closed again', await menuPick(/Close the door/) && !dr.open && !sktCanSee(B._sightSrc(), hu, gb));
+        // A wall made a door; "Remove all doors" leaves the walls
+        B._drawings.push({ k: 'tpl', id: 'r382w', shape: 'wall', pts: [9 * cs, 2 * cs, 9 * cs, 8 * cs] });
+        B._fixtureMenu(B._drawings[B._drawings.length - 1], 100, 100, 9 * cs, 4 * cs); await sleep(40);
+        ok('a wall’s menu: “Make it a door”', await menuPick(/Make it a door/) && B._walls().find(w => w.id === 'r382w').door === true);
+        B._fixtureMenu(B._walls().find(w => w.id === 'r382w'), 100, 100, 9 * cs, 4 * cs); await sleep(40);
+        ok('…and a door’s: “Make it a wall”', await menuPick(/Make it a wall/) && !B._walls().find(w => w.id === 'r382w').door);
+        B._fixtureMenu(dr, 100, 100, 5 * cs, 5 * cs); await sleep(40);
+        await menuPick(/Remove all doors/);
+        ok('“Remove all doors” leaves the walls', !B._walls().some(w => w.door) && B._walls().some(w => w.id === 'r382w'), JSON.stringify(B._walls().map(w => w.id)));
+      } catch(e){ ok('round 382 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
+      finally {
+        document.querySelectorAll('.ctx-menu, .context-menu').forEach(m => m.remove());
+        if (fogSaved) B._fog = keepF;
+        B._tool = keepTool; B._tplShape = keepShape; B._light = keepL;
+        state.party = JSON.parse(keepP);
+        if (keepT){ B._tokens = keepT; B._drawings = keepD; try { B._saveMap(); } catch(e){} }
+        try { B._render(); } catch(e){}
+        closePanel('battlemap');
+      }
+    }
     // -- Class features: represented, not just text ------------------------
     {
       try {

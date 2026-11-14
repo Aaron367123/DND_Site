@@ -3034,6 +3034,7 @@ function sktDragHeld(tokens, tok, dx, dy, dz){
 //   tok.lt:   {b, d} a light carried — bright for b feet, dim for d more.
 //   drawings: {shape:'lamp', x, y, ft: bright, w: dim}  a light on the map
 //             {shape:'wall', pts:[x,y,x,y…]}           blocks light and sight
+//             {…wall, door:true, open:true}             a door, which doesn't once opened
 //             {shape:'darkness', x, y, ft}              magical darkness
 //
 // Bright light, no walls and no magical darkness (every map until a DM says
@@ -3093,7 +3094,8 @@ function sktSightSrc(src){
   const walls = [], lights = [], darks = [];
   dr.forEach(s => {
     if (!s || s.k !== 'tpl') return;
-    if (s.shape === 'wall' && Array.isArray(s.pts)) for (let i = 0; i + 3 < s.pts.length; i += 2) walls.push([+s.pts[i], +s.pts[i + 1], +s.pts[i + 2], +s.pts[i + 3]]);
+    // (A door is a wall, until it's opened.)
+    if (s.shape === 'wall' && Array.isArray(s.pts) && !(s.door && s.open)) for (let i = 0; i + 3 < s.pts.length; i += 2) walls.push([+s.pts[i], +s.pts[i + 1], +s.pts[i + 2], +s.pts[i + 3]]);
     else if (s.shape === 'lamp') lights.push({ x: +s.x, y: +s.y, z: +s.z || 0, b: +s.ft || 0, d: +s.w || 0 });
     else if (s.shape === 'darkness') darks.push({ x: +s.x, y: +s.y, z: +s.z || 0, r: +s.ft || 15 });
   });

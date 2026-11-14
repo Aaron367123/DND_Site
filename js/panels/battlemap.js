@@ -2597,14 +2597,23 @@ registerPanel('battlemap',{
     const cs = this._csScreen() || 50, o = this._gridOffPx();
     return { x: Math.round((x - o.x) / cs) * cs + o.x, y: Math.round((y - o.y) / cs) * cs + o.y };
   },
+  // Which of the Area tool's boxes a shape uses: a wall, a door, a light or
+  // rough ground has no size in feet and no colour of its own (magical
+  // darkness is always dark) — the boxes sat there doing nothing.
+  _tplHas(shape, what){
+    if (what === 'size') return !/^(terrain|wall|door|lamp)$/.test(shape);
+    if (what === 'colour') return !/^(terrain|wall|door|lamp|darkness)$/.test(shape);
+    return true;
+  },
   _areaControlsHtml(){
     const opt = (v, l) => '<option value="' + v + '"' + (this._tplShape === v ? ' selected' : '') + '>' + l + '</option>';
     return '<select id="tpl-shape" title="Shape" style="width:78px;font-size:var(--fs-sm);padding:2px 4px;flex:0 0 auto">'
         + opt('circle', 'Sphere') + opt('cyl', 'Cylinder') + opt('cone', 'Cone') + opt('line', 'Line') + opt('cube', 'Cube') + opt('aura', 'Emanation')
         + opt('darkness', 'Magical darkness')
-        + (document.body.classList.contains('player-mode') ? '' : opt('terrain', 'Difficult terrain') + opt('wall', 'Wall (blocks sight)') + opt('lamp', 'Light source')) + '</select>'
+        + (document.body.classList.contains('player-mode') ? '' : opt('terrain', 'Difficult terrain') + opt('wall', 'Wall (blocks sight)') + opt('door', 'Door') + opt('lamp', 'Light source')) + '</select>'
+      + '<span id="tpl-wrap-s" style="display:' + (this._tplHas(this._tplShape, 'size') ? 'inline-flex' : 'none') + ';align-items:center;gap:3px;flex-shrink:0">'
       + '<input type="number" id="tpl-size" min="5" step="5" value="' + this._tplSize + '" style="width:52px;font-size:var(--fs-sm);padding:2px 4px;flex-shrink:0" title="Size in feet (radius for a sphere or cylinder, length for a cone or line, side for a cube, how far an emanation reaches from its creature)">'
-      + '<span class="bt-l" style="font-size:var(--fs-xs);color:var(--text-muted)">ft</span>'
+      + '<span class="bt-l" style="font-size:var(--fs-xs);color:var(--text-muted)">ft</span></span>'
       // A line is 5 ft wide unless the spell says otherwise (Gust of Wind: 10).
       + '<span id="tpl-wrap-w" style="display:' + (this._tplShape === 'line' ? 'inline-flex' : 'none') + ';align-items:center;gap:3px;flex-shrink:0">'
       +   '<span style="font-size:var(--fs-xs);color:var(--text-muted)">width</span>'
@@ -2623,7 +2632,7 @@ registerPanel('battlemap',{
       +   '<input type="number" id="tpl-height" min="5" step="5" value="' + this._tplHeight + '" style="width:46px;font-size:var(--fs-sm);padding:2px 4px" title="How high the cylinder is, in feet">'
       +   '<span style="font-size:var(--fs-xs);color:var(--text-muted)">ft</span>'
       + '</span>'
-      + '<input type="color" id="tpl-color" value="' + this._tplColor + '" style="width:24px;height:22px;padding:1px;border-radius:3px;flex-shrink:0;cursor:pointer" title="Colour">'
+      + '<input type="color" id="tpl-color" value="' + this._tplColor + '" style="width:24px;height:22px;padding:1px;border-radius:3px;flex-shrink:0;cursor:pointer;display:' + (this._tplHas(this._tplShape, 'colour') ? '' : 'none') + '" title="Colour">'
       + (this._areas().length ? '<button class="btn" data-mact="clear-areas" style="flex-shrink:0" title="Remove every area from the map">Clear areas</button>' : '');
   },
   // Outline in stage px: {circle:{x,y,r}} or {poly:[[x,y]…]}.
@@ -2813,14 +2822,15 @@ registerPanel('battlemap',{
     if (shape === 'cyl') draft.h = hi;
     if (from && +from.elev) draft.z = +from.elev;
     if (me) draft.by = me.id;
-    if (shape === 'wall' || shape === 'lamp'){
+    if (shape === 'wall' || shape === 'door' || shape === 'lamp'){
       if (isPlayer) return;
       const stage = this._body.querySelector('#map-stage');
       const vs = this._screenScale ? (this._screenScale() || 1) : 1;
       const lamp = shape === 'lamp' ? this._lamps().slice().reverse().find(l => Math.hypot(x - l.x, y - l.y) <= 14 / vs) : null;
-      const wall = shape === 'wall' ? this._wallNear(x, y) : null;
+      const wall = shape !== 'lamp' ? this._wallNear(x, y) : null;
       const a0 = this._areaSnap(x, y);
-      const box = shape === 'wall' ? { k: 'tpl', id: draft.id, shape: 'wall', pts: [a0.x, a0.y, a0.x, a0.y] } : null;
+      const box = shape !== 'lamp' ? { k: 'tpl', id: draft.id, shape: 'wall', pts: [a0.x, a0.y, a0.x, a0.y] } : null;
+      if (box && shape === 'door') box.door = true;
       const was = lamp ? { x: lamp.x, y: lamp.y } : null;
       let movedF = false;
       const mv = ev => {
@@ -2964,12 +2974,18 @@ registerPanel('battlemap',{
     return this._walls().slice().reverse().find(w => { for (let i = 0; i + 3 < w.pts.length; i += 2) if (segD(x, y, w.pts[i], w.pts[i + 1], w.pts[i + 2], w.pts[i + 3]) <= tol) return true; return false; }) || null;
   },
   _fixtureMenu(f, cx, cy, x, y){
-    const kind = f.shape === 'wall' ? 'wall' : 'light';
-    const items = [
+    const kind = f.shape === 'wall' ? (f.door ? 'door' : 'wall') : 'light';
+    const same = s => s && s.k === 'tpl' && s.shape === f.shape && !!s.door === !!f.door;
+    const redo = () => { this._saveMap(); this._render(); };
+    const items = [];
+    // A door: open it (light and sight go through), close it; a wall made a door or back.
+    if (f.door) items.push({ label: f.open ? '🚪 Close the door' : '🚪 Open the door', onClick: () => { if (f.open) delete f.open; else f.open = true; redo(); } });
+    if (f.shape === 'wall') items.push({ label: f.door ? '▬ Make it a wall' : '🚪 Make it a door', onClick: () => { if (f.door){ delete f.door; delete f.open; } else f.door = true; redo(); } });
+    items.push(
       { label: '✥ Move this ' + kind, onClick: () => this._moveEntry(f, x, y) },
-      { label: '✕ Remove this ' + kind, onClick: () => { this._drawings = this._drawings.filter(s => s !== f); this._saveMap(); this._render(); } },
-      { label: '✕ Remove all ' + kind + 's', onClick: () => { this._drawings = this._drawings.filter(s => !(s && s.k === 'tpl' && s.shape === f.shape)); this._saveMap(); this._render(); } },
-    ];
+      { label: '✕ Remove this ' + kind, onClick: () => { this._drawings = this._drawings.filter(s => s !== f); redo(); } },
+      { label: '✕ Remove all ' + kind + 's', onClick: () => { this._drawings = this._drawings.filter(s => !same(s)); redo(); } },
+    );
     if (typeof showContextMenu === 'function') showContextMenu(cx, cy, items);
   },
   // Walls and lights, drawn on the DM's map (a player sees the light they
@@ -2978,8 +2994,13 @@ registerPanel('battlemap',{
   _fixturesSvg(preview, vs){
     if (document.body.classList.contains('player-mode')) return '';
     const up = this._tool === 'area', ppf = this._ppf();
-    const line = (p, extra) => { let o = ''; for (let i = 0; i + 3 < p.length; i += 2) o += '<line x1="' + (+p[i]).toFixed(1) + '" y1="' + (+p[i + 1]).toFixed(1) + '" x2="' + (+p[i + 2]).toFixed(1) + '" y2="' + (+p[i + 3]).toFixed(1) + '" stroke="#e8643c" stroke-linecap="round" stroke-width="' + ((up ? 5 : 3) / vs).toFixed(2) + '" stroke-opacity="' + (up ? '.95' : '.6') + '" ' + (extra || '') + '/>'; return o; };
-    const walls = this._walls().map(w => line(w.pts, 'data-wall="' + w.id + '"')).join('') + (preview && preview.shape === 'wall' ? line(preview.pts, 'stroke-dasharray="' + (6 / vs) + ' ' + (4 / vs) + '"') : '');
+    // A wall orange; a door wood-brown, and dashed and faint while it stands open.
+    const line = (p, extra, door) => { let o = ''; for (let i = 0; i + 3 < p.length; i += 2) o += '<line x1="' + (+p[i]).toFixed(1) + '" y1="' + (+p[i + 1]).toFixed(1) + '" x2="' + (+p[i + 2]).toFixed(1) + '" y2="' + (+p[i + 3]).toFixed(1) + '" stroke="' + (door ? '#b07a3a' : '#e8643c') + '" stroke-linecap="round" stroke-width="' + ((up ? 5 : 3) * (door ? 1.4 : 1) / vs).toFixed(2) + '" stroke-opacity="' + (door === 'open' ? '.45' : up ? '.95' : '.6') + '" ' + (extra || '') + '/>'; return o; };
+    const dash = 'stroke-dasharray="' + (6 / vs) + ' ' + (4 / vs) + '"';
+    const walls = this._walls().map(w => w.door
+        ? '<g data-door="' + w.id + '"><title>Door (' + (w.open ? 'open' : 'closed') + ')</title>' + line(w.pts, w.open ? dash : '', w.open ? 'open' : true) + '</g>'
+        : line(w.pts, 'data-wall="' + w.id + '"')).join('')
+      + (preview && preview.shape === 'wall' ? line(preview.pts, dash, !!preview.door) : '');
     const lamps = this._lamps().map(l => '<g data-lamp="' + l.id + '">'
       + (up ? '<circle cx="' + l.x + '" cy="' + l.y + '" r="' + ((+l.ft || 0) * ppf).toFixed(1) + '" fill="none" stroke="#ffd36b" stroke-opacity=".7" stroke-dasharray="' + (5 / vs) + ' ' + (4 / vs) + '" stroke-width="' + (1.5 / vs) + '"/>'
             + '<circle cx="' + l.x + '" cy="' + l.y + '" r="' + (((+l.ft || 0) + (+l.w || 0)) * ppf).toFixed(1) + '" fill="none" stroke="#ffd36b" stroke-opacity=".4" stroke-dasharray="' + (3 / vs) + ' ' + (5 / vs) + '" stroke-width="' + (1.5 / vs) + '"/>' : '')
@@ -3050,7 +3071,7 @@ registerPanel('battlemap',{
     const stage = b.querySelector('#map-stage'); if (!stage) return;
     const orig = JSON.parse(JSON.stringify(t));
     b.querySelector('.map-place-hint')?.remove();
-    const what = t.shape === 'wall' ? 'wall' : t.shape === 'lamp' ? 'light' : t.shape === 'terrain' ? 'difficult terrain' : 'area';
+    const what = t.shape === 'wall' ? (t.door ? 'door' : 'wall') : t.shape === 'lamp' ? 'light' : t.shape === 'terrain' ? 'difficult terrain' : 'area';
     const tap = typeof matchMedia === 'function' && matchMedia('(pointer: coarse)').matches;
     const hint = document.createElement('div');
     hint.className = 'map-place-hint';
@@ -4049,6 +4070,8 @@ registerPanel('battlemap',{
       const w = this._body.querySelector('#tpl-wrap-w'); if (w) w.style.display = tplSel.value === 'line' ? 'inline-flex' : 'none';
       const h = this._body.querySelector('#tpl-wrap-h'); if (h) h.style.display = tplSel.value === 'cyl' ? 'inline-flex' : 'none';
       const l = this._body.querySelector('#tpl-wrap-l'); if (l) l.style.display = tplSel.value === 'lamp' ? 'inline-flex' : 'none';
+      const s = this._body.querySelector('#tpl-wrap-s'); if (s) s.style.display = this._tplHas(tplSel.value, 'size') ? 'inline-flex' : 'none';
+      const c = this._body.querySelector('#tpl-color'); if (c) c.style.display = this._tplHas(tplSel.value, 'colour') ? '' : 'none';
       this._renderAreas();
     };
     // A redraw (another device moved a token) rebuilds the stage: the ruler's
