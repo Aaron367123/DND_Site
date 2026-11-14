@@ -21093,6 +21093,115 @@ for (const cls of Object.keys(rule)) for (let L = 1; L <= 20; L++) for (const sc
         state.combatants = JSON.parse(keepC); state.activeCombatantId = keepA; state.combatRound = keepR; save();
       }
     }
+    // -- Round 361: areas from a creature — an emanation tied to its token and moving with it, a cone leaving the caster's edge, a line as wide as the spell says --
+    {
+      const B = panelDefs.battlemap;
+      let keepT = null, keepD = null, keepF, fogSaved = false; const keepTool = B._tool, keepShape = B._tplShape, keepSize = B._tplSize, keepW = B._tplWidth;
+      try {
+        openPanel('battlemap'); await sleep(700);
+        keepT = B._tokens.slice(); keepD = B._drawings.slice();
+        keepF = B._fog; fogSaved = true; B._fog = null;
+        const cs = B._csScreen(), ppf = B._ppf();
+        // A cleric, a Large ogre two squares off, a goblin 15 ft out, one 20 ft out
+        const cl = { id: 'r361c', label: 'r361 Cleric', x: 4.5 * cs, y: 4.5 * cs, size: 1, isPC: true };
+        const gN = { id: 'r361g1', label: 'r361 Goblin A', x: 7.5 * cs, y: 4.5 * cs, size: 1 };     // 3 squares east: 15 ft from the cleric
+        const gF = { id: 'r361g2', label: 'r361 Goblin B', x: 4.5 * cs, y: 8.5 * cs, size: 1 };     // 4 squares south: 20 ft
+        const og = { id: 'r361o', label: 'r361 Ogre', x: 2 * cs, y: 9 * cs, size: 2 };
+        B._tokens = [cl, gN, gF, og]; B._drawings = []; B._tool = 'area'; B._tplShape = 'aura'; B._tplSize = 15; B._render(); await sleep(250);
+        const press = async (t, dx, dy) => {
+          const el = B._body.querySelector('.map-token[data-tid="' + t.id + '"]'); if (!el) return 'no element';
+          const r = el.getBoundingClientRect(), cx = r.left + r.width / 2, cy = r.top + r.height / 2;
+          el.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, cancelable: true, clientX: cx, clientY: cy, button: 0 }));
+          if (dx || dy) for (let i = 1; i <= 4; i++){ document.dispatchEvent(new MouseEvent('mousemove', { bubbles: true, clientX: cx + dx * i / 4, clientY: cy + dy * i / 4 })); await sleep(15); }
+          document.dispatchEvent(new MouseEvent('mouseup', { bubbles: true, clientX: cx + (dx || 0), clientY: cy + (dy || 0) })); await sleep(80);
+          document.querySelectorAll('.ctx-menu').forEach(e => e.remove());
+          return 'ok';
+        };
+        ok('area tool: Emanation is a shape', !!B._body.querySelector('#tpl-shape option[value="aura"]'));
+        const x0 = cl.x;
+        await press(cl);
+        const au = B._areas().find(a => a.shape === 'aura');
+        ok('an emanation, pressed on a creature, is tied to it', au && au.tok === 'r361c' && au.ft === 15, JSON.stringify(au));
+        ok('…and the creature isn’t dragged off by the press', cl.x === x0);
+        const inside = () => B._tokensInArea(au).map(t => t.id).sort().join(',');
+        ok('15 ft emanation: the goblin 15 ft away is in it, the one 20 ft away isn’t, the cleric isn’t', inside() === 'r361g1', inside());
+        ok('…drawn round the creature’s space', !!B._body.querySelector('#tpl-layer rect[data-tpl="' + au.id + '"]'));
+        // It goes with the creature
+        cl.x = 4.5 * cs; cl.y = 7.5 * cs; B._renderTokens(); await sleep(40);
+        ok('the cleric moves: the emanation goes with them (the other goblin now in, the first out; the ogre’s near square in)', inside() === 'r361g2,r361o', inside());
+        const rc = B._body.querySelector('#tpl-layer rect[data-tpl="' + au.id + '"]');
+        ok('…and its outline is redrawn there', rc && Math.abs((+rc.getAttribute('y') + +rc.getAttribute('height') / 2) - 7.5 * cs) < 1, rc && rc.getAttribute('y'));
+        // Mid-drag, it keeps up with the token
+        { const el = B._body.querySelector('.map-token[data-tid="r361c"]'); const r = el.getBoundingClientRect(), cx = r.left + r.width / 2, cy = r.top + r.height / 2;
+          B._tool = ''; B._render(); await sleep(60);
+          const el2 = B._body.querySelector('.map-token[data-tid="r361c"]');
+          el2.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, cancelable: true, clientX: cx, clientY: cy, button: 0 }));
+          const z = B._screenScale();
+          for (let i = 1; i <= 4; i++){ document.dispatchEvent(new MouseEvent('mousemove', { bubbles: true, clientX: cx + i * cs * z / 2, clientY: cy })); await sleep(15); }
+          const rr = B._body.querySelector('#tpl-layer rect[data-tpl="' + au.id + '"]'), midX = +rr.getAttribute('x') + +rr.getAttribute('width') / 2;
+          ok('mid-drag, the emanation follows the token', Math.abs(midX - (cl.x + 2 * cs)) < cs * 0.3, midX + ' vs ' + (cl.x + 2 * cs));
+          document.dispatchEvent(new MouseEvent('mouseup', { bubbles: true, clientX: cx + 2 * cs * z, clientY: cy })); await sleep(80);
+          B._tool = 'area'; B._render(); await sleep(60); }
+        // Its own creature, if the spell says so
+        B._areaMenu(au, 100, 100); await sleep(60);
+        const it = [...document.querySelectorAll('.ctx-menu .ctx-menu-item')].find(x => /Count r361 Cleric in it/.test(x.textContent));
+        ok('its menu: count the creature itself in it', !!it);
+        if (it) it.click(); await sleep(60);
+        document.querySelectorAll('.ctx-menu').forEach(e => e.remove());
+        ok('…and then the creature is in it', B._tokensInArea(au).some(t => t.id === 'r361c'));
+        // A Large creature's emanation reaches from the edge of its 10 ft space
+        B._tplSize = 10; B._render(); await sleep(60);
+        await press(og);
+        const au2 = B._areas().find(a => a.shape === 'aura' && a.tok === 'r361o');
+        const pt = (sq) => B._inArea(au2, og.x + cs + (sq - 0.5) * cs, og.y);   // centre of the square sq squares beyond its edge
+        ok('a Large creature’s 10 ft emanation: 2 squares beyond its edge, not 3', au2 && pt(2) && !pt(3));
+        // A fireball dropped inside the aura is a new area, not the aura's menu
+        B._tplShape = 'circle'; B._tplSize = 20; B._render(); await sleep(60);
+        const n0 = B._areas().length;
+        B._areaPointerDown(og.x + cs * 1.5, og.y, 100, 100, false); await sleep(10);
+        document.dispatchEvent(new MouseEvent('mouseup', { bubbles: true, clientX: 100, clientY: 100 })); await sleep(60);
+        document.querySelectorAll('.ctx-menu').forEach(e => e.remove());
+        ok('a sphere dropped inside an emanation: a new area', B._areas().length === n0 + 1);
+        // A cone from the cleric: leaves the edge of their square, aimed by the drag; they don't move
+        B._drawings = []; B._tplShape = 'cone'; B._tplSize = 15; B._render(); await sleep(60);
+        const cx0 = cl.x, cy0 = cl.y, z = B._screenScale();
+        await press(cl, 2 * cs * z, 0);
+        const cone = B._areas().find(a => a.shape === 'cone');
+        ok('a cone pressed on a creature starts at the edge of its space, toward the drag', cone && Math.abs(cone.x - (cx0 + cs / 2)) < 1.5 && Math.abs(cone.y - cy0) < 1.5 && Math.abs(cone.ang) < 0.05, cone && [cone.x - cx0, cone.y - cy0, cone.ang].map(v => v.toFixed(2)).join(','));
+        ok('…and the creature stays where it was', cl.x === cx0 && cl.y === cy0);
+        // A sphere pressed on a creature: centred on it (a Fireball on the ogre)
+        B._drawings = []; B._tplShape = 'circle'; B._render(); await sleep(60);
+        await press(og);
+        const sp = B._areas()[0];
+        ok('a sphere pressed on a creature is centred on it', sp && Math.abs(sp.x - og.x) < 1.5 && Math.abs(sp.y - og.y) < 1.5);
+        // Line width
+        B._drawings = []; B._tplShape = 'line'; B._render(); await sleep(60);
+        const sel = B._body.querySelector('#tpl-shape'), wrap = B._body.querySelector('#tpl-wrap-w');
+        ok('a line: its width box shows', wrap && getComputedStyle(wrap).display !== 'none');
+        sel.value = 'cone'; sel.onchange(); await sleep(20);
+        ok('…and hides for a cone', getComputedStyle(wrap).display === 'none');
+        sel.value = 'line'; sel.onchange(); await sleep(20);
+        B._body.querySelector('#tpl-width').value = '10'; B._body.querySelector('#tpl-size').value = '60';
+        B._areaPointerDown(cs * 2, cs * 12, 100, 100, false); await sleep(10);
+        document.dispatchEvent(new MouseEvent('mouseup', { bubbles: true, clientX: 100, clientY: 100 })); await sleep(60);
+        const ln = B._areas().find(a => a.shape === 'line'), g = ln && B._areaGeom(ln);
+        const wide = g && Math.hypot(g.poly[0][0] - g.poly[1][0], g.poly[0][1] - g.poly[1][1]) / ppf;
+        ok('a Gust of Wind: 60 ft long, 10 ft wide', ln && ln.ft === 60 && ln.w === 10 && Math.abs(wide - 10) < 0.1, ln && JSON.stringify(ln) + ' ' + wide);
+        ok('…a 5 ft-wide square beside it is covered, one 10 ft off isn’t', B._inArea(ln, cs * 4, cs * 12 + 4.5 * ppf) && !B._inArea(ln, cs * 4, cs * 12 + 7 * ppf));
+        // A creature gone: its emanation goes with it
+        B._drawings = [{ k: 'tpl', id: 'r361gone', shape: 'aura', tok: 'r361nobody', ft: 10, x: 10, y: 10, c: '#ff0000' }];
+        B._saveMap(); await sleep(20);
+        ok('a token removed: its emanation is cleared, not left behind', !B._drawings.some(a => a.id === 'r361gone'));
+      } catch(e){ ok('round 361 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
+      finally {
+        if (fogSaved) B._fog = keepF;
+        if (keepT){ B._tokens = keepT; B._drawings = keepD; try { B._saveMap(); } catch(e){} }
+        B._tool = keepTool; B._tplShape = keepShape; B._tplSize = keepSize; B._tplWidth = keepW;
+        document.querySelectorAll('.ctx-menu').forEach(e => e.remove());
+        try { B._render(); } catch(e){}
+        closePanel('battlemap');
+      }
+    }
     // -- Class features: represented, not just text ------------------------
     {
       try {
@@ -24173,6 +24282,64 @@ for (const cls of Object.keys(rule)) for (let L = 1; L <= 20; L++) for (const sc
       } catch(e){ ok('round 360 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
       finally {
         if (saved){ B._tokens = keepT; B._fog = keepF; B._fogStrokes = keepS; B._gridOffsetX = keepG[0]; B._gridOffsetY = keepG[1]; try { B._renderTokens(); } catch(e){} }
+        paTab = keepTab; paRender();
+      }
+    }
+    // -- Round 362: on the phone, an emanation from the player's own creature (not a monster), and a line's width; the controls fit --
+    if (PLAYER){
+      const keepTab = paTab; const B = panelDefs.battlemap;
+      let keepT = null, keepD = null, keepF, fogSaved = false; const keepShape = B._tplShape, keepSize = B._tplSize, keepW = B._tplWidth;
+      try {
+        if (paMyIdx() < 0) paSetPc(state.party[0].id);
+        const me = paPc();
+        paTab = 'map'; paRender(); await sleep(900);
+        keepT = B._tokens.slice(); keepD = B._drawings.slice();
+        keepF = B._fog; fogSaved = true; B._fog = null;
+        const cs = B._csScreen();
+        const mine = { id: 'r362p', cid: me.id, label: me.name, x: 3.5 * cs, y: 3.5 * cs, size: 1, isPC: true };
+        const mon = { id: 'r362m', label: 'r362 Ogre', x: 6 * cs, y: 3 * cs, size: 2 };
+        B._tokens = [mine, mon]; B._drawings = []; B._renderTokens(); await sleep(60);
+        const scr = document.getElementById('pa-screen');
+        scr.querySelector('[data-pa-draw="tool-area"]').click(); await sleep(250);
+        const shapeB = scr.querySelector('.pa-area-ctl [data-pa-shape="aura"]');
+        ok('phone area tool: Emanation is a shape', !!shapeB);
+        shapeB.click(); await sleep(80);
+        const ctlR = scr.querySelector('.pa-area-ctl').getBoundingClientRect();
+        ok('…the controls stay on the screen', ctlR.left >= 0 && ctlR.right <= innerWidth + 1, Math.round(ctlR.left) + '..' + Math.round(ctlR.right) + ' of ' + innerWidth);
+        const tap = async (t) => {
+          const el = document.querySelector('#pa-screen .map-token[data-tid="' + t.id + '"]'); if (!el) return 'no element';
+          const r = el.getBoundingClientRect(), cx = r.left + r.width / 2, cy = r.top + r.height / 2;
+          const T = (x, y) => new Touch({ identifier: 9, target: el, clientX: x, clientY: y });
+          el.dispatchEvent(new TouchEvent('touchstart', { bubbles: true, cancelable: true, touches: [T(cx, cy)], targetTouches: [T(cx, cy)], changedTouches: [T(cx, cy)] }));
+          await sleep(20);
+          el.dispatchEvent(new TouchEvent('touchend', { bubbles: true, cancelable: true, touches: [], targetTouches: [], changedTouches: [T(cx, cy)] }));
+          document.dispatchEvent(new TouchEvent('touchend', { bubbles: true, cancelable: true, touches: [], targetTouches: [], changedTouches: [T(cx, cy)] }));
+          await sleep(80); document.querySelectorAll('.ctx-menu').forEach(e => e.remove());
+        };
+        await tap(mon);
+        ok('a player can’t tie an emanation to a monster', !B._areas().length, JSON.stringify(B._areas()));
+        await tap(mine);
+        const au = B._areas().find(a => a.shape === 'aura');
+        ok('…but can to their own character, and it is theirs', au && au.tok === 'r362p' && au.by === me.id, JSON.stringify(au));
+        // A line's width, from the phone
+        scr.querySelector('.pa-area-ctl [data-pa-shape="line"]').click(); await sleep(80);
+        const wb = scr.querySelector('.pa-area-ctl [data-pa-awidth="5"]');
+        ok('a line on the phone: a width control', !!wb);
+        if (wb) wb.click(); await sleep(80);
+        ok('…5 ft wider makes it 10', B._tplWidth === 10 && /10 ft/.test((scr.querySelector('.pa-area-w') || {}).textContent || ''));
+        const ctl2 = scr.querySelector('.pa-area-ctl').getBoundingClientRect();
+        ok('…and still fits the screen', ctl2.left >= 0 && ctl2.right <= innerWidth + 1, Math.round(ctl2.left) + '..' + Math.round(ctl2.right));
+        B._areaPointerDown(cs * 2, cs * 9, 100, 100, false); await sleep(10);
+        document.dispatchEvent(new MouseEvent('mouseup', { bubbles: true, clientX: 100, clientY: 100 })); await sleep(60);
+        const ln = B._areas().find(a => a.shape === 'line');
+        ok('…and the line laid is 10 ft wide', ln && ln.w === 10, JSON.stringify(ln));
+        ok('the width control is only for a line', (scr.querySelector('.pa-area-ctl [data-pa-shape="cone"]').click(), !scr.querySelector('.pa-area-ctl [data-pa-awidth]')));
+      } catch(e){ ok('round 362 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
+      finally {
+        if (fogSaved) B._fog = keepF;
+        if (keepT){ B._tokens = keepT; B._drawings = keepD; try { B._saveMap(); } catch(e){} }
+        B._tplShape = keepShape; B._tplSize = keepSize; B._tplWidth = keepW; B._tool = '';
+        document.querySelectorAll('.ctx-menu').forEach(e => e.remove());
         paTab = keepTab; paRender();
       }
     }

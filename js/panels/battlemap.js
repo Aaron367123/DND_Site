@@ -539,6 +539,8 @@ registerPanel('battlemap',{
     // _saveMap(), and hooking them individually would guarantee a missed one.
     // Snapshotting on commit also gets the granularity right for free: a fog
     // drag, a token drag and a pencil stroke each save once, at the end.
+    if (!document.body.classList.contains('player-mode') && (this._drawings || []).some(s => s && s.k === 'tpl' && s.shape === 'aura' && !(this._tokens || []).some(k => k.id === s.tok)))
+      this._drawings = this._drawings.filter(s => !(s && s.k === 'tpl' && s.shape === 'aura' && !(this._tokens || []).some(k => k.id === s.tok)));
     if (derived === true){ this._lastCommitted = this._undoSnapshot(); }
     else this._captureUndo();
     try{
@@ -2202,21 +2204,40 @@ registerPanel('battlemap',{
   // (half-angle atan ½), a line is 5 ft wide, a cube's point of origin is the
   // middle of one face. Sizes are FEET, converted with the map's own
   // ft-per-cell and cell spacing, so a 20 ft sphere is 4 squares on any map.
-  _tplShape: 'circle', _tplSize: 20, _tplColor: '#ff7a3d',
+  _tplShape: 'circle', _tplSize: 20, _tplWidth: 5, _tplColor: '#ff7a3d',
+  // An EMANATION (2024: Spirit Guardians, a paladin's aura) is tied to a
+  // creature: {shape:'aura', tok, ft}. It reaches ft feet out from the edge of
+  // that creature's space in every direction and moves when the creature does,
+  // so its outline is that space grown by ft — a square with rounded corners.
+  // The creature itself isn't in it unless whoever laid it says so (t.self).
+  _auraTok(t){
+    if (!t || t.shape !== 'aura') return null;
+    const k = (this._tokens || []).find(k => k.id === t.tok);
+    if (!k) return null;
+    const live = this._liveTok && this._liveTok.id === k.id ? this._liveTok : null;
+    return { tok: k, x: live ? live.x : k.x, y: live ? live.y : k.y, h: Math.max(1, Math.round(+k.size || 1)) * (this._tokenUnitScreen() || this._csScreen() || 50) / 2 };
+  },
   _ppf(){ return (this._tokenUnitScreen() || this._csScreen() || 50) / (this._ftPerCell || 5); },
   _areas(){ return (this._drawings || []).filter(s => s && s.k === 'tpl'); },
   _areaControlsHtml(){
     const opt = (v, l) => '<option value="' + v + '"' + (this._tplShape === v ? ' selected' : '') + '>' + l + '</option>';
     return '<select id="tpl-shape" title="Shape" style="width:78px;font-size:var(--fs-sm);padding:2px 4px;flex:0 0 auto">'
-        + opt('circle', 'Sphere') + opt('cone', 'Cone') + opt('line', 'Line') + opt('cube', 'Cube') + '</select>'
-      + '<input type="number" id="tpl-size" min="5" step="5" value="' + this._tplSize + '" style="width:52px;font-size:var(--fs-sm);padding:2px 4px;flex-shrink:0" title="Size in feet (radius for a sphere, length for a cone or line, side for a cube)">'
+        + opt('circle', 'Sphere') + opt('cone', 'Cone') + opt('line', 'Line') + opt('cube', 'Cube') + opt('aura', 'Emanation') + '</select>'
+      + '<input type="number" id="tpl-size" min="5" step="5" value="' + this._tplSize + '" style="width:52px;font-size:var(--fs-sm);padding:2px 4px;flex-shrink:0" title="Size in feet (radius for a sphere, length for a cone or line, side for a cube, how far an emanation reaches from its creature)">'
       + '<span class="bt-l" style="font-size:var(--fs-xs);color:var(--text-muted)">ft</span>'
+      // A line is 5 ft wide unless the spell says otherwise (Gust of Wind: 10).
+      + '<span id="tpl-wrap-w" style="display:' + (this._tplShape === 'line' ? 'inline-flex' : 'none') + ';align-items:center;gap:3px;flex-shrink:0">'
+      +   '<span style="font-size:var(--fs-xs);color:var(--text-muted)">width</span>'
+      +   '<input type="number" id="tpl-width" min="5" step="5" value="' + this._tplWidth + '" style="width:46px;font-size:var(--fs-sm);padding:2px 4px" title="How wide the line is, in feet">'
+      +   '<span style="font-size:var(--fs-xs);color:var(--text-muted)">ft</span>'
+      + '</span>'
       + '<input type="color" id="tpl-color" value="' + this._tplColor + '" style="width:24px;height:22px;padding:1px;border-radius:3px;flex-shrink:0;cursor:pointer" title="Colour">'
       + (this._areas().length ? '<button class="btn" data-mact="clear-areas" style="flex-shrink:0" title="Remove every area from the map">Clear areas</button>' : '');
   },
   // Outline in stage px: {circle:{x,y,r}} or {poly:[[x,y]…]}.
   _areaGeom(t){
     const L = (+t.ft || 0) * this._ppf();
+    if (t.shape === 'aura'){ const o = this._auraTok(t); return o ? { aura: { x: o.x, y: o.y, h: o.h, r: L } } : null; }
     if (t.shape === 'circle') return { circle: { x: t.x, y: t.y, r: L } };
     const a = +t.ang || 0, cos = Math.cos(a), sin = Math.sin(a);
     if (t.shape === 'cone'){
@@ -2225,7 +2246,7 @@ registerPanel('battlemap',{
         [t.x + L * Math.cos(a - h) / Math.cos(h), t.y + L * Math.sin(a - h) / Math.cos(h)],
         [t.x + L * Math.cos(a + h) / Math.cos(h), t.y + L * Math.sin(a + h) / Math.cos(h)]] };
     }
-    const w = (t.shape === 'cube' ? L : 5 * this._ppf()) / 2;   // half width
+    const w = (t.shape === 'cube' ? L : Math.max(1, +t.w || 5) * this._ppf()) / 2;   // half width
     const px = -sin * w, py = cos * w;                        // perpendicular
     return { poly: [[t.x + px, t.y + py], [t.x - px, t.y - py],
                     [t.x - px + cos * L, t.y - py + sin * L], [t.x + px + cos * L, t.y + py + sin * L]] };
@@ -2233,7 +2254,7 @@ registerPanel('battlemap',{
   // The far end of a directional area, where its turn handle sits. A sphere
   // has no direction, so it has no handle — you move it and that is all.
   _areaHandle(t){
-    if (!t || t.shape === 'circle') return null;
+    if (!t || t.shape === 'circle' || t.shape === 'aura') return null;
     const L = (+t.ft || 0) * this._ppf(), a = +t.ang || 0;
     return { x: t.x + Math.cos(a) * L, y: t.y + Math.sin(a) * L };
   },
@@ -2244,7 +2265,9 @@ registerPanel('battlemap',{
   },
   _inArea(t, x, y){
     const g = this._areaGeom(t);
+    if (!g) return false;
     if (g.circle) return Math.hypot(x - g.circle.x, y - g.circle.y) <= g.circle.r;
+    if (g.aura) return Math.hypot(Math.max(0, Math.abs(x - g.aura.x) - g.aura.h), Math.max(0, Math.abs(y - g.aura.y) - g.aura.h)) <= g.aura.r + 0.5;
     let inside = false;
     for (let i = 0, j = g.poly.length - 1; i < g.poly.length; j = i++){
       const [xi, yi] = g.poly[i], [xj, yj] = g.poly[j];
@@ -2254,7 +2277,12 @@ registerPanel('battlemap',{
   },
   _areaSvg(t, extra){
     const g = this._areaGeom(t), c = t.c || '#ff7a3d';
+    if (!g) return '';
     const style = 'fill="' + c + '" fill-opacity=".22" stroke="' + c + '" stroke-width="' + Math.max(1.5, 2 / (this._screenScale ? (this._screenScale() || 1) : 1)) + '" ' + (extra || '');
+    if (g.aura){
+      const a = g.aura, e = a.h + a.r;
+      return '<rect x="' + (a.x - e).toFixed(1) + '" y="' + (a.y - e).toFixed(1) + '" width="' + (2 * e).toFixed(1) + '" height="' + (2 * e).toFixed(1) + '" rx="' + a.r.toFixed(1) + '" ' + style + '/>';
+    }
     return g.circle
       ? '<circle cx="' + g.circle.x + '" cy="' + g.circle.y + '" r="' + g.circle.r + '" ' + style + '/>'
       : '<polygon points="' + g.poly.map(p => p[0].toFixed(1) + ',' + p[1].toFixed(1)).join(' ') + '" ' + style + '/>';
@@ -2291,6 +2319,7 @@ registerPanel('battlemap',{
   // creature with half its space in a fireball was left out of the saves.
   _tokenInArea(a, tok){
     if (!tok || tok.x == null) return false;
+    if (a.shape === 'aura' && tok.id === a.tok && !a.self) return false;   // its own creature, unless chosen
     const s = Math.max(1, Math.round(+tok.size || 1));
     if (s === 1) return this._inArea(a, tok.x, tok.y);
     const u = this._tokenUnitScreen() || this._csScreen() || 50;
@@ -2318,19 +2347,55 @@ registerPanel('battlemap',{
   // something anyone wants — a template is a thing you shuffle around the
   // board looking for the best angle, so shuffling it is the common case and
   // adding another is the rare one.
-  _areaPointerDown(x, y, cx, cy, touch){
+  // `from` is the token pressed, when the press landed on one: with the Area
+  // tool up a creature is where an area STARTS (Burning Hands from the
+  // wizard, a Fireball on the ogre), the way it is where the ruler starts —
+  // it used to be dragged off instead. A cone, line or cube leaves from the
+  // edge of its space, toward the drag; a sphere is centred on it; an
+  // emanation is tied to it.
+  _areaPointerDown(x, y, cx, cy, touch, from){
     // A player handles only the areas they laid (t.by), never the DM's.
     const isPlayer = document.body.classList.contains('player-mode');
     const me = isPlayer && typeof paPc === 'function' ? paPc() : null;
-    const stack = this._areas().slice().reverse().filter(t => !isPlayer || (me && t.by === me.id));
-    const turning = stack.find(t => this._nearHandle(t, x, y));
-    const hit = turning || stack.find(t => this._inArea(t, x, y));
     const shape = (this._body.querySelector('#tpl-shape') || {}).value || this._tplShape;
     const ft = Math.max(5, parseInt((this._body.querySelector('#tpl-size') || {}).value, 10) || this._tplSize);
+    const wd = Math.max(5, parseInt((this._body.querySelector('#tpl-width') || {}).value, 10) || this._tplWidth || 5);
     const col = (this._body.querySelector('#tpl-color') || {}).value || this._tplColor;
-    this._tplShape = shape; this._tplSize = ft; this._tplColor = col;
+    this._tplShape = shape; this._tplSize = ft; this._tplWidth = wd; this._tplColor = col;
+    // An emanation goes with its creature and isn't dragged on its own, so it
+    // only catches a press while emanations are what's being laid — otherwise
+    // a fireball dropped inside a paladin's aura would open the aura's menu.
+    const stack = this._areas().slice().reverse().filter(t => (!isPlayer || (me && t.by === me.id)) && (t.shape !== 'aura' || shape === 'aura'));
+    const turning = stack.find(t => this._nearHandle(t, x, y));
+    let hit = turning || (from && shape === 'aura'
+      ? stack.find(t => t.shape === 'aura' && t.tok === from.id && +t.ft === ft)   // the same one again: its menu
+      : stack.find(t => this._inArea(t, x, y) && !(from && t.shape === 'aura')));
     const draft = { k: 'tpl', id: 'tpl_' + (typeof uid === 'function' ? uid() : Date.now().toString(36)), shape, x, y, ang: 0, ft, c: col };
+    if (shape === 'line' && wd !== 5) draft.w = wd;
     if (me) draft.by = me.id;
+    if (shape === 'aura' && !hit){
+      // On a creature: tied to it (a player, to their own or their companion's).
+      if (!from || (isPlayer && !(typeof sktPlayerMayMoveToken === 'function' && sktPlayerMayMoveToken(from)))){
+        if (!from && typeof showToast === 'function') showToast('An emanation comes from a creature: press its token.');
+        return;
+      }
+      draft.tok = from.id; draft.x = from.x; draft.y = from.y;
+      this._drawings.push(draft);
+      this._saveMap();
+      this._renderAreas();
+      return;
+    }
+    // From a creature's space: where its edge meets the line toward (qx, qy).
+    const edge = from && shape !== 'circle' ? (qx, qy) => {
+      const h = Math.max(1, Math.round(+from.size || 1)) * (this._tokenUnitScreen() || this._csScreen() || 50) / 2;
+      const a = Math.atan2(qy - from.y, qx - from.x), c = Math.cos(a), s = Math.sin(a);
+      const d = h / Math.max(Math.abs(c), Math.abs(s), 1e-6);
+      return { x: from.x + c * d, y: from.y + s * d, ang: a };
+    } : null;
+    if (from && !hit){
+      if (edge){ const e0 = edge(from.x + 1, from.y); draft.x = e0.x; draft.y = e0.y; }
+      else { draft.x = from.x; draft.y = from.y; }
+    }
     const stage = this._body.querySelector('#map-stage');
     // Where the pressed area sat when the press landed, so a move follows the
     // finger instead of jumping the shape's origin under it.
@@ -2344,13 +2409,15 @@ registerPanel('battlemap',{
       if (Math.hypot(p.clientX - cx, p.clientY - cy) > 6) moved = true;
       if (ev.cancelable) ev.preventDefault();
       if (hit && moved){
+        if (hit.shape === 'aura') return;   // it goes where its creature goes
         if (turning) hit.ang = Math.atan2(q.y - hit.y, q.x - hit.x);
         else { hit.x = was.x + (q.x - x); hit.y = was.y + (q.y - y); }
         this._renderAreas();
         return;
       }
       if (hit) return;
-      if (shape !== 'circle') draft.ang = Math.atan2(q.y - y, q.x - x);
+      if (edge){ const e1 = edge(q.x, q.y); draft.x = e1.x; draft.y = e1.y; draft.ang = e1.ang; }
+      else if (shape !== 'circle') draft.ang = Math.atan2(q.y - y, q.x - x);
       else { draft.x = q.x; draft.y = q.y; }
       this._renderAreas(draft);
     };
@@ -2360,7 +2427,7 @@ registerPanel('battlemap',{
       if (touch) document.removeEventListener('touchcancel', up);
       this._areaDragging = false;
       if (hit){
-        if (!moved){ this._renderAreas(); this._areaMenu(hit, cx, cy); return; }
+        if (!moved || hit.shape === 'aura'){ this._renderAreas(); this._areaMenu(hit, cx, cy); return; }
         this._saveMap();
         this._renderAreas();
         return;
@@ -2386,7 +2453,15 @@ registerPanel('battlemap',{
         return c ? c.id : null;
       }).filter(Boolean);
       items.push({ label: '💥 Roll saves for the ' + ids.length + ' creature' + (ids.length === 1 ? '' : 's') + ' inside', disabled: !ids.length,
-        onClick: () => panelDefs.combat.openAreaSave({ targets: ids, name: t.ft + ' ft ' + ({circle:'sphere'}[t.shape] || t.shape) }) });
+        onClick: () => panelDefs.combat.openAreaSave({ targets: ids, name: t.ft + ' ft ' + ({circle:'sphere', aura:'emanation'}[t.shape] || t.shape) }) });
+    }
+    const o = this._auraTok(t);
+    if (o){
+      const nm = o.tok.label || 'the creature';
+      items.push({ label: t.self ? '◌ Leave ' + nm + ' out of it' : '◉ Count ' + nm + ' in it too', onClick: () => {
+        if (t.self) delete t.self; else t.self = true;
+        this._saveMap(); this._renderAreas();
+      }});
     }
     items.push({ label: '✕ Remove this area', onClick: () => {
       this._drawings = this._drawings.filter(s => s !== t && !(s && s.k === 'tpl' && s.id === t.id));
@@ -3092,7 +3167,7 @@ registerPanel('battlemap',{
         +'<option value="16"'+(this._drawSize===16?' selected':'')+'>Huge</option>'
       +'</select>' : '')
       +'<button class="btn '+(this._tool==='erase'?'active':'')+'" data-mact="tool-erase" title="Erase drawings">'+ICO('i-trash')+'<span class="bt-l">Erase</span></button>'
-      +'<button class="btn '+(this._tool==='area'?'active':'')+'" data-mact="tool-area" title="Area of effect — drop a sphere, cone, line or cube on the map. Drag one to move it, drag its dot to turn it.">◎<span class="bt-l">Area</span></button>'
+      +'<button class="btn '+(this._tool==='area'?'active':'')+'" data-mact="tool-area" title="Area of effect — drop a sphere, cone, line or cube on the map, or press a creature to start it there; an emanation goes round a creature and moves with it. Drag an area to move it, drag its dot to turn it.">◎<span class="bt-l">Area</span></button>'
       +'<button class="btn '+(this._tool==='ruler'?'active':'')+'" data-mact="tool-ruler" title="Ruler — drag across the map to measure a distance">'+ICO('i-ruler')+'<span class="bt-l">Ruler</span></button>'
       +(this._tool==='area' ? this._areaControlsHtml() : '')
       // Zoom — the bg-scale slider + % display + Fit, only when a map is loaded.
@@ -3122,7 +3197,7 @@ registerPanel('battlemap',{
         +'<option value="8"'+(this._drawSize===8?' selected':'')+'>Thick</option>'
         +'<option value="16"'+(this._drawSize===16?' selected':'')+'>Huge</option>'
       +'</select>' : '')
-      +'<button class="btn '+(this._tool==='area'?'active':'')+'" data-mact="tool-area" title="Area of effect — drop a sphere, cone, line or cube on the map. Drag one to move it, drag its dot to turn it.">◎<span class="bt-l">Area</span></button>'
+      +'<button class="btn '+(this._tool==='area'?'active':'')+'" data-mact="tool-area" title="Area of effect — drop a sphere, cone, line or cube on the map, or press a creature to start it there; an emanation goes round a creature and moves with it. Drag an area to move it, drag its dot to turn it.">◎<span class="bt-l">Area</span></button>'
       +'<button class="btn '+(this._tool==='ruler'?'active':'')+'" data-mact="tool-ruler" title="Ruler — drag across the map to measure a distance">'+ICO('i-ruler')+'<span class="bt-l">Ruler</span></button>'
       +(this._tool==='area' ? this._areaControlsHtml() : '')
       // Fog cluster — only the toggle is visible by default. When fog is on,
@@ -3290,6 +3365,11 @@ registerPanel('battlemap',{
     // Draw canvas needs to receive clicks for the pencil AND for the eraser
     // (to remove strokes). Other tools/no-tool let clicks pass through.
     drawCanvas.style.pointerEvents = (this._tool === 'draw' || this._tool === 'erase' || this._tool === 'area' || this._tool === 'ruler') ? 'auto' : 'none';
+    const tplSel = this._body.querySelector('#tpl-shape');
+    if (tplSel) tplSel.onchange = () => {
+      this._tplShape = tplSel.value;
+      const w = this._body.querySelector('#tpl-wrap-w'); if (w) w.style.display = tplSel.value === 'line' ? 'inline-flex' : 'none';
+    };
     // A redraw (another device moved a token) rebuilds the stage: the ruler's
     // line comes back rather than vanishing under the player's finger.
     if (this._tool === 'ruler' && this._rulerLast) setTimeout(() => { if (this._tool === 'ruler' && this._rulerLast) this._measureShow(...this._rulerLast); }, 0);
@@ -5625,6 +5705,7 @@ registerPanel('battlemap',{
         // With the ruler out, a token is where a measurement starts, not
         // something to move.
         if (this._tool === 'ruler'){ this._rulerDrag(t.x, t.y, false); return; }
+        if (this._tool === 'area'){ const p = this._stagePoint(e.clientX, e.clientY, stage); this._areaPointerDown(p.x, p.y, e.clientX, e.clientY, false, t); return; }
         // A player moves (or rubs out) only what is theirs.
         if (isPlayer && !sktPlayerMayMoveToken(t)) return;
 
@@ -5674,6 +5755,7 @@ registerPanel('battlemap',{
           curPy = this._drag.startPy + dy;
           el.style.left=curPx+'px';
           el.style.top=curPy+'px';
+          this._auraFollow(t, curPx, curPy);
           this._measureMove(t, this._drag.startPx, this._drag.startPy, curPx, curPy);
           this._broadcastTokenTick(t.id, curPx, curPy);
         };
@@ -5681,6 +5763,7 @@ registerPanel('battlemap',{
         const onUp=ev=>{
           document.removeEventListener('mousemove',onMove);
           document.removeEventListener('mouseup',onUp);
+          this._liveTok = null;
           if (moved) this._broadcastTokenEnd();
           if (moved && this._tool !== 'ruler') this._measureLinger();
           if(moved){
@@ -5734,6 +5817,7 @@ registerPanel('battlemap',{
         const touch = e.touches[0];
 
         if (this._tool === 'ruler'){ this._rulerDrag(t.x, t.y, true); return; }
+        if (this._tool === 'area'){ const p = this._stagePoint(touch.clientX, touch.clientY, stage); this._areaPointerDown(p.x, p.y, touch.clientX, touch.clientY, true, t); return; }
         if (isPlayer && !sktPlayerMayMoveToken(t)) return;
 
         if(this._tool==='erase'){
@@ -5786,11 +5870,13 @@ registerPanel('battlemap',{
           curPy = this._drag.startPy + dy;
           el.style.left = curPx+'px';
           el.style.top  = curPy+'px';
+          this._auraFollow(t, curPx, curPy);
           this._measureMove(t, this._drag.startPx, this._drag.startPy, curPx, curPy);
           this._broadcastTokenTick(t.id, curPx, curPy);
         };
         const onEnd = ev => {
           clearTimeout(longPressTimer);
+          this._liveTok = null;
           document.removeEventListener('touchmove', onMove);
           document.removeEventListener('touchend', onEnd);
           document.removeEventListener('touchcancel', onEnd);
@@ -5839,7 +5925,14 @@ registerPanel('battlemap',{
     });
     stage.appendChild(frag);
     this._fitTokenNames();
-    this._markTokensInAreas();
+    // Emanations are drawn round their tokens, so they are redrawn with them.
+    if (this._areas().some(a => a.shape === 'aura')) this._renderAreas(); else this._markTokensInAreas();
+  },
+  // Mid-drag, before the token's position is saved: its emanation keeps up.
+  _auraFollow(t, x, y){
+    if (!this._areas().some(a => a.shape === 'aura' && a.tok === t.id)) return;
+    this._liveTok = { id: t.id, x, y };
+    this._renderAreas();
   },
 
   _showPanel(t){

@@ -1004,16 +1004,19 @@ const PA_DRAW = [
   { act:'tool-area',  icon:'i-burst',  label:'Area',  tool:'area'  },
   { act:'undo',       icon:'i-undo',   label:'Undo'                },
 ];
-const PA_AREA_SHAPES = [['circle', 'Sphere'], ['cone', 'Cone'], ['line', 'Line'], ['cube', 'Cube']];
-// Shape and size of the next area: kept on the panel, and in its own
-// (hidden) toolbar controls, which the area tool reads.
-function paAreaSet(shape, dSize){
+// An emanation is laid by pressing the creature it comes from.
+const PA_AREA_SHAPES = [['circle', 'Sphere'], ['cone', 'Cone'], ['line', 'Line'], ['cube', 'Cube'], ['aura', 'Emanation']];
+// Shape, size and (a line's) width of the next area: kept on the panel, and
+// in its own (hidden) toolbar controls, which the area tool reads.
+function paAreaSet(shape, dSize, dWidth){
   const B = panelDefs.battlemap; if (!B) return;
   if (shape) B._tplShape = shape;
   if (dSize) B._tplSize = Math.max(5, Math.min(300, (+B._tplSize || 20) + dSize));
-  const sel = document.querySelector('.pa-mount #tpl-shape'), sz = document.querySelector('.pa-mount #tpl-size');
+  if (dWidth) B._tplWidth = Math.max(5, Math.min(60, (+B._tplWidth || 5) + dWidth));
+  const sel = document.querySelector('.pa-mount #tpl-shape'), sz = document.querySelector('.pa-mount #tpl-size'), wd = document.querySelector('.pa-mount #tpl-width');
   if (sel) sel.value = B._tplShape;
   if (sz) sz.value = B._tplSize;
+  if (wd) wd.value = B._tplWidth || 5;
   const host = document.getElementById('pa-screen');
   const old = host && host.querySelector('.pa-draw');
   if (old) old.remove();
@@ -1048,9 +1051,13 @@ function paAddDrawBar(host){
     ctl.className = 'pa-draw-sizes pa-area-ctl';
     ctl.setAttribute('role', 'group');
     ctl.setAttribute('aria-label', 'Area shape and size');
-    const cur = B._tplShape || 'circle', ft = +B._tplSize || 20;
-    ctl.innerHTML = PA_AREA_SHAPES.map(([v, l]) => `<button class="pa-area-b ${cur === v ? 'on' : ''}" data-pa-shape="${v}" aria-pressed="${cur === v}">${l}</button>`).join('')
-      + `<button class="pa-area-b" data-pa-asize="-5" aria-label="5 ft smaller">−</button><b class="pa-area-ft">${ft} ft</b><button class="pa-area-b" data-pa-asize="5" aria-label="5 ft bigger">+</button>`;
+    const cur = B._tplShape || 'circle', ft = +B._tplSize || 20, wd = +B._tplWidth || 5;
+    // Two rows: five shapes don't fit a phone beside the size.
+    ctl.innerHTML = '<div class="pa-area-row">' + PA_AREA_SHAPES.map(([v, l]) => `<button class="pa-area-b ${cur === v ? 'on' : ''}" data-pa-shape="${v}" aria-pressed="${cur === v}">${l}</button>`).join('') + '</div>'
+      + `<div class="pa-area-row"><button class="pa-area-b" data-pa-asize="-5" aria-label="5 ft smaller">−</button><b class="pa-area-ft">${ft} ft</b><button class="pa-area-b" data-pa-asize="5" aria-label="5 ft bigger">+</button>`
+      + (cur === 'line' ? `<span class="pa-area-l">width</span><button class="pa-area-b" data-pa-awidth="-5" aria-label="5 ft narrower">−</button><b class="pa-area-ft pa-area-w">${wd} ft</b><button class="pa-area-b" data-pa-awidth="5" aria-label="5 ft wider">+</button>` : '')
+      + (cur === 'aura' ? '<span class="pa-area-l">press a creature</span>' : '')
+      + '</div>';
     bar.appendChild(ctl);
   }
   host.appendChild(bar);
@@ -2297,6 +2304,8 @@ function paOnClick(e){
   if (ashape){ paAreaSet(ashape.dataset.paShape, 0); return; }
   const asize = e.target.closest('[data-pa-asize]');
   if (asize){ paAreaSet(null, +asize.dataset.paAsize); return; }
+  const awidth = e.target.closest('[data-pa-awidth]');
+  if (awidth){ paAreaSet(null, 0, +awidth.dataset.paAwidth); return; }
   const draw = e.target.closest('[data-pa-draw]');
   if (draw){ paDraw(draw.dataset.paDraw); return; }
   const react = e.target.closest('[data-pa-react]');

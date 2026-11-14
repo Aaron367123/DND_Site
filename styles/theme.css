@@ -849,7 +849,10 @@ input[type="checkbox"], input[type="radio"] { accent-color: var(--accent); }
 .pa-draw-sz i { display: block; border-radius: 50%; box-shadow: 0 0 0 1px rgba(0,0,0,.35); }
 .pa-draw-sz.on { border-color: var(--accent); background: color-mix(in srgb, var(--accent) 16%, transparent); }
 /* The area tool's shape and size, in the same pill above the bar. */
-.pa-area-ctl { align-items: center; white-space: nowrap; }
+.pa-area-ctl { flex-direction: column; align-items: center; white-space: nowrap; border-radius: 18px; }
+.pa-area-row { display: flex; align-items: center; justify-content: center; gap: 2px; }
+.pa-area-l { font-size: var(--fs-xs); color: var(--text-muted); padding: 0 4px 0 8px; }
+@media (max-width: 440px){ .pa-area-b { padding: 0 7px; } }
 .pa-area-b { min-height: 40px; padding: 0 10px; border-radius: var(--r-pill); border: 1px solid transparent;
   background: none; color: var(--text-muted); font: inherit; font-size: var(--fs-sm); cursor: pointer; }
 .pa-area-b.on { border-color: var(--accent); color: var(--text); background: color-mix(in srgb, var(--accent) 16%, transparent); }
@@ -893,6 +896,7 @@ body.player-app #toast-host { left: 50%; right: auto; transform: translateX(-50%
 /* On the phone's map, above its tools rather than on them. */
 body.player-app:has(#pa-screen .pa-draw) #toast-host { bottom: calc(150px + env(safe-area-inset-bottom, 0px)); }
 body.player-app:has(#pa-screen .pa-draw-sizes) #toast-host { bottom: calc(206px + env(safe-area-inset-bottom, 0px)); }
+body.player-app:has(#pa-screen .pa-area-ctl) #toast-host { bottom: calc(252px + env(safe-area-inset-bottom, 0px)); }
 body.player-app .toast-item.note, body.player-app .toast-item.action { background: var(--panel); }
 
 /* ── 41. Manage spells: rows you can read ────────────────── */
