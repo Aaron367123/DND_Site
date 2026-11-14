@@ -22430,8 +22430,9 @@ for (const cls of Object.keys(rule)) for (let L = 1; L <= 20; L++) for (const sc
         const blob = await new Promise(r => c.toBlob(r, type || 'image/png', .9));
         return new File([blob], name, { type: type || 'image/png' });
       };
-      const lastToast = () => { const t = [...document.querySelectorAll('#toast-host .toast-item')].pop(); return t; };
-      const upload = async file => { document.querySelectorAll('#toast-host .toast-item').forEach(t => t.remove()); B._useImageFile(file); for (let i = 0; i < 60; i++){ await sleep(100); const t = lastToast(); if (t && /Grid matched|No squares/.test(t.textContent)) break; } };
+      // (the grid's own message, by what it says: under load the sharing message can land after it)
+      const lastToast = () => [...document.querySelectorAll('#toast-host .toast-item')].filter(t => /Grid matched|No squares/.test(t.textContent)).pop();
+      const upload = async file => { document.querySelectorAll('#toast-host .toast-item').forEach(t => t.remove()); B._useImageFile(file); for (let i = 0; i < 120; i++){ await sleep(100); if (lastToast()) break; } };
       try {
         openPanel('battlemap'); await sleep(600);
         keepT = B._tokens.slice(); keepD = B._drawings.slice();
@@ -22479,6 +22480,78 @@ for (const cls of Object.keys(rule)) for (let L = 1; L <= 20; L++) for (const sc
         try { B._render(); } catch(e){}
         closePanel('battlemap');
       }
+    }
+    // -- Round 392: an upload that couldn't reach the players says so with Try again, which shares it --
+    {
+      const B = panelDefs.battlemap;
+      const S0 = localStorage.getItem('skt-battlemap-v1'), P0 = B._bgMapPath, I0 = _mapBgImage, W0 = B._bgMapNaturalW, H0 = B._bgMapNaturalH;
+      const putReal = window.sktMapBlobPut, readyReal = window.sktMapBlobReady, retireReal = B._retireBlob;
+      const keep = { cs: B._cellSize, ox: B._gridOffsetX, oy: B._gridOffsetY, cols: B._cols, rows: B._rows, sc: B._bgMapScale, lts: B._lastTokenScale, size: B._bgMapSize };
+      let keepT = null, keepD = null, keepF, fogSaved = false;
+      try {
+        openPanel('battlemap'); await sleep(600);
+        keepT = B._tokens.slice(); keepD = B._drawings.slice(); keepF = B._fog; fogSaved = true;
+        B._tokens = []; B._drawings = []; B._fog = null;
+        B._retireBlob = () => {};
+        let up = false, puts = 0;
+        window.sktMapBlobPut = () => { puts++; return Promise.resolve(up); }; window.sktMapBlobReady = () => up;
+        document.querySelectorAll('#toast-host .toast-item').forEach(t => t.remove());
+        const c = document.createElement('canvas'); c.width = 900; c.height = 600;
+        const g = c.getContext('2d'); g.fillStyle = '#556b2f'; g.fillRect(0, 0, 900, 600);
+        const blob = await new Promise(r => c.toBlob(r, 'image/png'));
+        B._useImageFile(new File([blob], 'r392-glade.png', { type: 'image/png' }));
+        let fail = null;
+        for (let i = 0; i < 50 && !fail; i++){ await sleep(100); fail = [...document.querySelectorAll('#toast-host .toast-item')].find(t => /Could not send the map/.test(t.textContent)); }
+        ok('an upload that can’t reach the players says so, with Try again', !!fail && /Try again/.test((fail.querySelector('button') || {}).textContent || '') && !B._bgMapPath && puts === 1, fail && fail.textContent);
+        // (pressed a moment later, as a person would: after the grid's own message)
+        for (let i = 0; i < 30 && ![...document.querySelectorAll('#toast-host .toast-item')].some(t => /Grid matched|No squares/.test(t.textContent)); i++) await sleep(100);
+        up = true;
+        if (fail) fail.querySelector('button').click();
+        for (let i = 0; i < 50 && !/^sktblob:/.test(B._bgMapPath || ''); i++) await sleep(100);
+        await sleep(400);
+        ok('…Try again sends it: the players have it', /^sktblob:/.test(B._bgMapPath || '') && puts === 2 && [...document.querySelectorAll('#toast-host .toast-item')].some(t => /Map shared/.test(t.textContent)), JSON.stringify([B._bgMapPath, puts, [...document.querySelectorAll('#toast-host .toast-item')].map(t => t.textContent)]));
+      } catch(e){ ok('round 392 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
+      finally {
+        document.querySelectorAll('#toast-host .toast-item').forEach(t => t.remove());
+        window.sktMapBlobPut = putReal; window.sktMapBlobReady = readyReal; B._retireBlob = retireReal;
+        if (fogSaved) B._fog = keepF;
+        B._cellSize = keep.cs; B._gridOffsetX = keep.ox; B._gridOffsetY = keep.oy; B._cols = keep.cols; B._rows = keep.rows; B._bgMapScale = keep.sc; B._lastTokenScale = keep.lts; B._bgMapSize = keep.size;
+        _mapBgImage = I0; B._bgMapPath = P0; B._bgMapNaturalW = W0; B._bgMapNaturalH = H0;
+        if (keepT){ B._tokens = keepT; B._drawings = keepD; }
+        if (S0 != null) localStorage.setItem('skt-battlemap-v1', S0);
+        try { B._render(); } catch(e){}
+        closePanel('battlemap');
+      }
+    }
+    // -- Round 393: grid matching on maps as they come — a WebP, an 8000 px photo with big squares, a small PNG, one with no grid; a picture this browser can't open --
+    {
+      const B = panelDefs.battlemap;
+      try {
+        let sd = 11; const rnd = () => (sd = (sd * 16807) % 2147483647) / 2147483647;
+        const mk = async (w, h, type, grid) => {
+          const c = document.createElement('canvas'); c.width = w; c.height = h; const g = c.getContext('2d');
+          g.fillStyle = '#5a4a3a'; g.fillRect(0, 0, w, h);
+          for (let i = 0; i < 4000; i++){ g.fillStyle = 'hsla(' + (rnd() * 60 + 20) + ',30%,' + (25 + rnd() * 30) + '%,.5)'; g.fillRect(rnd() * w, rnd() * h, 10 + rnd() * 40, 10 + rnd() * 40); }
+          if (grid){ g.strokeStyle = 'rgba(0,0,0,.6)'; g.lineWidth = 2; for (let x = 10; x < w; x += grid){ g.beginPath(); g.moveTo(x, 0); g.lineTo(x, h); g.stroke(); } for (let y = 10; y < h; y += grid){ g.beginPath(); g.moveTo(0, y); g.lineTo(w, y); g.stroke(); } }
+          const img = new Image(); await new Promise(r => { img.onload = r; img.src = c.toDataURL(type, 0.9); }); return img;
+        };
+        const got = [];
+        for (const [w, h, t, gsz] of [[2400, 1600, 'image/webp', 80], [8000, 6000, 'image/jpeg', 150], [1500, 1000, 'image/png', 50], [1600, 1200, 'image/jpeg', 0]]){
+          const R = sktDetectGrid(await mk(w, h, t, gsz)); got.push([t, gsz, R && +R.size.toFixed(2)]);
+        }
+        const near = (v, want) => v != null && Math.abs(v - want) / want < 0.005;
+        ok('grid matching: an 80 px grid on a WebP (not three squares at once)', near(got[0][2], 80), JSON.stringify(got));
+        ok('…150 px squares on an 8000 px photo (not two at once)', near(got[1][2], 150), JSON.stringify(got));
+        ok('…50 px squares on a small PNG', near(got[2][2], 50), JSON.stringify(got));
+        ok('…and none on a picture with no grid', got[3][2] === null, JSON.stringify(got));
+        // A picture this browser can't open
+        document.querySelectorAll('#toast-host .toast-item').forEach(t => t.remove());
+        const I0 = _mapBgImage;
+        B._useImageFile(new File(['not a picture'], 'IMG_0412.HEIC', { type: 'image/heic' }));
+        let tt = null; for (let i = 0; i < 30 && !tt; i++){ await sleep(100); tt = [...document.querySelectorAll('#toast-host .toast-item')].find(t => /HEIC|Could not open/.test(t.textContent)); }
+        ok('an iPhone HEIC picture: says to save it as JPG or PNG, and the map stays', !!tt && /HEIC/.test(tt.textContent) && /JPG or PNG/.test(tt.textContent) && _mapBgImage === I0, tt && tt.textContent);
+      } catch(e){ ok('round 393 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
+      finally { document.querySelectorAll('#toast-host .toast-item').forEach(t => t.remove()); }
     }
     // -- Class features: represented, not just text ------------------------
     {

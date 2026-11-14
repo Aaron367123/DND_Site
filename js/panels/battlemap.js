@@ -13,8 +13,9 @@ let _mapBgImage = null; // holds the Image object
 // at fractional spacings round it. Measured on 120 of the adventures' maps
 // with their known grids: when it answers (its thresholds below), the printed
 // grid or a whole multiple of the listed one — some listings count three
-// printed squares as one — far more often than not; on maps with no printed
-// grid it finds texture, so the caller shows what it found, with Undo.
+// printed squares as one — far more often than not (61 answered of 120: 28
+// the listed grid, 27 a multiple, 6 wrong); on maps with no printed grid it
+// can find texture, so the caller shows what it found, with Undo.
 // Returns { size, ox, oy } in the picture's own pixels, or null.
 function sktDetectGrid(img){
   const W0 = img && img.naturalWidth, H0 = img && img.naturalHeight;
@@ -55,12 +56,12 @@ function sktDetectGrid(img){
       if (P < minP) continue;
       const B = Math.max(8, Math.round(P * 4)), bins = new Float64Array(B), cnt = new Float64Array(B);
       for (let i = 0; i < n; i++){ const b = Math.floor((i % P) / P * B) % B; bins[b] += s[i]; cnt[b]++; }
-      const span = Math.max(1, Math.round(B / P * 1.5));
+      const span = Math.max(1, Math.round(B / P * 2.5));   // a line's width and then some, so a smeared one counts in full
       let mb = 0, mi = 0;
       for (let b = 0; b < B; b++){ let v = 0, c2 = 0; for (let t = 0; t < span; t++){ const q = (b + t) % B; v += bins[q]; c2 += cnt[q]; } const val = c2 ? v / c2 : 0; if (val > mb){ mb = val; mi = b + span / 2; } }
-      if (!top || mb > top.mb) top = { mb, P, ph: (mi / B) * P };
+      if (!top || mb > top.mb) top = { mb, P, ph: (mi / B) * P, bins, cnt, B };
     }
-    return top && { p: top.P, ph: top.ph % top.P, sharp: top.mb / mean, n: n / top.P };
+    return top && { p: top.P, ph: top.ph % top.P, sharp: top.mb / mean, n: n / top.P, mb: top.mb, bins: top.bins, cnt: top.cnt, B: top.B };
   };
   // Do the found lines stand out in each sixth of the map, not just overall?
   // (Texture repeats in patches; a printed grid runs everywhere.)
@@ -85,14 +86,32 @@ function sktDetectGrid(img){
   let best = -1, bl = 0;
   for (let q = minP; q <= maxP; q++) if (Rr[q] > Rr[q - 1] && Rr[q] >= Rr[q + 1] && Rr[q] > best){ best = Rr[q]; bl = q; }
   if (!bl) return null;
-  // The spacing itself, not a multiple of it: a strong peak at a whole fraction.
-  for (let dv = 5; dv >= 2; dv--){
-    const q = Math.round(bl / dv); if (q < minP) continue;
-    let m = 0; for (let t = q - 1; t <= q + 1; t++) if (t >= minP && Rr[t] > m) m = Rr[t];
-    if (m >= 0.8 * best){ bl = q; break; }
+  // The spacing itself, not a multiple of it. Folded at the strongest
+  // repeat, a printed grid has a line at every one of its squares' places in
+  // it; a fraction that isn't the grid puts some of those places on bare
+  // floor. So: the smallest whole fraction with a line at every place. (A
+  // line can be smeared, where the spacing isn't a whole number of pixels
+  // after shrinking — 150 px squares on an 8000 px photo stood at a third of
+  // the crisp ones — but bare floor stands at about nothing.)
+  const fx = fold(hx, bl), fy = fold(hy, bl);
+  if (!fx || !fy) return null;
+  const at = (f, pos) => {
+    const { bins, cnt, B, p } = f, c0 = Math.round(((pos % p) + p) % p / p * B), half = Math.max(1, Math.round(B / p * 1.25));
+    let v = 0, c2 = 0; for (let t = -half; t <= half; t++){ const q = ((c0 + t) % B + B) % B; v += bins[q]; c2 += cnt[q]; }
+    return c2 ? (v / c2) / f.mb : 0;
+  };
+  // Bare floor sits at about 1/sharpness of a line; a line well above it.
+  const floorBar = Math.max(0.2, 2.5 / Math.min(fx.sharp, fy.sharp));
+  let dvBest = 1;
+  for (let dv = 12; dv >= 2; dv--){
+    if (bl / dv < minP) continue;
+    let worst = 1;
+    for (const f of [fx, fy]) for (let j = 1; j < dv; j++) worst = Math.min(worst, at(f, f.ph + j * f.p / dv));
+    if (worst >= floorBar){ dvBest = dv; break; }
   }
-  const ax = fold(hx, bl), ay = fold(hy, bl);
-  if (!ax || !ay) return null;
+  const pick = dvBest === 1 ? { a: fx, b: fy } : { a: fold(hx, fx.p / dvBest), b: fold(hy, fy.p / dvBest) };
+  if (!pick.a || !pick.b) return null;
+  const ax = pick.a, ay = pick.b;
   if (Math.abs(ax.p - ay.p) / Math.max(ax.p, ay.p) >= 0.03) return null;
   const size = (ax.p * ax.n + ay.p * ay.n) / (ax.n + ay.n);
   // Sure enough to offer: sharp lines, in every part of the map, and at
@@ -1103,7 +1122,10 @@ registerPanel('battlemap',{
         // paint, so the new map is on screen first).
         setTimeout(() => this._autoGrid(img, file.name), 60);
       };
-      img.onerror = () => showToast('Could not load image');
+      // An iPhone's photos are HEIC, which Chrome and Edge can't open.
+      img.onerror = () => showToast(/\.(heic|heif)$/i.test(file.name || '')
+        ? 'This browser can’t open iPhone (HEIC) pictures: save it as a JPG or PNG first.'
+        : 'Could not open that picture: is it a PNG, JPG or WebP?');
       img.src = ev.target.result;
     };
     reader.onerror = () => showToast('Could not read file');
@@ -1361,7 +1383,11 @@ registerPanel('battlemap',{
     const id = 'u' + Date.now().toString(36);
     const stored = await window.sktMapBlobPut(id, data);
     if (!stored){
-      showToast('Could not upload the map — it stays on this device only');
+      // A dropped connection shouldn't cost the players the map: one press
+      // tries again (while it's still the map on screen).
+      showToast('Could not send the map to the players — it’s only on this device for now.', { alert: true, action: { label: 'Try again', run: () => {
+        if (_mapBgImage === img && !this._bgMapPath) this._shareUploadedMap(img, replacedPath);
+      } } });
       return;
     }
     // Only now the bytes are actually there. Pointing bgMapPath at an id
