@@ -21428,10 +21428,11 @@ for (const cls of Object.keys(rule)) for (let L = 1; L <= 20; L++) for (const sc
         B._measureHide();
         // Clear areas leaves it; its own menu removes it
         B._drawings.push({ k: 'tpl', id: 'r366s', shape: 'circle', x: cs * 8, y: cs * 8, ft: 10, c: '#f00' });
-        B._render(); await sleep(60);
+        B._tplShape = 'circle'; B._render(); await sleep(60);   // (Clear areas is on the Area tool; terrain is Build's)
         const clr = B._body.querySelector('[data-mact="clear-areas"]');
         if (clr) clr.click(); await sleep(60);
-        ok('“Clear areas” takes the spells, leaves the rubble', !B._areas().length && B._terrain().length === 1);
+        ok('“Clear areas” takes the spells, leaves the rubble', !!clr && !B._areas().length && B._terrain().length === 1);
+        B._tplShape = 'terrain'; B._render(); await sleep(60);
         const c2 = cl(o.x + 3.5 * cs, o.y + 2.5 * cs);
         B._areaPointerDown(o.x + 3.5 * cs, o.y + 2.5 * cs, c2.x, c2.y, false); await sleep(10);
         document.dispatchEvent(new MouseEvent('mouseup', { bubbles: true, clientX: c2.x, clientY: c2.y })); await sleep(60);
