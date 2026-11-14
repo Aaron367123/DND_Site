@@ -2837,8 +2837,8 @@ registerPanel('battlemap',{
         document.removeEventListener(touch ? 'touchend' : 'mouseup', upF);
         if (touch) document.removeEventListener('touchcancel', upF);
         if (!movedF){
-          if (lamp){ this._renderAreas(); this._fixtureMenu(lamp, cx, cy); return; }
-          if (wall){ this._renderAreas(); this._fixtureMenu(wall, cx, cy); return; }
+          if (lamp){ this._renderAreas(); this._fixtureMenu(lamp, cx, cy, x, y); return; }
+          if (wall){ this._renderAreas(); this._fixtureMenu(wall, cx, cy, x, y); return; }
           if (shape === 'lamp'){
             const L = SKT_LIGHTS.find(l => l[0] === ((this._body.querySelector('#tpl-lamp') || {}).value || this._tplLamp)) || SKT_LIGHTS[2];
             this._tplLamp = L[0];
@@ -2878,7 +2878,7 @@ registerPanel('battlemap',{
         document.removeEventListener(touch ? 'touchmove' : 'mousemove', mv);
         document.removeEventListener(touch ? 'touchend' : 'mouseup', upT);
         if (touch) document.removeEventListener('touchcancel', upT);
-        if (on && !movedT){ this._renderAreas(); this._terrainMenu(on, cx, cy); return; }
+        if (on && !movedT){ this._renderAreas(); this._terrainMenu(on, cx, cy, x, y); return; }
         this._drawings.push(box);
         this._saveMap();
         this._renderAreas();
@@ -2943,7 +2943,7 @@ registerPanel('battlemap',{
       if (touch) document.removeEventListener('touchcancel', up);
       this._areaDragging = false;
       if (hit){
-        if (!moved || hit.shape === 'aura'){ this._renderAreas(); this._areaMenu(hit, cx, cy); return; }
+        if (!moved || hit.shape === 'aura'){ this._renderAreas(); this._areaMenu(hit, cx, cy, x, y); return; }
         this._saveMap();
         this._renderAreas();
         return;
@@ -2963,9 +2963,10 @@ registerPanel('battlemap',{
     const segD = (px, py, ax, ay, bx, by) => { const dx = bx - ax, dy = by - ay, L = dx * dx + dy * dy; const u = L ? Math.max(0, Math.min(1, ((px - ax) * dx + (py - ay) * dy) / L)) : 0; return Math.hypot(px - ax - u * dx, py - ay - u * dy); };
     return this._walls().slice().reverse().find(w => { for (let i = 0; i + 3 < w.pts.length; i += 2) if (segD(x, y, w.pts[i], w.pts[i + 1], w.pts[i + 2], w.pts[i + 3]) <= tol) return true; return false; }) || null;
   },
-  _fixtureMenu(f, cx, cy){
+  _fixtureMenu(f, cx, cy, x, y){
     const kind = f.shape === 'wall' ? 'wall' : 'light';
     const items = [
+      { label: '✥ Move this ' + kind, onClick: () => this._moveEntry(f, x, y) },
       { label: '✕ Remove this ' + kind, onClick: () => { this._drawings = this._drawings.filter(s => s !== f); this._saveMap(); this._render(); } },
       { label: '✕ Remove all ' + kind + 's', onClick: () => { this._drawings = this._drawings.filter(s => !(s && s.k === 'tpl' && s.shape === f.shape)); this._saveMap(); this._render(); } },
     ];
@@ -2985,8 +2986,9 @@ registerPanel('battlemap',{
       + '<circle cx="' + l.x + '" cy="' + l.y + '" r="' + (7 / vs).toFixed(1) + '" fill="#ffd36b" stroke="#7a4a00" stroke-width="' + (1.5 / vs) + '"><title>Light: ' + (+l.ft || 0) + ' ft bright, ' + (+l.w || 0) + ' ft dim</title></circle></g>').join('');
     return walls + lamps;
   },
-  _terrainMenu(r, cx, cy){
+  _terrainMenu(r, cx, cy, x, y){
     const items = [
+      { label: '✥ Move this difficult terrain', onClick: () => this._moveEntry(r, x, y) },
       { label: '✕ Remove this difficult terrain', onClick: () => { this._drawings = this._drawings.filter(s => s !== r); this._saveMap(); this._renderAreas(); } },
       { label: '✕ Remove all difficult terrain', onClick: () => { this._drawings = this._drawings.filter(s => !(s && s.k === 'tpl' && s.shape === 'terrain')); this._saveMap(); this._renderAreas(); } },
     ];
@@ -3002,7 +3004,7 @@ registerPanel('battlemap',{
       return c ? c.id : null;
     }).filter(Boolean);
   },
-  _areaMenu(t, cx, cy){
+  _areaMenu(t, cx, cy, x, y){
     const isPlayer = document.body.classList.contains('player-mode');
     const items = [];
     if (!isPlayer && panelDefs.combat && typeof panelDefs.combat.openAreaSave === 'function'){
@@ -3010,6 +3012,8 @@ registerPanel('battlemap',{
       items.push({ label: '💥 Roll saves for the ' + ids.length + ' creature' + (ids.length === 1 ? '' : 's') + ' inside', disabled: !ids.length,
         onClick: () => panelDefs.combat.openAreaSave({ targets: ids, name: this._areaName(t) }) });
     }
+    // (An emanation goes where its creature goes.)
+    if (t.shape !== 'aura') items.push({ label: '✥ Move this area', onClick: () => this._moveEntry(t, x, y) });
     const o = this._auraTok(t);
     if (o){
       const nm = o.tok.label || 'the creature';
@@ -3031,6 +3035,102 @@ registerPanel('battlemap',{
       this._saveMap(); this._render();
     }});
     if (typeof showContextMenu === 'function') showContextMenu(cx, cy, items);
+  },
+
+  // "Move" from an area's menu — or a wall's, a light's, a stretch of rough
+  // ground's: it goes where the next press lands, following the pointer (or
+  // the finger dragged from there) until it's let go. A drag with the Area
+  // tool already moved a spell's area, but only from bare ground inside it:
+  // a Fireball dropped on a knot of goblins was mostly goblin, and a press on
+  // one starts a new area, so the menu (which offered only Remove) was all
+  // anyone found. (x, y): where it was pressed to open the menu; that spot of
+  // it stays under the pointer.
+  _moveEntry(t, x, y){
+    const b = this._body; if (!b || !t || x == null) return;
+    const stage = b.querySelector('#map-stage'); if (!stage) return;
+    const orig = JSON.parse(JSON.stringify(t));
+    b.querySelector('.map-place-hint')?.remove();
+    const what = t.shape === 'wall' ? 'wall' : t.shape === 'lamp' ? 'light' : t.shape === 'terrain' ? 'difficult terrain' : 'area';
+    const tap = typeof matchMedia === 'function' && matchMedia('(pointer: coarse)').matches;
+    const hint = document.createElement('div');
+    hint.className = 'map-place-hint';
+    hint.innerHTML = '<span>' + (tap ? 'Tap' : 'Click') + ' where the ' + what + ' goes</span><button class="btn small" data-move-cancel>Cancel</button>';
+    (b.querySelector('.bm-main') || b).appendChild(hint);
+    this._movingEntry = t;
+    let down = false;
+    const follow = (ex, ey) => {
+      const q = this._stagePoint(ex, ey, stage); if (!q) return;
+      this._shiftEntry(t, orig, x, y, q.x - x, q.y - y);
+      this._renderAreas();
+    };
+    const onMove = e => {
+      const p = e.touches ? e.touches[0] : e; if (!p) return;
+      if (e.touches && !down) return;
+      if (down && e.cancelable) e.preventDefault();
+      follow(p.clientX, p.clientY);
+    };
+    const onUp = () => { if (down) done(true); };
+    const onKey = e => { if (e.key === 'Escape'){ e.preventDefault(); e.stopPropagation(); done(false); } };
+    const onDown = e => {
+      if (e.touches && e.touches.length > 1) return;   // a pinch still zooms
+      if (e.target.closest && e.target.closest('[data-move-cancel]')){ e.preventDefault(); e.stopPropagation(); done(false); return; }
+      if (!stage.contains(e.target)){ done(false); return; }   // the toolbar, a panel: put it back
+      e.preventDefault(); e.stopPropagation();
+      const p = e.touches ? e.touches[0] : e;
+      down = true;
+      follow(p.clientX, p.clientY);
+    };
+    const done = keep => {
+      this._movingEntry = null;
+      hint.remove();
+      b.removeEventListener('mousedown', onDown, true);
+      b.removeEventListener('touchstart', onDown, true);
+      document.removeEventListener('mousemove', onMove);
+      document.removeEventListener('touchmove', onMove);
+      document.removeEventListener('mouseup', onUp);
+      document.removeEventListener('touchend', onUp);
+      document.removeEventListener('touchcancel', onUp);
+      document.removeEventListener('keydown', onKey, true);
+      if (!keep){ Object.keys(t).forEach(k => delete t[k]); Object.assign(t, orig); }
+      else this._saveMap();
+      this._renderAreas();
+    };
+    b.addEventListener('mousedown', onDown, true);
+    b.addEventListener('touchstart', onDown, { capture: true, passive: false });
+    document.addEventListener('mousemove', onMove);
+    document.addEventListener('touchmove', onMove, { passive: false });
+    document.addEventListener('mouseup', onUp);
+    document.addEventListener('touchend', onUp);
+    document.addEventListener('touchcancel', onUp);
+    document.addEventListener('keydown', onKey, true);
+  },
+  // An entry moved by (dx, dy) from where it was (o), pressed at (ax, ay):
+  // a spell's area or a light by its point of origin, snapped as when laid;
+  // a wall whole; rough ground by whole squares, or on a hex map hex by hex.
+  _shiftEntry(t, o, ax, ay, dx, dy){
+    if (t.shape === 'wall' && Array.isArray(o.pts)){
+      const s = this._areaSnap(o.pts[0] + dx, o.pts[1] + dy), ex = s.x - o.pts[0], ey = s.y - o.pts[1];
+      t.pts = o.pts.map((v, i) => v + (i % 2 ? ey : ex));
+      return;
+    }
+    if (t.shape === 'terrain'){
+      const cs = this._csScreen() || 50;
+      let ex = Math.round(dx / cs) * cs, ey = Math.round(dy / cs) * cs;
+      if (Array.isArray(o.hexes)){
+        // Hexes in odd-q rows (odd columns half a hex lower) move as cube
+        // coordinates do, or a shift across an odd column would zig-zag them.
+        const off = this._gridOffPx(), h0 = sktHexAt(ax, ay, cs, off.x, off.y), h1 = sktHexAt(ax + dx, ay + dy, cs, off.x, off.y);
+        const cube = (q, r) => [q, r - (q - (q & 1)) / 2];
+        const c0 = cube(h0.q, h0.r), c1 = cube(h1.q, h1.r), dq = c1[0] - c0[0], dz = c1[1] - c0[1];
+        t.hexes = o.hexes.map(c => { const k = cube(c[0], c[1]), q = k[0] + dq; return [q, k[1] + dz + (q - (q & 1)) / 2]; });
+        const p0 = this._hexAtQR(h0.q, h0.r), p1 = this._hexAtQR(h1.q, h1.r);
+        ex = p1[0] - p0[0]; ey = p1[1] - p0[1];
+      }
+      t.x = o.x + ex; t.y = o.y + ey; t.x2 = o.x2 + ex; t.y2 = o.y2 + ey;
+      return;
+    }
+    const s = this._areaSnap(o.x + dx, o.y + dy);
+    t.x = s.x; t.y = s.y;
   },
 
   _counterScaleLabels(vs){

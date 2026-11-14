@@ -21970,6 +21970,125 @@ for (const cls of Object.keys(rule)) for (let L = 1; L <= 20; L++) for (const sc
         closePanel('battlemap');
       }
     }
+    // -- Round 380: moving what's been laid — an area from its menu (even one on a crowd), a wall, a light, rough ground on squares and on hexes; Esc puts it back --
+    {
+      const B = panelDefs.battlemap;
+      let keepT = null, keepD = null, keepF, fogSaved = false;
+      const keepTool = B._tool, keepShape = B._tplShape, keepSize = B._tplSize, keepGrid = B._gridType, keepSnap = B._snapToGrid;
+      try {
+        openPanel('battlemap'); await sleep(700);
+        keepT = B._tokens.slice(); keepD = B._drawings.slice();
+        keepF = B._fog; fogSaved = true; B._fog = null;
+        B._gridType = 'square'; B._snapToGrid = true;
+        const cs = B._csScreen();
+        const gob = { id: 't380g', label: 'r380 Goblin', x: 6.5 * cs, y: 6.5 * cs, size: 1 };
+        B._tokens = [gob]; B._drawings = [];
+        B._tool = 'area'; B._tplShape = 'circle'; B._tplSize = 20; B._render(); await sleep(150);
+        const stage = B._body.querySelector('#map-stage'), z = B._screenScale(), sr = stage.getBoundingClientRect();
+        const cl = (sx, sy) => ({ x: sr.left + sx * z, y: sr.top + sy * z });
+        const press = (el, p) => el.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, cancelable: true, clientX: p.x, clientY: p.y, button: 0 }));
+        const mv = p => document.dispatchEvent(new MouseEvent('mousemove', { bubbles: true, clientX: p.x, clientY: p.y }));
+        const up = p => document.dispatchEvent(new MouseEvent('mouseup', { bubbles: true, clientX: p.x, clientY: p.y }));
+        const menuPick = async re => {
+          const it = [...document.querySelectorAll('.ctx-menu button, .context-menu button, [role="menu"] button, [role="menuitem"]')].find(x => re.test(x.textContent));
+          if (it) it.click(); await sleep(60); return !!it;
+        };
+        const closeMenus = () => document.querySelectorAll('.ctx-menu, .context-menu').forEach(m => m.remove());
+        // A Fireball on the goblin (pressed on its token)
+        const g = cl(gob.x, gob.y);
+        press(document.elementFromPoint(g.x, g.y), g); await sleep(20); up(g); await sleep(60);
+        const fb = B._areas()[0];
+        ok('a sphere laid on the goblin', fb && Math.abs(fb.x - gob.x) < 1 && Math.abs(fb.y - gob.y) < 1, JSON.stringify(fb));
+        // Its menu (a tap inside it, off the goblin) offers Move
+        const m0 = cl(gob.x - 2 * cs, gob.y);
+        press(document.elementFromPoint(m0.x, m0.y), m0); await sleep(20); up(m0); await sleep(80);
+        const picked = await menuPick(/Move this area/);
+        ok('an area’s menu offers “Move this area”', picked, [...document.querySelectorAll('button')].map(x => x.textContent).filter(t => /area/i.test(t)).join(' / '));
+        ok('…and says where to put it', /where the area goes/.test((B._body.querySelector('.map-place-hint') || {}).textContent || ''));
+        // It follows the pointer, and a click on the goblin's own square sets it down — not a new area
+        const t1 = cl(gob.x - 2 * cs + 4.2 * cs, gob.y + 3.2 * cs), want = B._areaSnap(gob.x + 4.2 * cs, gob.y + 3.2 * cs);
+        mv(t1); await sleep(30);
+        ok('…it follows the pointer before the click', fb.x === want.x && fb.y === want.y, JSON.stringify([fb.x / cs, fb.y / cs, want.x / cs, want.y / cs]));
+        press(document.elementFromPoint(t1.x, t1.y), t1); await sleep(20); up(t1); await sleep(80);
+        ok('…a click sets it down where pointed, snapped to the grid, and no second area', fb.x === want.x && fb.y === want.y && Math.abs(want.x - gob.x - 4.2 * cs) <= cs / 2 && B._areas().length === 1, JSON.stringify([fb.x / cs, fb.y / cs, B._areas().length]));
+        ok('…kept, and the hint gone', JSON.parse(localStorage.getItem('skt-battlemap-v1')).drawings.some(s => s.id === fb.id && s.x === fb.x) && !B._body.querySelector('.map-place-hint'));
+        // The goblin is pressed on with the move on: the area goes there, no new one, the goblin stays
+        const m1 = cl(fb.x - 2 * cs, fb.y);
+        press(document.elementFromPoint(m1.x, m1.y), m1); await sleep(20); up(m1); await sleep(80);
+        await menuPick(/Move this area/);
+        const g2 = cl(gob.x, gob.y);
+        press(document.elementFromPoint(g2.x, g2.y), g2); await sleep(20); up(g2); await sleep(80);
+        ok('…a click on a creature with it moving: one area, moved, the goblin where it stood', B._areas().length === 1 && gob.x === 6.5 * cs && gob.y === 6.5 * cs && fb.x < want.x - cs, JSON.stringify([fb.x / cs, B._areas().length, gob.x / cs]));
+        // Esc puts it back
+        const was = [fb.x, fb.y];
+        const m2 = cl(fb.x - 1.5 * cs, fb.y);
+        press(document.elementFromPoint(m2.x, m2.y), m2); await sleep(20); up(m2); await sleep(80);
+        await menuPick(/Move this area/);
+        mv(cl(2 * cs, 2 * cs)); await sleep(30);
+        document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true })); await sleep(60);
+        ok('…Esc puts it back', fb.x === was[0] && fb.y === was[1] && !B._body.querySelector('.map-place-hint'), JSON.stringify([fb.x, fb.y, was]));
+        mv(cl(3 * cs, 3 * cs)); await sleep(30);
+        ok('…and the pointer no longer moves it', fb.x === was[0]);
+        // An emanation's menu has no Move (it goes with its creature)
+        B._drawings.push({ k: 'tpl', id: 'r380au', shape: 'aura', tok: gob.id, x: gob.x, y: gob.y, ft: 10 });
+        B._areaMenu(B._drawings[B._drawings.length - 1], 100, 100, gob.x, gob.y); await sleep(40);
+        ok('an emanation’s menu: no Move', ![...document.querySelectorAll('button')].some(x => /Move this area/.test(x.textContent)));
+        closeMenus(); B._drawings = B._drawings.filter(s => s.id !== 'r380au');
+        // A wall, whole
+        B._drawings.push({ k: 'tpl', id: 'r380w', shape: 'wall', pts: [2 * cs, 2 * cs, 2 * cs, 5 * cs, 4 * cs, 5 * cs] });
+        B._tplShape = 'wall'; B._render(); await sleep(60);
+        const w0 = cl(2 * cs, 3 * cs);
+        B._areaPointerDown(2 * cs, 3 * cs, w0.x, w0.y, false); await sleep(10); up(w0); await sleep(60);
+        ok('a wall’s menu offers Move', await menuPick(/Move this wall/));
+        const w1 = cl(5 * cs, 4 * cs);
+        press(document.elementFromPoint(w1.x, w1.y), w1); await sleep(20); up(w1); await sleep(60);
+        const wl = B._walls()[0];
+        ok('…the whole wall moves 3 right and 1 down', JSON.stringify(wl.pts) === JSON.stringify([5 * cs, 3 * cs, 5 * cs, 6 * cs, 7 * cs, 6 * cs]), JSON.stringify(wl.pts.map(v => v / cs)));
+        // A light
+        B._drawings.push({ k: 'tpl', id: 'r380l', shape: 'lamp', x: 12 * cs, y: 3 * cs, ft: 20, w: 20, kind: 'torch' });
+        B._fixtureMenu(B._drawings[B._drawings.length - 1], 100, 100, 12 * cs, 3 * cs); await sleep(40);
+        ok('a light’s menu offers Move', await menuPick(/Move this light/));
+        const l1 = cl(13 * cs, 7 * cs);
+        press(document.elementFromPoint(l1.x, l1.y), l1); await sleep(20); up(l1); await sleep(60);
+        const lp = B._lamps()[0];
+        ok('…it goes where clicked', lp.x === 13 * cs && lp.y === 7 * cs, JSON.stringify([lp.x / cs, lp.y / cs]));
+        // Rough ground on squares
+        B._drawings.push({ k: 'tpl', id: 'r380t', shape: 'terrain', x: 1 * cs, y: 8 * cs, x2: 3 * cs, y2: 10 * cs });
+        B._tplShape = 'terrain'; B._render(); await sleep(60);
+        const r0 = cl(1.5 * cs, 8.5 * cs);
+        B._areaPointerDown(1.5 * cs, 8.5 * cs, r0.x, r0.y, false); await sleep(10); up(r0); await sleep(60);
+        ok('difficult terrain’s menu offers Move', await menuPick(/Move this difficult terrain/));
+        const r1 = cl(4.4 * cs, 9.6 * cs);
+        press(document.elementFromPoint(r1.x, r1.y), r1); await sleep(20); up(r1); await sleep(60);
+        const tr = B._terrain()[0];
+        ok('…by whole squares: 3 right, 1 down', tr.x === 4 * cs && tr.y === 9 * cs && tr.x2 === 6 * cs && tr.y2 === 11 * cs, JSON.stringify([tr.x, tr.y, tr.x2, tr.y2].map(v => v / cs)));
+        ok('…and a creature there now pays for it', B._inTerrain(5 * cs, 10 * cs) && !B._inTerrain(2 * cs, 8.5 * cs));
+        // Rough ground on hexes: an odd column's hexes stay a straight column
+        B._drawings = []; B._gridType = 'hex'; B._render(); await sleep(80);
+        const hx = { k: 'tpl', id: 'r380h', shape: 'terrain', x: 0, y: 0, x2: cs, y2: cs, hexes: [[2, 2], [2, 3], [3, 2]] };
+        B._drawings.push(hx);
+        const a0 = B._hexAtQR(2, 2), a1 = B._hexAtQR(5, 3);
+        B._terrainMenu(hx, 100, 100, a0[0], a0[1]); await sleep(40);
+        await menuPick(/Move this difficult terrain/);
+        const sr2 = B._body.querySelector('#map-stage').getBoundingClientRect(), z2 = B._screenScale();
+        const h1 = { x: sr2.left + a1[0] * z2, y: sr2.top + a1[1] * z2 };
+        press(document.elementFromPoint(h1.x, h1.y), h1); await sleep(20); up(h1); await sleep(60);
+        // (2,2)→(5,3): three columns over, from an even column to an odd one; cube-wise
+        // the others keep their places beside it — (2,3) below it, (3,2) down to its right.
+        const hs = JSON.stringify(hx.hexes);
+        ok('hex terrain moves hex by hex, keeping its shape', hs === JSON.stringify([[5, 3], [5, 4], [6, 4]]), hs);
+        ok('…and is where it’s drawn', B._inTerrain(a1[0], a1[1]) && !B._inTerrain(a0[0], a0[1]));
+      } catch(e){ ok('round 380 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
+      finally {
+        document.querySelectorAll('.ctx-menu, .context-menu').forEach(m => m.remove());
+        if (B._movingEntry) document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+        if (fogSaved) B._fog = keepF;
+        B._tool = keepTool; B._tplShape = keepShape; B._tplSize = keepSize; B._gridType = keepGrid; B._snapToGrid = keepSnap;
+        if (keepT){ B._tokens = keepT; B._drawings = keepD; try { B._saveMap(); } catch(e){} }
+        try { B._render(); } catch(e){}
+        closePanel('battlemap');
+      }
+    }
     // -- Class features: represented, not just text ------------------------
     {
       try {
@@ -25210,6 +25329,57 @@ for (const cls of Object.keys(rule)) for (let L = 1; L <= 20; L++) for (const sc
         if (keepT){ B._tokens = keepT; B._drawings = keepD; try { B._saveMap(); } catch(e){} }
         B._tool = ''; paHeightOpen = false;
         paTab = keepTab; paRender();
+      }
+    }
+    // -- Round 381: on a phone, a player moves the area they laid — tap it, Move, tap where it goes (or drag from there) --
+    if (PLAYER){
+      const keepTab = paTab; const B = panelDefs.battlemap;
+      let keepT = null, keepD = null, keepF, fogSaved = false; const keepTool = B._tool, keepShape = B._tplShape, keepSize = B._tplSize;
+      try {
+        if (paMyIdx() < 0) paSetPc(state.party[0].id);
+        const me = paPc();
+        paTab = 'map'; paRender(); await sleep(900);
+        keepT = B._tokens.slice(); keepD = B._drawings.slice();
+        keepF = B._fog; fogSaved = true; B._fog = null;
+        B._tokens = []; B._drawings = [];
+        B._tool = 'area'; B._tplShape = 'circle'; B._tplSize = 10; B._render(); await sleep(200);
+        const stage = B._body.querySelector('#map-stage');
+        const tp = (type, el, x, y) => { const t = new Touch({ identifier: 1, target: el, clientX: x, clientY: y }); el.dispatchEvent(new TouchEvent(type, { bubbles: true, cancelable: true, touches: type === 'touchend' ? [] : [t], targetTouches: type === 'touchend' ? [] : [t], changedTouches: [t] })); };
+        const tapAt = async (x, y) => { const el = document.elementFromPoint(x, y); tp('touchstart', el, x, y); await sleep(30); tp('touchend', el, x, y); await sleep(100); return el; };
+        const mx = innerWidth / 2, my = innerHeight / 2 - 60;
+        await tapAt(mx, my);
+        const a = B._areas()[0];
+        ok('phone: a tap lays their area', !!a && a.by === me.id, JSON.stringify(a));
+        const z = B._screenScale(), cs = B._csScreen();
+        await tapAt(mx - cs * z * 0.8, my);
+        const it = [...document.querySelectorAll('button')].find(x => /Move this area/.test(x.textContent));
+        ok('phone: tapping it, its menu offers Move', !!it);
+        if (it) it.click(); await sleep(80);
+        ok('…and the hint says to tap', /Tap where the area goes/.test((B._body.querySelector('.map-place-hint') || {}).textContent || ''));
+        const x0 = a.x, y0 = a.y;
+        // tap 3 squares lower and drag 1 more to the right before letting go
+        const ty = my + 3 * cs * z, el = document.elementFromPoint(mx - cs * z * 0.8, ty);
+        tp('touchstart', el, mx - cs * z * 0.8, ty); await sleep(20);
+        for (let i = 1; i <= 4; i++){ tp('touchmove', el, mx - cs * z * 0.8 + i * cs * z / 4, ty); await sleep(20); }
+        tp('touchend', el, mx + cs * z * 0.2, ty); await sleep(120);
+        ok('…the tap and drag move it: 3 squares down, 1 right', B._areas().length === 1 && Math.abs(a.y - y0 - 3 * cs) <= cs / 2 && Math.abs(a.x - x0 - cs) <= cs / 2, JSON.stringify([(a.x - x0) / cs, (a.y - y0) / cs, B._areas().length]));
+        ok('…and the hint gone', !B._body.querySelector('.map-place-hint'));
+        // The Cancel button puts it back
+        const sr = stage.getBoundingClientRect(); await tapAt(sr.left + a.x * z - cs * z * 0.8, sr.top + a.y * z);
+        const it2 = [...document.querySelectorAll('button')].find(x => /Move this area/.test(x.textContent));
+        if (it2) it2.click(); await sleep(80);
+        const x1 = a.x, y1 = a.y;
+        const cb = B._body.querySelector('[data-move-cancel]');
+        if (cb){ const r = cb.getBoundingClientRect(); await tapAt(r.left + r.width / 2, r.top + r.height / 2); }
+        ok('…Cancel puts it back', !!cb && a.x === x1 && a.y === y1 && !B._body.querySelector('.map-place-hint'), JSON.stringify([!!it2, !!cb]));
+      } catch(e){ ok('round 381 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
+      finally {
+        document.querySelectorAll('.ctx-menu, .context-menu').forEach(m => m.remove());
+        if (B._movingEntry) document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+        if (fogSaved) B._fog = keepF;
+        B._tool = keepTool; B._tplShape = keepShape; B._tplSize = keepSize;
+        if (keepT){ B._tokens = keepT; B._drawings = keepD; try { B._saveMap(); } catch(e){} }
+        paTab = keepTab; try { paRender(); } catch(e){}
       }
     }
   }
