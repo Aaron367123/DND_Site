@@ -1142,23 +1142,43 @@ registerPanel('battlemap',{
     if (found) how = 'from its name (' + found.nx + '×' + found.ny + ' squares)';
     else { try { found = sktDetectGrid(img); } catch(e){ found = null; } how = 'found on the picture'; }
     const align = { label: 'Align', run: () => { this._tool = 'align'; this._alignFirstClick = null; this._render(); showToast('Align: click two grid intersections. Span MULTIPLE cells for accuracy.'); } };
-    // (Said in the grid's own message: a note of its own would be replaced by it at once.)
-    const moved = n => n ? ' ' + (n === 1 ? 'A token past its edge is on it now.' : n + ' tokens past its edge are on it now.') : '';
     if (!found){
       const n = this._pullTokensOnto(true);
       if (n){ this._saveMap(); this._render(); }
-      showToast('No squares found on this map. To line the grid up with it, use Align and click two corners of a printed square.' + moved(n), { action: align });
+      showToast('No squares found on this map. To line the grid up with it, use Align and click two corners of a printed square.' + this._movedNote(n), { action: align });
       return;
     }
-    const was = { cs: this._cellSize, ox: this._gridOffsetX, oy: this._gridOffsetY };
+    this._applyGrid(found, how);
+  },
+  // (Said in the grid's own message: a note of its own would be replaced by it at once.)
+  _movedNote(n){ return n ? ' ' + (n === 1 ? 'A token past its edge is on it now.' : n + ' tokens past its edge are on it now.') : ''; },
+  // Our squares on found's — { size, ox, oy } in the map's own pixels —
+  // said, with Undo.
+  _applyGrid(found, how){
+    const img = _mapBgImage, was = { cs: this._cellSize, ox: this._gridOffsetX, oy: this._gridOffsetY };
     const sz = Math.max(8, found.size), mod = v => ((v % sz) + sz) % sz;
     this._cellSize = sz; this._gridOffsetX = mod(found.ox); this._gridOffsetY = mod(found.oy);
     this._fitGridToBg(); const n = this._pullTokensOnto(true); this._saveMap(); this._render();
-    showToast('Grid matched to the map’s squares, ' + how + '.' + moved(n), { action: { label: 'Undo', run: () => {
+    showToast('Grid matched to the map’s squares, ' + how + '.' + this._movedNote(n), { action: { label: 'Undo', run: () => {
       if (_mapBgImage !== img) return;
       this._cellSize = was.cs; this._gridOffsetX = was.ox; this._gridOffsetY = was.oy;
       this._fitGridToBg(); this._saveMap(); this._render();
     } } });
+  },
+  // Grid settings → Match: the map on screen's own squares, now — from the
+  // adventure's data, or found on the picture. (A shared upload on screen
+  // is its shrunk copy: what's found there is scaled up to the map's size.)
+  _matchGrid(){
+    const img = _mapBgImage; if (!img) return;
+    const path = this._bgMapPath;
+    this._advGrid(path).then(g => {
+      if (_mapBgImage !== img) return;
+      if (g){ const sc = g.w ? this._bgMapNaturalW / g.w : 1; this._applyGrid({ size: g.size * sc, ox: g.ox * sc, oy: g.oy * sc }, 'from the adventure’s map'); return; }
+      let f = null; try { f = sktDetectGrid(img); } catch(e){}
+      if (!f){ showToast('No squares found on this map. Use Align and click two corners of a printed square.'); return; }
+      const k = img.naturalWidth ? (this._bgMapNaturalW || img.naturalWidth) / img.naturalWidth : 1;
+      this._applyGrid({ size: f.size * k, ox: f.ox * k, oy: f.oy * k }, 'found on the picture');
+    });
   },
   // The grid an adventure's own data gives one of its maps — { size, ox, oy,
   // w } in the listed picture's pixels — or null (no grid, or hexes).
@@ -5452,6 +5472,7 @@ registerPanel('battlemap',{
         this._saveMap(); this._render();
         return;
       }
+      if (k === 'match-grid'){ this._matchGrid(); return; }
       if (k === 'fog-toggle'){
         this._fog = this._fog!==null ? null : new Set();
         if (this._fog!==null) this._fogTool = true;
@@ -6642,6 +6663,7 @@ registerPanel('battlemap',{
       + '</div>'
       + '<div class="bm-set-tiles">'
       +   tile('snap',  'Snap', 'tokens to cells', !!this._snapToGrid, {title:'Snap tokens to the grid when dropped (Shift inverts)'})
+      +   tile('match-grid', 'Match', 'its squares', false, {disabled: !_mapBgImage, title: _mapBgImage ? 'Line the grid up with the map’s own squares: from the adventure’s data, or found on the picture' : 'Choose a map first'})
       +   tile('align', 'Align', 'to a printed grid', this._tool === 'align', {disabled: !(this._bgMapPath || _mapBgImage), title: (this._bgMapPath || _mapBgImage) ? 'Click two opposite corners of one printed cell' : 'Choose a map first'})
       +   tile('reset-align', 'Reset', 'alignment', false, {disabled: !(this._gridOffsetX || this._gridOffsetY), title:'Put the grid offset back to 0,0'})
       + '</div>'

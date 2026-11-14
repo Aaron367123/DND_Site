@@ -22616,6 +22616,54 @@ for (const cls of Object.keys(rule)) for (let L = 1; L <= 20; L++) for (const sc
         closePanel('battlemap');
       }
     }
+    // -- Round 395: grid settings → Match: the map on screen's own squares — an adventure map's from its data, a shared upload's found on its shrunk copy at full size --
+    {
+      const B = panelDefs.battlemap;
+      const S0 = localStorage.getItem('skt-battlemap-v1'), P0 = B._bgMapPath, I0 = _mapBgImage, W0 = B._bgMapNaturalW, H0 = B._bgMapNaturalH, L0 = B._bgLoadedPath;
+      const keep = { cs: B._cellSize, ox: B._gridOffsetX, oy: B._gridOffsetY, cols: B._cols, rows: B._rows, size: B._bgMapSize, set: B._settingsOpen };
+      const toast = re => [...document.querySelectorAll('#toast-host .toast-item')].find(t => re.test(t.textContent));
+      try {
+        openPanel('battlemap'); await sleep(600);
+        // An adventure map, lined up wrong by hand
+        const path = 'adventure/SKT/044-308.webp';
+        B._bgMapPath = path; B._loadBgFromPath(path, false);
+        for (let i = 0; i < 80 && B._bgLoadedPath !== path; i++) await sleep(100);
+        B._cellSize = 98.4; B._gridOffsetX = 11; B._gridOffsetY = 7; B._fitGridToBg(); B._settingsOpen = true; B._render(); await sleep(200);
+        document.querySelectorAll('#toast-host .toast-item').forEach(t => t.remove());
+        const tile = B._body.querySelector('[data-bmset="match-grid"]');
+        ok('grid settings: Match, beside Align', !!tile && !tile.disabled && !!B._body.querySelector('[data-bmset="align"]'));
+        tile.click();
+        let tt = null; for (let i = 0; i < 50 && !(tt = toast(/Grid matched/)); i++) await sleep(100);
+        const md = (v, p) => ((v % p) + p) % p;
+        ok('…an adventure map: the grid its data gives', Math.abs(B._cellSize - 96) < 0.01 && Math.abs(B._gridOffsetX - md(-36, 96)) < 0.01 && Math.abs(B._gridOffsetY - md(-24, 96)) < 0.01 && !!tt && /adventure/.test(tt.textContent), JSON.stringify([B._cellSize, B._gridOffsetX, B._gridOffsetY, tt && tt.textContent]));
+        tt.querySelector('button').click(); await sleep(250);
+        ok('…Undo: the hand alignment back', B._cellSize === 98.4 && B._gridOffsetX === 11 && B._gridOffsetY === 7);
+        // A shared upload, on screen as its shrunk copy: what's found is scaled up
+        const c = document.createElement('canvas'); c.width = 2100; c.height = 1400; const g = c.getContext('2d');
+        let sd = 5; const rnd = () => (sd = (sd * 16807) % 2147483647) / 2147483647;
+        g.fillStyle = '#6b5a45'; g.fillRect(0, 0, 2100, 1400);
+        for (let i = 0; i < 2500; i++){ g.fillStyle = 'rgba(' + (60 + rnd() * 80 | 0) + ',' + (50 + rnd() * 60 | 0) + ',40,.5)'; g.beginPath(); g.arc(rnd() * 2100, rnd() * 1400, 4 + rnd() * 30, 0, 7); g.fill(); }
+        g.strokeStyle = 'rgba(0,0,0,.55)'; g.lineWidth = 3;
+        for (let x = 23; x < 2100; x += 70.3){ g.beginPath(); g.moveTo(x, 0); g.lineTo(x, 1400); g.stroke(); }
+        for (let y = 41; y < 1400; y += 70.3){ g.beginPath(); g.moveTo(0, y); g.lineTo(2100, y); g.stroke(); }
+        const half = document.createElement('canvas'); half.width = 1050; half.height = 700; half.getContext('2d').drawImage(c, 0, 0, 1050, 700);
+        const shrunk = new Image(); await new Promise(r => { shrunk.onload = r; shrunk.src = half.toDataURL('image/png'); });
+        _mapBgImage = shrunk; B._bgMapPath = 'sktblob:r395'; B._bgLoadedPath = 'sktblob:r395'; B._bgMapNaturalW = 2100; B._bgMapNaturalH = 1400; B._bgMapSize = { w: 2100, h: 1400 };
+        B._cellSize = 50; B._gridOffsetX = 0; B._gridOffsetY = 0; B._fitGridToBg(); B._render(); await sleep(150);
+        document.querySelectorAll('#toast-host .toast-item').forEach(t => t.remove());
+        B._body.querySelector('[data-bmset="match-grid"]').click();
+        tt = null; for (let i = 0; i < 50 && !(tt = toast(/Grid matched|No squares/)); i++) await sleep(100);
+        ok('…a shared upload (its shrunk copy on screen): the squares at the map’s full size', Math.abs(B._cellSize - 70.3) < 0.5 && /found on the picture/.test(tt && tt.textContent || ''), JSON.stringify([B._cellSize, B._gridOffsetX, tt && tt.textContent]));
+      } catch(e){ ok('round 395 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
+      finally {
+        document.querySelectorAll('#toast-host .toast-item').forEach(t => t.remove());
+        B._cellSize = keep.cs; B._gridOffsetX = keep.ox; B._gridOffsetY = keep.oy; B._cols = keep.cols; B._rows = keep.rows; B._bgMapSize = keep.size; B._settingsOpen = keep.set;
+        _mapBgImage = I0; B._bgMapPath = P0; B._bgMapNaturalW = W0; B._bgMapNaturalH = H0; B._bgLoadedPath = L0;
+        if (S0 != null) localStorage.setItem('skt-battlemap-v1', S0);
+        try { B._render(); } catch(e){}
+        closePanel('battlemap');
+      }
+    }
     // -- Class features: represented, not just text ------------------------
     {
       try {
