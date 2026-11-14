@@ -2784,7 +2784,7 @@ registerPanel('battlemap',{
   // Both run on the same machinery (tool 'area'); which one is up is which
   // kind of shape is chosen, and each remembers its last choice.
   _aoeShape: 'circle', _bldShape: 'wall',
-  _isBuildShape(s){ return /^(terrain|wall|door|lamp)$/.test(s || ''); },
+  _isBuildShape(s){ return /^(terrain|wall|door|lamp|note)$/.test(s || ''); },
   _areaBuild(){ return this._tool === 'area' && this._isBuildShape(this._tplShape); },
   // A CYLINDER (Moonbeam, Flame Strike, Ice Storm) is a circle on the map, as
   // a sphere is, but a column in the air: {shape:'cyl', ft: radius, h: height}
@@ -2808,7 +2808,8 @@ registerPanel('battlemap',{
   // A player's screen leaves out what the DM keeps to themselves (t.dm).
   // …and an emanation whose creature the players can't see (hidden by the
   // DM, or a monster under the fog): the glow would give away where it is.
-  _isFixture(s){ return !!s && (s.shape === 'terrain' || s.shape === 'wall' || s.shape === 'lamp'); },
+  _isFixture(s){ return !!s && (s.shape === 'terrain' || s.shape === 'wall' || s.shape === 'lamp' || s.shape === 'note'); },
+  _mapNotes(){ return (this._drawings || []).filter(s => s && s.k === 'tpl' && s.shape === 'note'); },
   _walls(){ return (this._drawings || []).filter(s => s && s.k === 'tpl' && s.shape === 'wall' && Array.isArray(s.pts)); },
   _lamps(){ return (this._drawings || []).filter(s => s && s.k === 'tpl' && s.shape === 'lamp'); },
   _areas(){ const pl = document.body.classList.contains('player-mode'); return (this._drawings || []).filter(s => s && s.k === 'tpl' && !this._isFixture(s) && !(pl && s.dm)
@@ -2912,8 +2913,8 @@ registerPanel('battlemap',{
   // rough ground has no size in feet and no colour of its own (magical
   // darkness is always dark) — the boxes sat there doing nothing.
   _tplHas(shape, what){
-    if (what === 'size') return !/^(terrain|wall|door|lamp)$/.test(shape);
-    if (what === 'colour') return !/^(terrain|wall|door|lamp|darkness)$/.test(shape);
+    if (what === 'size') return !/^(terrain|wall|door|lamp|note)$/.test(shape);
+    if (what === 'colour') return !/^(terrain|wall|door|lamp|darkness|note)$/.test(shape);
     return true;
   },
   _areaControlsHtml(){
@@ -2921,7 +2922,7 @@ registerPanel('battlemap',{
     const build = this._isBuildShape(this._tplShape) && !document.body.classList.contains('player-mode');
     return '<select id="tpl-shape" title="' + (build ? 'What to build' : 'Shape') + '" style="width:' + (build ? 'auto' : '78px') + ';font-size:var(--fs-sm);padding:2px 4px;flex:0 0 auto">'
         + (build
-          ? opt('wall', 'Wall') + opt('door', 'Door') + opt('lamp', 'Light source') + opt('terrain', 'Difficult terrain')
+          ? opt('wall', 'Wall') + opt('door', 'Door') + opt('lamp', 'Light source') + opt('terrain', 'Difficult terrain') + opt('note', 'Note (only you see it)')
           : opt('circle', 'Sphere') + opt('cyl', 'Cylinder') + opt('cone', 'Cone') + opt('line', 'Line') + opt('cube', 'Cube') + opt('aura', 'Emanation')
             + opt('darkness', 'Magical darkness')) + '</select>'
       + '<span id="tpl-wrap-s" style="display:' + (this._tplHas(this._tplShape, 'size') ? 'inline-flex' : 'none') + ';align-items:center;gap:3px;flex-shrink:0">'
@@ -3135,6 +3136,14 @@ registerPanel('battlemap',{
     if (shape === 'cyl') draft.h = hi;
     if (from && +from.elev) draft.z = +from.elev;
     if (me) draft.by = me.id;
+    // A note: pressed on one, its menu; anywhere else, a new one there.
+    if (shape === 'note'){
+      if (isPlayer) return;
+      const nt = this._noteAt(x, y);
+      if (nt){ this._renderAreas(); this._fixtureMenu(nt, cx, cy, x, y); return; }
+      this._editNote(null, x, y);
+      return;
+    }
     if (shape === 'wall' || shape === 'door' || shape === 'lamp'){
       if (isPlayer) return;
       const stage = this._body.querySelector('#map-stage');
@@ -3287,11 +3296,14 @@ registerPanel('battlemap',{
     return this._walls().slice().reverse().find(w => { for (let i = 0; i + 3 < w.pts.length; i += 2) if (segD(x, y, w.pts[i], w.pts[i + 1], w.pts[i + 2], w.pts[i + 3]) <= tol) return true; return false; }) || null;
   },
   _fixtureMenu(f, cx, cy, x, y){
-    const kind = f.shape === 'wall' ? (f.door ? 'door' : 'wall') : 'light';
+    const kind = f.shape === 'wall' ? (f.door ? 'door' : 'wall') : f.shape === 'note' ? 'note' : 'light';
     const same = s => s && s.k === 'tpl' && s.shape === f.shape && !!s.door === !!f.door;
     const redo = () => { this._saveMap(); this._render(); };
     const items = [];
     // A door: open it (light and sight go through), close it; a wall made a door or back.
+    if (f.shape === 'note') items.push(
+      { label: '📄 Read the note', onClick: () => this._showNoteCard(f, cx, cy) },
+      { label: '✎ Edit the note', onClick: () => this._editNote(f) });
     if (f.door) items.push({ label: f.open ? '🚪 Close the door' : '🚪 Open the door', onClick: () => { if (f.open) delete f.open; else { f.open = true; delete f.locked; } redo(); } });
     // Locked: the players can't open it from their phones (the DM still can).
     // Locking a door shuts it.
@@ -3324,7 +3336,95 @@ registerPanel('battlemap',{
       + (up ? '<circle cx="' + l.x + '" cy="' + l.y + '" r="' + ((+l.ft || 0) * ppf).toFixed(1) + '" fill="none" stroke="#ffd36b" stroke-opacity=".7" stroke-dasharray="' + (5 / vs) + ' ' + (4 / vs) + '" stroke-width="' + (1.5 / vs) + '"/>'
             + '<circle cx="' + l.x + '" cy="' + l.y + '" r="' + (((+l.ft || 0) + (+l.w || 0)) * ppf).toFixed(1) + '" fill="none" stroke="#ffd36b" stroke-opacity=".4" stroke-dasharray="' + (3 / vs) + ' ' + (5 / vs) + '" stroke-width="' + (1.5 / vs) + '"/>' : '')
       + '<circle cx="' + l.x + '" cy="' + l.y + '" r="' + (7 / vs).toFixed(1) + '" fill="#ffd36b" stroke="#7a4a00" stroke-width="' + (1.5 / vs) + '"><title>Light: ' + (+l.ft || 0) + ' ft bright, ' + (+l.w || 0) + ' ft dim</title></circle></g>').join('');
-    return walls + lamps + this._doors().map(d => this._doorHandleSvg(d, vs)).join('');
+    return walls + lamps + this._doors().map(d => this._doorHandleSvg(d, vs)).join('') + this._mapNotes().map(n => this._noteSvg(n, vs)).join('');
+  },
+  // ─── Notes on the map ──────────────────────────────────────────────────────
+  // The DM's own: what's in room 3, who waits behind the bar. A pin with its
+  // title beside it, on the DM's map only (a player's screen draws no
+  // fittings at all). Click it (no tool up) to read it; Build → Note to add,
+  // edit, move or remove one. It can open a page of the DM's notes.
+  _noteSvg(n, vs){
+    const coarse = typeof matchMedia === 'function' && matchMedia('(pointer: coarse)').matches;
+    const r = (coarse ? 11 : 8) / vs, x = +n.x, y = +n.y, sw = (1.5 / vs).toFixed(2);
+    const e = s => String(s || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/"/g, '&quot;');
+    const pw = r * 0.9, ph = r * 1.15;
+    return '<g data-note="' + e(n.id) + '"><title>' + e(n.title || 'Note') + '</title>'
+      + '<circle cx="' + x.toFixed(1) + '" cy="' + y.toFixed(1) + '" r="' + r.toFixed(1) + '" fill="#2f5d8a" fill-opacity=".95" stroke="#fff" stroke-width="' + sw + '"/>'
+      // a page with a turned corner
+      + '<path d="M' + (x - pw / 2).toFixed(1) + ' ' + (y - ph / 2).toFixed(1) + 'h' + (pw * .65).toFixed(1) + 'l' + (pw * .35).toFixed(1) + ' ' + (pw * .35).toFixed(1) + 'v' + (ph - pw * .35).toFixed(1) + 'h' + (-pw).toFixed(1) + 'z" fill="#fff"/>'
+      + (n.title ? '<text x="' + (x + r * 1.3).toFixed(1) + '" y="' + y.toFixed(1) + '" dominant-baseline="middle" font-size="' + (11 / vs).toFixed(1) + '" font-weight="600" fill="#fff" stroke="rgba(0,0,0,.7)" stroke-width="' + (3 / vs).toFixed(2) + '" paint-order="stroke">' + e(String(n.title).slice(0, 40)) + '</text>' : '')
+      + '</g>';
+  },
+  // The note whose pin is at (x, y) — the DM's map only.
+  _noteAt(x, y){
+    if (document.body.classList.contains('player-mode')) return null;
+    const coarse = typeof matchMedia === 'function' && matchMedia('(pointer: coarse)').matches;
+    const vs = this._screenScale ? (this._screenScale() || 1) : 1, tol = (coarse ? 22 : 13) / vs;
+    return this._mapNotes().slice().reverse().find(n => Math.hypot(x - n.x, y - n.y) <= tol) || null;
+  },
+  // The pages of the DM's notes, for a note to open: "Folder / Page".
+  _notePages(){
+    let items = [];
+    try { const d = JSON.parse(localStorage.getItem('skt-notes-v2') || '{}'); items = Array.isArray(d.items) ? d.items : []; } catch(e){}
+    const byId = {}; items.forEach(i => { if (i && i.id) byId[i.id] = i; });
+    return items.filter(i => i && i.type === 'file' && !i.owner).slice(0, 400).map(i => ({ value: i.id, label: (byId[i.parent] && byId[i.parent].name ? byId[i.parent].name + ' / ' : '') + (i.name || 'Untitled') }));
+  },
+  // Add a note at (x, y), or change note n.
+  _editNote(n, x, y){
+    const pages = this._notePages();
+    const fields = [
+      { id: 'title', label: 'Title', value: n ? n.title || '' : '', placeholder: 'Room 3: the bar' },
+      { id: 'text', label: 'Note (only you see it)', type: 'textarea', rows: 5, value: n ? n.text || '' : '' },
+    ];
+    if (pages.length) fields.push({ id: 'link', label: 'Opens a page of your notes', type: 'select', value: n ? n.link || '' : '', options: [{ value: '', label: '— none —' }].concat(pages) });
+    showModal(n ? 'Map note' : 'New map note', fields, n ? 'Save' : 'Add').then(r => {
+      if (!r) return;
+      const title = String(r.title || '').slice(0, 120), text = String(r.text || '').slice(0, 20000), link = r.link || '';
+      if (!title && !text && !link) return;
+      if (n){ n.title = title; n.text = text; if (link) n.link = link; else delete n.link; }
+      else { const nt = { k: 'tpl', id: 'note_' + (typeof uid === 'function' ? uid() : Date.now().toString(36)), shape: 'note', x, y, title, text }; if (link) nt.link = link; this._drawings.push(nt); }
+      this._saveMap(); this._render();
+    });
+  },
+  // A note read on the map: its title and words, in a card by the pin.
+  _showNoteCard(n, cx, cy){
+    document.querySelectorAll('.map-note-card').forEach(e => e.remove());
+    const e = s => String(s || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+    const page = n.link ? this._notePages().find(p => p.value === n.link) : null;
+    const card = document.createElement('div');
+    card.className = 'map-note-card';
+    card.setAttribute('role', 'dialog');
+    card.innerHTML = '<div class="mnc-h">' + e(n.title || 'Note') + '</div>'
+      + (n.text ? '<div class="mnc-t">' + e(n.text) + '</div>' : '')
+      + '<div class="mnc-a">'
+      + (page ? '<button class="btn small primary" data-mnc="open">Open “' + e(page.label.split(' / ').pop()) + '”</button>' : n.link ? '<span class="mnc-gone">Its page isn’t in your notes any more</span>' : '')
+      + '<button class="btn small" data-mnc="edit">Edit</button><button class="btn small" data-mnc="close">Close</button></div>';
+    document.body.appendChild(card);
+    const w = card.offsetWidth, h = card.offsetHeight;
+    card.style.left = Math.max(8, Math.min(innerWidth - w - 8, (cx || innerWidth / 2) + 12)) + 'px';
+    card.style.top = Math.max(8, Math.min(innerHeight - h - 8, (cy || innerHeight / 2) - 12)) + 'px';
+    const close = () => { card.remove(); document.removeEventListener('pointerdown', away, true); document.removeEventListener('keydown', esc); };
+    const away = ev => { if (!card.contains(ev.target)) close(); };
+    const esc = ev => { if (ev.key === 'Escape') close(); };
+    setTimeout(() => { document.addEventListener('pointerdown', away, true); document.addEventListener('keydown', esc); }, 0);
+    card.addEventListener('click', ev => {
+      const a = ev.target.closest('[data-mnc]'); if (!a) return;
+      close();
+      if (a.dataset.mnc === 'edit') this._editNote(n);
+      if (a.dataset.mnc === 'open') this._openNotePage(n.link);
+    });
+    return card;
+  },
+  // Open a page of the DM's notes in the Notes panel.
+  _openNotePage(id){
+    if (typeof openPanel === 'function') openPanel('notes');
+    const N = typeof panelDefs !== 'undefined' && panelDefs.notes;
+    setTimeout(() => {
+      if (!N || !N._data || !N._data.items.some(i => i.id === id && i.type === 'file')){ if (typeof showToast === 'function') showToast('That page isn’t in your notes any more.'); return; }
+      try { N._commitEditing && N._commitEditing(); } catch(e){}
+      N._data.selectedId = id; N._save();
+      try { N._render(); } catch(e){}
+    }, 120);
   },
   // ─── Doors ─────────────────────────────────────────────────────────────────
   // A handle in the middle of each door, the same size on screen at any
@@ -3371,7 +3471,9 @@ registerPanel('battlemap',{
     });
   },
   // A tap on the map with no tool up. Only a door's handle answers it.
-  _tapMap(x, y){
+  _tapMap(x, y, cx, cy){
+    const nt = this._noteAt(x, y);
+    if (nt){ this._showNoteCard(nt, cx, cy); return true; }
     const d = this._doorAt(x, y); if (!d) return false;
     if (document.body.classList.contains('player-mode')){
       if (d.locked){ if (typeof showToast === 'function') showToast('The door is locked.'); return true; }
@@ -3445,7 +3547,7 @@ registerPanel('battlemap',{
     const stage = b.querySelector('#map-stage'); if (!stage) return;
     const orig = JSON.parse(JSON.stringify(t));
     b.querySelector('.map-place-hint')?.remove();
-    const what = t.shape === 'wall' ? (t.door ? 'door' : 'wall') : t.shape === 'lamp' ? 'light' : t.shape === 'terrain' ? 'difficult terrain' : 'area';
+    const what = t.shape === 'wall' ? (t.door ? 'door' : 'wall') : t.shape === 'lamp' ? 'light' : t.shape === 'terrain' ? 'difficult terrain' : t.shape === 'note' ? 'note' : 'area';
     const tap = typeof matchMedia === 'function' && matchMedia('(pointer: coarse)').matches;
     const hint = document.createElement('div');
     hint.className = 'map-place-hint';
@@ -3503,6 +3605,7 @@ registerPanel('battlemap',{
   // a spell's area or a light by its point of origin, snapped as when laid;
   // a wall whole; rough ground by whole squares, or on a hex map hex by hex.
   _shiftEntry(t, o, ax, ay, dx, dy){
+    if (t.shape === 'note'){ t.x = o.x + dx; t.y = o.y + dy; return; }   // where it's put, not on a grid corner
     if (t.shape === 'wall' && Array.isArray(o.pts)){
       const s = this._areaSnap(o.pts[0] + dx, o.pts[1] + dy), ex = s.x - o.pts[0], ey = s.y - o.pts[1];
       t.pts = o.pts.map((v, i) => v + (i % 2 ? ey : ex));
@@ -4592,6 +4695,12 @@ registerPanel('battlemap',{
         const items = [{ label: 'Choose a map…', onClick: () => this._openMapPicker() }];
         if (_mapBgImage) items.push({ label: 'Remove this map image', onClick: () => { _mapBgImage = null; this._bgMapPath = null; this._saveMap(); this._render(); } });
         items.push({ label: 'Grid, snapping and alignment…', onClick: () => { this._settingsOpen = true; this._render(); } });
+        // The ambush sprung: every hidden token onto the players' map at once.
+        const hid = (this._tokens || []).filter(t => t && t.hidden);
+        if (hid.length) items.push({ label: '👁 Reveal all hidden tokens (' + hid.length + ')', onClick: () => {
+          hid.forEach(t => { delete t.hidden; }); this._saveMap(); this._render();
+          if (typeof showToast === 'function') showToast(hid.length === 1 ? hid[0].label + ' is on the players’ map' : hid.length + ' tokens are on the players’ map');
+        } });
         if (typeof showContextMenu === 'function') showContextMenu(r.left, r.bottom + 4, items);
       }
       else if(act==='toggle-toolbar'){
@@ -4957,11 +5066,14 @@ registerPanel('battlemap',{
       // Dedupe: don't place a new token directly on top of an existing one.
       if(this._tokens.find(t => Math.abs((t.x||0)-cx) < csClick/2 && Math.abs((t.y||0)-cy) < csClick/2)) return;
       const isPC=this._tool==='add-pc';
+      // An NPC can go down already hidden: the ambush the players haven't seen.
       showModal((isPC?'Place PC':'Place NPC'),[
         {id:'label',label:'Name',type:'text',value:'',placeholder:isPC?'PC name':'Enemy name'}
-      ],'Place').then(r2=>{
+      ].concat(isPC ? [] : [{id:'hid',label:'Hidden from the players',type:'checkbox',value:false}]),'Place').then(r2=>{
         if(!r2||!r2.label)return;
-        this._tokens.push({id:uid(),label:r2.label,x:cx,y:cy,isPC,color:'#696969',size:1,dead:false});
+        const tk = {id:uid(),label:r2.label,x:cx,y:cy,isPC,color:'#696969',size:1,dead:false};
+        if (r2.hid) tk.hidden = true;
+        this._tokens.push(tk);
         this._renderTokens();this._saveMap();
       });
     });
@@ -5222,7 +5334,7 @@ registerPanel('battlemap',{
         document.removeEventListener(mvEv, mv); document.removeEventListener(upEv, up);
         if (touch) document.removeEventListener('touchcancel', stop);
       };
-      const up = () => { const tap = live; stop(); if (tap) this._tapMap(at.x, at.y); };
+      const up = () => { const tap = live; stop(); if (tap) this._tapMap(at.x, at.y, cx, cy); };
       const mv = ev => {
         const p = ev.touches ? ev.touches[0] : ev;
         if (!p || (ev.touches && ev.touches.length > 1) || Math.hypot(p.clientX - cx, p.clientY - cy) > 8) stop();

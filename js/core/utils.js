@@ -788,6 +788,8 @@ window.showHelpOverlay = showHelpOverlay;
 
 // Themed modal — replaces browser prompt/confirm
 // fields: [{id, label, type='text', value='', placeholder='', min, max}]
+//   type 'textarea' (rows): several lines — Enter makes a new line there;
+//   type 'checkbox': answers true/false.
 // returns Promise<object|null> — null if cancelled
 function showModal(title, fields, confirmLabel) {
   if(!confirmLabel) confirmLabel = 'OK';
@@ -808,18 +810,25 @@ function showModal(title, fields, confirmLabel) {
           return '<option value="' + esc(v) + '"' + sel + '>' + esc(l) + '</option>';
         }).join('');
         control = '<select id="mf-' + f.id + '">' + optsHtml + '</select>';
+      } else if (f.type === 'textarea') {
+        control = '<textarea id="mf-' + f.id + '" rows="' + (f.rows || 4) + '" placeholder="' + esc(f.placeholder || '') + '">' + esc(f.value != null ? String(f.value) : '') + '</textarea>';
+      } else if (f.type === 'checkbox') {
+        control = '<input id="mf-' + f.id + '" type="checkbox"' + (f.value ? ' checked' : '') + '>';
       } else {
         var minAttr = f.min !== undefined ? ' min="' + f.min + '"' : '';
         var maxAttr = f.max !== undefined ? ' max="' + f.max + '"' : '';
+        // (escaped: a name with a quote in it cut the box's value short)
         control = '<input id="mf-' + f.id + '" type="' + (f.type||'text') + '"'
-          + ' value="' + (f.value !== undefined ? f.value : '') + '"'
-          + ' placeholder="' + (f.placeholder||'') + '"'
+          + ' value="' + esc(f.value !== undefined ? String(f.value) : '') + '"'
+          + ' placeholder="' + esc(f.placeholder||'') + '"'
           + minAttr + maxAttr + ' autocomplete="off">';
       }
-      fieldHtml += '<div class="modal-field">'
-        + '<label>' + (f.label||'') + '</label>'
-        + control
-        + '</div>';
+      fieldHtml += f.type === 'checkbox'
+        ? '<div class="modal-field modal-check"><label>' + control + ' ' + (f.label||'') + '</label></div>'
+        : '<div class="modal-field">'
+          + '<label>' + (f.label||'') + '</label>'
+          + control
+          + '</div>';
     });
 
     var bodyHtml = fields.length
@@ -837,14 +846,14 @@ function showModal(title, fields, confirmLabel) {
       + '</div>';
 
     document.body.appendChild(backdrop);
-    setTimeout(function(){ var inp = backdrop.querySelector('input,select'); if(inp) inp.focus(); }, 30);
+    setTimeout(function(){ var inp = backdrop.querySelector('input,select,textarea'); if(inp) inp.focus(); }, 30);
 
     // Keys on document, not the backdrop: the backdrop div isn't focusable,
     // so its keydown only fired while focus happened to sit inside the modal
     // (e.g. after the auto-focus). Document-level always works; close()
     // removes it so stacked/repeated modals don't accumulate handlers.
     var onKey = function(e) {
-      if(e.key === 'Enter')  { e.preventDefault(); backdrop.querySelector('#modal-confirm').click(); }
+      if(e.key === 'Enter' && !(e.target && e.target.tagName === 'TEXTAREA'))  { e.preventDefault(); backdrop.querySelector('#modal-confirm').click(); }
       if(e.key === 'Escape') { close(null); }
     };
     var close = function(result) { document.removeEventListener('keydown', onKey); backdrop.remove(); resolve(result); };
@@ -856,6 +865,7 @@ function showModal(title, fields, confirmLabel) {
       fields.forEach(function(f) {
         var el = backdrop.querySelector('#mf-' + f.id);
         if(!el) return;
+        if (f.type === 'checkbox') { result[f.id] = !!el.checked; return; }
         if (f.type === 'number') {
           // Parse, but keep a genuine 0 — `parseInt(v) || f.value` dropped any
           // "0" the user typed (0 is falsy) and silently restored the original

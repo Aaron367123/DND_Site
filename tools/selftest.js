@@ -22664,6 +22664,123 @@ for (const cls of Object.keys(rule)) for (let L = 1; L <= 20; L++) for (const sc
         closePanel('battlemap');
       }
     }
+    // -- Round 396: an NPC placed hidden; every hidden token revealed at once; map notes — added, drawn, read, opened in Notes, edited, moved, kept by Clear —; the modal's text box and tick box --
+    {
+      const B = panelDefs.battlemap;
+      let keepT = null, keepD = null, keepF, fogSaved = false;
+      const keepTool = B._tool, keepShape = B._tplShape;
+      const modal = () => [...document.querySelectorAll('.modal-backdrop')].pop();
+      try {
+        // The modal: a quote in a value, a text box of several lines, a tick box
+        const pm = showModal('r396', [{ id: 'a', label: 'A', value: 'He said "run"' }, { id: 't', label: 'T', type: 'textarea', value: 'line one' }, { id: 'c', label: 'C', type: 'checkbox', value: false }], 'Go');
+        await sleep(80);
+        const m0 = modal();
+        ok('modal: a value with a quote in it is kept whole', m0.querySelector('#mf-a').value === 'He said "run"');
+        const ta = m0.querySelector('#mf-t'); ta.value = 'line one\nline two';
+        ta.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
+        await sleep(50);
+        ok('…Enter in the text box is a new line, not OK', !!modal() && modal() === m0);
+        m0.querySelector('#mf-c').checked = true;
+        m0.querySelector('#modal-confirm').click();
+        const r0 = await pm;
+        ok('…its answers: the lines, and the tick as true', r0 && r0.t === 'line one\nline two' && r0.c === true && r0.a === 'He said "run"', JSON.stringify(r0));
+
+        openPanel('battlemap'); await sleep(700);
+        keepT = B._tokens.slice(); keepD = B._drawings.slice();
+        keepF = B._fog; fogSaved = true; B._fog = null;
+        const cs = B._csScreen();
+        B._tokens = []; B._drawings = []; B._tool = 'add-npc'; B._render(); await sleep(150);
+        // + NPC, placed hidden
+        const stage = B._body.querySelector('#map-stage'), r = stage.getBoundingClientRect(), z = B._screenScale();
+        const px = Math.round(r.left + 5.5 * cs * z), py = Math.round(r.top + 5.5 * cs * z);
+        (document.elementFromPoint(px, py) || stage).dispatchEvent(new MouseEvent('click', { bubbles: true, clientX: px, clientY: py }));
+        await sleep(150);
+        const m1 = modal();
+        ok('+ NPC: “Hidden from the players” when placing', !!m1 && !!m1.querySelector('#mf-hid') && m1.querySelector('#mf-hid').type === 'checkbox');
+        if (m1){ m1.querySelector('#mf-label').value = 'r396 Sniper'; m1.querySelector('#mf-hid').checked = true; m1.querySelector('#modal-confirm').click(); }
+        await sleep(150);
+        const sn = B._tokens.find(t => t.label === 'r396 Sniper');
+        ok('…it goes down hidden', !!sn && sn.hidden === true, JSON.stringify(B._tokens));
+        B._tool = ''; B._tokens.push({ id: 't396b', label: 'r396 Brute', x: 7.5 * cs, y: 5.5 * cs, size: 1, hidden: true }); B._render(); await sleep(100);
+        // Map ▾ → Reveal all hidden tokens
+        B._body.querySelector('[data-mact="map-menu"]').click(); await sleep(100);
+        const rev = [...document.querySelectorAll('.ctx-menu-item')].find(e => /Reveal all hidden tokens \(2\)/.test(e.textContent));
+        ok('Map ▾: Reveal all hidden tokens (2)', !!rev);
+        if (rev) rev.click(); await sleep(100);
+        document.querySelectorAll('.ctx-menu').forEach(m => m.remove());
+        ok('…both on the players’ map now', B._tokens.every(t => !t.hidden));
+        B._body.querySelector('[data-mact="map-menu"]').click(); await sleep(100);
+        ok('…and the item’s gone with nothing hidden', ![...document.querySelectorAll('.ctx-menu-item')].some(e => /Reveal all/.test(e.textContent)));
+        document.querySelectorAll('.ctx-menu').forEach(m => m.remove());
+
+        // Notes: Build → Note
+        B._tokens = []; B._tool = 'area'; B._tplShape = 'note'; B._render(); await sleep(120);
+        ok('Build: Note is one of its things', !!B._body.querySelector('#tpl-shape option[value="note"]') && B._areaBuild());
+        B._areaPointerDown(4 * cs, 3 * cs, 300, 300, false); await sleep(120);
+        const m2 = modal();
+        ok('…pressing the map asks for its title, words and a page of your notes', !!m2 && !!m2.querySelector('#mf-title') && m2.querySelector('#mf-text').tagName === 'TEXTAREA' && !!m2.querySelector('#mf-link option[value="n_secret"]'));
+        if (m2){ m2.querySelector('#mf-title').value = 'Room 3: the bar'; m2.querySelector('#mf-text').value = 'Behind the bar: <b>Kella</b>,\nthe Zhentarim spy.'; m2.querySelector('#mf-link').value = 'n_secret'; m2.querySelector('#modal-confirm').click(); }
+        await sleep(150);
+        const nt = B._mapNotes()[0];
+        ok('…a note, where it was pressed', !!nt && nt.title === 'Room 3: the bar' && nt.x === 4 * cs && nt.y === 3 * cs && nt.link === 'n_secret' && /\n/.test(nt.text), JSON.stringify(nt));
+        const pin = B._body.querySelector('#tpl-layer [data-note="' + (nt && nt.id) + '"]');
+        ok('…drawn on the map as a pin with its title', !!pin && /Room 3: the bar/.test(pin.textContent));
+        ok('…and not an area (no labels, not counted)', B._areas().length === 0);
+        // No tool up: a click on the pin reads it
+        B._tool = ''; B._render(); await sleep(100);
+        const sc = B._body.querySelector('#map-scroll');
+        const cl = (sx, sy) => { const rr = B._body.querySelector('#map-stage').getBoundingClientRect(), zz = B._screenScale(); return { x: Math.round(rr.left + sx * zz), y: Math.round(rr.top + sy * zz) }; };
+        const p = cl(4 * cs, 3 * cs);
+        sc.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, cancelable: true, clientX: p.x, clientY: p.y, button: 0 }));
+        await sleep(90); document.dispatchEvent(new MouseEvent('mouseup', { bubbles: true, clientX: p.x, clientY: p.y })); await sleep(120);
+        const card = document.querySelector('.map-note-card');
+        ok('a click on the pin: a card with its title and words (as words, not markup)', !!card && /Room 3: the bar/.test(card.textContent) && /Kella/.test(card.textContent) && !card.querySelector('.mnc-t b'), card && card.innerHTML);
+        const openB = card && card.querySelector('[data-mnc="open"]');
+        ok('…and its page’s button', !!openB && /DM only - the traitor/.test(openB.textContent));
+        if (openB) openB.click(); await sleep(500);
+        ok('…which opens that page in Notes', !!panelDefs.notes._data && panelDefs.notes._data.selectedId === 'n_secret' && !document.querySelector('.map-note-card'), panelDefs.notes._data && panelDefs.notes._data.selectedId);
+        closePanel('notes'); await sleep(100);
+        // Edit from the card
+        B._showNoteCard(nt, 300, 300); await sleep(60);
+        document.querySelector('.map-note-card [data-mnc="edit"]').click(); await sleep(120);
+        const m3 = modal();
+        ok('Edit: the note’s own words in the box', !!m3 && m3.querySelector('#mf-text').value === nt.text && m3.querySelector('#mf-link').value === 'n_secret');
+        if (m3){ m3.querySelector('#mf-title').value = 'Room 3'; m3.querySelector('#mf-link').value = ''; m3.querySelector('#modal-confirm').click(); }
+        await sleep(120);
+        ok('…saved: new title, no page', nt.title === 'Room 3' && !nt.link);
+        // Esc closes a card; so does a click away
+        B._showNoteCard(nt, 300, 300); await sleep(60);
+        document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' })); await sleep(40);
+        ok('Esc closes the card', !document.querySelector('.map-note-card'));
+        // Move it (Build up, its menu)
+        B._tool = 'area'; B._tplShape = 'note'; B._render(); await sleep(80);
+        B._fixtureMenu(nt, 300, 300, nt.x, nt.y); await sleep(80);
+        const mv = [...document.querySelectorAll('.ctx-menu-item')].find(e => /Move this note/.test(e.textContent));
+        ok('its menu: Read, Edit, Move, Remove', !!mv && [...document.querySelectorAll('.ctx-menu-item')].some(e => /Read the note/.test(e.textContent)) && [...document.querySelectorAll('.ctx-menu-item')].some(e => /Remove this note/.test(e.textContent)));
+        document.querySelectorAll('.ctx-menu').forEach(m => m.remove());
+        const snap0 = B._snapToGrid; B._snapToGrid = true;   // (with snapping on, an area would go to a grid corner)
+        B._shiftEntry(nt, { x: 4 * cs, y: 3 * cs }, 0, 0, 13, 7);
+        B._snapToGrid = snap0;
+        ok('…moved where it’s put, not onto a grid corner', nt.x === 4 * cs + 13 && nt.y === 3 * cs + 7);
+        // Clear drawings and Clear areas both leave notes
+        B._tool = ''; B._drawings.push({ p: [1, 1, 30, 30], c: '#f00', w: 2 }); B._drawings.push({ k: 'tpl', id: 'r396a', shape: 'circle', x: 300, y: 300, ft: 10 }); B._render(); await sleep(80);
+        // (the DM's is in the panel's ⋯ menu)
+        B.menuItems().find(i => i.label === 'Clear all drawings').run(); await sleep(120);
+        const cf = modal(); if (cf) cf.querySelector('#conf-ok').click(); await sleep(150);
+        B._tool = 'area'; B._tplShape = 'circle'; B._render(); await sleep(80);
+        const ca = B._body.querySelector('[data-mact="clear-areas"]'); if (ca) ca.click(); await sleep(120);
+        ok('Clear drawings and Clear areas leave the notes', B._mapNotes().length === 1 && !B._drawings.some(s => s.p) && !B._areas().length, JSON.stringify(B._drawings.map(s => s.shape || 'stroke')));
+      } catch(e){ ok('round 396 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
+      finally {
+        document.querySelectorAll('.modal-backdrop, .ctx-menu, .map-note-card').forEach(m => m.remove());
+        if (fogSaved) B._fog = keepF;
+        B._tool = keepTool; B._tplShape = keepShape;
+        if (keepT){ B._tokens = keepT; B._drawings = keepD; try { B._saveMap(); } catch(e){} }
+        try { B._render(); } catch(e){}
+        try { closePanel('notes'); } catch(e){}
+        closePanel('battlemap');
+      }
+    }
     // -- Class features: represented, not just text ------------------------
     {
       try {
@@ -26099,6 +26216,42 @@ for (const cls of Object.keys(rule)) for (let L = 1; L <= 20; L++) for (const sc
         B._tool = keepTool;
         if (keepT){ B._tokens = keepT; B._drawings = keepD; try { B._saveMap(); } catch(e){} }
         try { B._applyViewScale(keepVs || 1); } catch(e){}
+        paTab = keepTab; try { paRender(); } catch(e){}
+      }
+    }
+    // -- Round 397: a player's phone — the DM's map notes aren't drawn or readable; a hidden creature isn't on the map or in the turn strip, and its turn is "the DM's" --
+    if (PLAYER){
+      const keepTab = paTab; const B = panelDefs.battlemap;
+      let keepT = null, keepD = null;
+      const keepC = JSON.stringify(state.combatants), keepA = state.activeCombatantId;
+      try {
+        if (paMyIdx() < 0) paSetPc('zoey');
+        paTab = 'map'; paRender(); await sleep(900);
+        keepT = B._tokens.slice(); keepD = B._drawings.slice();
+        const cs = B._csScreen();
+        B._drawings = [{ k: 'tpl', id: 'r397n', shape: 'note', x: 4 * cs, y: 4 * cs, title: 'r397 The traitor is Kella', text: 'secret' }];
+        B._tokens.forEach(t => { if (t.cid === 'ogre1') t.hidden = true; });
+        B._render(); await sleep(200);
+        const scr = document.getElementById('pa-screen');
+        ok('player: the DM’s map note isn’t drawn', !document.querySelector('[data-note]') && !/r397 The traitor/.test(scr.textContent));
+        B._tapMap(4 * cs, 4 * cs, 200, 200); await sleep(80);
+        ok('…and a tap where it is reads nothing', !document.querySelector('.map-note-card'));
+        ok('a hidden creature isn’t on their map', !scr.querySelector('.map-token[data-tid="tk_ogre"]'), JSON.stringify([...scr.querySelectorAll('.map-token')].map(e => e.dataset.tid)));
+        // The turn strip: the order is Ulrick, Zoey, Werewolf, Ogre 1, Namroc, Creambak
+        state.activeCombatantId = 'wolf'; paRender(); await sleep(250);
+        const strip = () => document.querySelector('#pa-turn');
+        ok('…nor in the turn strip', !!strip() && !/Ogre 1/.test(strip().textContent) && /Werewolf/.test(strip().textContent), strip() && strip().textContent);
+        // From the Werewolf round to Zoey: Ogre (hidden), Namroc, Creambak, Ulrick, Zoey
+        ok('…and the turns until yours are the ones you can see', /4 turns until you/.test(strip().textContent), strip().textContent);
+        state.activeCombatantId = 'ogre1'; paRender(); await sleep(250);
+        ok('on its turn: “The DM’s turn”, no name', /The DM’s turn/.test(strip().textContent) && !/Ogre/.test(strip().textContent), strip().textContent);
+        B._tokens.forEach(t => { if (t.cid === 'ogre1') delete t.hidden; }); paRender(); await sleep(250);
+        ok('revealed: it’s back in the strip, by name', /Ogre 1/.test(strip().textContent), strip().textContent);
+      } catch(e){ ok('round 397 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
+      finally {
+        state.combatants = JSON.parse(keepC); state.activeCombatantId = keepA;
+        if (keepT){ B._tokens = keepT; B._tokens.forEach(t => { if (t.cid === 'ogre1') delete t.hidden; }); B._drawings = keepD; }
+        try { B._render(); } catch(e){}
         paTab = keepTab; try { paRender(); } catch(e){}
       }
     }

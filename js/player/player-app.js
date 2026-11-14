@@ -701,20 +701,28 @@ function paRenderTabs(tabs){
 // evening. Only when the DM has shared the order.
 function paRenderTurn(){
   const el = document.getElementById('pa-turn'); if (!el) return;
-  const list = state.combatants || [];
+  // A creature the DM has hidden on the map isn't in the players' order:
+  // its name in the strip gave the ambush away. On its turn the strip says
+  // only that it's the DM's.
+  const B = typeof panelDefs !== 'undefined' && panelDefs.battlemap;
+  const hid = new Set(((B && B._tokens) || []).filter(t => t && t.hidden && t.cid).map(t => t.cid));
+  const all = state.combatants || [];
+  const list = all.filter(c => !hid.has(c.id));
   if (!paShared().has('combat') || !list.length){ el.innerHTML = ''; el.hidden = true; paTurnAlert(null, false, null); return; }
   el.hidden = false;
   const meC = paCombatant();
   const activeId = state.activeCombatantId;
-  const i = list.findIndex(c => c.id === activeId);
-  const cur = list[i] || list[0];
+  const i = all.findIndex(c => c.id === activeId);
+  const curAll = all[i] || all[0];
+  const dmTurn = !!(curAll && hid.has(curAll.id));
+  const cur = dmTurn ? null : curAll;
   const mine = !!(meC && cur && cur.id === meC.id);
   // Turns until yours, counting round the order — the number a player is
-  // actually computing in their head while they wait.
+  // actually computing in their head while they wait (the turns they can see).
   let until = null;
   if (meC && !mine && i >= 0){
-    const j = list.findIndex(c => c.id === meC.id);
-    if (j >= 0) until = (j - i + list.length) % list.length;
+    let n = 0;
+    for (let k = 1; k <= all.length; k++){ const c = all[(i + k) % all.length]; if (c.id === meC.id){ until = n + 1; break; } if (!hid.has(c.id)) n++; }
   }
   const pips = list.map(c => {
     const hp = paHpText(c);
@@ -723,7 +731,7 @@ function paRenderTurn(){
       + `<b>${paEsc(c.name)}</b>${hp ? `<i>${paEsc(hp)}</i>` : ''}</span>`;
   }).join('');
   el.classList.toggle('mine', mine);
-  paTurnAlert(cur, mine, until);
+  paTurnAlert(curAll, mine, until);   // (its id only: whose turn it is changes, so "you're up next" still comes)
   // The strip is rebuilt on every redraw, which put it back at the start: on
   // a fight of ten, whoever's turn it was sat off to the right. On a new turn
   // it scrolls to them; otherwise it stays where the player left it.
@@ -734,7 +742,7 @@ function paRenderTurn(){
       <span class="pa-round">Round ${state.combatRound || 1}</span>
       ${mine
         ? `<span class="pa-now mine">Your turn</span>`
-        : `<span class="pa-now"><b>${paEsc(cur ? cur.name : '—')}</b>'s turn</span>`}
+        : dmTurn ? `<span class="pa-now">The DM’s turn</span>` : `<span class="pa-now"><b>${paEsc(cur ? cur.name : '—')}</b>'s turn</span>`}
       ${until != null && until > 0 ? `<span class="pa-until">${until} turn${until === 1 ? '' : 's'} until you</span>` : ''}
     </div>
     <div class="pa-strip">${pips}</div>`;
