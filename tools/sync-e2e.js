@@ -300,6 +300,17 @@ const window = {};
       return lat(t2);
     });
 
+    await step('phone pings the map → the DM sees it, with Zoey’s name; the DM pings → the phone sees it', async () => {
+      await dm.ev("openPanel('battlemap'); await new Promise(r=>setTimeout(r,300)); document.querySelectorAll('.map-ping').forEach(e => e.remove()); return 1");
+      await pl.ev("paTab = 'map'; paRender(); await new Promise(r=>setTimeout(r,500)); document.querySelectorAll('.map-ping').forEach(e => e.remove()); panelDefs.battlemap._ping(321, 234); return 1");
+      const t1 = await W(dm, "const p = [...document.querySelectorAll('#map-stage .map-ping')].find(e => /Zoey/i.test(e.textContent)); return p && Math.abs(p.offsetLeft + p.offsetWidth / 2 - 321) < 2 ? 1 : 0", 8000);
+      if (t1 == null) return { ok: false, why: 'the DM never saw the phone’s ping' };
+      await dm.ev("panelDefs.battlemap._ping(150, 160); return 1");
+      const t2 = await W(pl, "return [...document.querySelectorAll('#map-stage .map-ping')].some(e => /DM/.test(e.textContent)) ? 1 : 0", 8000);
+      if (t2 == null) return { ok: false, why: 'the phone never saw the DM’s ping' };
+      return lat(t1);
+    });
+
     await step('DM uploads a map (3000×4000) → phone draws it at the same size and grid', async () => {
       const geo = 'const B = panelDefs.battlemap; return [B._bgMapPath, B._bgMapNaturalW, B._bgMapNaturalH, B._cols, B._rows].join(" ")';
       const before = await dm.ev("return panelDefs.battlemap._bgMapPath || ''");

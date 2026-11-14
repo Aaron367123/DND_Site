@@ -3263,7 +3263,20 @@ registerPanel('battlemap',{
           if (Object.keys(next).some(k => k.startsWith('live:'))) this._liveQuiet = setTimeout(() => onLive(this._liveAll), window.realtimeLive.LIVE_STALE_MS + 500);
         };
         const unPrefix = window.realtimeLive.watchPrefix('stroke_', all => { this._liveAll = all; onLive(all); });
-        this._unsubLive = () => { try { unLegacy(); } catch(e){} try { unPrefix && unPrefix(); } catch(e){} clearTimeout(this._liveQuiet); };
+        // Pings from other screens: each device's own channel, shown once
+        // each (n), and not one that's old by the time it's heard (a page
+        // just opened shouldn't flash a ping from a minute ago).
+        const seenPing = this._seenPing || (this._seenPing = {});
+        const unPing = window.realtimeLive.watchPrefix('ping_', all => {
+          Object.keys(all || {}).forEach(k => {
+            const v = all[k];
+            if (!v || k === this._pingDev() || seenPing[k] === v.n) return;
+            seenPing[k] = v.n;
+            if (typeof v.ts === 'number' && window.realtimeLive.serverNow() - v.ts > 4000) return;
+            this._showPing(+v.x, +v.y, v.c, v.by);
+          });
+        });
+        this._unsubLive = () => { try { unLegacy(); } catch(e){} try { unPrefix && unPrefix(); } catch(e){} try { unPing && unPing(); } catch(e){} clearTimeout(this._liveQuiet); };
       }
       // Token movement streams to EVERY device, both roles. Strokes only ever
       // travelled DM to player because only the DM draws; a token can be
@@ -3284,6 +3297,7 @@ registerPanel('battlemap',{
       }
       this._bc.onmessage = ev => {
         const msg = ev.data; if (!msg) return;
+        if (msg.kind === 'ping'){ this._showPing(+msg.x, +msg.y, msg.c, msg.by); return; }
         if (!isPlayer){
           // The DM tab used to drop EVERY inbound message, on the stated
           // grounds that it was ignoring its own echoes. It has none to
@@ -3683,6 +3697,42 @@ registerPanel('battlemap',{
       try { if (window.realtimeLive) window.realtimeLive.clear(this._liveChan()); } catch(e){}
     }, 1500);
   },
+  // ─── Pings ─────────────────────────────────────────────────────────────────
+  // Who's pinging, and in what colour: the DM gold, each player their own
+  // (from their name, so it's the same on every screen).
+  _pingWho(){
+    const me = document.body.classList.contains('player-mode') && typeof paPc === 'function' ? paPc() : null;
+    if (!me) return { by: 'DM', c: '#ffd36b' };
+    const pal = ['#5ec8ff', '#7ee08a', '#ff8fb1', '#c49bff', '#ffb35c', '#4fe0c8'];
+    let h = 0; for (const ch of String(me.name || me.id || '')) h = (h * 31 + ch.charCodeAt(0)) >>> 0;
+    return { by: String(me.name || 'Player'), c: pal[h % pal.length] };
+  },
+  _pingDev(){ return String(typeof sktDeviceId === 'function' ? sktDeviceId() : 'd').replace(/[.#$\[\]\/]/g, ''); },
+  _ping(x, y){
+    const w = this._pingWho(), n = Math.random().toString(36).slice(2, 8);
+    this._showPing(x, y, w.c, w.by);
+    try { if (this._bc) this._bc.postMessage({ kind: 'ping', x, y, c: w.c, by: w.by, n }); } catch(e){}
+    const L = window.realtimeLive; if (!L) return;
+    try {
+      const chan = 'ping_' + this._pingDev();
+      L.push(chan, { x: Math.round(x), y: Math.round(y), c: w.c, by: w.by.slice(0, 40), n });
+      clearTimeout(this._pingClearT);
+      this._pingClearT = setTimeout(() => { try { L.clear(chan); } catch(e){} }, 4000);
+    } catch(e){}
+  },
+  // Two rings spreading from the spot and the name under them, the same size
+  // on screen at any zoom; gone after a few seconds.
+  _showPing(x, y, c, by){
+    const stage = this._body && this._body.querySelector('#map-stage');
+    if (!stage || !isFinite(x) || !isFinite(y)) return;
+    const vs = this._screenScale ? (this._screenScale() || 1) : 1, r = 28 / vs;
+    const el = document.createElement('div');
+    el.className = 'map-ping';
+    el.style.cssText = 'left:' + (x - r).toFixed(1) + 'px;top:' + (y - r).toFixed(1) + 'px;width:' + (2 * r).toFixed(1) + 'px;height:' + (2 * r).toFixed(1) + 'px;--ping:' + (/^#[0-9a-f]{3,8}$/i.test(c || '') ? c : '#ffd36b');
+    el.innerHTML = '<i></i><i></i><b style="font-size:' + (11 / vs).toFixed(1) + 'px">' + String(by || '').replace(/[&<>"]/g, ch => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[ch]) + '</b>';
+    stage.appendChild(el);
+    setTimeout(() => el.remove(), 3000);
+  },
   // A live stroke node back into a stroke: its chunks in order.
   _liveToStroke(v){
     if (!v || typeof v !== 'object') return null;
@@ -3963,7 +4013,7 @@ registerPanel('battlemap',{
       // Hidden on touch by CSS: there is no right-click on a phone, so this
       // hint spent a row of a 390px screen telling you to do something you
       // can't.
-      +'<span class="map-foot-hint" style="font-size:var(--fs-2xs);color:var(--text-dim)">Drag tokens freely · Right-click for options</span>'
+      +'<span class="map-foot-hint" style="font-size:var(--fs-2xs);color:var(--text-dim)">Drag tokens · Right-click for options · Hold to ping</span>'
     +'</div>';
 
     html+='<div id="token-panel" style="position:absolute;right:8px;top:52px;width:164px;background:var(--panel);border:1px solid var(--border);border-radius:5px;padding:10px;font-size:var(--fs-sm);z-index:20;display:none;box-shadow:0 4px 16px rgba(0,0,0,.5)">'
@@ -4756,6 +4806,39 @@ registerPanel('battlemap',{
     });
     // Suppress browser context menu so right-click drag is usable
     scrollEl.addEventListener('contextmenu', e => e.preventDefault());
+    // Hold still on the map with no tool up — the mouse button or a finger,
+    // half a second — and it pings: a pulse there on every screen for a few
+    // seconds, with who made it. "Here", the way a finger on the table says
+    // it: where the trap is, where I'm going. (A token held opens its panel;
+    // tokens keep their own presses, so they never get here.)
+    const holdStart = (cx, cy, target, touch) => {
+      if (this._tool || this._fogTool || this._movingEntry) return;
+      if (target && target.closest && (target.closest('.map-token') || target.closest('button'))) return;
+      clearTimeout(this._holdT);
+      const mvEv = touch ? 'touchmove' : 'mousemove', upEv = touch ? 'touchend' : 'mouseup';
+      const stop = () => {
+        clearTimeout(this._holdT);
+        document.removeEventListener(mvEv, mv); document.removeEventListener(upEv, stop);
+        if (touch) document.removeEventListener('touchcancel', stop);
+      };
+      const mv = ev => {
+        const p = ev.touches ? ev.touches[0] : ev;
+        if (!p || (ev.touches && ev.touches.length > 1) || Math.hypot(p.clientX - cx, p.clientY - cy) > 8) stop();
+      };
+      document.addEventListener(mvEv, mv, { passive: true });
+      document.addEventListener(upEv, stop);
+      if (touch) document.addEventListener('touchcancel', stop);
+      this._holdT = setTimeout(() => {
+        stop();
+        const stage = b.querySelector('#map-stage'); if (!stage) return;
+        const p = this._stagePoint(cx, cy, stage); if (p) this._ping(p.x, p.y);
+      }, 550);
+    };
+    scrollEl.addEventListener('mousedown', e => { if (e.button === 0) holdStart(e.clientX, e.clientY, e.target, false); });
+    scrollEl.addEventListener('touchstart', e => {
+      if (e.touches.length === 1) holdStart(e.touches[0].clientX, e.touches[0].clientY, e.target, true);
+      else clearTimeout(this._holdT);   // a pinch
+    }, { passive: true });
 
     // ─── Touch support: 1-finger pan, 2-finger pinch-zoom ──────────────────
     // Only fires if the touch began on the map background (not a token —

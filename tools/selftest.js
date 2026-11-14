@@ -22164,6 +22164,72 @@ for (const cls of Object.keys(rule)) for (let L = 1; L <= 20; L++) for (const sc
         closePanel('battlemap');
       }
     }
+    // -- Round 383: pings — hold still on the map and a pulse shows there with who made it; sent to the other screens; not from a drag, a token or with a tool up --
+    {
+      const B = panelDefs.battlemap;
+      let keepT = null, keepD = null, keepF, fogSaved = false, keepLive;
+      const keepTool = B._tool;
+      try {
+        openPanel('battlemap'); await sleep(700);
+        keepT = B._tokens.slice(); keepD = B._drawings.slice();
+        keepF = B._fog; fogSaved = true; B._fog = null;
+        const cs = B._csScreen();
+        const gob = { id: 't383g', label: 'r383 Goblin', x: 3.5 * cs, y: 3.5 * cs, size: 1 };
+        B._tokens = [gob]; B._drawings = []; B._tool = ''; B._render(); await sleep(150);
+        B._body.querySelectorAll('.map-ping').forEach(e => e.remove());
+        // What goes to the other screens
+        const sent = [], posted = [];
+        keepLive = window.realtimeLive;
+        window.realtimeLive = Object.assign({}, keepLive || {}, { push: (c, v) => { if (/^ping_/.test(c)) sent.push([c, v]); }, /* presence goes this way too */ clear: () => {}, patch: () => {} });
+        const bcWas = B._bc; B._bc = { postMessage: m => posted.push(m), onmessage: bcWas && bcWas.onmessage };
+        const cl = (sx, sy) => { const r = B._body.querySelector('#map-stage').getBoundingClientRect(), z = B._screenScale(); return { x: r.left + sx * z, y: r.top + sy * z }; };
+        const scroll = B._body.querySelector('#map-scroll');
+        const hold = async (sx, sy, ms, moveBy, target) => {
+          const p = cl(sx, sy), el = target || scroll;
+          el.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, cancelable: true, clientX: p.x, clientY: p.y, button: 0 }));
+          if (moveBy){ await sleep(100); document.dispatchEvent(new MouseEvent('mousemove', { bubbles: true, clientX: p.x + moveBy, clientY: p.y })); }
+          await sleep(ms);
+          document.dispatchEvent(new MouseEvent('mouseup', { bubbles: true, clientX: p.x + (moveBy || 0), clientY: p.y }));
+          await sleep(30);
+        };
+        const pings = () => [...B._body.querySelectorAll('#map-stage .map-ping')];
+        await hold(8 * cs, 6 * cs, 250);
+        ok('a short click is not a ping', !pings().length && !sent.length);
+        await hold(8 * cs, 6 * cs, 750);
+        const pg = pings()[0];
+        const mid = pg ? { x: pg.offsetLeft + pg.offsetWidth / 2, y: pg.offsetTop + pg.offsetHeight / 2 } : null;
+        ok('held still: a ping where it was held', pings().length === 1 && Math.abs(mid.x - 8 * cs) < 2 && Math.abs(mid.y - 6 * cs) < 2, JSON.stringify(mid));
+        ok('…saying who: the DM, in gold', /DM/.test(pg.textContent) && /#ffd36b/i.test(pg.style.getPropertyValue('--ping')));
+        ok('…sent to the other devices on this one’s own channel', sent.length === 1 && /^ping_/.test(sent[0][0]) && sent[0][1].x === Math.round(8 * cs) && sent[0][1].by === 'DM' && !!sent[0][1].n, JSON.stringify(sent));
+        ok('…and to this browser’s other tabs', posted.some(m => m.kind === 'ping' && m.x === 8 * cs));
+        await sleep(3200);
+        ok('…gone after a few seconds', !pings().length);
+        await hold(8 * cs, 6 * cs, 750, 40);
+        ok('a drag is a pan, not a ping', !pings().length && sent.length === 1);
+        await hold(gob.x, gob.y, 750, 0, B._body.querySelector('.map-token[data-tid="t383g"]'));
+        ok('holding a token is not a ping', !pings().length && sent.length === 1);
+        B._closePanel();
+        B._tool = 'area'; B._render(); await sleep(80);
+        const sc2 = B._body.querySelector('#map-scroll');
+        await hold(10 * cs, 3 * cs, 750, 0, sc2);
+        ok('with a tool up, holding is the tool’s, not a ping', !pings().length && sent.length === 1);
+        document.querySelectorAll('.ctx-menu, .context-menu').forEach(m => m.remove());
+        B._drawings = []; B._tool = ''; B._render(); await sleep(80);
+        // Another tab's ping arrives
+        B._bc.onmessage && B._bc.onmessage({ data: { kind: 'ping', x: 5 * cs, y: 5 * cs, c: '#7ee08a', by: 'Zoey <b>', n: 'x1' } });
+        const p2 = pings()[0];
+        ok('a ping from another tab shows, in its colour, its name as text', !!p2 && /#7ee08a/i.test(p2.style.getPropertyValue('--ping')) && p2.textContent.includes('Zoey <b>') && !p2.querySelector('b b'), p2 && p2.outerHTML);
+        B._bc = bcWas;
+      } catch(e){ ok('round 383 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
+      finally {
+        if (keepLive !== undefined) window.realtimeLive = keepLive;
+        if (fogSaved) B._fog = keepF;
+        B._tool = keepTool;
+        if (keepT){ B._tokens = keepT; B._drawings = keepD; try { B._saveMap(); } catch(e){} }
+        try { B._closePanel(); B._render(); } catch(e){}
+        closePanel('battlemap');
+      }
+    }
     // -- Class features: represented, not just text ------------------------
     {
       try {
@@ -25453,6 +25519,44 @@ for (const cls of Object.keys(rule)) for (let L = 1; L <= 20; L++) for (const sc
         if (B._movingEntry) document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
         if (fogSaved) B._fog = keepF;
         B._tool = keepTool; B._tplShape = keepShape; B._tplSize = keepSize;
+        if (keepT){ B._tokens = keepT; B._drawings = keepD; try { B._saveMap(); } catch(e){} }
+        paTab = keepTab; try { paRender(); } catch(e){}
+      }
+    }
+    // -- Round 384: on a phone, a finger held on the map pings, in the player's own colour and name; a pinch doesn't --
+    if (PLAYER){
+      const keepTab = paTab; const B = panelDefs.battlemap;
+      let keepT = null, keepD = null, keepF, fogSaved = false, keepLive; const keepTool = B._tool;
+      try {
+        if (paMyIdx() < 0) paSetPc(state.party[0].id);
+        const me = paPc();
+        paTab = 'map'; paRender(); await sleep(900);
+        keepT = B._tokens.slice(); keepD = B._drawings.slice();
+        keepF = B._fog; fogSaved = true; B._fog = null;
+        B._tokens = []; B._drawings = []; B._tool = ''; B._render(); await sleep(150);
+        const sent = [];
+        keepLive = window.realtimeLive;
+        window.realtimeLive = Object.assign({}, keepLive || {}, { push: (c, v) => { if (/^ping_/.test(c)) sent.push([c, v]); }, clear: () => {}, patch: () => {} });
+        const scroll = B._body.querySelector('#map-scroll');
+        const T = (x, y, id) => new Touch({ identifier: id || 1, target: scroll, clientX: x, clientY: y });
+        const fire = (type, touches, changed) => scroll.dispatchEvent(new TouchEvent(type, { bubbles: true, cancelable: true, touches, targetTouches: touches, changedTouches: changed || touches }));
+        const mx = innerWidth / 2, my = innerHeight / 2 - 60;
+        const pings = () => [...B._body.querySelectorAll('#map-stage .map-ping')];
+        fire('touchstart', [T(mx, my)]); await sleep(750);
+        fire('touchend', [], [T(mx, my)]); await sleep(40);
+        const pg = pings()[0];
+        ok('phone: a finger held still pings', !!pg && sent.length === 1, JSON.stringify(sent));
+        ok('…with the player’s name, in a colour that isn’t the DM’s gold', pg && pg.textContent.includes(me.name) && !/#ffd36b/i.test(pg.style.getPropertyValue('--ping')) && sent[0][1].by === me.name);
+        pings().forEach(e => e.remove());
+        fire('touchstart', [T(mx, my)]); await sleep(150);
+        fire('touchstart', [T(mx, my), T(mx + 80, my + 40, 2)]); await sleep(650);
+        fire('touchend', [], [T(mx, my), T(mx + 80, my + 40, 2)]); await sleep(40);
+        ok('…a pinch is not a ping', !pings().length && sent.length === 1);
+      } catch(e){ ok('round 384 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
+      finally {
+        if (keepLive !== undefined) window.realtimeLive = keepLive;
+        if (fogSaved) B._fog = keepF;
+        B._tool = keepTool;
         if (keepT){ B._tokens = keepT; B._drawings = keepD; try { B._saveMap(); } catch(e){} }
         paTab = keepTab; try { paRender(); } catch(e){}
       }
