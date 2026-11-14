@@ -825,7 +825,10 @@ registerPanel('battlemap',{
     if (_tv && typeof _tv._checkProvoke === 'function'){ try { _tv._checkProvoke(t, { x: t.x, y: t.y, elev: was }); } catch(err){} }
   },
   // One square (one hex sideways on a hex map) in a direction, as a drop.
+  // The arrow is the way it looks: on a map turned 90°, → moves the token
+  // right across the screen, which is down the map.
   _keyMove(t, dx, dy){
+    { const s = this._stageDelta(dx, dy); dx = s.x; dy = s.y; }
     if (this._gridType === 'hex' && dy) return;   // a hex row isn't a straight line down
     const cs = this._csScreen() || 50, from = { x: t.x, y: t.y };
     const half = (t.size || 1) * this._tokenUnitScreen() / 2, W = this._cols * cs, H = this._rows * cs;
@@ -2101,38 +2104,60 @@ registerPanel('battlemap',{
   // grid lines: a token sitting between squares on an unsnapped map moved
   // 1.4 squares is one square, as the straight-line measure says — rounding
   // each end to the grid made it two.
+  // On a hex map (path.hex) a step is a hex: cells are cube coordinates of
+  // the hex the token's middle is in, the same hexes the straight measure
+  // (sktHexSteps) counts.
   _pathCell(path, x, y){
+    if (path.hex){
+      const cs = this._csScreen() || 50, o = this._gridOffPx(), c = sktHexAt(x, y, cs, o.x, o.y);
+      const X = c.q, Z = c.r - (c.q - (c.q & 1)) / 2;
+      return [X, -X - Z, Z];
+    }
     const cs = this._csScreen() || 50;
     return [Math.round((x - path.ox) / cs), Math.round((y - path.oy) / cs)];
+  },
+  _hexCentre(cu){
+    const cs = this._csScreen() || 50, o = this._gridOffPx(), s = cs / 2, h = s * Math.sqrt(3), q = cu[0], r = cu[2] + (q - (q & 1)) / 2;
+    return [q * s * 1.5 + o.x, ((q & 1) ? h / 2 : 0) + r * h + h / 2 + o.y];
   },
   _pathTo(path, t, x, y){
     if (!path) return;
     const to = this._pathCell(path, x, y), cells = path.cells;
+    const same = (a, b) => a.every((v, i) => v === b[i]);
+    const apart = (a, b) => Math.max(...a.map((v, i) => Math.abs(v - b[i])));   // squares: Chebyshev; hexes: cube distance
+    const step = cur => {
+      if (!path.hex) return [cur[0] + Math.sign(to[0] - cur[0]), cur[1] + Math.sign(to[1] - cur[1])];
+      // One hex along the line toward it (cube lerp, rounded back to a hex).
+      const n = apart(cur, to), f = cur.map((v, i) => v + (to[i] - v) / n);
+      const r = f.map(Math.round), d = f.map((v, i) => Math.abs(r[i] - v));
+      if (d[0] > d[1] && d[0] > d[2]) r[0] = -r[1] - r[2]; else if (d[1] > d[2]) r[1] = -r[0] - r[2]; else r[2] = -r[0] - r[1];
+      return r;
+    };
     let guard = 0;
-    for (let cur = cells[cells.length - 1]; (cur[0] !== to[0] || cur[1] !== to[1]) && guard++ < 2000; cur = cells[cells.length - 1]){
-      const nx = cur[0] + Math.sign(to[0] - cur[0]), ny = cur[1] + Math.sign(to[1] - cur[1]);
-      const back = cells.findIndex(c => c[0] === nx && c[1] === ny);
+    for (let cur = cells[cells.length - 1]; !same(cur, to) && guard++ < 2000; cur = cells[cells.length - 1]){
+      const nx = step(cur);
+      const back = cells.findIndex(c => same(c, nx));
       if (back >= 0){ cells.length = back + 1; continue; }
       // (as often as it holds: set down beside someone in the way, the last
       // hop can bend back past more than one square)
-      while (cells.length >= 2 && Math.max(Math.abs(cells[cells.length - 2][0] - nx), Math.abs(cells[cells.length - 2][1] - ny)) <= 1) cells.pop();
-      cells.push([nx, ny]);
+      while (cells.length >= 2 && apart(cells[cells.length - 2], nx) <= 1) cells.pop();
+      cells.push(nx);
     }
   },
   // What the walk cost: {ft, dg, rough, pts} — pts in stage px for the line.
   _pathCost(t, path, prevDiag){
     const cs = this._csScreen() || 50, per = this._ftPerCell || 5;
-    const ctr = c => [path.ox + c[0] * cs, path.oy + c[1] * cs];   // the token's middle at that step
+    const ctr = c => path.hex ? this._hexCentre(c) : [path.ox + c[0] * cs, path.oy + c[1] * cs];   // the token's middle at that step
     let ft = 0, dg = 0, rough = 0, eu = 0, p = Math.max(0, Math.round(+prevDiag || 0));
     const cells = path.cells;
     for (let i = 1; i < cells.length; i++){
-      const a = cells[i - 1], b = cells[i], diag = a[0] !== b[0] && a[1] !== b[1];
+      const a = cells[i - 1], b = cells[i], diag = !path.hex && a[0] !== b[0] && a[1] !== b[1];
       if (diag){ ft += this._diagRule === 'alt' && p % 2 === 1 ? 2 * per : per; p++; dg++; eu += Math.SQRT2; }
       else { ft += per; eu += 1; }
       const [cx, cy] = ctr(b);
       rough += this._terrainExtra(t, cx, cy, cx, cy, true);
     }
-    if (this._diagRule === 'euclid') ft = Math.round(eu) * per;
+    if (this._diagRule === 'euclid' && !path.hex) ft = Math.round(eu) * per;
     return { ft, dg, rough, pts: cells.map(ctr) };
   },
   // The ruler on a token being dragged: this drag, and on its turn the whole
@@ -2140,10 +2165,10 @@ registerPanel('battlemap',{
   _measureMove(t, x0, y0, x1, y1){
     const mi = this._moveInfo(t);
     const prev = mi && typeof sktTurnDiag === 'function' ? sktTurnDiag(t) : 0;
-    // Dragged on squares: along the way walked.
+    // Dragged: along the way walked, square by square or hex by hex.
     const d = this._drag;
-    if (d && this._gridType !== 'hex'){
-      if (!d.path) d.path = { ox: x0, oy: y0, cells: [[0, 0]] };
+    if (d){
+      if (!d.path){ const hex = this._gridType === 'hex'; d.path = { ox: x0, oy: y0, hex, cells: [] }; d.path.cells.push(this._pathCell(d.path, x0, y0)); }
       this._pathTo(d.path, t, x1, y1);
       const pc = this._pathCost(t, d.path, prev);
       return this._measureShow(x0, y0, x1, y1, mi ? mi.budget : this._tokenSpeed(t), mi ? mi.moved : 0, mi && mi.cost, prev, pc.rough, pc);
@@ -2160,7 +2185,7 @@ registerPanel('battlemap',{
     if (typeof sktNoteMove !== 'function') return;
     const prev = typeof sktTurnDiag === 'function' ? sktTurnDiag(t) : 0;
     // The way it was dragged, to where it landed (snapped or set beside).
-    if (path && path.cells && this._gridType !== 'hex'){
+    if (path && path.cells){
       this._pathTo(path, t, t.x, t.y);
       const pc = this._pathCost(t, path, prev);
       if (pc.ft > 0 && sktNoteMove(this._tokens, t, pc.ft, pc.dg, pc.rough)) panelDefs.turnview?._syncMoved?.();

@@ -21727,6 +21727,85 @@ for (const cls of Object.keys(rule)) for (let L = 1; L <= 20; L++) for (const sc
         closePanel('battlemap');
       }
     }
+    // -- Round 375: on a turned map the arrow keys go the way they look --
+    {
+      const B = panelDefs.battlemap;
+      let keepT = null, keepF, fogSaved = false; const keepRot = B._mapRotation;
+      const key = k => document.dispatchEvent(new KeyboardEvent('keydown', { key: k, bubbles: true, cancelable: true }));
+      try {
+        openPanel('battlemap'); await sleep(700);
+        keepT = B._tokens.slice();
+        keepF = B._fog; fogSaved = true; B._fog = null;
+        const cs = B._csScreen();
+        const tk = { id: 'r375t', label: 'r375 Scout', x: 5.5 * cs, y: 5.5 * cs, size: 1 };
+        B._tokens = [tk]; B._mapRotation = 90; B._render(); await sleep(200);
+        B._selected = 'r375t';
+        const win = B._body.closest('.window'); document.querySelectorAll('.window').forEach(w => w.classList.remove('focused')); win.classList.add('focused');
+        const before = B._body.querySelector('.map-token[data-tid="r375t"]').getBoundingClientRect();
+        key('ArrowRight'); await sleep(60);
+        const after = B._body.querySelector('.map-token[data-tid="r375t"]').getBoundingClientRect();
+        ok('map turned 90°: → moves the token right on the screen', after.left - before.left > 5 && Math.abs(after.top - before.top) < 3, [before.left, before.top, after.left, after.top].map(Math.round).join(','));
+      } catch(e){ ok('round 375 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
+      finally {
+        if (fogSaved) B._fog = keepF;
+        B._mapRotation = keepRot; B._selected = null;
+        if (keepT){ B._tokens = keepT; try { B._saveMap(); } catch(e){} }
+        try { B._render(); } catch(e){}
+        closePanel('battlemap');
+      }
+    }
+    // -- Round 376: on a hex map a drag counts the hexes walked, not the straight line --
+    {
+      const B = panelDefs.battlemap;
+      let keepT = null, keepF, fogSaved = false; const keepC = JSON.stringify(state.combatants), keepA = state.activeCombatantId, keepR = state.combatRound, keepG = B._gridType, keepSnap = B._snapToGrid;
+      try {
+        openPanel('battlemap'); await sleep(700);
+        keepT = B._tokens.slice();
+        keepF = B._fog; fogSaved = true; B._fog = null;
+        B._gridType = 'hex'; B._snapToGrid = false; B._render(); await sleep(150);
+        const cs = B._csScreen(), col = cs * 0.75, row = cs * Math.sqrt(3) / 2;
+        state.combatants = [{ id: 'r376r', name: 'r376 Runner', hp: 20, hpMax: 20, ac: 12, conditions: [] }];
+        state.activeCombatantId = 'r376r'; state.combatRound = 1;
+        const [hx, hy] = B._hexCentre([4, -6, 2]);
+        const tk = { id: 'r376t', cid: 'r376r', label: 'r376 Runner', x: hx, y: hy, size: 1 };
+        B._tokens = [tk]; B._renderTokens(); await sleep(60);
+        const walk = async (legs) => {
+          const el = B._body.querySelector('.map-token[data-tid="r376t"]'), r = el.getBoundingClientRect(), z = B._screenScale();
+          const sx = r.left + r.width / 2, sy = r.top + r.height / 2;
+          el.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, cancelable: true, clientX: sx, clientY: sy, button: 0 }));
+          let cx = 0, cy = 0;
+          for (const [tx, ty] of legs){
+            const n = Math.max(1, Math.ceil(Math.hypot(tx - cx, ty - cy) / (cs / 5))), x0 = cx, y0 = cy;
+            for (let i = 1; i <= n; i++){ cx = x0 + (tx - x0) * i / n; cy = y0 + (ty - y0) * i / n;
+              document.dispatchEvent(new MouseEvent('mousemove', { bubbles: true, clientX: sx + cx * z, clientY: sy + cy * z })); await sleep(3); }
+          }
+          document.dispatchEvent(new MouseEvent('mouseup', { bubbles: true, clientX: sx + cx * z, clientY: sy + cy * z })); await sleep(60);
+        };
+        const from = { x: tk.x, y: tk.y };
+        delete tk.mv;
+        await walk([[4 * col, 0], [4 * col, 3 * row], [0, 3 * row]]);
+        const straight = B._feetBetweenPts(from.x, from.y, tk.x, tk.y);
+        ok('hex map: dragged out 4, down 3 and back — the walk, not the straight line', sktTurnMoved(tk) >= straight + 30 && sktTurnMoved(tk) % 5 === 0, sktTurnMoved(tk) + ' vs straight ' + straight);
+        tk.x = from.x; tk.y = from.y; B._renderTokens(); delete tk.mv;
+        await walk([[3 * col, 0], [0, 0], [col, 0]]);
+        ok('hex map: out 3 and back, then one hex on: 5 ft', sktTurnMoved(tk) === 5, sktTurnMoved(tk));
+        tk.x = from.x; tk.y = from.y; B._renderTokens(); delete tk.mv;
+        await walk([[3 * col, 0], [3 * col, 3 * row], [0, 3 * row], [0, 0], [col, 0]]);
+        ok('hex map: round a loop back to the start, then one hex on: 5 ft (the loop dropped)', sktTurnMoved(tk) === 5, sktTurnMoved(tk));
+        tk.x = from.x; tk.y = from.y; B._renderTokens(); delete tk.mv;
+        await walk([[0, 4 * row]]);
+        ok('hex map: straight down 4 hexes: 20 ft', sktTurnMoved(tk) === 20, sktTurnMoved(tk));
+      } catch(e){ ok('round 376 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
+      finally {
+        if (fogSaved) B._fog = keepF;
+        B._gridType = keepG; B._snapToGrid = keepSnap;
+        if (keepT){ B._tokens = keepT; try { B._saveMap(); } catch(e){} }
+        state.combatants = JSON.parse(keepC); state.activeCombatantId = keepA; state.combatRound = keepR;
+        B._measureHide();
+        try { B._render(); } catch(e){}
+        closePanel('battlemap');
+      }
+    }
     // -- Class features: represented, not just text ------------------------
     {
       try {
