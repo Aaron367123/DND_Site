@@ -2113,8 +2113,9 @@ registerPanel('battlemap',{
       const nx = cur[0] + Math.sign(to[0] - cur[0]), ny = cur[1] + Math.sign(to[1] - cur[1]);
       const back = cells.findIndex(c => c[0] === nx && c[1] === ny);
       if (back >= 0){ cells.length = back + 1; continue; }
-      const prev = cells[cells.length - 2];
-      if (prev && Math.max(Math.abs(prev[0] - nx), Math.abs(prev[1] - ny)) <= 1) cells.pop();
+      // (as often as it holds: set down beside someone in the way, the last
+      // hop can bend back past more than one square)
+      while (cells.length >= 2 && Math.max(Math.abs(cells[cells.length - 2][0] - nx), Math.abs(cells[cells.length - 2][1] - ny)) <= 1) cells.pop();
       cells.push([nx, ny]);
     }
   },

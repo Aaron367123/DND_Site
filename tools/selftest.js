@@ -21547,6 +21547,18 @@ for (const cls of Object.keys(rule)) for (let L = 1; L <= 20; L++) for (const sc
         await walk([[1.4, 0]]);
         ok('snap off, a token between squares dragged 1.4 squares: 5 ft, not 10', sktTurnMoved(tk) === 5, sktTurnMoved(tk));
         B._snapToGrid = true;
+        // A Large one dragged onto someone and set down beside them: the walk is no more than where it landed
+        { B._snapToGrid = false;
+          const big = { id: 'r369big', cid: 'r369r', label: 'r369 Runner', x: 200, y: 300, size: 2 }, blk = { id: 'r369blk', label: 'r369 Blocker', x: 300, y: 300, size: 1 };
+          B._tokens = [big, blk]; B._renderTokens(); await sleep(30);
+          const el = B._body.querySelector('.map-token[data-tid="r369big"]'), r = el.getBoundingClientRect(), z = B._screenScale() || 1;
+          const x0 = r.left + r.width / 2, y0 = r.top + r.height / 2;
+          el.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, cancelable: true, button: 0, clientX: x0, clientY: y0 }));
+          document.dispatchEvent(new MouseEvent('mousemove', { bubbles: true, clientX: x0 + 100 * z, clientY: y0 }));
+          document.dispatchEvent(new MouseEvent('mouseup', { bubbles: true, clientX: x0 + 100 * z, clientY: y0 })); await sleep(40);
+          const f = B._feetBetweenPts(200, 300, big.x, big.y);
+          ok('a Large one dragged onto someone, set down beside them: the move is where it landed', f > 0 && sktTurnMoved(big) === f, JSON.stringify([big.x, big.y, big.mv, f]));
+          B._tokens = [tk]; B._snapToGrid = true; B._renderTokens(); }
         // Through difficult terrain on the way, even when it ends outside it
         tk.x = o.x + 2.5 * cs; tk.y = o.y + 2.5 * cs; B._renderTokens(); delete tk.mv;
         B._drawings = [{ k: 'tpl', id: 'r369dt', shape: 'terrain', x: o.x + 4 * cs, y: o.y, x2: o.x + 6 * cs, y2: o.y + 4 * cs }];
