@@ -21806,6 +21806,170 @@ for (const cls of Object.keys(rule)) for (let L = 1; L <= 20; L++) for (const sc
         closePanel('battlemap');
       }
     }
+    // -- Round 377: light and sight — the map's light, a torch's reach, walls, darkvision, magical darkness; the Turn View's attacks see it --
+    {
+      const B = panelDefs.battlemap, T = panelDefs.turnview;
+      let keepT = null, keepD = null, keepF, fogSaved = false;
+      const keepP = JSON.stringify(state.party), keepC = JSON.stringify(state.combatants), keepL = B._light, keepTool = B._tool, keepShape = B._tplShape, keepDm = B._dmSight;
+      try {
+        for (let i = 0; i < 100 && !(typeof _5eLoaded !== 'undefined' && _5eLoaded); i++) await sleep(100);
+        ok('senses read from a sheet’s line and a stat block’s object', JSON.stringify(sktParseSenses('Darkvision 60 ft., Blindsight 10 ft.')) === '{"darkvision":60,"blindsight":10}'
+          && sktParseSenses({ darkvision: '120 ft.', passive_perception: 13 }).darkvision === 120);
+        openPanel('turnview'); await sleep(500);
+        openPanel('battlemap'); await sleep(700);
+        keepT = B._tokens.slice(); keepD = B._drawings.slice();
+        keepF = B._fog; fogSaved = true; B._fog = null;
+        const cs = B._csScreen();
+        state.party.push({ id: 'r377h', name: 'r377 Human', hp: 20, hpMax: 20, ac: 14, sheet: { senses: '' } },
+                         { id: 'r377d', name: 'r377 Dwarf', hp: 20, hpMax: 20, ac: 16, sheet: { senses: 'Darkvision 60 ft.' } },
+                         { id: 'r377w', name: 'r377 Warlock', hp: 20, hpMax: 20, ac: 13, sheet: { senses: '', featureList: [{ name: 'Devil’s Sight', text: '' }] } });
+        state.combatants = [{ id: 'r377h', name: 'r377 Human', isPC: true, hp: 20, hpMax: 20, ac: 14, conditions: [], initiative: 15 },
+                            { id: 'r377g', name: 'Goblin', hp: 7, hpMax: 7, ac: 15, conditions: [], initiative: 10 }];
+        ok('a dwarf’s darkvision from its sheet; a goblin’s from its stat block; Devil’s Sight', sktSenses({ id: 'r377d', isPC: true, name: 'r377 Dwarf' }).darkvision === 60
+          && sktSenses(state.combatants[1]).darkvision === 60 && sktSenses({ id: 'r377w', isPC: true, name: 'r377 Warlock' }).devilsight === 120,
+          JSON.stringify([sktSenses({ id: 'r377d', isPC: true }), sktSenses(state.combatants[1])]));
+        const hu = { id: 't377h', cid: 'r377h', label: 'r377 Human', isPC: true, x: 2.5 * cs, y: 5.5 * cs, size: 1 };
+        const dw = { id: 't377d', cid: 'r377d', label: 'r377 Dwarf', isPC: true, x: 2.5 * cs, y: 6.5 * cs, size: 1 };
+        const wl = { id: 't377w', cid: 'r377w', label: 'r377 Warlock', isPC: true, x: 2.5 * cs, y: 4.5 * cs, size: 1 };
+        const gb = { id: 't377g', cid: 'r377g', label: 'Goblin', x: 8.5 * cs, y: 5.5 * cs, size: 1 };     // 30 ft from the human
+        B._tokens = [hu, dw, wl, gb]; B._drawings = []; B._light = 'bright'; B._tool = ''; B._render(); await sleep(150);
+        let S = B._sightSrc();
+        ok('a bright map with nothing on it: sight is off, everyone sees', !S.on && sktCanSee(S, hu, gb));
+        ok('…and no Sight button for the DM', !B._body.querySelector('[data-mact="dm-sight"]'));
+        // Night falls (the DM's settings)
+        B._settingsOpen = true; B._render(); await sleep(120);
+        const tileDark = B._body.querySelector('[data-bmset="light-dark"]');
+        if (tileDark) tileDark.click();
+        await sleep(100);
+        ok('settings: Dark makes the map dark, and it is kept', B._light === 'dark' && JSON.parse(localStorage.getItem('skt-battlemap-v1')).light === 'dark', 'tile ' + !!tileDark);
+        B._settingsOpen = false; B._render(); await sleep(80);
+        S = B._sightSrc();
+        ok('in the dark: the human doesn’t see the goblin 30 ft off; the dwarf does (darkvision 60)', !sktCanSee(S, hu, gb) && sktCanSee(S, dw, gb));
+        // A torch
+        B._showPanel(hu); await sleep(80);
+        const ls = B._body.querySelector('#tp-light'); ls.value = 'torch'; ls.dispatchEvent(new Event('change', { bubbles: true })); await sleep(50);
+        B._closePanel();
+        ok('the token panel lights a torch: bright 20, dim 20 more', hu.lt && hu.lt.b === 20 && hu.lt.d === 20, JSON.stringify(hu.lt));
+        S = B._sightSrc();
+        ok('torchlight: bright at 15 ft, dim at 30, dark at 45', sktLightAt(S, hu.x + 3 * cs, hu.y) === 2 && sktLightAt(S, hu.x + 6 * cs, hu.y) === 1 && sktLightAt(S, hu.x + 9 * cs, hu.y) === 0);
+        ok('…so now the human sees the goblin (in its dim light)', sktCanSee(S, hu, gb));
+        // A wall between
+        B._drawings.push({ k: 'tpl', id: 'r377wall', shape: 'wall', pts: [5 * cs, 2 * cs, 5 * cs, 9 * cs] });
+        S = B._sightSrc();
+        ok('a wall between: no one sees the goblin, and the torch doesn’t light its side', !sktCanSee(S, hu, gb) && !sktCanSee(S, dw, gb) && sktLightAt(S, hu.x + 4 * cs, hu.y) === 0);
+        B._drawings = B._drawings.filter(s => s.id !== 'r377wall'); delete hu.lt;
+        // Magical darkness on the goblin
+        B._drawings.push({ k: 'tpl', id: 'r377dk', shape: 'darkness', x: gb.x, y: gb.y, ft: 15 });
+        S = B._sightSrc();
+        ok('magical darkness: darkvision doesn’t see into it; Devil’s Sight does', !sktCanSee(S, dw, gb) && sktCanSee(S, wl, gb));
+        B._drawings = [];
+        // The Turn View's attacks
+        T._mapCache = null;
+        const hc = state.combatants[0], gc = state.combatants[1];
+        const m1 = T._condMods(hc, gc), m2 = T._condMods(gc, hc);
+        ok('Turn View, in the dark: the human attacks at disadvantage (can’t see the goblin)', m1.dis.some(x => /can’t see the target/.test(x)), JSON.stringify(m1));
+        ok('…and the goblin, which sees by darkvision, at advantage (the human can’t see it)', m2.adv.some(x => /can’t see it/.test(x)) && !m2.dis.some(x => /can’t see/.test(x)), JSON.stringify(m2));
+        B._light = 'bright'; T._mapCache = null;
+        ok('…in bright light, neither', !T._condMods(hc, gc).dis.some(x => /see/.test(x)) && !T._condMods(gc, hc).adv.some(x => /see/.test(x)));
+        B._light = 'dark';
+        // The DM's tools: a wall, a light, magical darkness
+        B._tool = 'area'; B._tplShape = 'wall'; B._render(); await sleep(100);
+        const stage = B._body.querySelector('#map-stage'), z = B._screenScale(), sr = stage.getBoundingClientRect();
+        const cl = (sx, sy) => ({ x: sr.left + sx * z, y: sr.top + sy * z });
+        const p0 = cl(10 * cs, 2 * cs), p1 = cl(10 * cs, 6 * cs);
+        B._areaPointerDown(10 * cs, 2 * cs, p0.x, p0.y, false); await sleep(10);
+        for (let i = 1; i <= 4; i++){ document.dispatchEvent(new MouseEvent('mousemove', { bubbles: true, clientX: p0.x, clientY: p0.y + (p1.y - p0.y) * i / 4 })); await sleep(10); }
+        document.dispatchEvent(new MouseEvent('mouseup', { bubbles: true, clientX: p1.x, clientY: p1.y })); await sleep(60);
+        ok('the Area tool draws a wall with a drag', B._walls().length === 1 && Math.abs(B._walls()[0].pts[3] - 6 * cs) < cs * 0.3, JSON.stringify(B._walls()));
+        ok('…drawn on the DM’s map', !!B._body.querySelector('#tpl-layer [data-wall]'));
+        B._tplShape = 'lamp'; B._render(); await sleep(80);
+        B._body.querySelector('#tpl-lamp').value = 'lantern';
+        const p2 = cl(12 * cs, 8 * cs);
+        B._areaPointerDown(12 * cs, 8 * cs, p2.x, p2.y, false); await sleep(10);
+        document.dispatchEvent(new MouseEvent('mouseup', { bubbles: true, clientX: p2.x, clientY: p2.y })); await sleep(60);
+        const lp = B._lamps()[0];
+        ok('…and a light source where pressed: a lantern, 30 ft bright and 30 dim', lp && lp.ft === 30 && lp.w === 30, JSON.stringify(lp));
+        ok('…neither is a spell area (no saves, “Clear areas” leaves them)', !B._areas().some(a => a.shape === 'wall' || a.shape === 'lamp'));
+        ok('magical darkness is an area of its own, named', /magical darkness/.test(B._areaName({ shape: 'darkness', ft: 15 })));
+        // The DM's preview
+        B._tool = ''; B._render(); await sleep(80);
+        const sb = B._body.querySelector('[data-mact="dm-sight"]');
+        ok('a dark map: the DM has a Sight button', !!sb);
+        if (sb) sb.click(); await sleep(150);
+        ok('…pressed, the map is shaded as the party sees it', !!B._body.querySelector('#sight-layer'));
+        B._dmSight = false; B._render(); await sleep(60);
+        ok('…and off again', !B._body.querySelector('#sight-layer'));
+        // Another screen's map state: its light arrives
+        B.applyMapState(Object.assign(JSON.parse(localStorage.getItem('skt-battlemap-v1')), { light: 'dim' }), { source: 'test' }); await sleep(80);
+        ok('the map’s light reaches other screens', B._light === 'dim');
+      } catch(e){ ok('round 377 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
+      finally {
+        if (fogSaved) B._fog = keepF;
+        B._light = keepL; B._tool = keepTool; B._tplShape = keepShape; B._dmSight = keepDm; B._settingsOpen = false;
+        if (keepT){ B._tokens = keepT; B._drawings = keepD; try { B._saveMap(); } catch(e){} }
+        state.party = JSON.parse(keepP); state.combatants = JSON.parse(keepC);
+        try { B._closePanel(); B._render(); } catch(e){}
+        closePanel('battlemap'); closePanel('turnview');
+      }
+    }
+    // -- Round 379: difficult terrain on a hex map is hexes — laid by dragging over them, drawn as hexes, costed hex by hex --
+    {
+      const B = panelDefs.battlemap;
+      let keepT = null, keepD = null, keepF, fogSaved = false; const keepG = B._gridType, keepTool = B._tool, keepShape = B._tplShape;
+      const keepC = JSON.stringify(state.combatants), keepA = state.activeCombatantId, keepR = state.combatRound;
+      try {
+        openPanel('battlemap'); await sleep(700);
+        keepT = B._tokens.slice(); keepD = B._drawings.slice();
+        keepF = B._fog; fogSaved = true; B._fog = null;
+        B._gridType = 'hex'; B._tokens = []; B._drawings = []; B._tool = 'area'; B._tplShape = 'terrain'; B._render(); await sleep(150);
+        const cs = B._csScreen();
+        const [ax, ay] = B._hexAtQR(5, 2), [bx, by] = B._hexAtQR(5, 4);
+        const stage = B._body.querySelector('#map-stage'), z = B._screenScale(), sr = stage.getBoundingClientRect();
+        const cl = (sx, sy) => ({ x: sr.left + sx * z, y: sr.top + sy * z });
+        const p0 = cl(ax - 2, ay - 2), p1 = cl(bx + 2, by + 2);
+        B._areaPointerDown(ax - 2, ay - 2, p0.x, p0.y, false); await sleep(10);
+        for (let i = 1; i <= 4; i++){ document.dispatchEvent(new MouseEvent('mousemove', { bubbles: true, clientX: p0.x + (p1.x - p0.x) * i / 4, clientY: p0.y + (p1.y - p0.y) * i / 4 })); await sleep(10); }
+        document.dispatchEvent(new MouseEvent('mouseup', { bubbles: true, clientX: p1.x, clientY: p1.y })); await sleep(60);
+        const dt = B._terrain()[0];
+        const keys = dt && (dt.hexes || []).map(c => c.join(',')).sort().join(' ');
+        ok('hex map: a drag down a column of three hexes lays those three hexes', keys === '5,2 5,3 5,4', keys);
+        ok('…drawn as hexes', B._body.querySelectorAll('#tpl-layer [data-dt] polygon').length === 3);
+        const [cx, cy] = B._hexAtQR(5, 3), [ox, oy] = B._hexAtQR(8, 3);
+        ok('…the middle hex is rough, one three hexes away isn’t', B._inTerrain(cx, cy) && !B._inTerrain(ox, oy));
+        const [nx, ny] = B._hexAtQR(4, 3);
+        ok('…nor the hex beside the column (a block of squares would have taken it in)', !B._inTerrain(nx, ny));
+        // One press, no drag: the one hex
+        const [kx, ky] = B._hexAtQR(9, 6), pk = cl(kx, ky);
+        B._areaPointerDown(kx, ky, pk.x, pk.y, false); await sleep(10);
+        document.dispatchEvent(new MouseEvent('mouseup', { bubbles: true, clientX: pk.x, clientY: pk.y })); await sleep(60);
+        const one = B._terrain()[1];
+        ok('…a single press lays that one hex', one && JSON.stringify(one.hexes) === '[[9,6]]', one && JSON.stringify(one));
+        B._drawings = B._drawings.filter(x => x !== one);
+        // Costed hex by hex: walking 4 hexes down the column through the 3 rough ones
+        state.combatants = [{ id: 'r379r', name: 'r379 Runner', hp: 9, hpMax: 9, ac: 12, conditions: [] }];
+        state.activeCombatantId = 'r379r'; state.combatRound = 1;
+        const [sx, sy] = B._hexAtQR(5, 1), [ex, ey] = B._hexAtQR(5, 5);
+        const tk = { id: 'r379t', cid: 'r379r', label: 'r379 Runner', x: sx, y: sy, size: 1 };
+        B._tokens = [tk];
+        tk.x = ex; tk.y = ey; B._noteTurnMove(tk, { x: sx, y: sy });
+        ok('…4 hexes through the 3 rough ones: 20 + 15 = 35 ft', sktTurnMoved(tk) === 35, sktTurnMoved(tk));
+        // A press on it: its menu
+        const pm = cl(cx, cy);
+        B._areaPointerDown(cx, cy, pm.x, pm.y, false); await sleep(10);
+        document.dispatchEvent(new MouseEvent('mouseup', { bubbles: true, clientX: pm.x, clientY: pm.y })); await sleep(60);
+        ok('…a press on it opens its menu', [...document.querySelectorAll('.ctx-menu .ctx-menu-item')].some(x => /Remove this difficult terrain/.test(x.textContent)));
+        document.querySelectorAll('.ctx-menu').forEach(e => e.remove());
+      } catch(e){ ok('round 379 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
+      finally {
+        if (fogSaved) B._fog = keepF;
+        B._gridType = keepG; B._tool = keepTool; B._tplShape = keepShape;
+        if (keepT){ B._tokens = keepT; B._drawings = keepD; try { B._saveMap(); } catch(e){} }
+        state.combatants = JSON.parse(keepC); state.activeCombatantId = keepA; state.combatRound = keepR;
+        document.querySelectorAll('.ctx-menu').forEach(e => e.remove());
+        try { B._render(); } catch(e){}
+        closePanel('battlemap');
+      }
+    }
     // -- Class features: represented, not just text ------------------------
     {
       try {
@@ -25003,6 +25167,50 @@ for (const cls of Object.keys(rule)) for (let L = 1; L <= 20; L++) for (const sc
         B._tool = '';
       } catch(e){ ok('round 372 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
       finally { B._tplHeight = keepH; B._tplShape = keepShape; B._tool = ''; paTab = keepTab; paRender(); }
+    }
+    // -- Round 378: on a phone in the dark — the shade, a monster out of sight not drawn, a torch lit from the phone shows it; a wall hides it --
+    if (PLAYER){
+      const keepTab = paTab; const B = panelDefs.battlemap;
+      let keepT = null, keepD = null, keepF, fogSaved = false; const keepL = B._light, keepP = JSON.stringify(state.party);
+      try {
+        if (paMyIdx() < 0) paSetPc(state.party[0].id);
+        const me = paPc();
+        me.sheet = Object.assign({}, me.sheet, { senses: '' });   // no darkvision, for the test
+        paTab = 'map'; paRender(); await sleep(900);
+        keepT = B._tokens.slice(); keepD = B._drawings.slice();
+        keepF = B._fog; fogSaved = true; B._fog = null;
+        const cs = B._csScreen();
+        const mine = { id: 'r378p', cid: me.id, label: me.name, x: 2.5 * cs, y: 4.5 * cs, size: 1, isPC: true };
+        const ogre = { id: 'r378o', label: 'r378 Ogre', x: 9 * cs, y: 5 * cs, size: 2 };   // its near squares 30-35 ft off
+        B._tokens = [mine, ogre]; B._drawings = []; B._light = 'bright'; B._renderTokens(); await sleep(80);
+        const drawn = () => !!document.querySelector('#pa-screen .map-token[data-tid="r378o"]');
+        ok('phone, bright map: the ogre is drawn, no shade', drawn() && !document.querySelector('#pa-screen #sight-layer'));
+        B._light = 'dark'; B._render(); await sleep(150);
+        ok('phone, dark map, no light, no darkvision: the ogre isn’t drawn', !drawn());
+        ok('…and the map is shaded', !!document.querySelector('#pa-screen #sight-layer'));
+        // The Height & light control: a torch
+        const scr = document.getElementById('pa-screen');
+        const old = scr.querySelector('.pa-draw'); if (old) old.remove(); paAddDrawBar(scr);
+        scr.querySelector('[data-pa-draw="height"]').click(); await sleep(120);
+        const sel = scr.querySelector('.pa-height-ctl [data-pa-light]');
+        ok('the phone’s Height & light control: the light they carry', !!sel);
+        if (sel){ sel.value = 'torch'; sel.dispatchEvent(new Event('change', { bubbles: true })); await sleep(150); }
+        ok('…a torch lit: their token carries it', mine.lt && mine.lt.b === 20 && mine.lt.d === 20, JSON.stringify(mine.lt));
+        ok('…and the ogre in its dim light is drawn', drawn());
+        const hc = scr.querySelector('.pa-height-ctl'), r = hc && hc.getBoundingClientRect();
+        ok('…the control fits the screen', r && r.left >= 0 && r.right <= innerWidth + 1, r && Math.round(r.left) + '..' + Math.round(r.right));
+        // A wall between (the DM's): out of sight again
+        B._drawings.push({ k: 'tpl', id: 'r378w', shape: 'wall', pts: [6 * cs, 0, 6 * cs, 10 * cs] });
+        B._renderTokens(); B._renderAreas(); await sleep(80);
+        ok('a wall between: the ogre isn’t drawn, and the wall itself isn’t drawn on a player’s map', !drawn() && !document.querySelector('#pa-screen #tpl-layer [data-wall]'));
+      } catch(e){ ok('round 378 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
+      finally {
+        if (fogSaved) B._fog = keepF;
+        B._light = keepL; state.party = JSON.parse(keepP);
+        if (keepT){ B._tokens = keepT; B._drawings = keepD; try { B._saveMap(); } catch(e){} }
+        B._tool = ''; paHeightOpen = false;
+        paTab = keepTab; paRender();
+      }
     }
   }
 

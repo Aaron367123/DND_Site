@@ -163,6 +163,8 @@ registerPanel('battlemap',{
   _ftPerCell: 5,
   _diagRule: 'five',             // how a diagonal counts on squares: see sktGridFeet
   _fogHardness:50,               // 0–100 → blur on fog canvas
+  _light:'bright',               // the map's own light: 'bright' | 'dim' | 'dark' (see sktSightSrc)
+  _dmSight:false,                // the DM's "Sight" preview: shade the map as the party sees it
   _gridOpacity:60,               // 0–100 → grid line alpha
   // Grid line colour. null = Auto: sample the map art and pick black or white
   // for contrast (see _drawGrid). A '#rrggbb' string overrides that. Kept
@@ -399,6 +401,7 @@ registerPanel('battlemap',{
         this._ftPerCell     = +d.ftPerCell > 0 ? +d.ftPerCell : 5;
         this._diagRule      = d.diagRule || 'five';
         this._fogHardness   = (d.fogHardness   != null) ? d.fogHardness   : 50;
+        this._light         = d.light || 'bright';
         this._gridOpacity   = (d.gridOpacity   != null) ? d.gridOpacity   : 60;
         this._gridColor     = d.gridColor || null;
         this._gridWidth     = (d.gridWidth     != null) ? d.gridWidth     : 1;
@@ -547,7 +550,7 @@ registerPanel('battlemap',{
     else this._captureUndo();
     try{
       const fogArr=this._fog?Array.from(this._fog):null;
-      localStorage.setItem('skt-battlemap-v1',JSON.stringify({tokens:this._tokens,cellSize:this._cellSize,cols:this._cols,rows:this._rows,bgColor:this._bgColor,fog:fogArr,bgMapPath:this._bgMapPath,showGrid:this._showGrid,gridType:this._gridType,cellHighlight:this._cellHighlight,bgMapScale:this._bgMapScale,bgMapSize:this._bgMapSize||null,snapToGrid:this._snapToGrid,drawings:this._drawings,gridOffsetX:this._gridOffsetX,gridOffsetY:this._gridOffsetY,mapRotation:this._mapRotation,ftPerCell:this._ftPerCell,diagRule:this._diagRule||'five',fogHardness:this._fogHardness,gridOpacity:this._gridOpacity,gridColor:this._gridColor,gridWidth:this._gridWidth,tokensVisible:this._tokensVisible,namesVisible:this._namesVisible,pcsVisible:this._pcsVisible,npcsVisible:this._npcsVisible,fogPaintMode:this._fogPaintMode,fogBrushMode:this._fogBrushMode,fogBrushShape:this._fogBrushShape,fogStrokes:this._fogStrokes}));
+      localStorage.setItem('skt-battlemap-v1',JSON.stringify({tokens:this._tokens,cellSize:this._cellSize,cols:this._cols,rows:this._rows,bgColor:this._bgColor,fog:fogArr,bgMapPath:this._bgMapPath,showGrid:this._showGrid,gridType:this._gridType,cellHighlight:this._cellHighlight,bgMapScale:this._bgMapScale,bgMapSize:this._bgMapSize||null,snapToGrid:this._snapToGrid,drawings:this._drawings,gridOffsetX:this._gridOffsetX,gridOffsetY:this._gridOffsetY,mapRotation:this._mapRotation,ftPerCell:this._ftPerCell,diagRule:this._diagRule||'five',fogHardness:this._fogHardness,light:this._light||'bright',gridOpacity:this._gridOpacity,gridColor:this._gridColor,gridWidth:this._gridWidth,tokensVisible:this._tokensVisible,namesVisible:this._namesVisible,pcsVisible:this._pcsVisible,npcsVisible:this._npcsVisible,fogPaintMode:this._fogPaintMode,fogBrushMode:this._fogBrushMode,fogBrushShape:this._fogBrushShape,fogStrokes:this._fogStrokes}));
     }catch(e){
       // Fog sets and freehand strokes grow without bound on large maps — this
       // is a realistic place to hit the quota, and silently dropping the write
@@ -805,6 +808,70 @@ registerPanel('battlemap',{
   },
   _stopMapKeys(){
     if (this._mapKeyHandler){ document.removeEventListener('keydown', this._mapKeyHandler); this._mapKeyHandler = null; }
+  },
+  // LIGHT AND SIGHT (rules in sktSightSrc / sktSeePoint, js/core/utils.js).
+  _sightSrc(){
+    return sktSightSrc({ tokens: this._tokens, drawings: this._drawings, cs: this._csScreen() || 50, ftPerCell: this._ftPerCell, gridType: this._gridType, light: this._light });
+  },
+  // Whose eyes a screen sees with: a player's own creatures (their character,
+  // their companions), or the whole party's when none of theirs is on the
+  // map; the DM's Sight preview, the party's.
+  _sightViewers(){
+    const pcs = (this._tokens || []).filter(t => t && t.isPC && t.x != null && !t.dead);
+    if (!document.body.classList.contains('player-mode')) return pcs;
+    const mine = (this._tokens || []).filter(t => t && t.x != null && !t.dead && typeof sktPlayerMayMoveToken === 'function' && sktPlayerMayMoveToken(t));
+    return mine.length ? mine : pcs;
+  },
+  // Whether this player's eyes see token t (always, while the map has nothing
+  // to hide behind). Their own side's tokens are always shown.
+  _playerSees(t, S, eyes){
+    if (!t || t.isPC) return true;
+    S = S || this._sightSrc(); if (!S.on) return true;
+    eyes = eyes || this._sightViewers();
+    if (!eyes.length) return true;
+    if (typeof sktPlayerMayMoveToken === 'function' && sktPlayerMayMoveToken(t)) return true;
+    return eyes.some(v => sktCanSee(S, v, t));
+  },
+  _sightSoon(){
+    if (this._sightRaf) return;
+    const go = () => { this._sightRaf = null; try { this._renderSight(); } catch(e){} };
+    this._sightRaf = typeof requestAnimationFrame === 'function' ? requestAnimationFrame(go) : setTimeout(go, 16);
+  },
+  // The shade: on a player's map, black where they see nothing, deep where
+  // only darkvision reaches, light in dim light, none in bright; the DM's
+  // preview the same, fainter. Sampled twice a square and stretched, which
+  // softens its edges like a lantern's.
+  _renderSight(){
+    const b = this._body; if (!b) return;
+    const stage = b.querySelector('#map-stage'); if (!stage) return;
+    const pl = document.body.classList.contains('player-mode');
+    const S = this._sightSrc();
+    let cv = stage.querySelector('#sight-layer');
+    if (!S.on || !(pl || this._dmSight)){ if (cv) cv.remove(); return; }
+    if (!cv){ cv = document.createElement('canvas'); cv.id = 'sight-layer'; cv.style.cssText = 'position:absolute;top:0;left:0;z-index:8;pointer-events:none'; stage.appendChild(cv); }
+    const cs = this._csScreen() || 50, W = this._cols * cs, H = this._rows * cs;
+    const k = this._cols * this._rows > 4000 ? 1 : this._cols * this._rows > 1500 ? 2 : 3, nx = Math.max(1, Math.ceil(this._cols * k)), ny = Math.max(1, Math.ceil(this._rows * k));
+    cv.width = nx; cv.height = ny; cv.style.width = W + 'px'; cv.style.height = H + 'px';
+    // Smoothed and softened: the samples stretched square-by-square read as
+    // stair steps; light fades at its edge.
+    cv.style.imageRendering = 'auto'; cv.style.filter = 'blur(' + (cs * 0.3).toFixed(1) + 'px)';
+    const ctx = cv.getContext('2d'), img = ctx.createImageData(nx, ny);
+    const eyes = this._sightViewers().map(t => ({ x: t.x, y: t.y, z: +t.elev || 0, senses: sktTokenSenses(t) }));
+    const shade = [0.95, 0.66, 0.4, 0].map(a => a * (pl ? 1 : 0.55));
+    for (let j = 0; j < ny; j++) for (let i = 0; i < nx; i++){
+      const x = (i + 0.5) * cs / k, y = (j + 0.5) * cs / k, L = sktLightAt(S, x, y, 0);
+      let best = eyes.length ? 0 : Math.max(0, L + 1);
+      for (const v of eyes){ const s = sktSeePoint(S, v, x, y, 0, L); if (s > best){ best = s; if (best === 3) break; } }
+      const o = (j * nx + i) * 4;
+      img.data[o] = 4; img.data[o + 1] = 6; img.data[o + 2] = 14; img.data[o + 3] = Math.round(shade[best] * 255);
+    }
+    ctx.putImageData(img, 0, 0);
+  },
+  // A light carried: one of SKT_LIGHTS by key ('none' puts it out).
+  _setTokenLight(t, key){
+    const L = SKT_LIGHTS.find(l => l[0] === key);
+    if (!L || !L[2]) delete t.lt; else t.lt = { b: L[2], d: L[3] };
+    this._saveMap(); this._renderTokens();
   },
   // A token's height above (or below) the ground, in feet: "↑30 ft", "↓10 ft".
   _elevText(t){ const e = +(t && t.elev) || 0; return e ? (e > 0 ? '↑' : '↓') + Math.abs(e) + ' ft' : ''; },
@@ -1801,6 +1868,7 @@ registerPanel('battlemap',{
       fogBrushMode: this._fogBrushMode || 'grid',
       fogBrushShape:this._fogBrushShape || 'square',
       fogHardness:  this._fogHardness,
+      light:        this._light || 'bright',
       gridOpacity:  this._gridOpacity,
       gridColor:    this._gridColor || null,
       gridWidth:    this._gridWidth,
@@ -1840,6 +1908,7 @@ registerPanel('battlemap',{
     this._fogBrushMode = snap.fogBrushMode || 'grid';
     this._fogBrushShape= snap.fogBrushShape || 'square';
     if (snap.fogHardness != null) this._fogHardness = snap.fogHardness;
+    this._light = snap.light || 'bright';
     if (snap.gridOpacity != null) this._gridOpacity = snap.gridOpacity;
     this._gridColor = snap.gridColor || null;
     if (snap.gridWidth   != null) this._gridWidth   = snap.gridWidth;
@@ -2405,13 +2474,13 @@ registerPanel('battlemap',{
   // (half-angle atan ½), a line is 5 ft wide, a cube's point of origin is the
   // middle of one face. Sizes are FEET, converted with the map's own
   // ft-per-cell and cell spacing, so a 20 ft sphere is 4 squares on any map.
-  _tplShape: 'circle', _tplSize: 20, _tplWidth: 5, _tplHeight: 40, _tplColor: '#ff7a3d',
+  _tplShape: 'circle', _tplSize: 20, _tplWidth: 5, _tplHeight: 40, _tplColor: '#ff7a3d', _tplLamp: 'torch',
   // A CYLINDER (Moonbeam, Flame Strike, Ice Storm) is a circle on the map, as
   // a sphere is, but a column in the air: {shape:'cyl', ft: radius, h: height}
   // from its base up. With heights on the map the difference is who is in it —
   // the wyvern 30 ft up in a 40 ft column of moonlight is; a sphere of 5 ft
   // radius would have missed it.
-  _isRound(shape){ return shape === 'circle' || shape === 'cyl'; },
+  _isRound(shape){ return shape === 'circle' || shape === 'cyl' || shape === 'darkness'; },
   // An EMANATION (2024: Spirit Guardians, a paladin's aura) is tied to a
   // creature: {shape:'aura', tok, ft}. It reaches ft feet out from the edge of
   // that creature's space in every direction and moves when the creature does,
@@ -2428,10 +2497,13 @@ registerPanel('battlemap',{
   // A player's screen leaves out what the DM keeps to themselves (t.dm).
   // …and an emanation whose creature the players can't see (hidden by the
   // DM, or a monster under the fog): the glow would give away where it is.
-  _areas(){ const pl = document.body.classList.contains('player-mode'); return (this._drawings || []).filter(s => s && s.k === 'tpl' && s.shape !== 'terrain' && !(pl && s.dm)
+  _isFixture(s){ return !!s && (s.shape === 'terrain' || s.shape === 'wall' || s.shape === 'lamp'); },
+  _walls(){ return (this._drawings || []).filter(s => s && s.k === 'tpl' && s.shape === 'wall' && Array.isArray(s.pts)); },
+  _lamps(){ return (this._drawings || []).filter(s => s && s.k === 'tpl' && s.shape === 'lamp'); },
+  _areas(){ const pl = document.body.classList.contains('player-mode'); return (this._drawings || []).filter(s => s && s.k === 'tpl' && !this._isFixture(s) && !(pl && s.dm)
     && !(pl && s.shape === 'aura' && !this._shownToPlayers((this._tokens || []).find(k => k.id === s.tok)))); },
   // Whether a player's screen draws this token (the rule _renderTokens keeps).
-  _shownToPlayers(t){ return !!t && !t.hidden && (t.isPC || !this._tokenFogged(t)); },
+  _shownToPlayers(t){ return !!t && !t.hidden && (t.isPC || !this._tokenFogged(t)) && this._playerSees(t); },
   // DIFFICULT TERRAIN: rectangles on the grid ({shape:'terrain', x, y, x2, y2},
   // stage px, on grid lines), laid by the DM with the Area tool. Kept with the
   // areas so they sync, undo and save with the map, but not one of them: no
@@ -2440,8 +2512,40 @@ registerPanel('battlemap',{
   // limit line while dragging and on the turn's movement. Not for a creature
   // in the air (its height above 0).
   _terrain(){ return (this._drawings || []).filter(s => s && s.k === 'tpl' && s.shape === 'terrain'); },
-  _inTerrain(x, y){
-    return this._terrain().some(r => x >= Math.min(r.x, r.x2) && x <= Math.max(r.x, r.x2) && y >= Math.min(r.y, r.y2) && y <= Math.max(r.y, r.y2));
+  _inTerrain(x, y){ return this._terrain().some(r => this._terrainHas(r, x, y)); },
+  // One stretch of terrain: on squares a block of them; on a hex map the
+  // hexes themselves (r.hexes, [q, r] each) — a block of squares laid over
+  // hexes cut them in half and matched neither the grid nor the way a token
+  // moves across it.
+  _terrainHas(r, x, y){
+    if (Array.isArray(r.hexes)){
+      const cs = this._csScreen() || 50, o = this._gridOffPx(), h = sktHexAt(x, y, cs, o.x, o.y);
+      return r.hexes.some(c => c[0] === h.q && c[1] === h.r);
+    }
+    return x >= Math.min(r.x, r.x2) && x <= Math.max(r.x, r.x2) && y >= Math.min(r.y, r.y2) && y <= Math.max(r.y, r.y2);
+  },
+  // The middle of hex (q, r), and its outline.
+  _hexAtQR(q, r){
+    const cs = this._csScreen() || 50, o = this._gridOffPx(), s = cs / 2, h = s * Math.sqrt(3);
+    return [q * s * 1.5 + o.x, ((q & 1) ? h / 2 : 0) + r * h + h / 2 + o.y];
+  },
+  _hexPoints(q, r){
+    const [cx, cy] = this._hexAtQR(q, r), s = (this._csScreen() || 50) / 2;
+    return [0, 1, 2, 3, 4, 5].map(i => (cx + s * Math.cos(i * Math.PI / 3)).toFixed(1) + ',' + (cy + s * Math.sin(i * Math.PI / 3)).toFixed(1)).join(' ');
+  },
+  // A drag on a hex map: the hexes whose middles are inside it, and the one
+  // pressed on at least.
+  _terrainHexes(x0, y0, x1, y1){
+    const cs = this._csScreen() || 50, o = this._gridOffPx();
+    const a = sktHexAt(x0, y0, cs, o.x, o.y), out = [[a.q, a.r]];
+    const lx = Math.min(x0, x1), hx = Math.max(x0, x1), ly = Math.min(y0, y1), hy = Math.max(y0, y1);
+    const q0 = sktHexAt(lx, ly, cs, o.x, o.y), q1 = sktHexAt(hx, hy, cs, o.x, o.y);
+    for (let q = Math.min(q0.q, q1.q) - 1; q <= Math.max(q0.q, q1.q) + 1; q++)
+      for (let r = Math.min(q0.r, q1.r) - 1; r <= Math.max(q0.r, q1.r) + 1; r++){
+        const [cx, cy] = this._hexAtQR(q, r);
+        if (cx >= lx && cx <= hx && cy >= ly && cy <= hy && !out.some(c => c[0] === q && c[1] === r)) out.push([q, r]);
+      }
+    return out;
   },
   // The extra feet a move from (x0,y0) to (x1,y1) costs `tok` in difficult
   // terrain: a square at a time along the way, its whole space at each.
@@ -2475,7 +2579,7 @@ registerPanel('battlemap',{
   },
   // What an area is, in words: "20 ft sphere", "60 ft line, 10 ft wide".
   _areaName(t){
-    const nm = { circle: 'sphere', aura: 'emanation', cyl: 'cylinder' }[t.shape] || t.shape;
+    const nm = { circle: 'sphere', aura: 'emanation', cyl: 'cylinder', darkness: 'magical darkness' }[t.shape] || t.shape;
     return (+t.ft || 0) + ' ft ' + nm + (t.shape === 'line' && +t.w > 5 ? ', ' + t.w + ' ft wide' : '') + (t.shape === 'cyl' ? ', ' + (+t.h || 40) + ' ft high' : '');
   },
   // Where its label sits: the middle of it (above an emanation's creature).
@@ -2497,7 +2601,8 @@ registerPanel('battlemap',{
     const opt = (v, l) => '<option value="' + v + '"' + (this._tplShape === v ? ' selected' : '') + '>' + l + '</option>';
     return '<select id="tpl-shape" title="Shape" style="width:78px;font-size:var(--fs-sm);padding:2px 4px;flex:0 0 auto">'
         + opt('circle', 'Sphere') + opt('cyl', 'Cylinder') + opt('cone', 'Cone') + opt('line', 'Line') + opt('cube', 'Cube') + opt('aura', 'Emanation')
-        + (document.body.classList.contains('player-mode') ? '' : opt('terrain', 'Difficult terrain')) + '</select>'
+        + opt('darkness', 'Magical darkness')
+        + (document.body.classList.contains('player-mode') ? '' : opt('terrain', 'Difficult terrain') + opt('wall', 'Wall (blocks sight)') + opt('lamp', 'Light source')) + '</select>'
       + '<input type="number" id="tpl-size" min="5" step="5" value="' + this._tplSize + '" style="width:52px;font-size:var(--fs-sm);padding:2px 4px;flex-shrink:0" title="Size in feet (radius for a sphere or cylinder, length for a cone or line, side for a cube, how far an emanation reaches from its creature)">'
       + '<span class="bt-l" style="font-size:var(--fs-xs);color:var(--text-muted)">ft</span>'
       // A line is 5 ft wide unless the spell says otherwise (Gust of Wind: 10).
@@ -2505,6 +2610,12 @@ registerPanel('battlemap',{
       +   '<span style="font-size:var(--fs-xs);color:var(--text-muted)">width</span>'
       +   '<input type="number" id="tpl-width" min="5" step="5" value="' + this._tplWidth + '" style="width:46px;font-size:var(--fs-sm);padding:2px 4px" title="How wide the line is, in feet">'
       +   '<span style="font-size:var(--fs-xs);color:var(--text-muted)">ft</span>'
+      + '</span>'
+      // A light on the map: a brazier, a lantern on a hook, a Daylight spell.
+      + '<span id="tpl-wrap-l" style="display:' + (this._tplShape === 'lamp' ? 'inline-flex' : 'none') + ';align-items:center;gap:3px;flex-shrink:0">'
+      +   '<select id="tpl-lamp" title="What light it gives" style="font-size:var(--fs-sm);padding:2px 4px">'
+      +     SKT_LIGHTS.filter(l => l[0] !== 'none').map(l => '<option value="' + l[0] + '"' + (this._tplLamp === l[0] ? ' selected' : '') + '>' + l[1] + ' (' + l[2] + '/' + l[3] + ' ft)</option>').join('')
+      +   '</select>'
       + '</span>'
       // A cylinder is as high as the spell says (Moonbeam, Flame Strike: 40).
       + '<span id="tpl-wrap-h" style="display:' + (this._tplShape === 'cyl' ? 'inline-flex' : 'none') + ';align-items:center;gap:3px;flex-shrink:0">'
@@ -2574,9 +2685,9 @@ registerPanel('battlemap',{
     return inside;
   },
   _areaSvg(t, extra){
-    const g = this._areaGeom(t), c = t.c || '#ff7a3d';
+    const g = this._areaGeom(t), dk = t.shape === 'darkness', c = dk ? '#05060a' : (t.c || '#ff7a3d');
     if (!g) return '';
-    const style = 'fill="' + c + '" fill-opacity=".22" stroke="' + c + '" stroke-width="' + Math.max(1.5, 2 / (this._screenScale ? (this._screenScale() || 1) : 1)) + '" ' + (extra || '');
+    const style = 'fill="' + c + '" fill-opacity="' + (dk ? '.62' : '.22') + '" stroke="' + c + '" stroke-width="' + Math.max(1.5, 2 / (this._screenScale ? (this._screenScale() || 1) : 1)) + '" ' + (extra || '');
     if (g.aura){
       const a = g.aura, e = a.h + a.r;
       return '<rect x="' + (a.x - e).toFixed(1) + '" y="' + (a.y - e).toFixed(1) + '" width="' + (2 * e).toFixed(1) + '" height="' + (2 * e).toFixed(1) + '" rx="' + a.r.toFixed(1) + '" ' + style + '/>';
@@ -2616,15 +2727,19 @@ registerPanel('battlemap',{
     }).join('');
     const hatch = '<defs><pattern id="bm-dt-hatch" patternUnits="userSpaceOnUse" width="' + (cs / 3).toFixed(1) + '" height="' + (cs / 3).toFixed(1) + '" patternTransform="rotate(45)">'
       + '<line x1="0" y1="0" x2="0" y2="' + (cs / 3).toFixed(1) + '" stroke="#7a5230" stroke-opacity=".55" stroke-width="' + Math.max(1.5, cs / 18).toFixed(1) + '"/></pattern></defs>';
+    const hexSvg = (r, extra) => r.hexes.map(c => '<polygon points="' + this._hexPoints(c[0], c[1]) + '" fill="url(#bm-dt-hatch)" stroke="#7a5230" stroke-opacity=".7" stroke-width="' + (1.5 / vs).toFixed(2) + '" ' + extra + '/>').join('');
     const rough = this._terrain().map(r => {
+      if (Array.isArray(r.hexes)) return '<g data-dt="' + r.id + '"><title>Difficult terrain</title>' + hexSvg(r, '') + '</g>';
       const x = Math.min(r.x, r.x2), y = Math.min(r.y, r.y2), w = Math.abs(r.x2 - r.x), h = Math.abs(r.y2 - r.y);
       return '<rect x="' + x.toFixed(1) + '" y="' + y.toFixed(1) + '" width="' + w.toFixed(1) + '" height="' + h.toFixed(1) + '" fill="url(#bm-dt-hatch)" stroke="#7a5230" stroke-opacity=".7" stroke-width="' + (1.5 / vs).toFixed(2) + '" data-dt="' + r.id + '"><title>Difficult terrain</title></rect>';
-    }).join('') + (preview && preview.shape === 'terrain' ? (() => { const x = Math.min(preview.x, preview.x2), y = Math.min(preview.y, preview.y2);
+    }).join('') + (preview && preview.shape === 'terrain' ? (() => { if (Array.isArray(preview.hexes)) return hexSvg(preview, 'stroke-dasharray="6 4"'); const x = Math.min(preview.x, preview.x2), y = Math.min(preview.y, preview.y2);
       return '<rect x="' + x + '" y="' + y + '" width="' + Math.abs(preview.x2 - preview.x) + '" height="' + Math.abs(preview.y2 - preview.y) + '" fill="url(#bm-dt-hatch)" stroke="#7a5230" stroke-dasharray="6 4" stroke-width="' + (1.5 / vs).toFixed(2) + '"/>'; })() : '');
     svg.innerHTML = hatch + rough + this._areas().map(t => this._areaSvg(t, 'data-tpl="' + t.id + '"' + (t.dm ? ' stroke-dasharray="' + (6 / vs).toFixed(1) + ' ' + (4 / vs).toFixed(1) + '"' : ''))).join('')
       + labels
       + handles
-      + (preview && preview.shape !== 'terrain' ? this._areaSvg(preview, 'stroke-dasharray="6 4"') : '');
+      + (preview && !this._isFixture(preview) ? this._areaSvg(preview, 'stroke-dasharray="6 4"') : '')
+      + this._fixturesSvg(preview, vs);
+    this._sightSoon();
     this._markTokensInAreas(preview);
   },
   // Whether a creature is in an area: any square of its space whose centre
@@ -2650,7 +2765,7 @@ registerPanel('battlemap',{
   },
   _markTokensInAreas(preview){
     const b = this._body; if (!b) return;
-    const areas = this._areas().concat(preview && preview.shape !== 'terrain' ? [preview] : []);
+    const areas = this._areas().concat(preview && !this._isFixture(preview) ? [preview] : []);
     b.querySelectorAll('.map-token').forEach(el => {
       const tok = (this._tokens || []).find(t => String(t.id) === el.dataset.tid);
       el.classList.toggle('in-area', !!tok && areas.some(a => this._tokenInArea(a, tok)));
@@ -2698,11 +2813,56 @@ registerPanel('battlemap',{
     if (shape === 'cyl') draft.h = hi;
     if (from && +from.elev) draft.z = +from.elev;
     if (me) draft.by = me.id;
+    if (shape === 'wall' || shape === 'lamp'){
+      if (isPlayer) return;
+      const stage = this._body.querySelector('#map-stage');
+      const vs = this._screenScale ? (this._screenScale() || 1) : 1;
+      const lamp = shape === 'lamp' ? this._lamps().slice().reverse().find(l => Math.hypot(x - l.x, y - l.y) <= 14 / vs) : null;
+      const wall = shape === 'wall' ? this._wallNear(x, y) : null;
+      const a0 = this._areaSnap(x, y);
+      const box = shape === 'wall' ? { k: 'tpl', id: draft.id, shape: 'wall', pts: [a0.x, a0.y, a0.x, a0.y] } : null;
+      const was = lamp ? { x: lamp.x, y: lamp.y } : null;
+      let movedF = false;
+      const mv = ev => {
+        const p = ev.touches ? ev.touches[0] : ev;
+        if (Math.hypot(p.clientX - cx, p.clientY - cy) > 6) movedF = true;
+        if (!movedF) return;
+        if (ev.cancelable) ev.preventDefault();
+        const q = this._stagePoint(p.clientX, p.clientY, stage);
+        if (lamp){ const s1 = this._areaSnap(was.x + q.x - x, was.y + q.y - y); lamp.x = s1.x; lamp.y = s1.y; this._renderAreas(); return; }
+        if (box){ const b1 = this._areaSnap(q.x, q.y); box.pts[2] = b1.x; box.pts[3] = b1.y; this._renderAreas(box); }
+      };
+      const upF = () => {
+        document.removeEventListener(touch ? 'touchmove' : 'mousemove', mv);
+        document.removeEventListener(touch ? 'touchend' : 'mouseup', upF);
+        if (touch) document.removeEventListener('touchcancel', upF);
+        if (!movedF){
+          if (lamp){ this._renderAreas(); this._fixtureMenu(lamp, cx, cy); return; }
+          if (wall){ this._renderAreas(); this._fixtureMenu(wall, cx, cy); return; }
+          if (shape === 'lamp'){
+            const L = SKT_LIGHTS.find(l => l[0] === ((this._body.querySelector('#tpl-lamp') || {}).value || this._tplLamp)) || SKT_LIGHTS[2];
+            this._tplLamp = L[0];
+            this._drawings.push({ k: 'tpl', id: draft.id, shape: 'lamp', x: a0.x, y: a0.y, ft: L[2], w: L[3], kind: L[0] });
+            this._saveMap(); this._render(); return;
+          }
+          this._renderAreas(); return;
+        }
+        if (box && Math.hypot(box.pts[2] - box.pts[0], box.pts[3] - box.pts[1]) > 2){ this._drawings.push(box); this._saveMap(); this._render(); return; }
+        if (lamp){ this._saveMap(); this._render(); return; }
+        this._renderAreas();
+      };
+      document.addEventListener(touch ? 'touchmove' : 'mousemove', mv, { passive: false });
+      document.addEventListener(touch ? 'touchend' : 'mouseup', upF);
+      if (touch) document.addEventListener('touchcancel', upF);
+      return;
+    }
     if (shape === 'terrain'){
       if (isPlayer) return;
-      const on = this._terrain().slice().reverse().find(r => x >= Math.min(r.x, r.x2) && x <= Math.max(r.x, r.x2) && y >= Math.min(r.y, r.y2) && y <= Math.max(r.y, r.y2));
+      const on = this._terrain().slice().reverse().find(r => this._terrainHas(r, x, y));
+      const hexy = this._gridType === 'hex';
       const stage = this._body.querySelector('#map-stage');
       const box = Object.assign({ k: 'tpl', id: draft.id, shape: 'terrain' }, this._terrainRect(x, y, x, y));
+      if (hexy) box.hexes = this._terrainHexes(x, y, x, y);
       let movedT = false;
       const mv = ev => {
         const p = ev.touches ? ev.touches[0] : ev;
@@ -2711,6 +2871,7 @@ registerPanel('battlemap',{
         if (ev.cancelable) ev.preventDefault();
         const q = this._stagePoint(p.clientX, p.clientY, stage);
         Object.assign(box, this._terrainRect(x, y, q.x, q.y));
+        if (hexy) box.hexes = this._terrainHexes(x, y, q.x, q.y);
         this._renderAreas(box);
       };
       const upT = () => {
@@ -2796,6 +2957,34 @@ registerPanel('battlemap',{
     if (touch) document.addEventListener('touchcancel', up);
     if (!hit) this._renderAreas(draft);
   },
+  // A wall within a few pixels of (x, y) — its line, not just its ends.
+  _wallNear(x, y){
+    const vs = this._screenScale ? (this._screenScale() || 1) : 1, tol = 9 / vs;
+    const segD = (px, py, ax, ay, bx, by) => { const dx = bx - ax, dy = by - ay, L = dx * dx + dy * dy; const u = L ? Math.max(0, Math.min(1, ((px - ax) * dx + (py - ay) * dy) / L)) : 0; return Math.hypot(px - ax - u * dx, py - ay - u * dy); };
+    return this._walls().slice().reverse().find(w => { for (let i = 0; i + 3 < w.pts.length; i += 2) if (segD(x, y, w.pts[i], w.pts[i + 1], w.pts[i + 2], w.pts[i + 3]) <= tol) return true; return false; }) || null;
+  },
+  _fixtureMenu(f, cx, cy){
+    const kind = f.shape === 'wall' ? 'wall' : 'light';
+    const items = [
+      { label: '✕ Remove this ' + kind, onClick: () => { this._drawings = this._drawings.filter(s => s !== f); this._saveMap(); this._render(); } },
+      { label: '✕ Remove all ' + kind + 's', onClick: () => { this._drawings = this._drawings.filter(s => !(s && s.k === 'tpl' && s.shape === f.shape)); this._saveMap(); this._render(); } },
+    ];
+    if (typeof showContextMenu === 'function') showContextMenu(cx, cy, items);
+  },
+  // Walls and lights, drawn on the DM's map (a player sees the light they
+  // give, not the fittings): a wall a thick line, a light a small sun with
+  // its bright and dim reach dotted round it while the Area tool is up.
+  _fixturesSvg(preview, vs){
+    if (document.body.classList.contains('player-mode')) return '';
+    const up = this._tool === 'area', ppf = this._ppf();
+    const line = (p, extra) => { let o = ''; for (let i = 0; i + 3 < p.length; i += 2) o += '<line x1="' + (+p[i]).toFixed(1) + '" y1="' + (+p[i + 1]).toFixed(1) + '" x2="' + (+p[i + 2]).toFixed(1) + '" y2="' + (+p[i + 3]).toFixed(1) + '" stroke="#e8643c" stroke-linecap="round" stroke-width="' + ((up ? 5 : 3) / vs).toFixed(2) + '" stroke-opacity="' + (up ? '.95' : '.6') + '" ' + (extra || '') + '/>'; return o; };
+    const walls = this._walls().map(w => line(w.pts, 'data-wall="' + w.id + '"')).join('') + (preview && preview.shape === 'wall' ? line(preview.pts, 'stroke-dasharray="' + (6 / vs) + ' ' + (4 / vs) + '"') : '');
+    const lamps = this._lamps().map(l => '<g data-lamp="' + l.id + '">'
+      + (up ? '<circle cx="' + l.x + '" cy="' + l.y + '" r="' + ((+l.ft || 0) * ppf).toFixed(1) + '" fill="none" stroke="#ffd36b" stroke-opacity=".7" stroke-dasharray="' + (5 / vs) + ' ' + (4 / vs) + '" stroke-width="' + (1.5 / vs) + '"/>'
+            + '<circle cx="' + l.x + '" cy="' + l.y + '" r="' + (((+l.ft || 0) + (+l.w || 0)) * ppf).toFixed(1) + '" fill="none" stroke="#ffd36b" stroke-opacity=".4" stroke-dasharray="' + (3 / vs) + ' ' + (5 / vs) + '" stroke-width="' + (1.5 / vs) + '"/>' : '')
+      + '<circle cx="' + l.x + '" cy="' + l.y + '" r="' + (7 / vs).toFixed(1) + '" fill="#ffd36b" stroke="#7a4a00" stroke-width="' + (1.5 / vs) + '"><title>Light: ' + (+l.ft || 0) + ' ft bright, ' + (+l.w || 0) + ' ft dim</title></circle></g>').join('');
+    return walls + lamps;
+  },
   _terrainMenu(r, cx, cy){
     const items = [
       { label: '✕ Remove this difficult terrain', onClick: () => { this._drawings = this._drawings.filter(s => s !== r); this._saveMap(); this._renderAreas(); } },
@@ -2838,7 +3027,7 @@ registerPanel('battlemap',{
       this._saveMap(); this._renderAreas();
     }});
     if (!isPlayer) items.push({ label: '✕ Remove all areas', onClick: () => {
-      this._drawings = this._drawings.filter(s => !(s && s.k === 'tpl' && s.shape !== 'terrain'));
+      this._drawings = this._drawings.filter(s => !(s && s.k === 'tpl' && !this._isFixture(s)));
       this._saveMap(); this._render();
     }});
     if (typeof showContextMenu === 'function') showContextMenu(cx, cy, items);
@@ -3142,9 +3331,10 @@ registerPanel('battlemap',{
     // which tokens and names show. They reached a player's map only when it
     // was reloaded (mount reads them), never as they changed, and an undo
     // of one changed nothing on screen.
-    const looks = () => [this._fogHardness, this._snapToGrid, this._tokensVisible, this._namesVisible, this._pcsVisible, this._npcsVisible].join('|');
+    const looks = () => [this._fogHardness, this._snapToGrid, this._tokensVisible, this._namesVisible, this._pcsVisible, this._npcsVisible, this._light].join('|');
     const looksBefore = looks();
     if (src.fogHardness != null) this._fogHardness = +src.fogHardness;
+    if ('light' in src) this._light = src.light || 'bright';
     if ('snapToGrid' in src) this._snapToGrid = !!src.snapToGrid;
     if ('tokensVisible' in src) this._tokensVisible = src.tokensVisible !== false;
     if ('namesVisible' in src)  this._namesVisible  = src.namesVisible  !== false;
@@ -3280,7 +3470,7 @@ registerPanel('battlemap',{
         // Free-mode fog strokes (pixel-level, cell-fraction coords).
         fogStrokes: this._fogStrokes || [],
         // The fog's softness, snapping and token visibility, as _saveMap keeps them.
-        fogHardness: this._fogHardness, snapToGrid: !!this._snapToGrid,
+        fogHardness: this._fogHardness, snapToGrid: !!this._snapToGrid, light: this._light || 'bright',
         tokensVisible: this._tokensVisible !== false, namesVisible: this._namesVisible !== false,
         pcsVisible: this._pcsVisible !== false, npcsVisible: this._npcsVisible !== false,
         // Who sent this. The DM tab needs it to tell a PLAYER tab's message
@@ -3578,6 +3768,7 @@ registerPanel('battlemap',{
       // Fog cluster — only the toggle is visible by default. When fog is on,
       // its sub-controls (paint mode, brush radius, hide/show all) appear.
       +'<button class="btn '+(this._fog!==null?'active':'')+'" data-mact="fog-toggle" style="flex-shrink:0" title="Toggle Fog of War">'+ICO('i-cloud')+'<span class="bt-l">Fog</span></button>'
+      +(this._sightSrc().on ? '<button class="btn '+(this._dmSight?'active':'')+'" data-mact="dm-sight" style="flex-shrink:0" title="Shade the map as the party sees it: light, darkvision and walls">'+ICO('i-eye')+'<span class="bt-l">Sight</span></button>' : '')
       +(this._fog!==null?'<button class="btn icon-btn '+(this._fogTool?'active':'')+'" data-mact="fog-paint" style="flex-shrink:0" title="Paint to reveal fog">'+ICO('i-pencil')+'</button>':'')
       +(this._fog!==null&&this._fogTool?'<input type="range" id="fog-radius" min="1" max="5" value="'+(this._fogRadius||1)+'" style="width:50px;flex-shrink:0" title="Brush size">':'')
       +(this._fog!==null?'<button class="btn icon-btn" data-mact="fog-hide-all" style="flex-shrink:0" title="Hide entire map (fog everything)">'+ICO('i-eye-off')+'</button>':'')
@@ -3676,6 +3867,12 @@ registerPanel('battlemap',{
         +'<span id="tp-elev-val" style="flex:1;text-align:center;font-size:var(--fs-sm)">0 ft</span>'
         +'<button class="btn icon-btn" id="tp-elev-up" title="5 ft higher" style="padding:1px 6px;font-size:var(--fs-lg)">+</button>'
       +'</div>'
+      +'<label class="field-label">Light it carries</label>'
+      +'<select id="tp-light" style="width:100%;margin-bottom:6px;font-size:var(--fs-sm)">'
+        + SKT_LIGHTS.map(l => '<option value="' + l[0] + '">' + l[1] + (l[2] ? ' (' + l[2] + '/' + l[3] + ' ft)' : '') + '</option>').join('')
+      +'</select>'
+      +'<label class="field-label">Darkvision (ft)</label>'
+      +'<input type="number" id="tp-dv" min="0" step="5" placeholder="from its sheet" style="width:100%;margin-bottom:6px;font-size:var(--fs-sm)">'
       +'<label class="field-label">Facing</label>'
       +'<div style="display:flex;gap:3px;margin-bottom:6px;align-items:center">'
         +'<button class="btn icon-btn" id="tp-rot-left" title="Rotate -45°" style="padding:1px 6px;font-size:var(--fs-sm)">↺</button>'
@@ -3751,6 +3948,8 @@ registerPanel('battlemap',{
       this._tplShape = tplSel.value;
       const w = this._body.querySelector('#tpl-wrap-w'); if (w) w.style.display = tplSel.value === 'line' ? 'inline-flex' : 'none';
       const h = this._body.querySelector('#tpl-wrap-h'); if (h) h.style.display = tplSel.value === 'cyl' ? 'inline-flex' : 'none';
+      const l = this._body.querySelector('#tpl-wrap-l'); if (l) l.style.display = tplSel.value === 'lamp' ? 'inline-flex' : 'none';
+      this._renderAreas();
     };
     // A redraw (another device moved a token) rebuilds the stage: the ruler's
     // line comes back rather than vanishing under the player's finger.
@@ -3804,9 +4003,10 @@ registerPanel('battlemap',{
         this._render();
       }
       else if(act==='sync-combat') this._syncParty();
+      else if(act==='dm-sight'){ this._dmSight = !this._dmSight; this._render(); }
       else if(act==='clear-areas'){
         if (!this._areas().length) return;
-        this._drawings = this._drawings.filter(s => !(s && s.k === 'tpl' && s.shape !== 'terrain'));
+        this._drawings = this._drawings.filter(s => !(s && s.k === 'tpl' && !this._isFixture(s)));
         this._saveMap(); this._render();
       }
       else if(act==='toggle-settings'){
@@ -4685,6 +4885,11 @@ registerPanel('battlemap',{
         if (c) this._drawGrid(c, this._csScreen());
         this._refreshSettings();
         this._broadcast();
+        return;
+      }
+      if (k === 'light-bright' || k === 'light-dim' || k === 'light-dark'){
+        this._light = k.slice(6);
+        this._saveMap(); this._render(); this._refreshSettings();
         return;
       }
       if (k === 'grid-square' || k === 'grid-hex' || k === 'grid-none'){
@@ -5830,6 +6035,12 @@ registerPanel('battlemap',{
       +     ' style="width:100%;height:26px;padding:1px;border:1px solid var(--border);border-radius:4px;background:var(--panel-2);cursor:pointer" title="Background colour">'
       + '</div>'
 
+      + '<div class="bm-set-section-head">LIGHT</div>'
+      + '<div class="bm-set-tiles three">'
+      +   tile('light-bright', 'Bright', 'day, a lit hall', (this._light || 'bright') === 'bright', {title:'Everyone sees everything (but walls)'})
+      +   tile('light-dim',    'Dim',    'dusk, moonlight', this._light === 'dim', {title:'Lightly obscured: everyone still sees'})
+      +   tile('light-dark',   'Dark',   'a cave, no moon', this._light === 'dark', {title:'Only what light or darkvision reaches is seen'})
+      + '</div>'
       + '<div class="bm-set-section-head">FOG OF WAR</div>'
       + '<div class="bm-set-tiles four">'
       +   tile('fog-reveal',  'Reveal', '', fogOn && paint==='reveal', {disabled:!fogOn,title:fogOn?'':'Enable Fog of War first'})
@@ -5939,6 +6150,7 @@ registerPanel('battlemap',{
     // sees everything regardless. Fog set is keyed by "gx,gy" — derive cell
     // from the token's pixel center.
     const isPlayer = document.body.classList.contains('player-mode');
+    const _sS = isPlayer ? this._sightSrc() : null, _sE = _sS && _sS.on ? this._sightViewers() : null;
     // Batch all token/name/facing nodes into one fragment so the browser does
     // a single layout pass instead of one per appendChild (3 nodes × N tokens).
     const frag = document.createDocumentFragment();
@@ -5956,6 +6168,8 @@ registerPanel('battlemap',{
       // the invisible stalker. The DM sees it ghosted; a player's screen is
       // never told it exists.
       if (isPlayer && t.hidden) return;
+      // In the dark, behind a wall, out of their darkvision's reach: unseen.
+      if (isPlayer && !t.isPC && !this._playerSees(t, _sS, _sE)) return;
       const px=t.x;
       const py=t.y;
       // Visual diameter scales with the bg image so tokens stay proportional
@@ -6320,6 +6534,8 @@ registerPanel('battlemap',{
     this._fitTokenNames();
     // Emanations are drawn round their tokens, so they are redrawn with them.
     if (this._areas().some(a => a.shape === 'aura')) this._renderAreas(); else this._markTokensInAreas();
+    // A light carried moved, or eyes did: the shade follows.
+    this._sightSoon();
   },
   // Mid-drag, before the token's position is saved: its emanation keeps up.
   _auraFollow(t, x, y){
@@ -6456,6 +6672,12 @@ registerPanel('battlemap',{
       showContextMenu(r.left, r.bottom + 4, items);
     });
 
+    { const ls = b.querySelector('#tp-light'), cur = SKT_LIGHTS.find(l => t.lt && l[2] === +t.lt.b && l[3] === +t.lt.d);
+      if (ls) ls.value = t.lt ? (cur ? cur[0] : 'torch') : 'none';
+      const dv = b.querySelector('#tp-dv'), auto = sktTokenSenses(Object.assign({}, t, { dv: null }));
+      if (dv){ dv.value = t.dv != null ? t.dv : ''; dv.placeholder = auto.darkvision ? auto.darkvision + ' (its sheet)' : 'none (its sheet)'; } }
+    rewire('#tp-light', 'change', e => { this._setTokenLight(t, e.target.value); });
+    rewire('#tp-dv', 'change', e => { const v = e.target.value.trim(); if (v === '') delete t.dv; else t.dv = Math.max(0, parseInt(v, 10) || 0); this._saveMap(); this._renderTokens(); });
     const elevShow = () => { const v = b.querySelector('#tp-elev-val'); if (v) v.textContent = this._elevText(t) || '0 ft (on the ground)'; };
     elevShow();
     rewire('#tp-elev-down','click',()=>{ this._setElev(t, (+t.elev || 0) - 5); elevShow(); });

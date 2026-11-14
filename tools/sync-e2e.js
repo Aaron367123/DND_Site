@@ -285,6 +285,21 @@ const window = {};
       return lat(t);
     });
 
+    await step('DM makes the map dark → phone shades it; phone lights a torch → DM sees Zoey carrying it', async () => {
+      const ZOEY = "t.isPC && t.label === 'Zoey'";
+      await dm.ev("const B = panelDefs.battlemap; B._light = 'dark'; B._saveMap(); B._render(); return 1");
+      const t1 = await W(pl, "return panelDefs.battlemap._light === 'dark' && !!document.querySelector('#pa-screen #sight-layer') ? 1 : 0");
+      if (t1 == null) return { ok: false, why: 'the phone never went dark: ' + await pl.ev("return panelDefs.battlemap._light") };
+      const lit = await pl.ev("paTab = 'map'; paRender(); await new Promise(r=>setTimeout(r,600)); for (const s of ['.pa-init', '#pa-rest', '#pa-roll-req']) document.querySelectorAll(s).forEach(e => e.remove()); if (!paHeightOpen){ const b = document.querySelector('#pa-screen [data-pa-draw=\"height\"]'); if (!b) return 'no button'; b.click(); await new Promise(r=>setTimeout(r,200)); } const sel = document.querySelector('#pa-screen [data-pa-light]'); if (!sel) return 'no light picker'; sel.value = 'torch'; sel.dispatchEvent(new Event('change', { bubbles: true })); await new Promise(r=>setTimeout(r,200)); return 'ok'");
+      if (lit !== 'ok') return { ok: false, why: 'phone: ' + lit };
+      const t2 = await W(dm, "const z = (panelDefs.battlemap._tokens||[]).find(t => " + ZOEY + "); return z && z.lt && z.lt.b === 20 ? 1 : 0");
+      // Tidy: torch out, back to daylight.
+      await pl.ev("const me = paMyToken(); if (me) panelDefs.battlemap._setTokenLight(me, 'none'); paHeightOpen = false; return 1");
+      await dm.ev("const B = panelDefs.battlemap; B._light = 'bright'; B._saveMap(); B._render(); return 1");
+      if (t2 == null) return { ok: false, why: 'the torch never reached the DM' };
+      return lat(t2);
+    });
+
     await step('DM uploads a map (3000×4000) → phone draws it at the same size and grid', async () => {
       const geo = 'const B = panelDefs.battlemap; return [B._bgMapPath, B._bgMapNaturalW, B._bgMapNaturalH, B._cols, B._rows].join(" ")';
       const before = await dm.ev("return panelDefs.battlemap._bgMapPath || ''");

@@ -3023,6 +3023,134 @@ function sktDragHeld(tokens, tok, dx, dy, dz){
     if (dz){ const e = (+ot.elev || 0) + dz; if (e) ot.elev = e; else delete ot.elev; } out.push(ot); } });
   return out;
 }
+// ─── Light and sight ─────────────────────────────────────────────────────────
+// One rule for who can see what, used by the battle map (the players' dark,
+// which monsters a phone shows) and the Turn View (attacking what you can't
+// see). It works on a map as the Turn View reads it — {tokens, drawings, cs,
+// ftPerCell, gridType, light} — so both get the same answer.
+//
+//   light:    the map's own light — 'bright' (day, a lit hall), 'dim'
+//             (twilight, moonlight) or 'dark' (a cave, a night with no moon).
+//   tok.lt:   {b, d} a light carried — bright for b feet, dim for d more.
+//   drawings: {shape:'lamp', x, y, ft: bright, w: dim}  a light on the map
+//             {shape:'wall', pts:[x,y,x,y…]}           blocks light and sight
+//             {shape:'darkness', x, y, ft}              magical darkness
+//
+// Bright light, no walls and no magical darkness (every map until a DM says
+// otherwise) and nothing changes: everyone sees everything.
+const SKT_LIGHTS = [
+  ['none', 'No light', 0, 0], ['candle', 'Candle', 5, 5], ['torch', 'Torch', 20, 20], ['lamp', 'Lamp', 15, 30],
+  ['lantern', 'Lantern', 30, 30], ['light', 'Light (cantrip)', 20, 20], ['daylight', 'Daylight (spell)', 60, 60],
+];
+// "Darkvision 60 ft., Blindsight 10 ft." or {darkvision:'60 ft.'} or a list
+// → {darkvision: 60, blindsight: 10}.
+function sktParseSenses(s){
+  const out = {};
+  const put = (k, v) => { const n = parseInt((String(v).match(/\d+/) || [''])[0], 10); if (n > 0) out[k] = Math.max(out[k] || 0, n); };
+  if (!s) return out;
+  if (typeof s === 'object' && !Array.isArray(s)){
+    Object.keys(s).forEach(k => { const key = k.toLowerCase().replace(/[^a-z]/g, ''); if (/^(darkvision|blindsight|truesight|tremorsense)$/.test(key)) put(key, s[k]); });
+    return out;
+  }
+  String(Array.isArray(s) ? s.join(', ') : s).replace(/(darkvision|blindsight|truesight|tremorsense)\D{0,3}(\d+)/gi, (m, k, n) => { put(k.toLowerCase(), n); return m; });
+  return out;
+}
+// A fighter's senses: a character's sheet (and Devil's Sight, which sees
+// through magical darkness), a monster's stat block.
+function sktSenses(c){
+  if (!c) return {};
+  const pc = c.isPC || (state.party || []).some(p => p && p.id === c.id) ? (state.party || []).find(p => p && (p.id === c.id || p.name === c.name)) : null;
+  if (pc){
+    const o = sktParseSenses((pc.sheet || {}).senses);
+    if ((((pc.sheet || {}).featureList) || []).some(f => f && /devil.?s sight/i.test(f.name || ''))) o.devilsight = 120;
+    return o;
+  }
+  const C = typeof panelDefs !== 'undefined' && panelDefs.combat;
+  const m = C && typeof C.statBlockFor === 'function' ? C.statBlockFor(c) : null;
+  const o = Object.assign({}, sktParseSenses(m && m._raw && m._raw.senses));
+  const more = sktParseSenses((m && m.senses) || c.senses);
+  Object.keys(more).forEach(k => { o[k] = Math.max(o[k] || 0, more[k]); });
+  return o;
+}
+// A token's: the fighter it stands for, or the party member; a DM's number
+// on the token (tok.dv, darkvision) over either.
+function sktTokenSenses(tok){
+  if (!tok) return {};
+  const c = (state.combatants || []).find(x => x && tok.cid != null && x.id === tok.cid)
+    || (state.party || []).find(p => p && (p.id === tok.cid || (tok.isPC && p.name === tok.label)))
+    || (state.combatants || []).find(x => x && typeof sktNormName === 'function' && sktNormName(x.name) === sktNormName(tok.label));
+  const o = c ? sktSenses(c.isPC || (state.party || []).some(p => p.id === c.id) ? Object.assign({ isPC: true }, c) : c) : {};
+  if (tok.dv != null && +tok.dv >= 0) o.darkvision = +tok.dv;
+  return o;
+}
+// The map, read for light and sight once: {on, amb, unit, ppf, walls, lights, darks}.
+function sktSightSrc(src){
+  src = src || {};
+  const unit = src.gridType === 'hex' ? (src.cs || 50) * Math.sqrt(3) / 2 : (src.cs || 50);
+  const ppf = unit / (+src.ftPerCell > 0 ? +src.ftPerCell : 5);
+  const amb = { bright: 2, dim: 1, dark: 0 }[src.light] ?? 2;
+  const dr = Array.isArray(src.drawings) ? src.drawings : [];
+  const walls = [], lights = [], darks = [];
+  dr.forEach(s => {
+    if (!s || s.k !== 'tpl') return;
+    if (s.shape === 'wall' && Array.isArray(s.pts)) for (let i = 0; i + 3 < s.pts.length; i += 2) walls.push([+s.pts[i], +s.pts[i + 1], +s.pts[i + 2], +s.pts[i + 3]]);
+    else if (s.shape === 'lamp') lights.push({ x: +s.x, y: +s.y, z: +s.z || 0, b: +s.ft || 0, d: +s.w || 0 });
+    else if (s.shape === 'darkness') darks.push({ x: +s.x, y: +s.y, z: +s.z || 0, r: +s.ft || 15 });
+  });
+  (src.tokens || []).forEach(t => {
+    if (t && t.lt && t.x != null && (+t.lt.b > 0 || +t.lt.d > 0)) lights.push({ x: t.x, y: t.y, z: +t.elev || 0, b: +t.lt.b || 0, d: +t.lt.d || 0 });
+  });
+  return { on: amb < 2 || walls.length > 0 || darks.length > 0, amb, unit, ppf, walls, lights, darks };
+}
+// Does the line from (ax,ay) to (bx,by) pass through a wall? (Touching a
+// wall's end doesn't count: a line along a corner isn't stopped by it.)
+function sktWallBetween(S, ax, ay, bx, by){
+  const cr = (ox, oy, px, py, qx, qy) => (px - ox) * (qy - oy) - (py - oy) * (qx - ox);
+  for (const w of S.walls){
+    const d1 = cr(w[0], w[1], w[2], w[3], ax, ay), d2 = cr(w[0], w[1], w[2], w[3], bx, by);
+    const d3 = cr(ax, ay, bx, by, w[0], w[1]), d4 = cr(ax, ay, bx, by, w[2], w[3]);
+    if (((d1 > 0 && d2 < 0) || (d1 < 0 && d2 > 0)) && ((d3 > 0 && d4 < 0) || (d3 < 0 && d4 > 0))) return true;
+  }
+  return false;
+}
+// The light at a point (z: its height in feet): 2 bright, 1 dim, 0 darkness,
+// -1 magical darkness (no light reaches into it; darkvision doesn't see it).
+function sktLightAt(S, x, y, z){
+  z = +z || 0;
+  for (const d of S.darks) if (Math.hypot(x - d.x, y - d.y, (z - d.z) * S.ppf) <= d.r * S.ppf) return -1;
+  let L = S.amb;
+  for (const l of S.lights){
+    if (L >= 2) break;
+    const ft = Math.hypot(x - l.x, y - l.y, (z - l.z) * S.ppf) / S.ppf;
+    if (ft > l.b + l.d || sktWallBetween(S, l.x, l.y, x, y)) continue;
+    L = Math.max(L, ft <= l.b ? 2 : 1);
+  }
+  return L;
+}
+// How a viewer {x, y, z, senses} sees a point: 3 in bright light, 2 in dim, 1
+// only by darkvision or blindsight/truesight, 0 not at all (a wall between,
+// or darkness beyond what its eyes reach).
+// (L: the light there, when the caller has it already.)
+function sktSeePoint(S, v, x, y, z, L){
+  if (S.walls.length && sktWallBetween(S, v.x, v.y, x, y)) return 0;
+  const sn = v.senses || {}, ft = Math.hypot(x - v.x, y - v.y, ((+z || 0) - (+v.z || 0)) * S.ppf) / S.ppf;
+  if (L == null) L = sktLightAt(S, x, y, z);
+  if (L >= 1) return L + 1;
+  if ((sn.blindsight || 0) >= ft || (sn.truesight || 0) >= ft || (sn.devilsight || 0) >= ft) return 1;
+  if (L === 0 && (sn.darkvision || 0) >= ft) return 1;
+  return 0;
+}
+// Can viewer token `v` see token `t` (any square of its space)? Always yes
+// while the map has no dark, walls or magical darkness.
+function sktCanSee(S, v, t, vSenses){
+  if (!S || !S.on || !v || !t || v.x == null || t.x == null) return true;
+  const eye = { x: v.x, y: v.y, z: +v.elev || 0, senses: vSenses || sktTokenSenses(v) };
+  const s = Math.max(1, Math.round(+t.size || 1));
+  for (let i = 0; i < s; i++) for (let j = 0; j < s; j++)
+    if (sktSeePoint(S, eye, t.x + (i - (s - 1) / 2) * S.unit, t.y + (j - (s - 1) / 2) * S.unit, +t.elev || 0) > 0) return true;
+  return false;
+}
+
 // How far it may go this turn: its Speed, once more for each Dash.
 function sktMoveBudget(speed, c){
   // Steady Aim: Speed 0 until the end of the turn it was used in.

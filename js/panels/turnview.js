@@ -928,6 +928,7 @@ registerPanel('turnview', {
                gridColor:B._gridColor || null,
                gridOpacity:B._gridOpacity, gridWidth:B._gridWidth,
                ftPerCell:+B._ftPerCell > 0 ? +B._ftPerCell : 5, diagRule:B._diagRule || 'five',
+               light:B._light || 'bright',
                drawings:Array.isArray(B._drawings) ? B._drawings : [] };
     }
     try {
@@ -943,6 +944,7 @@ registerPanel('turnview', {
                  gridColor:d.gridColor || null,
                  gridOpacity:d.gridOpacity, gridWidth:d.gridWidth,
                  ftPerCell:+d.ftPerCell > 0 ? +d.ftPerCell : 5, diagRule:d.diagRule || 'five',
+                 light:d.light || 'bright',
                  drawings:Array.isArray(d.drawings) ? d.drawings : [] };
       }
     } catch(e){}
@@ -1188,6 +1190,14 @@ registerPanel('turnview', {
     // — and blindsight or truesight that reaches still finds it.
     if (attacker && attacker.hidden && !this._hasCond(attacker, 'invisible') && !this._seesUnseen(target, attacker)) adv.push('hidden');
     if (target && target.hidden && !this._hasCond(target, 'invisible') && !this._seesUnseen(attacker, target)) dis.push('target hidden');
+    // Out of sight on the map: darkness its eyes don't reach, magical
+    // darkness, a wall between. Attacking what you can't see is at
+    // disadvantage; being attacked by what you can't see, the other way round.
+    const sight = this._sightBetween(attacker, target);
+    if (sight){
+      if (!sight.aSeesT && !dis.some(x => /^target (invisible|hidden)/.test(x))) dis.push('can’t see the target (' + sight.why + ')');
+      if (!sight.tSeesA && !adv.some(x => /^(invisible|hidden)/.test(x))) adv.push('the target can’t see it (' + sight.why + ')');
+    }
     // Pack Tactics: "advantage on an attack roll against a creature if at
     // least one of the wolf's allies is within 5 feet of the creature and the
     // ally isn't incapacitated." Its side is its allies (monsters, or the
@@ -1224,17 +1234,28 @@ registerPanel('turnview', {
   },
   // Whether `who` sees `other` though it is invisible: a monster's
   // blindsight or truesight, as far as it reaches (unknown distance: no).
+  // (A character's too, from its sheet: Blind Fighting's 10 ft of blindsight,
+  // 2024 Skulker's — this read monsters' stat blocks only.)
   _seesUnseen(who, other){
-    if (!who || who.isPC) return false;
-    const raw = (this._entryOf(who) || {})._raw || {};
-    // ({ blindsight: '60 ft.' } as the loader keeps it; a string from older data)
-    const sn = raw.senses || {};
-    const reach = typeof sn === 'string'
-      ? Math.max(0, ...[...sn.matchAll(/\b(?:blindsight|truesight)\s+(\d+)/gi)].map(x => +x[1]))
-      : Math.max(0, parseInt(sn.blindsight, 10) || 0, parseInt(sn.truesight, 10) || 0);
+    if (!who) return false;
+    const sn = typeof sktSenses === 'function' ? sktSenses(who) : {};
+    const reach = Math.max(0, sn.blindsight || 0, sn.truesight || 0);
     if (!reach) return false;
     const ft = this._ftBetween(who, other);
     return ft != null && ft <= reach;
+  },
+  // Who sees whom on the map ({aSeesT, tSeesA, why}), or null when the map
+  // has nothing to hide in (bright light, no walls) or either has no token.
+  _sightBetween(a, t){
+    if (typeof sktSightSrc !== 'function' || !a || !t) return null;
+    const S = sktSightSrc(this._map());
+    if (!S.on) return null;
+    const ta = this._tokenFor(a), tt = this._tokenFor(t);
+    if (!ta || !tt || ta.x == null || tt.x == null) return null;
+    const aSeesT = sktCanSee(S, ta, tt), tSeesA = sktCanSee(S, tt, ta);
+    if (aSeesT && tSeesA) return null;
+    const why = S.walls.length && sktWallBetween(S, ta.x, ta.y, tt.x, tt.y) ? 'a wall between' : 'darkness';
+    return { aSeesT, tSeesA, why };
   },
   // Can't act: no Pack Tactics help, no threat to a ranged attacker.
   _INCAP: ['incapacitated', 'paralyzed', 'petrified', 'stunned', 'unconscious'],

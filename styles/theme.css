@@ -852,6 +852,7 @@ input[type="checkbox"], input[type="radio"] { accent-color: var(--accent); }
 .pa-area-ctl { flex-direction: column; align-items: center; white-space: nowrap; border-radius: 18px; }
 .pa-area-row { display: flex; align-items: center; justify-content: center; gap: 2px; flex-wrap: wrap; }
 .pa-area-l { font-size: var(--fs-xs); color: var(--text-muted); padding: 0 4px 0 8px; }
+.pa-light-sel { min-height: 36px; margin: 2px 4px; font: inherit; font-size: var(--fs-sm); border-radius: var(--r-pill); padding: 0 10px; background: var(--panel-2); color: var(--text); border: 1px solid var(--border); }
 @media (max-width: 440px){ .pa-area-b { padding: 0 7px; } }
 .pa-area-b { min-height: 40px; padding: 0 10px; border-radius: var(--r-pill); border: 1px solid transparent;
   background: none; color: var(--text-muted); font: inherit; font-size: var(--fs-sm); cursor: pointer; }

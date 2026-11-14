@@ -1003,7 +1003,7 @@ const PA_DRAW = [
   // fireball goes is theirs to show. Their own areas only: the DM's stay put.
   { act:'tool-area',  icon:'i-burst',  label:'Area',  tool:'area'  },
   // How high their character is flying (the Fly spell, wings, a broom).
-  { act:'height',     icon:'i-up',     label:'Height', mine:true    },
+  { act:'height',     icon:'i-up',     label:'Height & light', mine:true },
   { act:'undo',       icon:'i-undo',   label:'Undo'                },
 ];
 let paHeightOpen = false;
@@ -1061,7 +1061,11 @@ function paAddDrawBar(host){
     hc.innerHTML = '<div class="pa-area-row"><span class="pa-area-l">Height</span>'
       + '<button class="pa-area-b" data-pa-draw="elev-down" aria-label="5 ft lower">−</button>'
       + '<b class="pa-area-ft pa-elev-v">' + (B._elevText(myTok) || 'ground') + '</b>'
-      + '<button class="pa-area-b" data-pa-draw="elev-up" aria-label="5 ft higher">+</button></div>';
+      + '<button class="pa-area-b" data-pa-draw="elev-up" aria-label="5 ft higher">+</button></div>'
+      // …and the light they carry: a torch lit, a Light cantrip on the shield.
+      + '<div class="pa-area-row"><span class="pa-area-l">Light</span><select class="pa-light-sel" data-pa-light aria-label="Light you carry">'
+      + (typeof SKT_LIGHTS !== 'undefined' ? SKT_LIGHTS : []).map(l => '<option value="' + l[0] + '"' + ((myTok.lt ? (SKT_LIGHTS.find(x => x[2] === +myTok.lt.b && x[3] === +myTok.lt.d) || ['torch'])[0] : 'none') === l[0] ? ' selected' : '') + '>' + l[1] + '</option>').join('')
+      + '</select></div>';
     bar.appendChild(hc);
   }
   // With the area tool on: its shape, and its size in feet.
@@ -2345,4 +2349,15 @@ function paOnClick(e){
     paRenderPrompt(); return;
   }
 }
-function paOnChange(){ /* inputs are read on use; nothing to do */ }
+function paOnChange(e){
+  // The light their character carries (the Height control's second row).
+  const ls = e && e.target && e.target.closest && e.target.closest('[data-pa-light]');
+  if (ls){
+    const B = panelDefs.battlemap, me = paMyToken();
+    if (B && me && typeof B._setTokenLight === 'function') B._setTokenLight(me, ls.value);
+    const host = document.getElementById('pa-screen'), old = host && host.querySelector('.pa-draw');
+    if (old) old.remove();
+    if (host) paAddDrawBar(host);
+  }
+  /* other inputs are read on use */
+}
