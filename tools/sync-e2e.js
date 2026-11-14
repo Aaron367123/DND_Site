@@ -311,6 +311,26 @@ const window = {};
       return lat(t1);
     });
 
+    await step('DM puts a door beside Zoey → phone taps it open → the DM sees it open; DM locks it → phone can’t', async () => {
+      const ZOEY = "t.isPC && t.label === 'Zoey'";
+      const put = await dm.ev("openPanel('battlemap'); await new Promise(r=>setTimeout(r,300)); const B = panelDefs.battlemap, cs = B._csScreen(); const z = (B._tokens||[]).find(t => " + ZOEY + "); if (!z) return 'no Zoey on the map'; B._drawings = B._drawings.filter(s => s.id !== 'e2e-door'); B._drawings.push({ k: 'tpl', id: 'e2e-door', shape: 'wall', door: true, pts: [z.x - cs / 2, z.y + cs / 2, z.x + cs / 2, z.y + cs / 2] }); B._saveMap(); B._render(); return 'ok'");
+      if (put !== 'ok') return { ok: false, why: 'DM: ' + put };
+      await pl.ev("paTab = 'map'; paRender(); return 1");
+      const seen = await W(pl, "return document.querySelector('#pa-screen [data-door-h=\"e2e-door\"]') ? 1 : 0", 10000);
+      if (seen == null) return { ok: false, why: 'the phone never showed the door’s handle' };
+      const tapped = await pl.ev("const B = panelDefs.battlemap, d = B._drawings.find(s => s.id === 'e2e-door'); const m = B._doorMid(d); B._tapMap(m.x, m.y); return d.open ? 'open' : 'shut'");
+      if (tapped !== 'open') return { ok: false, why: 'the phone’s tap left it ' + tapped };
+      const t1 = await W(dm, "const d = panelDefs.battlemap._drawings.find(s => s.id === 'e2e-door'); return d && d.open ? 1 : 0", 10000);
+      if (t1 == null) return { ok: false, why: 'the DM never saw it open' };
+      await dm.ev("const B = panelDefs.battlemap, d = B._drawings.find(s => s.id === 'e2e-door'); d.locked = true; delete d.open; B._saveMap(); B._render(); return 1");
+      const t2 = await W(pl, "const d = panelDefs.battlemap._drawings.find(s => s.id === 'e2e-door'); return d && d.locked && !d.open ? 1 : 0", 10000);
+      if (t2 == null) return { ok: false, why: 'the lock never reached the phone' };
+      const tried = await pl.ev("const B = panelDefs.battlemap, d = B._drawings.find(s => s.id === 'e2e-door'); const m = B._doorMid(d); B._tapMap(m.x, m.y); return d.open ? 'open' : 'shut'");
+      await dm.ev("const B = panelDefs.battlemap; B._drawings = B._drawings.filter(s => s.id !== 'e2e-door'); B._saveMap(); B._render(); return 1");
+      if (tried !== 'shut') return { ok: false, why: 'the phone opened a locked door' };
+      return lat(t1);
+    });
+
     await step('DM uploads a map (3000×4000) → phone draws it at the same size and grid', async () => {
       const geo = 'const B = panelDefs.battlemap; return [B._bgMapPath, B._bgMapNaturalW, B._bgMapNaturalH, B._cols, B._rows].join(" ")';
       const before = await dm.ev("return panelDefs.battlemap._bgMapPath || ''");

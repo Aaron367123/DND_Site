@@ -940,6 +940,59 @@ registerPanel('battlemap',{
   //      this still shows the DM their map; the only casualty is _bgLuminance,
   //      which already treats a tainted canvas as "couldn't sample" and falls
   //      back to the default grid colour. A visible map beats a correct grid.
+  // A picture from this computer as the map: shown here at once, then
+  // shared (_shareUploadedMap). From the map menu's Upload, or dropped on
+  // the map.
+  _useImageFile(file, done){
+    if (!file) return;
+    if (file.size > 20*1024*1024){ showToast('Image too large (max 20MB)'); return; }
+    showToast('Loading image…');
+    const reader = new FileReader();
+    reader.onload = ev => {
+      const img = new Image();
+      img.onload = () => {
+        // Clear any stale stage background NOW so we don't see the old map
+        // peek through while the new natural-size calculation runs. Without
+        // this, replacing a 5etools map with an upload sometimes leaves the
+        // old background painted because CSS backgroundImage was cached on
+        // the existing stage element.
+        const oldStage = this._body?.querySelector('#map-stage');
+        if (oldStage){ oldStage.style.backgroundImage = 'none'; }
+        _mapBgImage = img;
+        this._bgMapNaturalW = img.naturalWidth;
+        this._bgMapNaturalH = img.naturalHeight;
+        // What this upload replaces, so the old one can be retired once the
+        // new one is safely on the server — and not before.
+        const replacedPath = this._bgMapPath;
+        // Held here only until the shared copy lands. If it never does,
+        // this is all there is and the map stays on this device.
+        this._bgMapPath = null;
+        this._bgMapSize = null;
+        // Bake token rescale + clear stale drawings/fog BEFORE clobbering
+        // scale fields. See _resetMapScene comment for the full rationale.
+        this._resetMapScene();
+        this._bgMapScale = 1;
+        this._lastTokenScale = 1;
+        this._gridOffsetX = 0;
+        this._gridOffsetY = 0;
+        this._saveMap();
+        // Full re-render rebuilds the stage from scratch so the new image's
+        // dimensions, the grid, and the bg URL are all consistent. Then a
+        // fit-to-view call sizes it sensibly.
+        this._render();
+        this._fitMapToView();
+        if (done) done();
+        // Show it here first, share it second. Encoding and uploading a
+        // few megabytes takes a moment, and the DM should not be looking
+        // at a spinner in the meantime.
+        this._shareUploadedMap(img, replacedPath);
+      };
+      img.onerror = () => showToast('Could not load image');
+      img.src = ev.target.result;
+    };
+    reader.onerror = () => showToast('Could not read file');
+    reader.readAsDataURL(file);
+  },
   // Re-encode an uploaded image small enough to share.
   //
   // The file the DM picks can be 20MB, and it has to travel as a base64
@@ -1990,7 +2043,16 @@ registerPanel('battlemap',{
     }
     // Drawings live in stage pixels too — scale them in lockstep.
     (this._drawings||[]).forEach(s => {
-      if (s && s.k === 'tpl'){ s.x *= ratio; s.y *= ratio; if (s.x2 != null){ s.x2 *= ratio; s.y2 *= ratio; } return; }   // areas: origin only, size in feet; terrain: both corners
+      // Areas: origin only, size in feet; terrain: both corners (a hex
+      // terrain's cells are grid cells, which scale with the grid); walls and
+      // doors: every point — they stayed put while the picture under them
+      // grew or shrank, and stopped lining up with the walls drawn on it.
+      if (s && s.k === 'tpl'){
+        if (s.x != null){ s.x *= ratio; s.y *= ratio; }
+        if (s.x2 != null){ s.x2 *= ratio; s.y2 *= ratio; }
+        if (Array.isArray(s.pts)) s.pts = s.pts.map(v => +v * ratio);
+        return;
+      }
       if (!s.p) return;
       for (let i = 0; i < s.p.length; i++) s.p[i] *= ratio;
     });
@@ -2988,8 +3050,11 @@ registerPanel('battlemap',{
     const redo = () => { this._saveMap(); this._render(); };
     const items = [];
     // A door: open it (light and sight go through), close it; a wall made a door or back.
-    if (f.door) items.push({ label: f.open ? '🚪 Close the door' : '🚪 Open the door', onClick: () => { if (f.open) delete f.open; else f.open = true; redo(); } });
-    if (f.shape === 'wall') items.push({ label: f.door ? '▬ Make it a wall' : '🚪 Make it a door', onClick: () => { if (f.door){ delete f.door; delete f.open; } else f.door = true; redo(); } });
+    if (f.door) items.push({ label: f.open ? '🚪 Close the door' : '🚪 Open the door', onClick: () => { if (f.open) delete f.open; else { f.open = true; delete f.locked; } redo(); } });
+    // Locked: the players can't open it from their phones (the DM still can).
+    // Locking a door shuts it.
+    if (f.door) items.push({ label: f.locked ? '🔓 Unlock the door' : '🔒 Lock the door', onClick: () => { if (f.locked) delete f.locked; else { f.locked = true; delete f.open; } redo(); } });
+    if (f.shape === 'wall') items.push({ label: f.door ? '▬ Make it a wall' : '🚪 Make it a door', onClick: () => { if (f.door){ delete f.door; delete f.open; delete f.locked; } else f.door = true; redo(); } });
     items.push(
       { label: '✥ Move this ' + kind, onClick: () => this._moveEntry(f, x, y) },
       { label: '✕ Remove this ' + kind, onClick: () => { this._drawings = this._drawings.filter(s => s !== f); redo(); } },
@@ -3001,7 +3066,10 @@ registerPanel('battlemap',{
   // give, not the fittings): a wall a thick line, a light a small sun with
   // its bright and dim reach dotted round it while the Build tool is up.
   _fixturesSvg(preview, vs){
-    if (document.body.classList.contains('player-mode')) return '';
+    // A player sees no walls or lights, only the handles of the doors they
+    // can see — the sight shade (above this layer) covers any in the dark,
+    // and fog hides the rest.
+    if (document.body.classList.contains('player-mode')) return this._doors().filter(d => !this._isFogged(this._doorMid(d).x, this._doorMid(d).y)).map(d => this._doorHandleSvg(d, vs)).join('');
     const up = this._areaBuild(), ppf = this._ppf();
     // A wall orange; a door wood-brown, and dashed and faint while it stands open.
     const line = (p, extra, door) => { let o = ''; for (let i = 0; i + 3 < p.length; i += 2) o += '<line x1="' + (+p[i]).toFixed(1) + '" y1="' + (+p[i + 1]).toFixed(1) + '" x2="' + (+p[i + 2]).toFixed(1) + '" y2="' + (+p[i + 3]).toFixed(1) + '" stroke="' + (door ? '#b07a3a' : '#e8643c') + '" stroke-linecap="round" stroke-width="' + ((up ? 5 : 3) * (door ? 1.4 : 1) / vs).toFixed(2) + '" stroke-opacity="' + (door === 'open' ? '.45' : up ? '.95' : '.6') + '" ' + (extra || '') + '/>'; return o; };
@@ -3014,7 +3082,62 @@ registerPanel('battlemap',{
       + (up ? '<circle cx="' + l.x + '" cy="' + l.y + '" r="' + ((+l.ft || 0) * ppf).toFixed(1) + '" fill="none" stroke="#ffd36b" stroke-opacity=".7" stroke-dasharray="' + (5 / vs) + ' ' + (4 / vs) + '" stroke-width="' + (1.5 / vs) + '"/>'
             + '<circle cx="' + l.x + '" cy="' + l.y + '" r="' + (((+l.ft || 0) + (+l.w || 0)) * ppf).toFixed(1) + '" fill="none" stroke="#ffd36b" stroke-opacity=".4" stroke-dasharray="' + (3 / vs) + ' ' + (5 / vs) + '" stroke-width="' + (1.5 / vs) + '"/>' : '')
       + '<circle cx="' + l.x + '" cy="' + l.y + '" r="' + (7 / vs).toFixed(1) + '" fill="#ffd36b" stroke="#7a4a00" stroke-width="' + (1.5 / vs) + '"><title>Light: ' + (+l.ft || 0) + ' ft bright, ' + (+l.w || 0) + ' ft dim</title></circle></g>').join('');
-    return walls + lamps;
+    return walls + lamps + this._doors().map(d => this._doorHandleSvg(d, vs)).join('');
+  },
+  // ─── Doors ─────────────────────────────────────────────────────────────────
+  // A handle in the middle of each door, the same size on screen at any
+  // zoom: tap it (no tool up) to open or close the door. A player opens one
+  // their own creature stands next to, unless the DM has locked it.
+  _doors(){ return this._walls().filter(w => w.door); },
+  _doorMid(d){ const p = d.pts, n = p.length; return { x: (+p[0] + +p[n - 2]) / 2, y: (+p[1] + +p[n - 1]) / 2 }; },
+  _doorHandleSvg(d, vs){
+    // (bigger under a finger than under a mouse pointer)
+    const coarse = typeof matchMedia === 'function' && matchMedia('(pointer: coarse)').matches;
+    const m = this._doorMid(d), r = (coarse ? 12 : 9) / vs, sw = (1.5 / vs).toFixed(2), wood = '#b07a3a';
+    const bw = r * 0.8, bh = r * 1.1, bx = m.x - bw / 2, by = m.y - bh / 2;
+    const glyph = d.locked
+      // a padlock: its shackle and body
+      ? '<path d="M' + (m.x - r * .3).toFixed(1) + ' ' + (m.y - r * .05).toFixed(1) + 'v' + (-r * .25).toFixed(1) + 'a' + (r * .3).toFixed(1) + ' ' + (r * .3).toFixed(1) + ' 0 0 1 ' + (r * .6).toFixed(1) + ' 0v' + (r * .25).toFixed(1) + '" fill="none" stroke="#e8d9a8" stroke-width="' + sw + '"/>'
+        + '<rect x="' + (m.x - r * .45).toFixed(1) + '" y="' + (m.y - r * .05).toFixed(1) + '" width="' + (r * .9).toFixed(1) + '" height="' + (r * .6).toFixed(1) + '" rx="' + (r * .1).toFixed(1) + '" fill="#e8d9a8"/>'
+      // a door: solid when shut, an empty frame when open
+      : '<rect x="' + bx.toFixed(1) + '" y="' + by.toFixed(1) + '" width="' + bw.toFixed(1) + '" height="' + bh.toFixed(1) + '" fill="' + (d.open ? 'none' : wood) + '" stroke="' + wood + '" stroke-width="' + sw + '"/>';
+    const what = d.locked ? 'locked' : d.open ? 'open' : 'closed';
+    return '<g data-door-h="' + d.id + '" data-state="' + what + '"><title>Door, ' + what + '</title>'
+      + '<circle cx="' + m.x.toFixed(1) + '" cy="' + m.y.toFixed(1) + '" r="' + r.toFixed(1) + '" fill="#211a14" fill-opacity=".88" stroke="' + wood + '" stroke-width="' + sw + '"/>'
+      + glyph + '</g>';
+  },
+  // The door whose handle is at (x, y) — one this screen can see.
+  _doorAt(x, y){
+    const coarse = typeof matchMedia === 'function' && matchMedia('(pointer: coarse)').matches;
+    const vs = this._screenScale ? (this._screenScale() || 1) : 1, tol = (coarse ? 22 : 14) / vs;
+    const pl = document.body.classList.contains('player-mode');
+    return this._doors().slice().reverse().find(d => {
+      const m = this._doorMid(d);
+      return Math.hypot(x - m.x, y - m.y) <= tol && !(pl && this._isFogged(m.x, m.y));
+    }) || null;
+  },
+  // Whether one of this player's own creatures is next to door d: its edge
+  // within 5 ft of the door.
+  _reachesDoor(d){
+    const cs = this._csScreen() || 50, unit = (this._tokenUnitScreen && this._tokenUnitScreen()) || cs;
+    const seg = (px, py, ax, ay, bx, by) => { const dx = bx - ax, dy = by - ay, L = dx * dx + dy * dy; const u = L ? Math.max(0, Math.min(1, ((px - ax) * dx + (py - ay) * dy) / L)) : 0; return Math.hypot(px - ax - u * dx, py - ay - u * dy); };
+    return (this._tokens || []).some(t => {
+      if (!t || t.x == null || t.dead || !(typeof sktPlayerMayMoveToken === 'function' && sktPlayerMayMoveToken(t))) return false;
+      const reach = Math.max(1, +t.size || 1) * unit / 2 + cs * 1.05;
+      for (let i = 0; i + 3 < d.pts.length; i += 2) if (seg(t.x, t.y, +d.pts[i], +d.pts[i + 1], +d.pts[i + 2], +d.pts[i + 3]) <= reach) return true;
+      return false;
+    });
+  },
+  // A tap on the map with no tool up. Only a door's handle answers it.
+  _tapMap(x, y){
+    const d = this._doorAt(x, y); if (!d) return false;
+    if (document.body.classList.contains('player-mode')){
+      if (d.locked){ if (typeof showToast === 'function') showToast('The door is locked.'); return true; }
+      if (!this._reachesDoor(d)){ if (typeof showToast === 'function') showToast('Get next to the door to ' + (d.open ? 'close' : 'open') + ' it.'); return true; }
+    }
+    if (d.open) delete d.open; else { d.open = true; delete d.locked; }
+    this._saveMap(); this._render();
+    return true;
   },
   _terrainMenu(r, cx, cy, x, y){
     const items = [
@@ -4848,25 +4971,33 @@ registerPanel('battlemap',{
       const stage0 = b.querySelector('#map-stage'), at = stage0 && this._stagePoint(cx, cy, stage0);
       if (!at) return;
       const mvEv = touch ? 'touchmove' : 'mousemove', upEv = touch ? 'touchend' : 'mouseup';
+      // Let go before the half second, without moving: a tap — on a door's
+      // handle, that opens or closes it.
+      let live = true;
       const stop = () => {
+        live = false;
         clearTimeout(this._holdT);
-        document.removeEventListener(mvEv, mv); document.removeEventListener(upEv, stop);
+        document.removeEventListener(mvEv, mv); document.removeEventListener(upEv, up);
         if (touch) document.removeEventListener('touchcancel', stop);
       };
+      const up = () => { const tap = live; stop(); if (tap) this._tapMap(at.x, at.y); };
       const mv = ev => {
         const p = ev.touches ? ev.touches[0] : ev;
         if (!p || (ev.touches && ev.touches.length > 1) || Math.hypot(p.clientX - cx, p.clientY - cy) > 8) stop();
       };
       document.addEventListener(mvEv, mv, { passive: true });
-      document.addEventListener(upEv, stop);
+      document.addEventListener(upEv, up);
       if (touch) document.addEventListener('touchcancel', stop);
       this._holdT = setTimeout(() => {
         stop();
         this._ping(at.x, at.y);
       }, 550);
     };
-    scrollEl.addEventListener('mousedown', e => { if (e.button === 0) holdStart(e.clientX, e.clientY, e.target, false); });
+    // (A phone follows a tap with a made-up mouse press at the same spot; it
+    // would be a second tap, and the door it opened would shut again.)
+    scrollEl.addEventListener('mousedown', e => { if (e.button === 0 && Date.now() - (this._touchAt || 0) > 800) holdStart(e.clientX, e.clientY, e.target, false); });
     scrollEl.addEventListener('touchstart', e => {
+      this._touchAt = Date.now();
       if (e.touches.length === 1) holdStart(e.touches[0].clientX, e.touches[0].clientY, e.target, true);
       else clearTimeout(this._holdT);   // a pinch
     }, { passive: true });
@@ -4946,7 +5077,11 @@ registerPanel('battlemap',{
     // ─── button anywhere on the map to place a token at the cursor. ────────
     const dropTypes = ['application/x-skt-party-pi', 'application/x-skt-bestiary-mid'];
     const hasTokenDrop = (e) => dropTypes.some(t => e.dataTransfer.types.includes(t));
+    // A picture dragged from the computer: the DM's new map. (Unhandled, the
+    // browser opened the picture in place of the whole site.)
+    const hasFileDrop = (e) => !document.body.classList.contains('player-mode') && [...(e.dataTransfer.types || [])].includes('Files');
     scrollEl.addEventListener('dragover', e => {
+      if (hasFileDrop(e)){ e.preventDefault(); e.dataTransfer.dropEffect = 'copy'; scrollEl.classList.add('map-drop-active'); return; }
       if (!hasTokenDrop(e)) return;
       e.preventDefault();
       e.dataTransfer.dropEffect = 'copy';
@@ -4957,6 +5092,20 @@ registerPanel('battlemap',{
     });
     scrollEl.addEventListener('drop', e => {
       scrollEl.classList.remove('map-drop-active');
+      if (hasFileDrop(e)){
+        e.preventDefault(); e.stopPropagation();
+        const file = [...(e.dataTransfer.files || [])][0];
+        if (!file) return;
+        if (!/^image\//.test(file.type || '')){ showToast('That isn’t a picture: drop a PNG, JPG or WebP map.'); return; }
+        // A new map clears this one's walls, doors, drawings and fog, and
+        // that can't be undone: ask, when there's something to lose.
+        const lose = (this._drawings || []).length || this._fog;
+        const go = () => this._useImageFile(file);
+        if (!lose || typeof showConfirm !== 'function'){ go(); return; }
+        showConfirm('Use “' + file.name + '” as the map? The walls, doors, areas, drawings and fog on this one are cleared. To keep a copy, save it first: Map ▾ → Choose a map… → Save current as….', { title: 'New map', confirmLabel: 'Use it' })
+          .then(ok => { if (ok) go(); });
+        return;
+      }
       if (!hasTokenDrop(e)) return;
       e.preventDefault(); e.stopPropagation();
       // Compute drop position in stage coordinates (zoom + rotation aware).
@@ -5438,54 +5587,8 @@ registerPanel('battlemap',{
     uploadInput.addEventListener('change', e=>{
       const file = e.target.files && e.target.files[0];
       if (!file) return;
-      if (file.size > 20*1024*1024){ showToast('Image too large (max 20MB)'); e.target.value=''; return; }
-      showToast('Loading image…');
-      const reader = new FileReader();
-      reader.onload = ev => {
-        const img = new Image();
-        img.onload = () => {
-          // Clear any stale stage background NOW so we don't see the old map
-          // peek through while the new natural-size calculation runs. Without
-          // this, replacing a 5etools map with an upload sometimes leaves the
-          // old background painted because CSS backgroundImage was cached on
-          // the existing stage element.
-          const oldStage = this._body?.querySelector('#map-stage');
-          if (oldStage){ oldStage.style.backgroundImage = 'none'; }
-          _mapBgImage = img;
-          this._bgMapNaturalW = img.naturalWidth;
-          this._bgMapNaturalH = img.naturalHeight;
-          // What this upload replaces, so the old one can be retired once the
-          // new one is safely on the server — and not before.
-          const replacedPath = this._bgMapPath;
-          // Held here only until the shared copy lands. If it never does,
-          // this is all there is and the map stays on this device.
-          this._bgMapPath = null;
-          this._bgMapSize = null;
-          // Bake token rescale + clear stale drawings/fog BEFORE clobbering
-          // scale fields. See _resetMapScene comment for the full rationale.
-          this._resetMapScene();
-          this._bgMapScale = 1;
-          this._lastTokenScale = 1;
-          this._gridOffsetX = 0;
-          this._gridOffsetY = 0;
-          this._saveMap();
-          // Full re-render rebuilds the stage from scratch so the new image's
-          // dimensions, the grid, and the bg URL are all consistent. Then a
-          // fit-to-view call sizes it sensibly.
-          this._render();
-          this._fitMapToView();
-          close();
-          // Show it here first, share it second. Encoding and uploading a
-          // few megabytes takes a moment, and the DM should not be looking
-          // at a spinner in the meantime.
-          this._shareUploadedMap(img, replacedPath);
-        };
-        img.onerror = () => showToast('Could not load image');
-        img.src = ev.target.result;
-      };
-      reader.onerror = () => showToast('Could not read file');
-      reader.readAsDataURL(file);
       e.target.value = '';
+      this._useImageFile(file, close);
     });
 
     backdrop.querySelector('#mapsel-clear')?.addEventListener('click', ()=>{

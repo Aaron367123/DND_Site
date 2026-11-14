@@ -22290,6 +22290,125 @@ for (const cls of Object.keys(rule)) for (let L = 1; L <= 20; L++) for (const sc
         closePanel('battlemap');
       }
     }
+    // -- Round 388: a door has a handle; a click on it (no tool up) opens and shuts it; the DM can lock it; holding it still pings --
+    {
+      const B = panelDefs.battlemap;
+      let keepT = null, keepD = null, keepF, fogSaved = false, keepLive;
+      const keepTool = B._tool, keepShape = B._tplShape;
+      try {
+        openPanel('battlemap'); await sleep(700);
+        keepT = B._tokens.slice(); keepD = B._drawings.slice();
+        keepF = B._fog; fogSaved = true; B._fog = null;
+        const cs = B._csScreen();
+        const door = { k: 'tpl', id: 'r388d', shape: 'wall', door: true, pts: [4 * cs, 4 * cs, 5 * cs, 4 * cs] };
+        B._tokens = []; B._drawings = [door]; B._tool = ''; B._render(); await sleep(150);
+        keepLive = window.realtimeLive;
+        window.realtimeLive = Object.assign({}, keepLive || {}, { push: () => {}, clear: () => {}, patch: () => {} });
+        const h = () => B._body.querySelector('#tpl-layer [data-door-h="r388d"]');
+        ok('a door has a handle, in its middle, saying it’s closed', !!h() && h().getAttribute('data-state') === 'closed'
+          && Math.abs(+h().querySelector('circle').getAttribute('cx') - 4.5 * cs) < 0.5);
+        const scroll = B._body.querySelector('#map-scroll');
+        const cl = (sx, sy) => { const r = B._body.querySelector('#map-stage').getBoundingClientRect(), z = B._screenScale(); return { x: Math.round(r.left + sx * z), y: Math.round(r.top + sy * z) }; };
+        const press = async (sx, sy, ms) => {
+          const p = cl(sx, sy);
+          scroll.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, cancelable: true, clientX: p.x, clientY: p.y, button: 0 }));
+          await sleep(ms);
+          document.dispatchEvent(new MouseEvent('mouseup', { bubbles: true, clientX: p.x, clientY: p.y }));
+          await sleep(60);
+        };
+        await press(4.5 * cs, 4 * cs, 90);
+        ok('a click on the handle opens the door', door.open === true && h() && h().getAttribute('data-state') === 'open', JSON.stringify(door));
+        await press(4.5 * cs, 4 * cs, 90);
+        ok('…and another shuts it', !door.open && h().getAttribute('data-state') === 'closed');
+        await press(4.5 * cs, 6 * cs, 90);
+        ok('a click elsewhere on the map leaves it', !door.open);
+        // Held: a ping, not a door
+        B._body.querySelectorAll('.map-ping').forEach(e => e.remove());
+        await press(4.5 * cs, 4 * cs, 750);
+        ok('held on the handle: a ping, and the door stays as it was', !door.open && !!B._body.querySelector('.map-ping'));
+        // The DM locks it
+        B._fixtureMenu(door, 300, 300, door.pts[0], door.pts[1]); await sleep(60);
+        const lockIt = [...document.querySelectorAll('.ctx-menu-item')].find(e => /Lock the door/.test(e.textContent));
+        ok('the door’s menu: Lock the door', !!lockIt);
+        if (lockIt) lockIt.click(); await sleep(80);
+        document.querySelectorAll('.ctx-menu, .context-menu').forEach(m => m.remove());
+        ok('…locked, and its handle shows a padlock', door.locked === true && !door.open && h().getAttribute('data-state') === 'locked' && !!h().querySelector('path'));
+        await press(4.5 * cs, 4 * cs, 90);
+        ok('the DM can still open a locked door (and it’s no longer locked)', door.open === true && !door.locked);
+        // With the Build tool up a click on it is the tool's, not a toggle
+        B._tool = 'area'; B._tplShape = 'wall'; B._render(); await sleep(80);
+        await press(4.5 * cs, 4 * cs, 90);
+        document.querySelectorAll('.ctx-menu, .context-menu').forEach(m => m.remove());
+        ok('with Build up a click is the tool’s (its menu), not a toggle', door.open === true);
+      } catch(e){ ok('round 388 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
+      finally {
+        if (keepLive !== undefined) window.realtimeLive = keepLive;
+        if (fogSaved) B._fog = keepF;
+        B._tool = keepTool; B._tplShape = keepShape;
+        if (keepT){ B._tokens = keepT; B._drawings = keepD; try { B._saveMap(); } catch(e){} }
+        try { B._render(); } catch(e){}
+        closePanel('battlemap');
+      }
+    }
+    // -- Round 390: the map's picture rescaled: walls and doors go with it, as tokens and areas do; a picture dropped on the map becomes the map --
+    {
+      const B = panelDefs.battlemap;
+      const S0 = localStorage.getItem('skt-battlemap-v1'), P0 = B._bgMapPath, I0 = _mapBgImage, W0 = B._bgMapNaturalW, H0 = B._bgMapNaturalH;
+      const putReal = window.sktMapBlobPut, readyReal = window.sktMapBlobReady;
+      let keepT = null, keepD = null, keepF, fogSaved = false, keepSc = B._bgMapScale, keepLts = B._lastTokenScale;
+      try {
+        openPanel('battlemap'); await sleep(700);
+        keepT = B._tokens.slice(); keepD = B._drawings.slice();
+        keepF = B._fog; fogSaved = true; B._fog = null;
+        const cs = B._csScreen();
+        const tok = { id: 't390', label: 'r390 Goblin', x: 4 * cs, y: 4 * cs, size: 1 };
+        const wall = { k: 'tpl', id: 'r390w', shape: 'wall', pts: [4 * cs, 4 * cs, 8 * cs, 4 * cs] };
+        const door = { k: 'tpl', id: 'r390d', shape: 'wall', door: true, pts: [8 * cs, 4 * cs, 9 * cs, 4 * cs] };
+        const lamp = { k: 'tpl', id: 'r390l', shape: 'lamp', x: 4 * cs, y: 4 * cs, ft: 20, w: 20 };
+        B._tokens = [tok]; B._drawings = [wall, door, lamp];
+        B._lastTokenScale = 1; B._scaleTokensTo(1.5);
+        ok('the map rescaled: a wall’s ends go with the picture, as a token does', Math.abs(wall.pts[0] - tok.x) < 0.01 && Math.abs(wall.pts[2] - 8 * cs * 1.5) < 0.01, JSON.stringify([wall.pts, tok.x]));
+        ok('…a door’s too, and a light’s', Math.abs(door.pts[2] - 9 * cs * 1.5) < 0.01 && Math.abs(lamp.x - tok.x) < 0.01);
+        ok('…and a wall gets no stray x/y of its own', !('x' in wall) && !('y' in wall), JSON.stringify(wall));
+        B._scaleTokensTo(1);
+        // A picture dropped on the map
+        B._tokens = []; B._drawings = [wall]; B._render(); await sleep(150);
+        window.sktMapBlobPut = () => Promise.resolve(true); window.sktMapBlobReady = () => true;
+        const c = document.createElement('canvas'); c.width = 640; c.height = 480;
+        const g = c.getContext('2d'); g.fillStyle = '#4a6b4a'; g.fillRect(0, 0, 640, 480); g.fillStyle = '#c8b48a'; g.fillRect(100, 100, 300, 200);
+        const blob = await new Promise(r => c.toBlob(r, 'image/png'));
+        const file = new File([blob], 'r390-cave.png', { type: 'image/png' });
+        const scroll = B._body.querySelector('#map-scroll');
+        const dt = new DataTransfer(); dt.items.add(file);
+        const over = new DragEvent('dragover', { bubbles: true, cancelable: true, dataTransfer: dt });
+        scroll.dispatchEvent(over);
+        ok('a picture dragged over the map is taken (the browser doesn’t open it instead)', over.defaultPrevented);
+        const drop = new DragEvent('drop', { bubbles: true, cancelable: true, dataTransfer: dt });
+        scroll.dispatchEvent(drop); await sleep(150);
+        const modal = [...document.querySelectorAll('.modal-backdrop')].pop();
+        ok('…dropped on a map with walls on it: asks first, naming the picture', drop.defaultPrevented && !!modal && /r390-cave\.png/.test(modal.textContent) && /cleared/.test(modal.textContent), modal && modal.textContent);
+        if (modal) modal.querySelector('#conf-ok').click();
+        await sleep(900);
+        ok('…and it becomes the map', !!_mapBgImage && _mapBgImage.naturalWidth === 640 && B._bgMapNaturalW === 640 && !B._drawings.length, JSON.stringify([_mapBgImage && _mapBgImage.naturalWidth, B._bgMapNaturalW, B._drawings.length]));
+        // Something that isn't a picture
+        const dt2 = new DataTransfer(); dt2.items.add(new File(['hello'], 'notes.txt', { type: 'text/plain' }));
+        const drop2 = new DragEvent('drop', { bubbles: true, cancelable: true, dataTransfer: dt2 });
+        scroll.dispatchEvent(drop2); await sleep(150);
+        const tt = [...document.querySelectorAll('#toast-host .toast-item')].pop();
+        ok('a file that isn’t a picture: said, and the map kept', drop2.defaultPrevented && _mapBgImage && _mapBgImage.naturalWidth === 640 && !!tt && /isn’t a picture/.test(tt.textContent));
+      } catch(e){ ok('round 390 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
+      finally {
+        document.querySelectorAll('.modal-backdrop').forEach(m => m.remove());
+        window.sktMapBlobPut = putReal; window.sktMapBlobReady = readyReal;
+        if (fogSaved) B._fog = keepF;
+        B._bgMapScale = keepSc; B._lastTokenScale = keepLts;
+        _mapBgImage = I0; B._bgMapPath = P0; B._bgMapNaturalW = W0; B._bgMapNaturalH = H0;
+        if (keepT){ B._tokens = keepT; B._drawings = keepD; }
+        if (S0 != null) localStorage.setItem('skt-battlemap-v1', S0);
+        try { B._render(); } catch(e){}
+        closePanel('battlemap');
+      }
+    }
     // -- Class features: represented, not just text ------------------------
     {
       try {
@@ -25664,6 +25783,66 @@ for (const cls of Object.keys(rule)) for (let L = 1; L <= 20; L++) for (const sc
       } catch(e){ ok('round 387 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
       finally {
         if (keepT){ B._tokens = keepT; try { B._render(); } catch(e){} }
+        try { B._applyViewScale(keepVs || 1); } catch(e){}
+        paTab = keepTab; try { paRender(); } catch(e){}
+      }
+    }
+    // -- Round 389: on a phone, a player taps a door's handle next to their character to open it; not a far one, a locked one or one under fog; no walls shown --
+    if (PLAYER){
+      const keepTab = paTab; const B = panelDefs.battlemap;
+      let keepT = null, keepD = null, keepF, fogSaved = false, keepVs = B._viewScale; const keepTool = B._tool;
+      try {
+        if (paMyIdx() < 0) paSetPc(state.party[0].id);
+        const me = paPc();
+        paTab = 'map'; paRender(); await sleep(900);
+        keepT = B._tokens.slice(); keepD = B._drawings.slice();
+        keepF = B._fog; fogSaved = true;
+        const cs = B._csScreen();
+        const D = (id, x, extra) => Object.assign({ k: 'tpl', id, shape: 'wall', door: true, pts: [x * cs, 6 * cs, (x + 1) * cs, 6 * cs] }, extra || {});
+        const near = D('r389a', 3), far = D('r389b', 12), locked = D('r389c', 5, { locked: true }), fogged = D('r389d', 16);
+        const wall = { k: 'tpl', id: 'r389w', shape: 'wall', pts: [0, 9 * cs, 4 * cs, 9 * cs] };
+        B._tokens = [{ id: 't389me', cid: me.id, label: me.name, isPC: true, x: 3.5 * cs, y: 6.5 * cs, size: 1 }];
+        B._drawings = [near, far, locked, fogged, wall];
+        // Fog over the far right of the map; the rest revealed
+        const f = new Set(); for (let gx = 0; gx < 14; gx++) for (let gy = 0; gy < B._rows; gy++) f.add(gx + ',' + gy);
+        B._fog = f; B._fogStrokes = [];
+        B._tool = ''; B._applyViewScale(1.2); B._render(); await sleep(400);
+        const hs = id => B._body.querySelector('#tpl-layer [data-door-h="' + id + '"]');
+        ok('player: door handles for the doors they can see, none under fog', !!hs('r389a') && !!hs('r389b') && !!hs('r389c') && !hs('r389d'));
+        ok('…and no walls or door lines drawn', !B._body.querySelector('#tpl-layer [data-wall], #tpl-layer [data-door]'));
+        const cl = (sx, sy) => { const r = B._body.querySelector('#map-stage').getBoundingClientRect(), z = B._screenScale(); return { x: Math.round(r.left + sx * z), y: Math.round(r.top + sy * z) }; };
+        const tap = async (sx, sy) => {
+          const p = cl(sx, sy), scroll = B._body.querySelector('#map-scroll');   // (rebuilt when the map redraws)
+          const T = new Touch({ identifier: 1, target: scroll, clientX: p.x, clientY: p.y });
+          scroll.dispatchEvent(new TouchEvent('touchstart', { bubbles: true, cancelable: true, touches: [T], targetTouches: [T], changedTouches: [T] }));
+          await sleep(80);
+          scroll.dispatchEvent(new TouchEvent('touchend', { bubbles: true, cancelable: true, touches: [], targetTouches: [], changedTouches: [T] }));
+          // …and the made-up mouse press a phone sends after a tap
+          await sleep(20);
+          scroll.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, cancelable: true, clientX: p.x, clientY: p.y, button: 0 }));
+          document.dispatchEvent(new MouseEvent('mouseup', { bubbles: true, clientX: p.x, clientY: p.y }));
+          await sleep(120);
+        };
+        const lastToast = () => { const t = [...document.querySelectorAll('#toast-host .toast-item')].pop(); return t ? t.textContent : ''; };
+        // Scroll the near door into view first
+        const sc = () => B._body.querySelector('#map-scroll');
+        { const hp = hs('r389a').getBoundingClientRect(), sr = sc().getBoundingClientRect(); sc().scrollLeft += hp.left - sr.left - sr.width / 2; sc().scrollTop += hp.top - sr.top - sr.height / 2; await sleep(150); }
+        await tap(3.5 * cs, 6 * cs);
+        ok('a tap on the door beside you opens it (once — the phone’s echo doesn’t shut it again)', near.open === true && hs('r389a').getAttribute('data-state') === 'open', JSON.stringify(near));
+        await tap(3.5 * cs, 6 * cs);
+        ok('…and shuts it', !near.open);
+        sc().scrollLeft += 2 * cs * B._screenScale(); await sleep(120);
+        await tap(5.5 * cs, 6 * cs);
+        ok('a locked door doesn’t open, and says so', !locked.open && locked.locked && /locked/i.test(lastToast()), lastToast());
+        sc().scrollLeft += 7 * cs * B._screenScale(); await sleep(120);
+        await tap(12.5 * cs, 6 * cs);
+        ok('a door across the room doesn’t open: get next to it', !far.open && /next to the door/i.test(lastToast()), lastToast());
+        ok('…the wall stays a wall', !wall.open && !wall.door);
+      } catch(e){ ok('round 389 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
+      finally {
+        if (fogSaved) B._fog = keepF;
+        B._tool = keepTool;
+        if (keepT){ B._tokens = keepT; B._drawings = keepD; try { B._saveMap(); } catch(e){} }
         try { B._applyViewScale(keepVs || 1); } catch(e){}
         paTab = keepTab; try { paRender(); } catch(e){}
       }
