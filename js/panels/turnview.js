@@ -2773,7 +2773,9 @@ registerPanel('turnview', {
         + (c && c.id === state.activeCombatantId ? 'cur ' : '')
         + (c && this._armed === c.id ? 'tgt ' : '')
         + (((c && (c.hp || 0) <= 0) || t.dead) ? 'dead ' : '')
-        + (c ? '' : 'loose');
+        + (c ? '' : 'loose')
+        // In the air (or under the ground): a dashed ring, the height on hover.
+        + (+t.elev ? ' aloft' : '');
       if (c) n.dataset.tvtok = c.id;
       n.dataset.tvlabel = t.label || '';
       // A Large creature covers four squares and a Huge one nine, and the
@@ -2789,7 +2791,8 @@ registerPanel('turnview', {
       // floor keeps the proportion true whatever the zoom.
       const sz = Math.max(1, t.size || 1);
       if (sz > 1) n.style.setProperty('--tok', Math.max(12, cell * 0.9) * sz + 'px');
-      n.title = label + (c ? ` — ${c.hp}/${c.hpMax}` : ' — not in the initiative order');
+      n.title = label + (c ? ` — ${c.hp}/${c.hpMax}` : ' — not in the initiative order')
+        + (+t.elev ? (t.elev > 0 ? ' · ' + t.elev + ' ft up' : ' · ' + (-t.elev) + ' ft down') : '');
       // The same face the battle map draws: the bestiary head-shot, the party
       // member's chosen glyph, or the class icon — through renderIcon(), which
       // is where the path repair and the emoji/SVG/image branching already

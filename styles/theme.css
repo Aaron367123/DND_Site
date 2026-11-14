@@ -850,7 +850,7 @@ input[type="checkbox"], input[type="radio"] { accent-color: var(--accent); }
 .pa-draw-sz.on { border-color: var(--accent); background: color-mix(in srgb, var(--accent) 16%, transparent); }
 /* The area tool's shape and size, in the same pill above the bar. */
 .pa-area-ctl { flex-direction: column; align-items: center; white-space: nowrap; border-radius: 18px; }
-.pa-area-row { display: flex; align-items: center; justify-content: center; gap: 2px; }
+.pa-area-row { display: flex; align-items: center; justify-content: center; gap: 2px; flex-wrap: wrap; }
 .pa-area-l { font-size: var(--fs-xs); color: var(--text-muted); padding: 0 4px 0 8px; }
 @media (max-width: 440px){ .pa-area-b { padding: 0 7px; } }
 .pa-area-b { min-height: 40px; padding: 0 10px; border-radius: var(--r-pill); border: 1px solid transparent;

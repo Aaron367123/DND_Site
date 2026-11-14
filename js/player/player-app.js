@@ -1008,14 +1008,16 @@ const PA_DRAW = [
 ];
 let paHeightOpen = false;
 // An emanation is laid by pressing the creature it comes from.
-const PA_AREA_SHAPES = [['circle', 'Sphere'], ['cone', 'Cone'], ['line', 'Line'], ['cube', 'Cube'], ['aura', 'Emanation']];
+const PA_AREA_SHAPES = [['circle', 'Sphere'], ['cyl', 'Cylinder'], ['cone', 'Cone'], ['line', 'Line'], ['cube', 'Cube'], ['aura', 'Emanation']];
 // Shape, size and (a line's) width of the next area: kept on the panel, and
 // in its own (hidden) toolbar controls, which the area tool reads.
 function paAreaSet(shape, dSize, dWidth){
   const B = panelDefs.battlemap; if (!B) return;
   if (shape) B._tplShape = shape;
   if (dSize) B._tplSize = Math.max(5, Math.min(300, (+B._tplSize || 20) + dSize));
-  if (dWidth) B._tplWidth = Math.max(5, Math.min(60, (+B._tplWidth || 5) + dWidth));
+  if (dWidth && B._tplShape === 'cyl') B._tplHeight = Math.max(5, Math.min(300, (+B._tplHeight || 40) + dWidth));
+  else if (dWidth) B._tplWidth = Math.max(5, Math.min(60, (+B._tplWidth || 5) + dWidth));
+  const hh = document.querySelector('.pa-mount #tpl-height'); if (hh) hh.value = B._tplHeight || 40;
   const sel = document.querySelector('.pa-mount #tpl-shape'), sz = document.querySelector('.pa-mount #tpl-size'), wd = document.querySelector('.pa-mount #tpl-width');
   if (sel) sel.value = B._tplShape;
   if (sz) sz.value = B._tplSize;
@@ -1073,6 +1075,7 @@ function paAddDrawBar(host){
     ctl.innerHTML = '<div class="pa-area-row">' + PA_AREA_SHAPES.map(([v, l]) => `<button class="pa-area-b ${cur === v ? 'on' : ''}" data-pa-shape="${v}" aria-pressed="${cur === v}">${l}</button>`).join('') + '</div>'
       + `<div class="pa-area-row"><button class="pa-area-b" data-pa-asize="-5" aria-label="5 ft smaller">−</button><b class="pa-area-ft">${ft} ft</b><button class="pa-area-b" data-pa-asize="5" aria-label="5 ft bigger">+</button>`
       + (cur === 'line' ? `<span class="pa-area-l">width</span><button class="pa-area-b" data-pa-awidth="-5" aria-label="5 ft narrower">−</button><b class="pa-area-ft pa-area-w">${wd} ft</b><button class="pa-area-b" data-pa-awidth="5" aria-label="5 ft wider">+</button>` : '')
+      + (cur === 'cyl' ? `<span class="pa-area-l">high</span><button class="pa-area-b" data-pa-awidth="-5" aria-label="5 ft lower">−</button><b class="pa-area-ft pa-area-w">${+B._tplHeight || 40} ft</b><button class="pa-area-b" data-pa-awidth="5" aria-label="5 ft higher">+</button>` : '')
       + (cur === 'aura' ? '<span class="pa-area-l">press a creature</span>' : '')
       + '</div>';
     bar.appendChild(ctl);

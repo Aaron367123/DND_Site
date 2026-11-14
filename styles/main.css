@@ -4278,6 +4278,7 @@ select.tv-in.wide { width:126px; }
    added, a token left over. Drawn, because it IS on the map, but plainly not
    part of the fight. */
 .tv-tok.loose { opacity:.5; border-style:dashed; }
+.tv-tok.aloft { outline:2px dashed #6aa7ff; outline-offset:2px; }
 .tv-tok:active { cursor:grabbing; }
 
 /* ── Targets ──────────────────────────────────────────────────────────── */

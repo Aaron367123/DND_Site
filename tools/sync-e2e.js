@@ -265,6 +265,26 @@ const window = {};
       return lat(t);
     });
 
+    await step('phone flies Zoey 20 ft up (Height) → DM; DM’s hidden area stays off the phone, its difficult terrain and an emanation on Zoey reach it', async () => {
+      const ZOEY = "t.isPC && t.label === 'Zoey'";
+      await pl.ev("paTab = 'map'; paRender(); await new Promise(r=>setTimeout(r,900)); for (const s of ['.pa-init', '#pa-rest', '#pa-roll-req']) document.querySelectorAll(s).forEach(e => e.remove()); return 1");
+      const opened = await pl.ev("const b = document.querySelector('#pa-screen [data-pa-draw=\"height\"]'); if (!b) return 'no Height button'; b.click(); await new Promise(r=>setTimeout(r,200)); const up = () => document.querySelector('#pa-screen .pa-height-ctl [data-pa-draw=\"elev-up\"]'); if (!up()) return 'no up'; const me = paMyToken(); if (me && me.elev) panelDefs.battlemap._setElev(me, 0); await new Promise(r=>setTimeout(r,200)); for (let i = 0; i < 4; i++){ up().click(); await new Promise(r=>setTimeout(r,120)); } return 'ok ' + (paMyToken() || {}).elev");
+      if (!/^ok 20$/.test(opened)) return { ok: false, why: 'phone height: ' + opened };
+      const t = await W(dm, "const z = (panelDefs.battlemap._tokens||[]).find(t => " + ZOEY + "); return z && z.elev === 20 ? 1 : 0");
+      if (t == null) return { ok: false, why: 'Zoey’s height never reached the DM: ' + await dm.ev("const z = (panelDefs.battlemap._tokens||[]).find(t => " + ZOEY + "); return z && z.elev") };
+      await dm.ev("const B = panelDefs.battlemap, z = B._tokens.find(t => " + ZOEY + "), cs = B._csScreen(); B._drawings = B._drawings.filter(s => !(s && /^e2e-/.test(s.id || ''))); B._drawings.push({ k: 'tpl', id: 'e2e-hid', shape: 'circle', x: z.x + cs * 4, y: z.y, ft: 10, c: '#ff0000', dm: true }, { k: 'tpl', id: 'e2e-dt', shape: 'terrain', x: z.x + cs, y: z.y + cs, x2: z.x + cs * 3, y2: z.y + cs * 3 }, { k: 'tpl', id: 'e2e-aura', shape: 'aura', tok: z.id, ft: 10, x: z.x, y: z.y, c: '#e8c547' }); B._saveMap(); B._renderAreas(); return 1");
+      const got = await W(pl, "const B = panelDefs.battlemap, ids = (B._drawings||[]).map(s => s && s.id); return ids.includes('e2e-dt') && ids.includes('e2e-aura') ? 1 : 0");
+      if (got == null) return { ok: false, why: 'the terrain and emanation never reached the phone' };
+      const seen = await pl.ev("const B = panelDefs.battlemap; B._renderAreas(); await new Promise(r=>setTimeout(r,200)); return JSON.stringify({ areas: B._areas().map(a => a.id).filter(x => /^e2e-/.test(x)), rough: B._terrain().map(a => a.id), hidDrawn: !!document.querySelector('#pa-screen #tpl-layer [data-tpl=\"e2e-hid\"]'), dtDrawn: !!document.querySelector('#pa-screen #tpl-layer [data-dt=\"e2e-dt\"]'), auraDrawn: !!document.querySelector('#pa-screen #tpl-layer [data-tpl=\"e2e-aura\"]') })");
+      const s = JSON.parse(seen);
+      // Tidy: down to the ground, areas gone.
+      await pl.ev("const me = paMyToken(); if (me) panelDefs.battlemap._setElev(me, 0); paHeightOpen = false; return 1");
+      await dm.ev("const B = panelDefs.battlemap; B._drawings = B._drawings.filter(s => !(s && /^e2e-/.test(s.id || ''))); B._saveMap(); B._renderAreas(); return 1");
+      if (s.hidDrawn || s.areas.includes('e2e-hid')) return { ok: false, why: 'the hidden area shows on the phone: ' + seen };
+      if (!s.dtDrawn || !s.auraDrawn || !s.rough.includes('e2e-dt')) return { ok: false, why: 'phone map: ' + seen };
+      return lat(t);
+    });
+
     await step('DM uploads a map (3000×4000) → phone draws it at the same size and grid', async () => {
       const geo = 'const B = panelDefs.battlemap; return [B._bgMapPath, B._bgMapNaturalW, B._bgMapNaturalH, B._cols, B._rows].join(" ")';
       const before = await dm.ev("return panelDefs.battlemap._bgMapPath || ''");

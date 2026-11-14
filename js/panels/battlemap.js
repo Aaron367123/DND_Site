@@ -2360,7 +2360,13 @@ registerPanel('battlemap',{
   // (half-angle atan ½), a line is 5 ft wide, a cube's point of origin is the
   // middle of one face. Sizes are FEET, converted with the map's own
   // ft-per-cell and cell spacing, so a 20 ft sphere is 4 squares on any map.
-  _tplShape: 'circle', _tplSize: 20, _tplWidth: 5, _tplColor: '#ff7a3d',
+  _tplShape: 'circle', _tplSize: 20, _tplWidth: 5, _tplHeight: 40, _tplColor: '#ff7a3d',
+  // A CYLINDER (Moonbeam, Flame Strike, Ice Storm) is a circle on the map, as
+  // a sphere is, but a column in the air: {shape:'cyl', ft: radius, h: height}
+  // from its base up. With heights on the map the difference is who is in it —
+  // the wyvern 30 ft up in a 40 ft column of moonlight is; a sphere of 5 ft
+  // radius would have missed it.
+  _isRound(shape){ return shape === 'circle' || shape === 'cyl'; },
   // An EMANATION (2024: Spirit Guardians, a paladin's aura) is tied to a
   // creature: {shape:'aura', tok, ft}. It reaches ft feet out from the edge of
   // that creature's space in every direction and moves when the creature does,
@@ -2375,7 +2381,12 @@ registerPanel('battlemap',{
   },
   _ppf(){ return (this._tokenUnitScreen() || this._csScreen() || 50) / (this._ftPerCell || 5); },
   // A player's screen leaves out what the DM keeps to themselves (t.dm).
-  _areas(){ const pl = document.body.classList.contains('player-mode'); return (this._drawings || []).filter(s => s && s.k === 'tpl' && s.shape !== 'terrain' && !(pl && s.dm)); },
+  // …and an emanation whose creature the players can't see (hidden by the
+  // DM, or a monster under the fog): the glow would give away where it is.
+  _areas(){ const pl = document.body.classList.contains('player-mode'); return (this._drawings || []).filter(s => s && s.k === 'tpl' && s.shape !== 'terrain' && !(pl && s.dm)
+    && !(pl && s.shape === 'aura' && !this._shownToPlayers((this._tokens || []).find(k => k.id === s.tok)))); },
+  // Whether a player's screen draws this token (the rule _renderTokens keeps).
+  _shownToPlayers(t){ return !!t && !t.hidden && (t.isPC || !this._tokenFogged(t)); },
   // DIFFICULT TERRAIN: rectangles on the grid ({shape:'terrain', x, y, x2, y2},
   // stage px, on grid lines), laid by the DM with the Area tool. Kept with the
   // areas so they sync, undo and save with the map, but not one of them: no
@@ -2419,8 +2430,8 @@ registerPanel('battlemap',{
   },
   // What an area is, in words: "20 ft sphere", "60 ft line, 10 ft wide".
   _areaName(t){
-    const nm = { circle: 'sphere', aura: 'emanation' }[t.shape] || t.shape;
-    return (+t.ft || 0) + ' ft ' + nm + (t.shape === 'line' && +t.w > 5 ? ', ' + t.w + ' ft wide' : '');
+    const nm = { circle: 'sphere', aura: 'emanation', cyl: 'cylinder' }[t.shape] || t.shape;
+    return (+t.ft || 0) + ' ft ' + nm + (t.shape === 'line' && +t.w > 5 ? ', ' + t.w + ' ft wide' : '') + (t.shape === 'cyl' ? ', ' + (+t.h || 40) + ' ft high' : '');
   },
   // Where its label sits: the middle of it (above an emanation's creature).
   _areaMid(t){
@@ -2440,14 +2451,20 @@ registerPanel('battlemap',{
   _areaControlsHtml(){
     const opt = (v, l) => '<option value="' + v + '"' + (this._tplShape === v ? ' selected' : '') + '>' + l + '</option>';
     return '<select id="tpl-shape" title="Shape" style="width:78px;font-size:var(--fs-sm);padding:2px 4px;flex:0 0 auto">'
-        + opt('circle', 'Sphere') + opt('cone', 'Cone') + opt('line', 'Line') + opt('cube', 'Cube') + opt('aura', 'Emanation')
+        + opt('circle', 'Sphere') + opt('cyl', 'Cylinder') + opt('cone', 'Cone') + opt('line', 'Line') + opt('cube', 'Cube') + opt('aura', 'Emanation')
         + (document.body.classList.contains('player-mode') ? '' : opt('terrain', 'Difficult terrain')) + '</select>'
-      + '<input type="number" id="tpl-size" min="5" step="5" value="' + this._tplSize + '" style="width:52px;font-size:var(--fs-sm);padding:2px 4px;flex-shrink:0" title="Size in feet (radius for a sphere, length for a cone or line, side for a cube, how far an emanation reaches from its creature)">'
+      + '<input type="number" id="tpl-size" min="5" step="5" value="' + this._tplSize + '" style="width:52px;font-size:var(--fs-sm);padding:2px 4px;flex-shrink:0" title="Size in feet (radius for a sphere or cylinder, length for a cone or line, side for a cube, how far an emanation reaches from its creature)">'
       + '<span class="bt-l" style="font-size:var(--fs-xs);color:var(--text-muted)">ft</span>'
       // A line is 5 ft wide unless the spell says otherwise (Gust of Wind: 10).
       + '<span id="tpl-wrap-w" style="display:' + (this._tplShape === 'line' ? 'inline-flex' : 'none') + ';align-items:center;gap:3px;flex-shrink:0">'
       +   '<span style="font-size:var(--fs-xs);color:var(--text-muted)">width</span>'
       +   '<input type="number" id="tpl-width" min="5" step="5" value="' + this._tplWidth + '" style="width:46px;font-size:var(--fs-sm);padding:2px 4px" title="How wide the line is, in feet">'
+      +   '<span style="font-size:var(--fs-xs);color:var(--text-muted)">ft</span>'
+      + '</span>'
+      // A cylinder is as high as the spell says (Moonbeam, Flame Strike: 40).
+      + '<span id="tpl-wrap-h" style="display:' + (this._tplShape === 'cyl' ? 'inline-flex' : 'none') + ';align-items:center;gap:3px;flex-shrink:0">'
+      +   '<span style="font-size:var(--fs-xs);color:var(--text-muted)">high</span>'
+      +   '<input type="number" id="tpl-height" min="5" step="5" value="' + this._tplHeight + '" style="width:46px;font-size:var(--fs-sm);padding:2px 4px" title="How high the cylinder is, in feet">'
       +   '<span style="font-size:var(--fs-xs);color:var(--text-muted)">ft</span>'
       + '</span>'
       + '<input type="color" id="tpl-color" value="' + this._tplColor + '" style="width:24px;height:22px;padding:1px;border-radius:3px;flex-shrink:0;cursor:pointer" title="Colour">'
@@ -2457,7 +2474,7 @@ registerPanel('battlemap',{
   _areaGeom(t){
     const L = (+t.ft || 0) * this._ppf();
     if (t.shape === 'aura'){ const o = this._auraTok(t); return o ? { aura: { x: o.x, y: o.y, h: o.h, r: L } } : null; }
-    if (t.shape === 'circle') return { circle: { x: t.x, y: t.y, r: L } };
+    if (this._isRound(t.shape)) return { circle: { x: t.x, y: t.y, r: L } };
     const a = +t.ang || 0, cos = Math.cos(a), sin = Math.sin(a);
     if (t.shape === 'cone'){
       const h = Math.atan(0.5);
@@ -2473,7 +2490,7 @@ registerPanel('battlemap',{
   // The far end of a directional area, where its turn handle sits. A sphere
   // has no direction, so it has no handle — you move it and that is all.
   _areaHandle(t){
-    if (!t || t.shape === 'circle' || t.shape === 'aura') return null;
+    if (!t || this._isRound(t.shape) || t.shape === 'aura') return null;
     const L = (+t.ft || 0) * this._ppf(), a = +t.ang || 0;
     return { x: t.x + Math.cos(a) * L, y: t.y + Math.sin(a) * L };
   },
@@ -2491,6 +2508,11 @@ registerPanel('battlemap',{
     const g = this._areaGeom(t);
     if (!g) return false;
     const zp = (+z || 0) * this._ppf();
+    if (g.circle && t.shape === 'cyl'){
+      // Its base at the origin's height, up as high as it is.
+      const top = Math.max(1, +t.h || 40) * this._ppf();
+      return Math.hypot(x - g.circle.x, y - g.circle.y) <= g.circle.r && zp >= -0.5 && zp <= top + 0.5;
+    }
     if (g.circle) return Math.hypot(x - g.circle.x, y - g.circle.y, zp) <= g.circle.r;
     if (g.aura) return Math.hypot(Math.max(0, Math.abs(x - g.aura.x) - g.aura.h), Math.max(0, Math.abs(y - g.aura.y) - g.aura.h), zp) <= g.aura.r + 0.5;
     if (zp){
@@ -2611,6 +2633,8 @@ registerPanel('battlemap',{
     const shape = (this._body.querySelector('#tpl-shape') || {}).value || this._tplShape;
     const ft = Math.max(5, parseInt((this._body.querySelector('#tpl-size') || {}).value, 10) || this._tplSize);
     const wd = Math.max(5, parseInt((this._body.querySelector('#tpl-width') || {}).value, 10) || this._tplWidth || 5);
+    const hi = Math.max(5, parseInt((this._body.querySelector('#tpl-height') || {}).value, 10) || this._tplHeight || 40);
+    this._tplHeight = hi;
     const col = (this._body.querySelector('#tpl-color') || {}).value || this._tplColor;
     this._tplShape = shape; this._tplSize = ft; this._tplWidth = wd; this._tplColor = col;
     // An emanation goes with its creature and isn't dragged on its own, so it
@@ -2626,6 +2650,7 @@ registerPanel('battlemap',{
       : stack.find(t => this._inArea(t, x, y)));
     const draft = { k: 'tpl', id: 'tpl_' + (typeof uid === 'function' ? uid() : Date.now().toString(36)), shape, x, y, ang: 0, ft, c: col };
     if (shape === 'line' && wd !== 5) draft.w = wd;
+    if (shape === 'cyl') draft.h = hi;
     if (from && +from.elev) draft.z = +from.elev;
     if (me) draft.by = me.id;
     if (shape === 'terrain'){
@@ -2670,7 +2695,7 @@ registerPanel('battlemap',{
       return;
     }
     // From a creature's space: where its edge meets the line toward (qx, qy).
-    const edge = from && shape !== 'circle' ? (qx, qy) => {
+    const edge = from && !this._isRound(shape) ? (qx, qy) => {
       const h = Math.max(1, Math.round(+from.size || 1)) * (this._tokenUnitScreen() || this._csScreen() || 50) / 2;
       const a = Math.atan2(qy - from.y, qx - from.x), c = Math.cos(a), s = Math.sin(a);
       const d = h / Math.max(Math.abs(c), Math.abs(s), 1e-6);
@@ -2701,7 +2726,7 @@ registerPanel('battlemap',{
       }
       if (hit) return;
       if (edge){ const e1 = edge(q.x, q.y); draft.x = e1.x; draft.y = e1.y; draft.ang = e1.ang; }
-      else if (shape !== 'circle') draft.ang = Math.atan2(q.y - draft.y, q.x - draft.x);
+      else if (!this._isRound(shape)) draft.ang = Math.atan2(q.y - draft.y, q.x - draft.x);
       else if (from){ draft.x = q.x; draft.y = q.y; }
       else { const s2 = this._areaSnap(q.x, q.y); draft.x = s2.x; draft.y = s2.y; }
       this._renderAreas(draft);
@@ -3676,6 +3701,7 @@ registerPanel('battlemap',{
     if (tplSel) tplSel.onchange = () => {
       this._tplShape = tplSel.value;
       const w = this._body.querySelector('#tpl-wrap-w'); if (w) w.style.display = tplSel.value === 'line' ? 'inline-flex' : 'none';
+      const h = this._body.querySelector('#tpl-wrap-h'); if (h) h.style.display = tplSel.value === 'cyl' ? 'inline-flex' : 'none';
     };
     // A redraw (another device moved a token) rebuilds the stage: the ruler's
     // line comes back rather than vanishing under the player's finger.

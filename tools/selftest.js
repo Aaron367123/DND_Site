@@ -21575,6 +21575,76 @@ for (const cls of Object.keys(rule)) for (let L = 1; L <= 20; L++) for (const sc
         closePanel('battlemap');
       }
     }
+    // -- Round 370: the Turn View's map shows who is in the air --
+    {
+      openPanel('turnview'); await sleep(700);
+      openPanel('battlemap'); await sleep(700);
+      const T = panelDefs.turnview, B = panelDefs.battlemap;
+      const tok0 = JSON.stringify(B._tokens);
+      try {
+        const z = B._tokens.find(t => t && t.isPC && t.x != null);
+        ok('tv height: a character on the map', !!z);
+        if (z){
+          B._setElev(z, 30); await sleep(50);
+          T._mapCache = null; T._render(); await sleep(150);
+          const n = [...T._body.querySelectorAll('.tv-tok')].find(e => e.dataset.tvlabel === z.label);
+          ok('the Turn View marks a flyer: a ring, and its height on hover', n && n.classList.contains('aloft') && /30 ft up/.test(n.title), n && n.className + ' | ' + n.title);
+          B._setElev(z, 0); await sleep(50);
+          T._mapCache = null; T._render(); await sleep(150);
+          const n2 = [...T._body.querySelectorAll('.tv-tok')].find(e => e.dataset.tvlabel === z.label);
+          ok('…and not once it lands', n2 && !n2.classList.contains('aloft'));
+        }
+      } catch(e){ ok('round 370 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
+      finally { B._tokens = JSON.parse(tok0); try { B._saveMap(); B._renderTokens(); } catch(e){} closePanel('battlemap'); closePanel('turnview'); }
+    }
+    // -- Round 371: a cylinder (Moonbeam, Flame Strike) is a column — the flyer inside it is in, above it isn't; a hidden creature's emanation stays off the players' maps --
+    {
+      const B = panelDefs.battlemap;
+      let keepT = null, keepD = null, keepF, fogSaved = false; const keepTool = B._tool, keepShape = B._tplShape;
+      try {
+        openPanel('battlemap'); await sleep(700);
+        keepT = B._tokens.slice(); keepD = B._drawings.slice();
+        keepF = B._fog; fogSaved = true; B._fog = null;
+        const cs = B._csScreen();
+        const wy = { id: 'r371w', label: 'r371 Wyvern', x: 5.5 * cs, y: 5.5 * cs, size: 1, elev: 30 };
+        const gb = { id: 'r371g', label: 'r371 Goblin', x: 6.5 * cs, y: 5.5 * cs, size: 1 };
+        B._tokens = [wy, gb]; B._drawings = []; B._tool = 'area'; B._tplShape = 'cyl'; B._render(); await sleep(120);
+        const wrap = B._body.querySelector('#tpl-wrap-h');
+        ok('area tool: a Cylinder, with how high it is', !!B._body.querySelector('#tpl-shape option[value="cyl"]') && wrap && getComputedStyle(wrap).display !== 'none');
+        B._body.querySelector('#tpl-size').value = '10'; B._body.querySelector('#tpl-height').value = '40';
+        B._areaPointerDown(5.5 * cs, 5.5 * cs, 100, 100, false); await sleep(10);
+        document.dispatchEvent(new MouseEvent('mouseup', { bubbles: true, clientX: 100, clientY: 100 })); await sleep(50);
+        document.querySelectorAll('.ctx-menu').forEach(e => e.remove());
+        const cy = B._areas().find(a => a.shape === 'cyl');
+        ok('a 10 ft cylinder 40 ft high, laid', cy && cy.ft === 10 && cy.h === 40, JSON.stringify(cy));
+        ok('…the wyvern 30 ft up in the column is in it, the goblin on the ground too', B._tokenInArea(cy, wy) && B._tokenInArea(cy, gb));
+        const sph = { k: 'tpl', id: 'r371s', shape: 'circle', x: 5.5 * cs, y: 5.5 * cs, ft: 10 };
+        ok('…where a 10 ft sphere would miss the wyvern', !B._tokenInArea(sph, wy));
+        wy.elev = 45;
+        ok('…and 45 ft up, over the top, it isn’t', !B._tokenInArea(cy, wy));
+        ok('…it says what it is', ((B._body.querySelector('#tpl-layer text[data-tpll="' + cy.id + '"]') || {}).textContent || '') === '10 ft cylinder, 40 ft high');
+        // A hidden creature's emanation: off a player's map
+        wy.elev = 0;
+        B._drawings.push({ k: 'tpl', id: 'r371a', shape: 'aura', tok: 'r371w', ft: 10, x: 0, y: 0 });
+        const playerSees = () => { document.body.classList.add('player-mode'); const ids = B._areas().map(a => a.id); document.body.classList.remove('player-mode'); return ids.includes('r371a'); };
+        ok('a creature in plain sight: its emanation on the players’ map', playerSees());
+        wy.hidden = true;
+        ok('hidden by the DM: its emanation isn’t (it would give it away)', !playerSees() && B._areas().some(a => a.id === 'r371a'));
+        delete wy.hidden;
+        const keepFS = B._fogStrokes; B._fogStrokes = []; B._fog = new Set();   // (the set lists what's revealed: empty, all fogged)
+        const fogged = B._tokenFogged(wy);
+        ok('under the fog: nor is it', fogged && !playerSees(), 'fogged ' + fogged);
+        B._fog = null; B._fogStrokes = keepFS;
+      } catch(e){ ok('round 371 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
+      finally {
+        document.body.classList.remove('player-mode');
+        if (fogSaved) B._fog = keepF;
+        if (keepT){ B._tokens = keepT; B._drawings = keepD; try { B._saveMap(); } catch(e){} }
+        B._tool = keepTool; B._tplShape = keepShape;
+        try { B._render(); } catch(e){}
+        closePanel('battlemap');
+      }
+    }
     // -- Class features: represented, not just text ------------------------
     {
       try {
@@ -24749,6 +24819,29 @@ for (const cls of Object.keys(rule)) for (let L = 1; L <= 20; L++) for (const sc
         B._tool = ''; paHeightOpen = false;
         paTab = keepTab; paRender();
       }
+    }
+    // -- Round 372: on the phone, a cylinder and how high it is; six shapes still fit --
+    if (PLAYER){
+      const keepTab = paTab; const B = panelDefs.battlemap; const keepH = B._tplHeight, keepShape = B._tplShape;
+      try {
+        if (paMyIdx() < 0) paSetPc(state.party[0].id);
+        paTab = 'map'; paRender(); await sleep(900);
+        const scr = document.getElementById('pa-screen');
+        scr.querySelector('[data-pa-draw="tool-area"]').click(); await sleep(200);
+        const cb = scr.querySelector('.pa-area-ctl [data-pa-shape="cyl"]');
+        ok('phone area tool: a Cylinder', !!cb);
+        cb.click(); await sleep(100);
+        const h0 = +B._tplHeight || 40;
+        const up = scr.querySelector('.pa-area-ctl [data-pa-awidth="5"]');
+        ok('…with how high it is', !!up && /high/.test(scr.querySelector('.pa-area-ctl').textContent));
+        if (up) up.click(); await sleep(100);
+        ok('…5 ft higher', B._tplHeight === h0 + 5 && new RegExp((h0 + 5) + ' ft').test(scr.querySelector('.pa-area-w').textContent), B._tplHeight);
+        const c = scr.querySelector('.pa-area-ctl').getBoundingClientRect();
+        const btns = [...scr.querySelectorAll('.pa-area-ctl button')].map(b => b.getBoundingClientRect());
+        ok('…every button on the screen', c.left >= 0 && c.right <= innerWidth + 1 && btns.every(r => r.left >= 0 && r.right <= innerWidth + 1 && r.top >= 0), Math.round(c.left) + '..' + Math.round(c.right));
+        B._tool = '';
+      } catch(e){ ok('round 372 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
+      finally { B._tplHeight = keepH; B._tplShape = keepShape; B._tool = ''; paTab = keepTab; paRender(); }
     }
   }
 
