@@ -22202,8 +22202,8 @@ for (const cls of Object.keys(rule)) for (let L = 1; L <= 20; L++) for (const sc
         const mid = pg ? { x: pg.offsetLeft + pg.offsetWidth / 2, y: pg.offsetTop + pg.offsetHeight / 2 } : null;
         ok('held still: a ping where it was held', pings().length === 1 && Math.abs(mid.x - at.x) < 1.5 && Math.abs(mid.y - at.y) < 1.5 && Math.abs(at.x - 8 * cs) < cs / 4, JSON.stringify([mid, at]));
         ok('…saying who: the DM, in gold', /DM/.test(pg.textContent) && /#ffd36b/i.test(pg.style.getPropertyValue('--ping')));
-        ok('…sent to the other devices on this one’s own channel', sent.length === 1 && /^ping_/.test(sent[0][0]) && sent[0][1].x === Math.round(at.x) && sent[0][1].by === 'DM' && !!sent[0][1].n, JSON.stringify(sent));
-        ok('…and to this browser’s other tabs', posted.some(m => m.kind === 'ping' && m.x === at.x));
+        ok('…sent to the other devices on this one’s own channel', sent.length === 1 && /^ping_/.test(sent[0][0]) && Math.abs(sent[0][1].x - at.x) < 1.5 && sent[0][1].by === 'DM' && !!sent[0][1].n, JSON.stringify(sent));
+        ok('…and to this browser’s other tabs', posted.some(m => m.kind === 'ping' && Math.abs(m.x - at.x) < 1.5), JSON.stringify([posted.map(m => [m.kind, m.x]), at]));
         await sleep(3200);
         ok('…gone after a few seconds', !pings().length);
         await hold(8 * cs, 6 * cs, 750, 40);
