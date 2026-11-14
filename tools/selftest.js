@@ -22186,7 +22186,9 @@ for (const cls of Object.keys(rule)) for (let L = 1; L <= 20; L++) for (const sc
         const scroll = B._body.querySelector('#map-scroll');
         let at = null;
         const hold = async (sx, sy, ms, moveBy, target) => {
-          const p = cl(sx, sy), el = target || scroll;
+          // (whole screen pixels, as a mouse event carries them — 0.85 px dropped
+          // was 1.7 map px at the zoom an earlier round leaves)
+          const p = (q => ({ x: Math.round(q.x), y: Math.round(q.y) }))(cl(sx, sy)), el = target || scroll;
           // (the spot under the pointer as the map itself reads it, at the press — zoomed or turned)
           at = B._stagePoint(p.x, p.y, B._body.querySelector('#map-stage'));
           el.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, cancelable: true, clientX: p.x, clientY: p.y, button: 0 }));
