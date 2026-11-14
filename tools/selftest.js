@@ -22781,6 +22781,85 @@ for (const cls of Object.keys(rule)) for (let L = 1; L <= 20; L++) for (const sc
         closePanel('battlemap');
       }
     }
+    // -- Round 398: floors — a building of several maps: add one, switch, a token up the stairs, rename, kept on reload, remove --
+    {
+      const B = panelDefs.battlemap;
+      let snap0 = null; const S0 = localStorage.getItem('skt-battlemap-v1');
+      const modal = () => [...document.querySelectorAll('.modal-backdrop')].pop();
+      const labels = () => B._tokens.map(t => t.label).sort().join(',');
+      try {
+        try { localStorage.removeItem('skt-bm-floors-v1'); } catch(e){}
+        B._floors = undefined;
+        openPanel('battlemap'); await sleep(700);
+        snap0 = B._snapshotMap(); const name0 = B._floorName;
+        const cs = B._csScreen();
+        B._tokens = [{ id: 't398z', label: 'Zoey', isPC: true, x: 3.5 * cs, y: 3.5 * cs, size: 1 }, { id: 't398g', label: 'r398 Goblin', x: 6.5 * cs, y: 3.5 * cs, size: 1 }];
+        B._drawings = [{ k: 'tpl', id: 'r398w', shape: 'wall', pts: [cs, cs, 5 * cs, cs] }, { k: 'tpl', id: 'r398n', shape: 'note', x: 2 * cs, y: 2 * cs, title: 'r398 Cellar stairs' }];
+        B._fog = new Set(['1,1', '2,2']); B._floorName = null;
+        B._saveMap(); B._render(); await sleep(150);
+        // Map ▾ offers it
+        B._body.querySelector('[data-mact="map-menu"]').click(); await sleep(100);
+        const addI = [...document.querySelectorAll('.ctx-menu-item')].find(e => /Add a floor/.test(e.textContent));
+        ok('Map ▾: Add a floor', !!addI);
+        if (addI) addI.click(); await sleep(150);
+        const m1 = modal();
+        ok('…asks what this map is and what the new one is', !!m1 && m1.querySelector('#mf-here').value === 'Ground floor' && m1.querySelector('#mf-name').value === 'Upper floor');
+        if (m1) m1.querySelector('#modal-confirm').click();
+        await sleep(600);
+        document.querySelectorAll('.modal-backdrop').forEach(m => m.remove());   // (the map picker, offered for the new floor)
+        ok('…and you’re on the new floor: empty, its name on the map', B._floorList().length === 2 && B._floorName === 'Upper floor' && !B._tokens.length && !B._drawings.length && !B._fog && !B._bgMapPath, JSON.stringify([B._floorList().length, B._floorName, B._tokens.length]));
+        ok('…the footer says which floor', /Upper floor/.test(B._body.querySelector('.map-foot').textContent));
+        ok('…and the map everyone gets carries its name', JSON.parse(localStorage.getItem('skt-battlemap-v1')).floorName === 'Upper floor');
+        const sel = () => B._body.querySelector('#bm-floor');
+        ok('…and the toolbar switches floors', !!sel() && sel().options.length === 2 && sel().selectedOptions[0].textContent === 'Upper floor');
+        // Something up here
+        B._tokens.push({ id: 't398h', label: 'r398 Harpy', x: 4.5 * cs, y: 4.5 * cs, size: 1 }); B._saveMap(); B._render(); await sleep(100);
+        // Down
+        sel().value = B._floorList()[0].id; sel().dispatchEvent(new Event('change')); await sleep(400);
+        ok('switched down: the ground floor as it was — tokens, wall, note, fog', B._floorName === 'Ground floor' && labels() === 'Zoey,r398 Goblin' && B._walls().length === 1 && B._mapNotes().length === 1 && !!B._fog && B._fog.has('2,2'), labels());
+        // Zoey up the stairs, from her panel
+        const z = B._tokens.find(t => t.label === 'Zoey');
+        B._showPanel(z); await sleep(150);
+        const fb = B._body.querySelector('#tp-floor');
+        ok('a token’s panel: To another floor', !!fb && fb.style.display !== 'none');
+        fb.click(); await sleep(100);
+        const up = [...document.querySelectorAll('.ctx-menu-item')].find(e => /Upper floor/.test(e.textContent));
+        ok('…offering the other floors', !!up);
+        if (up) up.click(); await sleep(200);
+        ok('…she’s gone from this floor', labels() === 'r398 Goblin');
+        ok('…and the party bar doesn’t offer her back (she’s upstairs)', ![...B._body.querySelectorAll('.map-party-bar [data-mact="add-party"]')].some(e => /Zoey/.test(e.textContent)));
+        sel().value = B._floorList()[1].id; sel().dispatchEvent(new Event('change')); await sleep(400);
+        ok('up: she’s there, with the harpy', labels() === 'Zoey,r398 Goblin'.replace('r398 Goblin', 'r398 Harpy') && B._floorName === 'Upper floor', labels());
+        // Rename
+        B._renameFloor(); await sleep(100);
+        const m2 = modal(); if (m2){ m2.querySelector('#mf-name').value = 'The roof'; m2.querySelector('#modal-confirm').click(); }
+        await sleep(150);
+        ok('renamed: on the map and in the switcher', B._floorName === 'The roof' && sel().selectedOptions[0].textContent === 'The roof');
+        // Kept on this device
+        const kept = JSON.parse(localStorage.getItem('skt-bm-floors-v1') || 'null');
+        B._floors = undefined;
+        ok('kept on this device: both floors, the ground floor’s map waiting', B._floorList().length === 2 && !!kept && kept.list.find(f => f.name === 'Ground floor').snap.tokens.some(t => t.label === 'r398 Goblin'));
+        // An upload a waiting floor stands on is kept
+        B._floors.list[0].snap.bgMapPath = 'sktblob:r398up';
+        ok('an upload a waiting floor stands on isn’t cleaned up', B._localSavedBlobIds().has('r398up'));
+        B._floors.list[0].snap.bgMapPath = null;
+        // Remove this floor
+        B._removeFloor(); await sleep(100);
+        const cf = modal(); ok('remove: asks first', !!cf && /The roof/.test(cf.textContent));
+        if (cf) cf.querySelector('#conf-ok').click(); await sleep(400);
+        ok('…gone: back on the ground floor, a plain map again', B._floorList().length === 0 && !B._floorName && labels() === 'r398 Goblin' && !sel() && localStorage.getItem('skt-bm-floors-v1') === null, JSON.stringify([B._floorList().length, B._floorName, labels()]));
+      } catch(e){ ok('round 398 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
+      finally {
+        document.querySelectorAll('.modal-backdrop, .ctx-menu').forEach(m => m.remove());
+        try { localStorage.removeItem('skt-bm-floors-v1'); } catch(e){}
+        B._floors = undefined; B._floorName = null;
+        try { B._closePanel(); } catch(e){}
+        if (snap0){ try { B._restoreMapSnapshot(snap0); } catch(e){} }
+        if (S0 != null) localStorage.setItem('skt-battlemap-v1', S0);
+        try { B._render(); } catch(e){}
+        closePanel('battlemap');
+      }
+    }
     // -- Class features: represented, not just text ------------------------
     {
       try {
@@ -26254,6 +26333,21 @@ for (const cls of Object.keys(rule)) for (let L = 1; L <= 20; L++) for (const sc
         try { B._render(); } catch(e){}
         paTab = keepTab; try { paRender(); } catch(e){}
       }
+    }
+    // -- Round 399: a phone hears which floor is on screen: its footer says so; no floor switcher or stairs for a player --
+    if (PLAYER){
+      const keepTab = paTab; const B = panelDefs.battlemap; const keepName = B._floorName;
+      try {
+        paTab = 'map'; paRender(); await sleep(900);
+        const S = JSON.parse(localStorage.getItem('skt-battlemap-v1') || '{}');
+        B.applyMapState(Object.assign({}, S, { floorName: 'r399 Upper deck' }), { source: 'fb' }); await sleep(300);
+        const foot = document.querySelector('#pa-screen .map-foot');
+        ok('phone: the footer says which floor is on screen', !!foot && /r399 Upper deck/.test(foot.textContent), foot && foot.textContent);
+        ok('…and a player has no floor switcher', !document.querySelector('#pa-screen #bm-floor'));
+        B.applyMapState(Object.assign({}, S, { floorName: null }), { source: 'fb' }); await sleep(300);
+        ok('…a plain map again: no floor named', !/r399 Upper deck/.test((document.querySelector('#pa-screen .map-foot') || {}).textContent || ''));
+      } catch(e){ ok('round 399 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
+      finally { B._floorName = keepName; paTab = keepTab; try { paRender(); } catch(e){} }
     }
   }
 

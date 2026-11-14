@@ -119,6 +119,7 @@ const LABELS = {
   'skt-notes-v2':             'Session notes',
   'skt-battlemap-v1':         'Battle map',
   'skt-battlemap-saved-v1':   'Saved maps',
+  'skt-bm-floors-v1':         'Map floors',
   'skt-battlemap-starred-v1': 'Starred maps',
   'skt-bestiary-v1':          'Bestiary',
   'skt-npcs-v2':              'NPC library',

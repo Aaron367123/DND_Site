@@ -2794,6 +2794,8 @@ body.player-mode #campaign-btn{display:none !important}
 .map-ping b{position:absolute;top:100%;left:50%;transform:translateX(-50%);color:#fff;white-space:nowrap;font-weight:600;text-shadow:0 0 3px #000,0 0 2px #000}
 @keyframes map-ping{0%{transform:scale(.2);opacity:1}100%{transform:scale(1);opacity:0}}
 @media (prefers-reduced-motion: reduce){.map-ping i{animation:none;opacity:.8}}
+/* Which floor of the building is on screen (footer) */
+.map-floor{font-weight:600;color:var(--text)}
 /* A map note read on the map */
 .map-note-card{position:fixed;z-index:10002;max-width:min(320px,calc(100vw - 16px));background:var(--panel);border:1px solid var(--border);border-radius:6px;padding:10px 12px;box-shadow:var(--sh-2,0 6px 20px rgba(0,0,0,.45));font-size:var(--fs-sm);color:var(--text)}
 .map-note-card .mnc-h{font-weight:600;font-size:var(--fs-md);margin-bottom:6px}

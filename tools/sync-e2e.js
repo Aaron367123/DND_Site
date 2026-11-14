@@ -331,6 +331,22 @@ const window = {};
       return lat(t1);
     });
 
+    await step('DM adds a floor and goes up → the phone shows the upper floor (its name, its tokens); back down → the ground floor', async () => {
+      const prep = await dm.ev("openPanel('battlemap'); await new Promise(r=>setTimeout(r,300)); const B = panelDefs.battlemap; try { localStorage.removeItem('skt-bm-floors-v1'); } catch(e){} B._floors = undefined; B._floorName = null; B._tokens = B._tokens.filter(t => !/^e2e-fl/.test(t.id)); B._tokens.push({ id: 'e2e-fl-g', label: 'e2e Ground goblin', x: 120, y: 120, size: 1 }); B._saveMap(); B._render(); return 'ok'");
+      if (prep !== 'ok') return { ok: false, why: 'DM: ' + prep };
+      await W(pl, "paTab = 'map'; paRender(); return (panelDefs.battlemap._tokens || []).some(t => t.id === 'e2e-fl-g') ? 1 : 0", 10000);
+      const up = await dm.ev("const B = panelDefs.battlemap; B._floors = { active: 'fl_e2eA', list: [{ id: 'fl_e2eA', name: 'e2e Ground', snap: null }, { id: 'fl_e2eB', name: 'e2e Tower top', snap: Object.assign(B._blankFloorSnap(), { tokens: [{ id: 'e2e-fl-h', label: 'e2e Harpy', x: 160, y: 160, size: 1 }] }) }] }; B._floorName = 'e2e Ground'; B._switchFloor('fl_e2eB'); return B._floorName");
+      if (up !== 'e2e Tower top') return { ok: false, why: 'DM switch: ' + up };
+      const t1 = await W(pl, "const B = panelDefs.battlemap; const f = document.querySelector('#pa-screen .map-foot'); return B._floorName === 'e2e Tower top' && (B._tokens || []).some(t => t.id === 'e2e-fl-h') && !(B._tokens || []).some(t => t.id === 'e2e-fl-g') && f && /e2e Tower top/.test(f.textContent) ? 1 : 0", 12000);
+      if (t1 == null) return { ok: false, why: 'the phone never went up: ' + await pl.ev("const B = panelDefs.battlemap; return B._floorName + ' ' + (B._tokens || []).map(t => t.id).join(',')") };
+      await dm.ev("panelDefs.battlemap._switchFloor('fl_e2eA'); return 1");
+      const t2 = await W(pl, "const B = panelDefs.battlemap; return B._floorName === 'e2e Ground' && (B._tokens || []).some(t => t.id === 'e2e-fl-g') && !(B._tokens || []).some(t => t.id === 'e2e-fl-h') ? 1 : 0", 12000);
+      // Tidy: a plain map, the goblin gone.
+      await dm.ev("const B = panelDefs.battlemap; try { localStorage.removeItem('skt-bm-floors-v1'); } catch(e){} B._floors = undefined; B._floorName = null; B._tokens = B._tokens.filter(t => !/^e2e-fl/.test(t.id)); B._saveMap(); B._render(); return 1");
+      if (t2 == null) return { ok: false, why: 'the phone never came back down' };
+      return lat(t1);
+    });
+
     await step('DM uploads a map (3000×4000) → phone draws it at the same size and grid', async () => {
       const geo = 'const B = panelDefs.battlemap; return [B._bgMapPath, B._bgMapNaturalW, B._bgMapNaturalH, B._cols, B._rows].join(" ")';
       const before = await dm.ev("return panelDefs.battlemap._bgMapPath || ''");

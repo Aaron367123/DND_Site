@@ -368,7 +368,118 @@ registerPanel('battlemap',{
       const id = this._blobIdOf(m && m.snapshot && m.snapshot.bgMapPath);
       if (id) ids.add(id);
     });
+    // …and the floors waiting on this device
+    this._floorList().forEach(f => { const id = this._blobIdOf(f.snap && f.snap.bgMapPath); if (id) ids.add(id); });
     return ids;
+  },
+  // ─── Floors ────────────────────────────────────────────────────────────────
+  // A building of several maps — a tower's storeys, a ship's decks. The floor
+  // on screen is the map itself, synced to everyone as always; the others
+  // wait on the DM's device (like saved maps), each a whole snapshot: its
+  // picture, grid, walls, fog, notes and tokens. Switching floors puts this
+  // one away and brings that one out, on every screen. A token goes to
+  // another floor from its panel (the stairs). Everyone's footer says which
+  // floor it is.
+  _floorsKey: 'skt-bm-floors-v1',
+  _floorList(){
+    if (this._floors === undefined){
+      let d = null; try { d = JSON.parse(localStorage.getItem(this._floorsKey) || 'null'); } catch(e){}
+      this._floors = d && Array.isArray(d.list) && d.list.length ? d : null;
+    }
+    return this._floors ? this._floors.list : [];
+  },
+  _saveFloors(gone){
+    if (this._floors && this._floors.list.length > 1){ if (typeof saveJson === 'function') saveJson(this._floorsKey, this._floors, 'map floors'); else try { localStorage.setItem(this._floorsKey, JSON.stringify(this._floors)); } catch(e){} }
+    else { this._floors = null; try { localStorage.removeItem(this._floorsKey); } catch(e){} }
+    // Other DM devices' cleanup must see the uploads these floors stand on.
+    if (typeof window.sktMapBlobRefs === 'function'){
+      const want = {};
+      this._floorList().forEach(f => { const id = this._blobIdOf(f.snap && f.snap.bgMapPath); if (id) want['fl_' + f.id] = id; });
+      const drop = (gone || []).map(id => 'fl_' + id);
+      if (Object.keys(want).length || drop.length) window.sktMapBlobRefs(m => { drop.forEach(k => { delete m[k]; }); Object.assign(m, want); });
+    }
+  },
+  _onOtherFloor(name){
+    if (!this._floors) return null;
+    const f = this._floorList().find(x => x.id !== this._floors.active && x.snap && (x.snap.tokens || []).some(t => t && t.isPC && t.label === name));
+    return f || null;
+  },
+  // A new floor's empty map: this one's grid and scale, nothing on it.
+  _blankFloorSnap(){
+    const s = this._snapshotMap();
+    Object.assign(s, { bgMapPath: null, bgMapSize: null, tokens: [], drawings: [], fog: null, fogStrokes: [], hadUploadedImage: false, gridOffsetX: 0, gridOffsetY: 0 });
+    return s;
+  },
+  _addFloor(){
+    if (document.body.classList.contains('player-mode')) return;
+    const first = !this._floorList().length;
+    const fields = [];
+    if (first) fields.push({ id: 'here', label: 'This map is the', value: this._floorName || 'Ground floor' });
+    fields.push({ id: 'name', label: first ? 'The new floor is the' : 'Name', value: first ? 'Upper floor' : 'Floor ' + (this._floorList().length + 1) });
+    return showModal('Add a floor', fields, 'Add').then(r => {
+      if (!r || !r.name) return;
+      if (first){
+        this._floors = { active: 'fl_' + uid(), list: [] };
+        this._floors.list.push({ id: this._floors.active, name: (r.here || 'Ground floor').slice(0, 40), snap: null });
+        this._floorName = this._floors.list[0].name;
+      }
+      const nf = { id: 'fl_' + uid(), name: r.name.slice(0, 40), snap: this._blankFloorSnap() };
+      this._floors.list.push(nf);
+      this._switchFloor(nf.id);
+      // A new floor has no map yet: choose one.
+      if (typeof showToast === 'function') showToast('On “' + nf.name + '” now: choose its map.');
+      setTimeout(() => this._openMapPicker(), 250);
+    });
+  },
+  _switchFloor(id){
+    const F = this._floors; if (!F) return;
+    const cur = F.list.find(f => f.id === F.active), next = F.list.find(f => f.id === id);
+    if (!next || next === cur) return;
+    if (cur) cur.snap = this._snapshotMap();
+    const snap = next.snap || this._blankFloorSnap();
+    next.snap = null; F.active = next.id;
+    this._floorName = next.name;
+    this._closePanel && this._closePanel();
+    this._saveFloors();
+    this._restoreMapSnapshot(snap);
+    this._pullTokensOnto();
+    this._render();
+  },
+  _renameFloor(){
+    const F = this._floors; if (!F) return;
+    const cur = F.list.find(f => f.id === F.active); if (!cur) return;
+    showModal('Rename this floor', [{ id: 'name', label: 'Name', value: cur.name }], 'Rename').then(r => {
+      if (!r || !r.name) return;
+      cur.name = r.name.slice(0, 40); this._floorName = cur.name;
+      this._saveFloors(); this._saveMap(); this._render();
+    });
+  },
+  // This floor goes — its map, walls, notes and tokens — and the floor
+  // before it comes up. With one left, it's a plain map again.
+  _removeFloor(){
+    const F = this._floors; if (!F || F.list.length < 2) return;
+    const cur = F.list.find(f => f.id === F.active);
+    return showConfirm('Remove “' + cur.name + '”? Its map, walls, notes and tokens go with it.', { title: 'Remove this floor', confirmLabel: 'Remove', danger: true }).then(ok => {
+      if (!ok) return;
+      const i = F.list.indexOf(cur), next = F.list[i > 0 ? i - 1 : 1];
+      const snap = next.snap || this._blankFloorSnap();
+      F.list.splice(i, 1); next.snap = null; F.active = next.id;
+      this._floorName = F.list.length > 1 ? next.name : null;
+      this._saveFloors([cur.id]);
+      this._restoreMapSnapshot(snap);
+      this._render();
+    });
+  },
+  // Up or down the stairs: token t onto floor id, where it stands now.
+  _tokenToFloor(t, id){
+    const F = this._floors; if (!F || !t) return;
+    const dest = F.list.find(f => f.id === id); if (!dest || id === F.active) return;
+    if (!dest.snap) dest.snap = this._blankFloorSnap();
+    dest.snap.tokens = (dest.snap.tokens || []).concat([JSON.parse(JSON.stringify(t))]);
+    this._tokens = this._tokens.filter(x => x !== t);
+    this._closePanel && this._closePanel();
+    this._saveFloors(); this._saveMap(); this._render();
+    if (typeof showToast === 'function') showToast((t.label || 'The token') + ' is on “' + dest.name + '” now.');
   },
 
   // Remove an uploaded map from the server if — and only if — nothing still
@@ -524,6 +635,7 @@ registerPanel('battlemap',{
         this._showGrid = this._gridType !== 'none';
         this._cellHighlight = !!d.cellHighlight;
         this._bgMapScale = d.bgMapScale || 1;
+        this._floorName = d.floorName || null;
         this._bgMapSize = d.bgMapSize || null;
         this._snapToGrid = !!d.snapToGrid;
         this._gridOffsetX = d.gridOffsetX || 0;
@@ -682,7 +794,7 @@ registerPanel('battlemap',{
     else this._captureUndo();
     try{
       const fogArr=this._fog?Array.from(this._fog):null;
-      localStorage.setItem('skt-battlemap-v1',JSON.stringify({tokens:this._tokens,cellSize:this._cellSize,cols:this._cols,rows:this._rows,bgColor:this._bgColor,fog:fogArr,bgMapPath:this._bgMapPath,showGrid:this._showGrid,gridType:this._gridType,cellHighlight:this._cellHighlight,bgMapScale:this._bgMapScale,bgMapSize:this._bgMapSize||null,snapToGrid:this._snapToGrid,drawings:this._drawings,gridOffsetX:this._gridOffsetX,gridOffsetY:this._gridOffsetY,mapRotation:this._mapRotation,ftPerCell:this._ftPerCell,diagRule:this._diagRule||'five',fogHardness:this._fogHardness,light:this._light||'bright',gridOpacity:this._gridOpacity,gridColor:this._gridColor,gridWidth:this._gridWidth,tokensVisible:this._tokensVisible,namesVisible:this._namesVisible,pcsVisible:this._pcsVisible,npcsVisible:this._npcsVisible,fogPaintMode:this._fogPaintMode,fogBrushMode:this._fogBrushMode,fogBrushShape:this._fogBrushShape,fogStrokes:this._fogStrokes}));
+      localStorage.setItem('skt-battlemap-v1',JSON.stringify({tokens:this._tokens,cellSize:this._cellSize,cols:this._cols,rows:this._rows,bgColor:this._bgColor,fog:fogArr,bgMapPath:this._bgMapPath,showGrid:this._showGrid,gridType:this._gridType,cellHighlight:this._cellHighlight,bgMapScale:this._bgMapScale,bgMapSize:this._bgMapSize||null,snapToGrid:this._snapToGrid,floorName:this._floorName||null,drawings:this._drawings,gridOffsetX:this._gridOffsetX,gridOffsetY:this._gridOffsetY,mapRotation:this._mapRotation,ftPerCell:this._ftPerCell,diagRule:this._diagRule||'five',fogHardness:this._fogHardness,light:this._light||'bright',gridOpacity:this._gridOpacity,gridColor:this._gridColor,gridWidth:this._gridWidth,tokensVisible:this._tokensVisible,namesVisible:this._namesVisible,pcsVisible:this._pcsVisible,npcsVisible:this._npcsVisible,fogPaintMode:this._fogPaintMode,fogBrushMode:this._fogBrushMode,fogBrushShape:this._fogBrushShape,fogStrokes:this._fogStrokes}));
     }catch(e){
       // Fog sets and freehand strokes grow without bound on large maps — this
       // is a realistic place to hit the quota, and silently dropping the write
@@ -3904,8 +4016,9 @@ registerPanel('battlemap',{
     // Everything that determines the STAGE's pixel size. Only _setupMap resizes
     // the stage and re-tiles the background, so any change here has to fall
     // through to a full _render() rather than the cheap repaint.
+    // (and the floor's name, which the footer shows)
     const struct = () => [this._cols, this._rows, this._cellSize, this._gridType,
-      this._bgMapScale, this._mapRotation, this._gridOffsetX, this._gridOffsetY].join('|');
+      this._bgMapScale, this._mapRotation, this._gridOffsetX, this._gridOffsetY, this._floorName || ''].join('|');
     const structBefore = struct();
 
     if (src.tokens)   this._tokens   = src.tokens;
@@ -3931,6 +4044,7 @@ registerPanel('battlemap',{
       this._lastTokenScale = src.bgMapScale;
     }
     if (src.mapRotation != null) this._mapRotation = src.mapRotation;
+    if ('floorName' in src) this._floorName = src.floorName || null;
     if ('bgMapSize' in src) this._bgMapSize = src.bgMapSize || null;
     if (src.gridOpacity != null) this._gridOpacity = src.gridOpacity;
     if ('gridColor' in src) this._gridColor = src.gridColor || null;
@@ -4348,7 +4462,7 @@ registerPanel('battlemap',{
     const partyBtns=state.party.map((p,pi)=>{
       if (_isPlayer && (!_mine || _mine.id !== p.id)) return '';
       const onMap=this._tokens.find(t=>t.label===p.name&&t.isPC);
-      if(onMap)return '';
+      if(onMap || this._onOtherFloor(p.name))return '';
       // renderIcon handles emoji vs uploaded images (data: URLs / img/ paths) vs SVG.
       const iconHtml = renderIcon(sktPcIcon(p), p.name);
       return '<button class="btn small" data-mact="add-party" data-pi="'+pi+'" draggable="true" title="Click to add at the centre of your current view, or drag onto the map for precise placement" style="font-size:var(--fs-xs);display:inline-flex;align-items:center;gap:4px;cursor:grab">'
@@ -4428,6 +4542,7 @@ registerPanel('battlemap',{
       // size showed as a raw "38.46473".
       +'<div class="bm-div" style="width:1px;background:var(--border);height:18px;margin:0 4px;flex-shrink:0"></div>'
       +'<button class="btn" data-mact="map-menu" style="flex-shrink:0" title="Choose a map, or remove this one">'+ICO('i-map')+'<span class="bt-l">Map ▾</span></button>'
+      +(this._floorList().length > 1 ? '<select id="bm-floor" title="Which floor is on everyone’s screen" style="flex-shrink:0;max-width:140px;font-size:var(--fs-sm);padding:2px 4px">'+this._floorList().map(f => '<option value="'+esc(f.id)+'"'+(f.id===this._floors.active?' selected':'')+'>'+esc(f.name)+'</option>').join('')+'</select>' : '')
       +(_mapBgImage?'<input type="range" id="map-bg-scale" min="0.1" max="3" step="0.05" value="'+(this._bgMapScale||1)+'" style="width:56px;flex-shrink:0" title="Zoom">':'')
       // The zoom reads out on the Fit button, which is where you go to undo it.
       +(_mapBgImage?'<button class="btn" data-mact="fit-map" style="flex-shrink:0" title="Fit the map to the panel">⊙ <span id="map-bg-scale-pct">'+Math.round((this._bgMapScale||1)*100)+'%</span></button>':'')
@@ -4485,6 +4600,7 @@ registerPanel('battlemap',{
     +'</div>';
 
     html+='<div class="map-foot" style="padding:3px 10px;border-top:1px solid var(--border);background:var(--panel-2);font-size:var(--fs-xs);color:var(--text-muted);display:flex;align-items:center;gap:10px;flex-shrink:0">'
+      +(this._floorName ? '<span class="map-floor" title="Which floor of the building this is">'+esc(this._floorName)+'</span>' : '')
       +'<span>1 '+(this._gridType==='hex'?'hex':'sq')+' = <strong>'+_bmDist(ft)+'</strong></span>'
       +'<span class="bt-l" style="color:var(--text-dim)">'+this._cols+'×'+this._rows+' '+(this._gridType==='hex'?'hexes':'squares')+' ('+_bmDist(this._cols*ft)+' × '+_bmDist(this._rows*ft)+')</span>'
       +'<span style="flex:1"></span>'
@@ -4544,6 +4660,7 @@ registerPanel('battlemap',{
         +'<button class="btn small" id="tp-cond" style="width:100%">⚑ Conditions…</button>'
       +'</div>'
       +'<button class="btn small" id="tp-hide" style="width:100%;margin-top:6px"></button>'
+      +'<button class="btn small" id="tp-floor" style="width:100%;margin-top:6px;display:none" title="Up or down the stairs: onto another floor of the building">⇅ To another floor…</button>'
       +'<div style="display:flex;gap:4px;margin-top:6px">'
         +'<button class="btn small" id="tp-kill" style="flex:1">☠</button>'
         +'<button class="btn small danger" id="tp-del" style="flex:1">Del</button>'
@@ -4594,6 +4711,8 @@ registerPanel('battlemap',{
     // Draw canvas needs to receive clicks for the pencil AND for the eraser
     // (to remove strokes). Other tools/no-tool let clicks pass through.
     drawCanvas.style.pointerEvents = (this._tool === 'draw' || this._tool === 'erase' || this._tool === 'area' || this._tool === 'ruler') ? 'auto' : 'none';
+    const flSel = this._body.querySelector('#bm-floor');
+    if (flSel) flSel.onchange = () => this._switchFloor(flSel.value);
     const tplSel = this._body.querySelector('#tpl-shape');
     if (tplSel) tplSel.onchange = () => {
       this._tplShape = tplSel.value;
@@ -4695,6 +4814,16 @@ registerPanel('battlemap',{
         const items = [{ label: 'Choose a map…', onClick: () => this._openMapPicker() }];
         if (_mapBgImage) items.push({ label: 'Remove this map image', onClick: () => { _mapBgImage = null; this._bgMapPath = null; this._saveMap(); this._render(); } });
         items.push({ label: 'Grid, snapping and alignment…', onClick: () => { this._settingsOpen = true; this._render(); } });
+        // Floors: a tower's storeys, a ship's decks — one map each, one on
+        // everyone's screen at a time.
+        const fl = this._floorList();
+        items.push({ label: 'Floors ─────', disabled: true });
+        if (fl.length > 1) fl.forEach(f => items.push({ label: f.name, checked: f.id === this._floors.active, onClick: () => this._switchFloor(f.id) }));
+        items.push({ label: fl.length > 1 ? '+ Add a floor…' : '+ Add a floor (a building of several maps)…', onClick: () => this._addFloor() });
+        if (fl.length > 1){
+          items.push({ label: 'Rename this floor…', onClick: () => this._renameFloor() });
+          items.push({ label: 'Remove this floor…', danger: true, onClick: () => this._removeFloor() });
+        }
         // The ambush sprung: every hidden token onto the players' map at once.
         const hid = (this._tokens || []).filter(t => t && t.hidden);
         if (hid.length) items.push({ label: '👁 Reveal all hidden tokens (' + hid.length + ')', onClick: () => {
@@ -7312,6 +7441,13 @@ registerPanel('battlemap',{
       if (el) el.textContent = t.hidden ? '\u{1F441} Reveal to players' : '\u{1F441} Hide from players';
     };
     paintHide();
+    // Another floor of the building (the DM's, with floors).
+    const otherFloors = () => document.body.classList.contains('player-mode') || !this._floors ? [] : this._floorList().filter(f => f.id !== this._floors.active);
+    { const fb = b.querySelector('#tp-floor'); if (fb) fb.style.display = otherFloors().length ? '' : 'none'; }
+    rewire('#tp-floor','click', ev => {
+      const r = ev.currentTarget.getBoundingClientRect();
+      if (typeof showContextMenu === 'function') showContextMenu(r.left, r.bottom + 4, otherFloors().map(f => ({ label: f.name, onClick: () => this._tokenToFloor(t, f.id) })));
+    });
     rewire('#tp-hide','click',()=>{
       t.hidden = !t.hidden;
       this._saveMap(); this._renderTokens(); paintHide();
@@ -7446,7 +7582,7 @@ registerPanel('battlemap',{
       || { x: this._cols*cs/2, y: this._rows*cs/2 };
     source.forEach((c)=>{
       const name=c.name||c.label;
-      if(!this._tokens.find(t=>t.label===name&&t.isPC)){
+      if(!this._tokens.find(t=>t.label===name&&t.isPC) && !this._onOtherFloor(name)){
         // _freeCellNear reads this._tokens, and we push as we go, so each
         // member takes the next free ring rather than stacking on the first.
         const {x, y} = this._freeCellNear(centre.x, centre.y);
