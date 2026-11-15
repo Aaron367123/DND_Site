@@ -2461,12 +2461,40 @@ registerPanel('turnview', {
     }
     return null;
   },
+  // Walls on the map, by the Dungeon Master's Guide's way on a grid: from
+  // the corner of the attacker's square that does best, lines to the four
+  // corners of the target's square — one or two blocked is half cover, three
+  // or four three-quarters, and all four from every corner total cover. (A
+  // big creature: whichever of its squares does best. Corners sit a hair
+  // inside their square, so a wall drawn along a grid line isn't "touching"
+  // a corner and missed.) → 0, 2, 5 or 'total'. Squares only.
+  _wallCover(c, t){
+    const A = this._tokenFor(c), T = this._tokenFor(t);
+    if (!A || !T || A.x == null || T.x == null || typeof sktSightSrc !== 'function') return 0;
+    const m = this._map(); if (m.gridType === 'hex') return 0;
+    const S = sktSightSrc(m); if (!S.walls.length) return 0;
+    const cs = this._cs(), h = cs / 2 - cs * 0.05;
+    const squares = k => { const s = Math.max(1, Math.round(+k.size || 1)), out = []; for (let i = 0; i < s; i++) for (let j = 0; j < s; j++) out.push([k.x + (i - (s - 1) / 2) * cs, k.y + (j - (s - 1) / 2) * cs]); return out; };
+    const corners = q => [[q[0] - h, q[1] - h], [q[0] + h, q[1] - h], [q[0] + h, q[1] + h], [q[0] - h, q[1] + h]];
+    let best = 4;
+    for (const sa of squares(A)) for (const ca of corners(sa)) for (const sb of squares(T)){
+      let n = 0; for (const cb of corners(sb)) if (sktWallBetween(S, ca[0], ca[1], cb[0], cb[1])) n++;
+      if (n < best){ best = n; if (!best) return 0; }
+    }
+    return best >= 4 ? 'total' : best >= 3 ? 5 : 2;
+  },
   // → { ac, total, why, auto, ignored } for attack `a` (optional) by c on t.
   _coverFor(c, t, a){
     if (!c || !t) return { ac: 0 };
     const set = this._covers[this._coverKey(c, t)];
     let v = set, why = '', auto = false;
-    if (set == null){ const o = this._coverAuto(c, t); v = o ? 2 : 0; if (o){ why = o.name + ' in the way'; auto = true; } }
+    if (set == null){
+      // The map's own say: a creature in the way (half), walls (by the lines) — the more of the two.
+      const o = this._coverAuto(c, t), w = this._wallCover(c, t);
+      if (w === 'total') return { ac: 0, total: true, why: 'a wall in the way', auto: true };
+      v = Math.max(o ? 2 : 0, w || 0);
+      if (v){ why = w && w >= (o ? 2 : 0) ? 'a wall in the way' : o.name + ' in the way'; auto = true; }
+    }
     if (v === 'total') return { ac: 0, total: true, why: 'total cover' };
     // Sharpshooter (a ranged weapon) and Spell Sniper (a spell attack) ignore
     // half and three-quarters cover.

@@ -23203,6 +23203,50 @@ for (const cls of Object.keys(rule)) for (let L = 1; L <= 20; L++) for (const sc
         closePanel('battlemap');
       }
     }
+    // -- Round 410: cover from walls in the Turn View, by the DMG's corner lines — none in the open, half round a wall's end, total through a wall or a closed door, none through an open one; the DM's own setting still wins --
+    {
+      const B = panelDefs.battlemap, TV = panelDefs.turnview;
+      let keepT = null, keepD = null, keepF, saved = false; const keepCov = TV && JSON.stringify(TV._covers || {});
+      try {
+        openPanel('battlemap'); await sleep(600);
+        keepT = JSON.parse(JSON.stringify(B._tokens)); keepD = B._drawings.slice(); keepF = B._fog; saved = true;
+        const cs = B._csScreen();
+        const ul = B._tokens.find(t => t.cid === 'ulrick'), wf = B._tokens.find(t => t.cid === 'wolf');
+        B._tokens.forEach((t, i) => { if (t !== ul && t !== wf){ t.x = (15 + i) * cs + cs / 2; t.y = 12.5 * cs; } });
+        ul.x = 3.5 * cs; ul.y = 5.5 * cs; ul.size = 1; wf.x = 8.5 * cs; wf.y = 5.5 * cs; wf.size = 1;
+        const c = state.combatants.find(x => x.id === 'ulrick'), t = state.combatants.find(x => x.id === 'wolf');
+        const cov = draw => { B._drawings = draw; B._saveMap(); TV._mapCache = null; TV._covers = {}; return TV._coverFor(c, t); };
+        const W = (y0, y1, extra) => Object.assign({ k: 'tpl', id: 'r410w' + y0, shape: 'wall', pts: [6 * cs, y0 * cs, 6 * cs, y1 * cs] }, extra || {});
+        let r = cov([]);
+        ok('cover: none in the open', !r.ac && !r.total, JSON.stringify(r));
+        r = cov([W(0, 12)]);
+        ok('…a wall between: total cover (it can’t be targeted)', r.total === true && /wall/.test(r.why), JSON.stringify(r));
+        r = cov([W(5.45, 12)]);
+        ok('…a wall that ends just short of the line: half cover, +2 AC, “a wall in the way”', r.ac === 2 && !r.total && /a wall in the way/.test(r.why), JSON.stringify(r));
+        const door = W(5, 6, { door: true });
+        r = cov([W(0, 5), door, W(6, 12)]);
+        ok('…a closed door in the wall: total cover', r.total === true, JSON.stringify(r));
+        door.open = true; r = cov([W(0, 5), door, W(6, 12)]);
+        ok('…the door open: none', !r.ac && !r.total, JSON.stringify(r));
+        // Side by side, a wall on the grid line between them
+        ul.x = 5.5 * cs; wf.x = 6.5 * cs;
+        r = cov([W(0, 12)]);
+        ok('…side by side with a wall on the line between: total cover', r.total === true, JSON.stringify(r));
+        ul.x = 3.5 * cs; wf.x = 8.5 * cs;
+        // The DM's own setting wins
+        B._drawings = [W(0, 12)]; B._saveMap(); TV._mapCache = null;
+        TV._covers = {}; TV._covers[TV._coverKey(c, t)] = 0;
+        r = TV._coverFor(c, t);
+        ok('the DM set no cover: none, wall or not', !r.ac && !r.total, JSON.stringify(r));
+      } catch(e){ ok('round 410 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
+      finally {
+        if (TV && keepCov) TV._covers = JSON.parse(keepCov);
+        if (saved){ B._tokens = keepT; B._drawings = keepD; B._fog = keepF; try { B._saveMap(); } catch(e){} }
+        if (TV) TV._mapCache = null;
+        try { B._render(); } catch(e){}
+        closePanel('battlemap');
+      }
+    }
     // -- Class features: represented, not just text ------------------------
     {
       try {
