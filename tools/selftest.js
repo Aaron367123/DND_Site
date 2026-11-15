@@ -23107,6 +23107,32 @@ for (const cls of Object.keys(rule)) for (let L = 1; L <= 20; L++) for (const sc
         closePanel('battlemap');
       }
     }
+    // -- Round 407: the DM's moves aren't stopped by walls (a monster set down anywhere) --
+    {
+      const B = panelDefs.battlemap;
+      let keepT = null, keepD = null, keepF, keepSnap, saved = false;
+      try {
+        openPanel('battlemap'); await sleep(700);
+        keepT = B._tokens.slice(); keepD = B._drawings.slice(); keepF = B._fog; keepSnap = B._snapToGrid; saved = true;
+        const cs = B._csScreen();
+        const o = { id: 't407o', label: 'r407 Ogre', x: 3.5 * cs, y: 5.5 * cs, size: 1 };
+        B._tokens = [o]; B._fog = null; B._snapToGrid = true;
+        B._drawings = [{ k: 'tpl', id: 'r407w', shape: 'wall', pts: [6 * cs, 0, 6 * cs, 12 * cs] }];
+        B._tool = ''; B._render(); await sleep(150);
+        const el = B._body.querySelector('.map-token[data-tid="t407o"]'), st = B._body.querySelector('#map-stage'), r = st.getBoundingClientRect(), zz = B._screenScale();
+        const a = { x: Math.round(r.left + 3.5 * cs * zz), y: Math.round(r.top + 5.5 * cs * zz) }, bq = { x: Math.round(r.left + 8.5 * cs * zz), y: Math.round(r.top + 5.5 * cs * zz) };
+        el.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, cancelable: true, clientX: a.x, clientY: a.y, button: 0 }));
+        for (let k = 1; k <= 8; k++) document.dispatchEvent(new MouseEvent('mousemove', { bubbles: true, clientX: Math.round(a.x + (bq.x - a.x) * k / 8), clientY: a.y }));
+        document.dispatchEvent(new MouseEvent('mouseup', { bubbles: true, clientX: bq.x, clientY: bq.y }));
+        await sleep(150);
+        ok('the DM drags a monster through a wall: it goes where it was put', Math.abs(o.x / cs - 8.5) < 0.01, o.x / cs);
+      } catch(e){ ok('round 407 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
+      finally {
+        if (saved){ B._tokens = keepT; B._drawings = keepD; B._fog = keepF; B._snapToGrid = keepSnap; }
+        try { B._closePanel(); B._render(); } catch(e){}
+        closePanel('battlemap');
+      }
+    }
     // -- Class features: represented, not just text ------------------------
     {
       try {
@@ -26657,6 +26683,68 @@ for (const cls of Object.keys(rule)) for (let L = 1; L <= 20; L++) for (const sc
         if (fogSaved){ B._fog = keepF; B._light = keepL; B._exploreEpoch = keepE; }
         if (keepT){ B._tokens = keepT; B._drawings = keepD; }
         B._explored = null;
+        try { B._render(); } catch(e){}
+        paTab = keepTab; try { paRender(); } catch(e){}
+      }
+    }
+    // -- Round 406: on a phone, walls stop a player's creature — dragged straight at one it stops on the square before; a closed door stops it, an open one doesn't; dragged round the end of a wall it gets there; a step by key into a wall isn't taken --
+    if (PLAYER){
+      const keepTab = paTab, B = panelDefs.battlemap;
+      let keepT = null, keepD = null, keepF, keepSnap, saved = false;
+      const st0 = window.showToast; let toasts = [];
+      try {
+        if (paMyIdx() < 0) paSetPc('zoey');
+        paTab = 'map'; paRender(); await sleep(900);
+        keepT = B._tokens.slice(); keepD = B._drawings.slice(); keepF = B._fog; keepSnap = B._snapToGrid; saved = true;
+        window.showToast = function(m){ toasts.push(String(m)); return st0.apply(this, arguments); };
+        const cs = B._csScreen(), me = paPc();
+        const z = { id: 't406z', cid: me.id, label: me.name, isPC: true, x: 3.5 * cs, y: 5.5 * cs, size: 1 };
+        B._tokens = [z]; B._fog = null; B._snapToGrid = true;
+        const wallAt = (y0, y1, extra) => Object.assign({ k: 'tpl', id: 'r406w' + y0, shape: 'wall', pts: [6 * cs, y0 * cs, 6 * cs, y1 * cs] }, extra || {});
+        const drag = async route => {
+          B._render(); await sleep(150);
+          const el = document.querySelector('#pa-screen .map-token[data-tid="t406z"]');
+          const st = B._body.querySelector('#map-stage'), r = () => st.getBoundingClientRect(), zz = B._screenScale();
+          const at = (gx, gy) => ({ x: r().left + gx * cs * zz, y: r().top + gy * cs * zz });
+          const T = p => new Touch({ identifier: 7, target: el, clientX: p.x, clientY: p.y });
+          let p = at(z.x / cs, z.y / cs);
+          el.dispatchEvent(new TouchEvent('touchstart', { bubbles: true, cancelable: true, touches: [T(p)], changedTouches: [T(p)] }));
+          for (const [gx, gy] of route){
+            const q = at(gx, gy);
+            for (let k = 1; k <= 6; k++){ const m = { x: p.x + (q.x - p.x) * k / 6, y: p.y + (q.y - p.y) * k / 6 }; document.dispatchEvent(new TouchEvent('touchmove', { bubbles: true, cancelable: true, touches: [T(m)], changedTouches: [T(m)] })); await sleep(10); }
+            p = q;
+          }
+          document.dispatchEvent(new TouchEvent('touchend', { bubbles: true, cancelable: true, touches: [], changedTouches: [T(p)] }));
+          await sleep(120);
+          return { gx: z.x / cs, gy: z.y / cs };
+        };
+        // A wall across the way
+        B._drawings = [wallAt(0, 12)];
+        toasts = [];
+        let e = await drag([[8.5, 5.5]]);
+        ok('phone: dragged at a wall, it stops on the square before it', e.gx < 6 && e.gx >= 4.5 && /A wall’s in the way/.test(toasts.join('|')), JSON.stringify([e, toasts]));
+        // A closed door in it; then open
+        z.x = 3.5 * cs; z.y = 5.5 * cs;
+        const door = { k: 'tpl', id: 'r406d', shape: 'wall', door: true, pts: [6 * cs, 5 * cs, 6 * cs, 6 * cs] };
+        B._drawings = [wallAt(0, 5), door, wallAt(6, 12)];
+        e = await drag([[8.5, 5.5]]);
+        ok('…a closed door stops it too', e.gx < 6, JSON.stringify(e));
+        z.x = 3.5 * cs; z.y = 5.5 * cs; door.open = true;
+        e = await drag([[8.5, 5.5]]);
+        ok('…through the open door it goes', Math.abs(e.gx - 8.5) < 0.01 && Math.abs(e.gy - 5.5) < 0.01, JSON.stringify(e));
+        // Round the end of a wall
+        z.x = 3.5 * cs; z.y = 5.5 * cs;
+        B._drawings = [wallAt(0, 7)];
+        e = await drag([[3.5, 8.5], [8.5, 8.5], [8.5, 5.5]]);
+        ok('…dragged round the end of a wall, it gets there', Math.abs(e.gx - 8.5) < 0.01 && Math.abs(e.gy - 5.5) < 0.01, JSON.stringify(e));
+        // By key
+        z.x = 5.5 * cs; z.y = 5.5 * cs; B._drawings = [wallAt(0, 12)]; B._render(); await sleep(80);
+        B._keyMove(z, 1, 0); await sleep(60);
+        ok('a step by key into a wall isn’t taken', z.x === 5.5 * cs);
+      } catch(e){ ok('round 406 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
+      finally {
+        window.showToast = st0;
+        if (saved){ B._tokens = keepT; B._drawings = keepD; B._fog = keepF; B._snapToGrid = keepSnap; }
         try { B._render(); } catch(e){}
         paTab = keepTab; try { paRender(); } catch(e){}
       }

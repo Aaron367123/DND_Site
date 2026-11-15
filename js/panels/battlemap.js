@@ -1592,6 +1592,7 @@ registerPanel('battlemap',{
     if (nx === t.x && ny === t.y) return;
     const land = this._landing(t, nx, ny, from, false);
     if (this._fearBlocks(t, land, from)) return;
+    if (this._wallStop(t, land, from, null)) return;   // a step into a wall isn't taken
     if (land.x === from.x && land.y === from.y) return;
     // The ruler shows this step against the turn's total before it's added.
     this._measureMove(t, from.x, from.y, land.x, land.y); this._measureLinger();
@@ -2532,6 +2533,29 @@ registerPanel('battlemap',{
     const player = document.body.classList.contains('player-mode');
     if (typeof showToast === 'function') showToast(c.name + ' is frightened of ' + by.name + (player ? ' — it can’t move closer' : ' — it can’t willingly move closer (moved anyway)'), { alert: true });
     return player;
+  },
+  // Walls: a player's creature can't walk through one (nor a closed door).
+  // The way the drag went, square by square: at the first step that crosses
+  // a wall it stops, on the square before — and the turn's count stops there
+  // too. The DM's moves are their own. → where it stops, or null (clear).
+  _wallStop(t, to, from, path){
+    if (!document.body.classList.contains('player-mode') || !to || !from) return null;
+    const S = sktSightSrc({ drawings: this._drawings, cs: this._csScreen() || 50, ftPerCell: this._ftPerCell, gridType: this._gridType, light: 'bright' });
+    if (!S.walls.length) return null;
+    const cs = this._csScreen() || 50, pts = [[from.x, from.y]];
+    const cells = path && Array.isArray(path.cells) ? path.cells : null;
+    if (cells && cells.length > 1){
+      const ctr = c => path.hex ? this._hexCentre(c) : [path.ox + c[0] * cs, path.oy + c[1] * cs];
+      cells.slice(1).forEach(c => pts.push(ctr(c)));
+    }
+    pts.push([to.x, to.y]);
+    for (let i = 1; i < pts.length; i++){
+      if (!sktWallBetween(S, pts[i - 1][0], pts[i - 1][1], pts[i][0], pts[i][1])) continue;
+      if (cells && i < cells.length) cells.length = i;
+      if (typeof showToast === 'function') showToast('A wall’s in the way.');
+      return { x: pts[i - 1][0], y: pts[i - 1][1] };
+    }
+    return null;
   },
   _combatantFor(t){
     if (!t || typeof state === 'undefined' || !Array.isArray(state.combatants)) return null;
@@ -7694,6 +7718,7 @@ registerPanel('battlemap',{
             const half = size * this._tokenUnitScreen() / 2;
             const land = this._landing(t, Math.max(half, Math.min(stageW - half, nx)), Math.max(half, Math.min(stageH - half, ny)), _oaFrom, !!(ev && ev.altKey) && !document.body.classList.contains('player-mode'));
             if (this._fearBlocks(t, land, _oaFrom)){ land.x = _oaFrom.x; land.y = _oaFrom.y; land.moved = false; }
+            { const ws = this._wallStop(t, land, _oaFrom, this._drag && this._drag.path); if (ws){ land.x = ws.x; land.y = ws.y; land.moved = false; } }
             t.x = land.x; t.y = land.y;
             if (land.moved) this._landingNote();
             this._noteTurnMove(t, _oaFrom, this._drag && this._drag.path);
@@ -7814,6 +7839,7 @@ registerPanel('battlemap',{
             const half = size * this._tokenUnitScreen() / 2;
             const land = this._landing(t, Math.max(half, Math.min(stageW - half, nx)), Math.max(half, Math.min(stageH - half, ny)), _oaFrom, false);
             if (this._fearBlocks(t, land, _oaFrom)){ land.x = _oaFrom.x; land.y = _oaFrom.y; land.moved = false; }
+            { const ws = this._wallStop(t, land, _oaFrom, this._drag && this._drag.path); if (ws){ land.x = ws.x; land.y = ws.y; land.moved = false; } }
             t.x = land.x; t.y = land.y;
             if (land.moved) this._landingNote();
             this._noteTurnMove(t, _oaFrom, this._drag && this._drag.path);
