@@ -3215,7 +3215,7 @@ registerPanel('battlemap',{
   // the same at any zoom. `speed` adds "of N ft" and turns red past it.
   _measureShow(x0, y0, x1, y1, speed, moved, extra, prevDiag, rough, walked){
     const stage = this._body && this._body.querySelector('#map-stage'); if (!stage) return;
-    let m = stage.querySelector('.bm-measure');
+    let m = stage.querySelector('.bm-measure:not(.remote)');   // (not someone else's)
     if (!m){ m = document.createElement('div'); m.className = 'bm-measure'; m.innerHTML = '<svg><line class="bm-measure-line"/><polyline class="bm-measure-line bm-measure-path" fill="none"/><circle class="bm-measure-a"/><circle class="bm-measure-b"/></svg><span class="bm-measure-l"></span>'; stage.appendChild(m); }
     clearTimeout(this._measureT); m.classList.remove('fading');
     const k = 1 / (this._screenScale() || 1);
@@ -3251,11 +3251,76 @@ registerPanel('battlemap',{
     l.style.transform = 'translate(' + (14 * k) + 'px, ' + (-30 * k) + 'px)';
     m.classList.toggle('over', !!over);
     this._measureFt = ft;
-    if (this._tool === 'ruler') this._rulerLast = [x0, y0, x1, y1];
+    if (this._tool === 'ruler'){ this._rulerLast = [x0, y0, x1, y1]; this._rulerSend(bent ? walked.pts : [[x0, y0], [x1, y1]], l.textContent); }
+    // A player dragging their creature: the way and the feet go to the DM's
+    // screen too, as a ruler does (the token itself already streams). Not the
+    // DM's drags: a monster's way may run under the fog.
+    else if (this._drag && document.body.classList.contains('player-mode')) this._rulerSend(bent ? walked.pts : [[x0, y0], [x1, y1]], l.textContent);
     return ft;
   },
-  _measureLinger(){ clearTimeout(this._measureT); const m = this._body?.querySelector('#map-stage .bm-measure'); if (m) m.classList.add('fading'); this._measureT = setTimeout(() => { if (this._tool !== 'ruler') this._measureHide(); }, 1500); },
-  _measureHide(){ this._body?.querySelector('#map-stage .bm-measure')?.remove(); this._measureFt = null; if (this._tool !== 'ruler'){ this._rulerLast = null; this._rulerLegs = null; } },
+  _measureLinger(){ clearTimeout(this._measureT); const m = this._body?.querySelector('#map-stage .bm-measure:not(.remote)'); if (m) m.classList.add('fading'); this._measureT = setTimeout(() => { if (this._tool !== 'ruler') this._measureHide(); }, 1500); },
+  _measureHide(){ this._body?.querySelector('#map-stage .bm-measure:not(.remote)')?.remove(); this._measureFt = null; this._rulerSend(null); if (this._tool !== 'ruler'){ this._rulerLast = null; this._rulerLegs = null; } },
+  // ─── Rulers everyone sees ─────────────────────────────────────────────────
+  // A measurement used to stay on the screen that made it: a player working
+  // out whether the goblin is in reach did it where neither the DM nor the
+  // TV could see. The ruler tool's line now goes out on its own live channel,
+  // as a ping does (ruler_<device>; tabs on this machine by the broadcast
+  // channel), in the measurer's colour with their name on the label.
+  // A player's always does. The DM's only with "Show players" ticked: a DM
+  // measures from creatures the players haven't found.
+  _rulerShareOn(){
+    if (document.body.classList.contains('player-mode')) return true;
+    try { return localStorage.getItem('skt-bm-ruler-share-v1') === '1'; } catch(e){ return false; }
+  },
+  _rulerSend(pts, label){
+    if (pts && !this._rulerShareOn()) pts = null;
+    if (!pts && !this._rulerSent && !this._rulerSendT) return;
+    this._rulerNext = pts ? { p: [].concat(...pts.slice(0, 64).map(q => [Math.round(q[0]), Math.round(q[1])])), t: String(label || '').slice(0, 120) } : null;
+    const go = () => {
+      clearTimeout(this._rulerSendT); this._rulerSendT = null;
+      const v = this._rulerNext, w = this._pingWho(), dev = this._pingDev();
+      const msg = v ? { p: v.p, t: v.t, c: w.c, by: w.by.slice(0, 40) } : null;
+      try { if (this._bc) this._bc.postMessage({ kind: 'ruler', dev, v: msg }); } catch(e){}
+      const L = window.realtimeLive;
+      try { if (L){ if (msg) L.push('ruler_' + dev, msg); else L.clear('ruler_' + dev); } } catch(e){}
+      this._rulerSent = !!msg;
+    };
+    if (!pts){ go(); return; }
+    if (!this._rulerSendT) this._rulerSendT = setTimeout(go, 100);   // ten a second, the last one always sent
+  },
+  // Someone else's ruler (key: their device), or null for gone.
+  _showRemoteRuler(key, v){
+    const R = this._remoteRulers || (this._remoteRulers = {});
+    if (v && Array.isArray(v.p) && v.p.length >= 4 && v.p.every(n => isFinite(+n))) R[key] = { p: v.p.map(Number), t: String(v.t || ''), c: v.c, by: String(v.by || ''), at: Date.now() };
+    else delete R[key];
+    this._drawRemoteRulers();
+  },
+  // Drawn like this screen's own, in their colour, their name first; one
+  // left untouched for a minute goes (a phone that slept with it out).
+  _drawRemoteRulers(){
+    const stage = this._body && this._body.querySelector('#map-stage'); if (!stage) return;
+    const R = this._remoteRulers || {}, now = Date.now();
+    Object.keys(R).forEach(k => { if (now - R[k].at > 60000) delete R[k]; });
+    stage.querySelectorAll('.bm-measure.remote').forEach(e => { if (!R[e.dataset.dev]) e.remove(); });
+    const k = 1 / (this._screenScale() || 1), W = this._cols * this._csScreen(), H = this._rows * this._csScreen();
+    Object.keys(R).forEach(key => {
+      const v = R[key];
+      let m = [...stage.querySelectorAll('.bm-measure.remote')].find(e => e.dataset.dev === key);
+      if (!m){ m = document.createElement('div'); m.className = 'bm-measure remote'; m.dataset.dev = key; m.innerHTML = '<svg><polyline class="bm-measure-line" fill="none"/><circle class="bm-measure-a"/><circle class="bm-measure-b"/></svg><span class="bm-measure-l"></span>'; stage.appendChild(m); }
+      m.style.setProperty('--rc', /^#[0-9a-f]{3,8}$/i.test(v.c || '') ? v.c : '#ffd36b');
+      const svg = m.querySelector('svg'); svg.setAttribute('width', W); svg.setAttribute('height', H); svg.setAttribute('viewBox', '0 0 ' + W + ' ' + H);
+      const P = v.p, n = P.length >> 1, pl = m.querySelector('polyline');
+      const pts = []; for (let i = 0; i < n; i++) pts.push(P[2 * i] + ',' + P[2 * i + 1]);
+      pl.setAttribute('points', pts.join(' ')); pl.setAttribute('stroke-width', 2.5 * k); pl.setAttribute('stroke-dasharray', (8 * k) + ' ' + (5 * k));
+      [['.bm-measure-a', P[0], P[1]], ['.bm-measure-b', P[2 * n - 2], P[2 * n - 1]]].forEach(([sel, x, y]) => { const c = m.querySelector(sel); c.setAttribute('cx', x); c.setAttribute('cy', y); c.setAttribute('r', 4 * k); });
+      const l = m.querySelector('.bm-measure-l');
+      l.textContent = (v.by ? v.by + ': ' : '') + v.t;
+      l.style.left = P[2 * n - 2] + 'px'; l.style.top = P[2 * n - 1] + 'px'; l.style.fontSize = (13 * k).toFixed(2) + 'px';
+      l.style.transform = 'translate(' + (14 * k) + 'px, ' + (-30 * k) + 'px)';
+    });
+    clearTimeout(this._remoteRulerT);
+    if (Object.keys(R).length) this._remoteRulerT = setTimeout(() => this._drawRemoteRulers(), 61000);
+  },
   // Measure from (ax, ay) to wherever the pointer goes, until it's let go.
   // Shared by a press on the map and a press on a token (with the ruler out,
   // pressing a token measures from it instead of moving it).
@@ -4508,7 +4573,20 @@ registerPanel('battlemap',{
             this._showPing(+v.x, +v.y, v.c, v.by);
           });
         });
-        this._unsubLive = () => { try { unLegacy(); } catch(e){} try { unPrefix && unPrefix(); } catch(e){} try { unPing && unPing(); } catch(e){} clearTimeout(this._liveQuiet); };
+        // Rulers from other screens (see _rulerSend): ours skipped, and one
+        // a minute old by the time it's heard left out.
+        const unRuler = window.realtimeLive.watchPrefix('ruler_', all => {
+          const R = this._remoteRulers || (this._remoteRulers = {}), me = this._pingDev();
+          all = all || {};
+          Object.keys(R).forEach(k => { if (k !== me && !all[k]) delete R[k]; });
+          Object.keys(all).forEach(k => {
+            const v = all[k]; if (k === me || !v) return;
+            if (typeof v.ts === 'number' && window.realtimeLive.serverNow() - v.ts > 60000){ delete R[k]; return; }
+            if (!R[k] || R[k].ts !== v.ts){ this._showRemoteRuler(k, v); if (R[k]) R[k].ts = v.ts; }
+          });
+          this._drawRemoteRulers();
+        });
+        this._unsubLive = () => { try { unLegacy(); } catch(e){} try { unPrefix && unPrefix(); } catch(e){} try { unPing && unPing(); } catch(e){} try { unRuler && unRuler(); } catch(e){} clearTimeout(this._liveQuiet); };
       }
       // Token movement streams to EVERY device, both roles. Strokes only ever
       // travelled DM to player because only the DM draws; a token can be
@@ -4530,6 +4608,7 @@ registerPanel('battlemap',{
       this._bc.onmessage = ev => {
         const msg = ev.data; if (!msg) return;
         if (msg.kind === 'ping'){ this._showPing(+msg.x, +msg.y, msg.c, msg.by); return; }
+        if (msg.kind === 'ruler'){ this._showRemoteRuler(String(msg.dev || 'tab'), msg.v); return; }
         if (!isPlayer){
           // The DM tab used to drop EVERY inbound message, on the stated
           // grounds that it was ignoring its own echoes. It has none to
@@ -4787,6 +4866,7 @@ registerPanel('battlemap',{
     }
   },
   _stopBroadcast(){
+    try { this._rulerSend(null); } catch(e){}   // our ruler off the other screens
     try { this._bc?.close(); } catch(e){}
     try { if (this._unsubLive) this._unsubLive(); } catch(e){}
     try { if (this._unsubTok) this._unsubTok(); } catch(e){}
@@ -5171,6 +5251,7 @@ registerPanel('battlemap',{
       +'<button class="btn '+(this._tool==='area'&&!this._areaBuild()?'active':'')+'" data-mact="tool-area" title="Area of effect — drop a sphere, cone, line or cube on the map, or press a creature to start it there; an emanation goes round a creature and moves with it. Drag an area to move it, drag its dot to turn it.">◎<span class="bt-l">Area</span></button>'
       +'<button class="btn '+(this._areaBuild()?'active':'')+'" data-mact="tool-build" title="Build the map — walls and doors that block light and sight, light sources, difficult terrain. Only you see the walls and doors; the players see what they do.">▦<span class="bt-l">Build</span></button>'
       +'<button class="btn '+(this._tool==='ruler'?'active':'')+'" data-mact="tool-ruler" title="Ruler — drag across the map to measure a distance">'+ICO('i-ruler')+'<span class="bt-l">Ruler</span></button>'
+      +(this._tool==='ruler' ? '<label class="bm-ruler-share" title="Your ruler shows on the players’ screens and the TV as you measure"><input type="checkbox" id="ruler-share"'+(this._rulerShareOn()?' checked':'')+'> Show players</label>' : '')
       +(this._tool==='area' ? this._areaControlsHtml() : '')
       // Fog cluster — only the toggle is visible by default. When fog is on,
       // its sub-controls (paint mode, brush radius, hide/show all) appear.
@@ -5358,6 +5439,12 @@ registerPanel('battlemap',{
     drawCanvas.style.pointerEvents = (this._tool === 'draw' || this._tool === 'erase' || this._tool === 'area' || this._tool === 'ruler') ? 'auto' : 'none';
     const saSel = this._body.querySelector('#bm-seeas');
     if (saSel) saSel.onchange = () => { this._seeAs = saSel.value || null; this._renderSight(); };
+    const rsBox = this._body.querySelector('#ruler-share');
+    if (rsBox) rsBox.onchange = () => {
+      try { localStorage.setItem('skt-bm-ruler-share-v1', rsBox.checked ? '1' : '0'); } catch(e){}
+      if (!rsBox.checked) this._rulerSend(null);
+      else if (this._rulerLast){ const L = this._rulerLegs; this._rulerSend(L && L.length > 1 ? L : [[this._rulerLast[0], this._rulerLast[1]], [this._rulerLast[2], this._rulerLast[3]]], (this._body.querySelector('.bm-measure:not(.remote) .bm-measure-l') || {}).textContent); }
+    };
     const flSel = this._body.querySelector('#bm-floor');
     if (flSel) flSel.onchange = () => this._switchFloor(flSel.value);
     const tplSel = this._body.querySelector('#tpl-shape');
@@ -5379,6 +5466,7 @@ registerPanel('battlemap',{
       if (L && L.length > 2){ const each = []; for (let i = 1; i < L.length; i++) each.push(this._feetBetweenPts(L[i - 1][0], L[i - 1][1], L[i][0], L[i][1], 0)); this._measureShow(L[0][0], L[0][1], L[L.length - 1][0], L[L.length - 1][1], null, 0, null, 0, 0, { ft: each.reduce((a, b) => a + b, 0), pts: L, legs: each }); }
       else this._measureShow(...this._rulerLast);
     }, 0);
+    this._drawRemoteRulers();
     this._drawAllStrokes();
     this._renderTokens();
     // Size the zoom wrappers to match the stage we just built. Must happen

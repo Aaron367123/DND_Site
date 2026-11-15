@@ -23431,6 +23431,108 @@ for (const cls of Object.keys(rule)) for (let L = 1; L <= 20; L++) for (const sc
         closePanel('battlemap');
       }
     }
+    // -- Round 418: rulers everyone sees — the DM's only with "Show players" ticked; sent as it moves, cleared when put away; another screen's drawn in its colour with its name (as text), through a redraw, and gone when it goes --
+    if (!PLAYER){
+      const B = panelDefs.battlemap;
+      let keepT = null, keepD = null, keepF, keepTool, keepLive, keepShare = null, saved = false, bcWas;
+      try {
+        openPanel('battlemap'); await sleep(700);
+        keepT = B._tokens.slice(); keepD = B._drawings.slice(); keepF = B._fog; keepTool = B._tool; saved = true;
+        try { keepShare = localStorage.getItem('skt-bm-ruler-share-v1'); localStorage.removeItem('skt-bm-ruler-share-v1'); } catch(e){}
+        const cs = B._csScreen();
+        B._tokens = []; B._drawings = []; B._fog = null; B._snapToGrid = true; B._tool = 'ruler'; B._rulerLegs = null; B._rulerLast = null; B._render(); await sleep(150);
+        const sent = [], cleared = [], posted = [];
+        keepLive = window.realtimeLive;
+        window.realtimeLive = Object.assign({}, keepLive || {}, { push: (c, v) => { if (/^ruler_/.test(c)) sent.push([c, JSON.parse(JSON.stringify(v))]); }, clear: c => { if (/^ruler_/.test(c)) cleared.push(c); }, patch: () => {} });
+        bcWas = B._bc; B._bc = { postMessage: m => posted.push(m), onmessage: bcWas && bcWas.onmessage, close: () => {} };
+        const cl = (sx, sy) => { const r = B._body.querySelector('#map-stage').getBoundingClientRect(), z = B._screenScale(); return { x: Math.round(r.left + sx * z), y: Math.round(r.top + sy * z) }; };
+        const measure = async (a, b) => { const p = cl(a[0] * cs, a[1] * cs), q = cl(b[0] * cs, b[1] * cs), tg = B._body.querySelector('#draw-canvas');
+          tg.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, cancelable: true, clientX: p.x, clientY: p.y, button: 0 }));
+          for (let k = 1; k <= 5; k++) document.dispatchEvent(new MouseEvent('mousemove', { bubbles: true, clientX: Math.round(p.x + (q.x - p.x) * k / 5), clientY: Math.round(p.y + (q.y - p.y) * k / 5) }));
+          document.dispatchEvent(new MouseEvent('mouseup', { bubbles: true, clientX: q.x, clientY: q.y })); await sleep(200); };
+        const box = B._body.querySelector('#ruler-share');
+        ok('the DM’s ruler has a “Show players” box, off at first', !!box && !box.checked);
+        await measure([2.5, 2.5], [8.5, 2.5]);
+        ok('…off: the DM’s measuring goes nowhere', !sent.length && !posted.some(m => m.kind === 'ruler'), JSON.stringify(sent));
+        box.checked = true; box.dispatchEvent(new Event('change', { bubbles: true })); await sleep(200);
+        const s0 = sent[sent.length - 1];
+        ok('ticked: the ruler that’s out goes to the others at once, on this screen’s own channel', !!s0 && s0[0] === 'ruler_' + B._pingDev() && s0[1].p.join() === [2.5 * cs, 2.5 * cs, 8.5 * cs, 2.5 * cs].map(Math.round).join() && /30 ft/.test(s0[1].t) && s0[1].by === 'DM', JSON.stringify(s0));
+        let n0 = sent.length;
+        await measure([2.5, 4.5], [2.5, 9.5]);
+        const s1 = sent[sent.length - 1];
+        ok('…a new measurement: sent as it moves (a few a second, not every mouse move), the last place last', sent.length > n0 && sent.length - n0 <= 3 && s1[1].p.join() === [2.5 * cs, 4.5 * cs, 2.5 * cs, 9.5 * cs].map(Math.round).join() && /25 ft/.test(s1[1].t), JSON.stringify([sent.length - n0, s1]));
+        ok('…and to this browser’s other tabs', posted.some(m => m.kind === 'ruler' && m.v && /25 ft/.test(m.v.t)));
+        // a second leg: the whole way goes
+        await measure([2.5, 9.5], [6.5, 9.5]);
+        const s2 = sent[sent.length - 1];
+        ok('…a second leg: the whole way, its total and legs', s2[1].p.length === 6 && /45 ft/.test(s2[1].t) && /\(25 \+ 20\)/.test(s2[1].t), JSON.stringify(s2));
+        // put away
+        B._body.querySelector('[data-mact="tool-ruler"]').click(); await sleep(100);
+        ok('put away: cleared from the others', cleared.includes('ruler_' + B._pingDev()) && posted.some(m => m.kind === 'ruler' && m.v === null), JSON.stringify(cleared));
+        localStorage.setItem('skt-bm-ruler-share-v1', '0');
+        B._tool = 'ruler'; B._render(); await sleep(100);
+        n0 = sent.length;
+        await measure([1.5, 1.5], [3.5, 1.5]);
+        ok('unticked again: nothing more goes', sent.length === n0 && !B._body.querySelector('#ruler-share').checked);
+        // The DM dragging a creature, even with the box ticked: its way isn't sent (it may run under the fog)
+        localStorage.setItem('skt-bm-ruler-share-v1', '1');
+        B._tool = ''; B._measureHide(); B._render(); await sleep(80);
+        { const g = { id: 't418g', label: 'r418 Goblin', x: 2.5 * cs, y: 2.5 * cs, size: 1 }; B._tokens = [g]; B._render(); await sleep(100);
+          n0 = sent.length; const p = cl(g.x, g.y), q = cl(5.5 * cs, 2.5 * cs), el = B._body.querySelector('.map-token[data-tid="t418g"]');
+          el.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, cancelable: true, clientX: p.x, clientY: p.y, button: 0 }));
+          for (let k = 1; k <= 5; k++) document.dispatchEvent(new MouseEvent('mousemove', { bubbles: true, clientX: Math.round(p.x + (q.x - p.x) * k / 5), clientY: p.y }));
+          document.dispatchEvent(new MouseEvent('mouseup', { bubbles: true, clientX: q.x, clientY: q.y })); await sleep(250);
+          ok('the DM dragging a creature: moved, its way not sent', g.x === 5.5 * cs && sent.length === n0, JSON.stringify([g.x / cs, sent.length - n0]));
+          B._tokens = []; }
+        localStorage.setItem('skt-bm-ruler-share-v1', '0');
+        B._tool = ''; B._measureHide(); B._render(); await sleep(80);
+        // Another screen's ruler arrives (a tab on this machine)
+        const rem = () => [...B._body.querySelectorAll('#map-stage .bm-measure.remote')];
+        B._bc.onmessage && B._bc.onmessage({ data: { kind: 'ruler', dev: 'r418dev', v: { p: [3 * cs, 3 * cs, 3 * cs, 7 * cs, 6 * cs, 7 * cs], t: '35 ft (20 + 15)', c: '#7ee08a', by: 'Zoey <b>' } } });
+        const r0 = rem()[0];
+        ok('another screen’s ruler: drawn, in their colour, their name on it as text', rem().length === 1 && /#7ee08a/i.test(r0.style.getPropertyValue('--rc')) && r0.querySelector('.bm-measure-l').textContent === 'Zoey <b>: 35 ft (20 + 15)' && !r0.querySelector('.bm-measure-l b') && r0.querySelector('polyline').getAttribute('points').split(' ').length === 3, r0 && r0.outerHTML.slice(0, 300));
+        ok('…not mistaken for this screen’s own (no ruler of ours to put away)', !B._body.querySelector('#map-stage .bm-measure:not(.remote)'));
+        B._render(); await sleep(100);
+        ok('…still there after the map redraws', rem().length === 1);
+        B._tool = 'ruler'; B._render(); await sleep(80);
+        await measure([8.5, 1.5], [8.5, 5.5]);
+        const own = B._body.querySelector('#map-stage .bm-measure:not(.remote)');
+        ok('…measuring here meanwhile: our own line beside theirs, theirs untouched', !!own && rem().length === 1 && rem()[0].querySelector('.bm-measure-l').textContent === 'Zoey <b>: 35 ft (20 + 15)' && /20 ft/.test(own.textContent), rem().map(e => e.textContent).join(' | '));
+        B._measureLinger();
+        ok('…ours fading doesn’t fade theirs', !rem()[0].classList.contains('fading'));
+        B._tool = ''; B._render(); await sleep(80);
+        B._measureHide();
+        ok('…this screen putting its own ruler away leaves theirs', rem().length === 1);
+        B._bc.onmessage && B._bc.onmessage({ data: { kind: 'ruler', dev: 'r418dev', v: null } });
+        ok('…and gone when they put it away', !rem().length);
+        // Over Firebase: other devices', not our own echo, not an old one
+        let cb = null;
+        window.realtimeLive = { LIVE_STALE_MS: 8000, serverNow: () => Date.now(), isStale: () => false, push: () => {}, patch: () => {}, clear: () => {}, listen: () => () => {}, watchPrefix: (pre, f) => { if (pre === 'ruler_') cb = f; return () => {}; } };
+        B._stopBroadcast(); B._startBroadcast(); await sleep(50);
+        ok('the map listens for rulers from other devices', typeof cb === 'function');
+        if (cb){
+          const now = Date.now(), me = B._pingDev();
+          cb({ ava: { p: [2 * cs, 2 * cs, 5 * cs, 2 * cs], t: '15 ft', c: '#5ec8ff', by: 'Ava', ts: now }, [me]: { p: [0, 0, cs, 0], t: '5 ft', c: '#ffd36b', by: 'DM', ts: now }, old: { p: [0, cs, cs, cs], t: '5 ft', c: '#fff', by: 'Bo', ts: now - 120000 } });
+          await sleep(30);
+          ok('…another device’s shows; our own echo and a stale one don’t', rem().length === 1 && /^Ava: 15 ft$/.test(rem()[0].querySelector('.bm-measure-l').textContent), rem().map(e => e.textContent).join(' | '));
+          cb({ ava: { p: [2 * cs, 2 * cs, 7 * cs, 2 * cs], t: '25 ft', c: '#5ec8ff', by: 'Ava', ts: now + 100 } }); await sleep(30);
+          ok('…it moves as they measure', rem().length === 1 && /25 ft/.test(rem()[0].textContent) && rem()[0].querySelector('.bm-measure-b').getAttribute('cx') == String(7 * cs));
+          cb({}); await sleep(30);
+          ok('…and goes when their channel empties', !rem().length);
+        }
+      } catch(e){ ok('round 418 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
+      finally {
+        if (keepLive !== undefined) window.realtimeLive = keepLive;
+        try { B._stopBroadcast(); } catch(e){}
+        try { if (bcWas && bcWas !== B._bc) bcWas.close(); } catch(e){}
+        try { if (keepShare == null) localStorage.removeItem('skt-bm-ruler-share-v1'); else localStorage.setItem('skt-bm-ruler-share-v1', keepShare); } catch(e){}
+        B._remoteRulers = {}; B._rulerSent = false;
+        if (saved){ B._tokens = keepT; B._drawings = keepD; B._fog = keepF; B._tool = keepTool; try { B._saveMap(); } catch(e){} }
+        try { B._startBroadcast(); } catch(e){}
+        try { B._closePanel(); B._render(); } catch(e){}
+        closePanel('battlemap');
+      }
+    }
     // -- Class features: represented, not just text ------------------------
     {
       try {
@@ -27159,6 +27261,89 @@ for (const cls of Object.keys(rule)) for (let L = 1; L <= 20; L++) for (const sc
         ok('…nor by key', z.x === 3.5 * cs, (z.x / cs).toFixed(2));
       } catch(e){ ok('round 417 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
       finally {
+        if (saved){ B._tokens = keepT; B._drawings = keepD; B._fog = keepF; B._snapToGrid = keepSnap; }
+        try { B._render(); } catch(e){}
+        paTab = keepTab; try { paRender(); } catch(e){}
+      }
+    }
+    // -- Round 419: a player's ruler goes to everyone as they measure — under their name, in their colour, no box to tick — and is cleared when they put it away or leave the map --
+    if (PLAYER){
+      const keepTab = paTab, B = panelDefs.battlemap;
+      let keepT = null, keepD = null, keepF, keepLive, saved = false;
+      try {
+        if (paMyIdx() < 0) paSetPc('zoey');
+        paTab = 'map'; paRender(); await sleep(900);
+        keepT = B._tokens.slice(); keepD = B._drawings.slice(); keepF = B._fog; saved = true;
+        const cs = B._csScreen();
+        const sent = [], cleared = [];
+        keepLive = window.realtimeLive;
+        window.realtimeLive = Object.assign({}, keepLive || {}, { push: (c, v) => { if (/^ruler_/.test(c)) sent.push([c, JSON.parse(JSON.stringify(v))]); }, clear: c => { if (/^ruler_/.test(c)) cleared.push(c); }, patch: () => {} });
+        B._drawings = []; B._fog = null; B._snapToGrid = true; B._tool = 'ruler'; B._rulerLegs = null; B._rulerLast = null; B._render(); await sleep(150);
+        ok('phone: no “Show players” box — a player’s ruler is always shared', !B._body.querySelector('#ruler-share'));
+        const st = B._body.querySelector('#map-stage'), z = B._screenScale(), tg = B._body.querySelector('#draw-canvas') || st;
+        const at = (gx, gy) => { const r = st.getBoundingClientRect(); return { x: r.left + gx * cs * z, y: r.top + gy * cs * z }; };
+        const T = p => new Touch({ identifier: 6, target: tg, clientX: p.x, clientY: p.y });
+        const p = at(2.5, 2.5), q = at(2.5, 6.5);
+        tg.dispatchEvent(new TouchEvent('touchstart', { bubbles: true, cancelable: true, touches: [T(p)], changedTouches: [T(p)] }));
+        for (let k = 1; k <= 6; k++){ const m = { x: p.x, y: p.y + (q.y - p.y) * k / 6 }; document.dispatchEvent(new TouchEvent('touchmove', { bubbles: true, cancelable: true, touches: [T(m)], changedTouches: [T(m)] })); }
+        document.dispatchEvent(new TouchEvent('touchend', { bubbles: true, cancelable: true, touches: [], changedTouches: [T(q)] })); await sleep(250);
+        const s = sent[sent.length - 1], w = B._pingWho();
+        ok('…her measuring by finger goes out, under her name and colour', !!s && s[0] === 'ruler_' + B._pingDev() && /20 ft/.test(s[1].t) && s[1].by === w.by && /zoey/i.test(s[1].by) && s[1].c === w.c && s[1].c !== '#ffd36b', JSON.stringify(s));
+        B._body.querySelector('[data-mact="tool-ruler"]').click(); await sleep(100);
+        ok('…put away: cleared', cleared.length === 1);
+        B._tool = 'ruler'; B._render(); await sleep(100);
+        await (async () => { const p2 = at(4.5, 2.5), q2 = at(7.5, 2.5);
+          tg.isConnected || 0;
+          const tg2 = B._body.querySelector('#draw-canvas') || B._body.querySelector('#map-stage');
+          const T2 = pp => new Touch({ identifier: 7, target: tg2, clientX: pp.x, clientY: pp.y });
+          tg2.dispatchEvent(new TouchEvent('touchstart', { bubbles: true, cancelable: true, touches: [T2(p2)], changedTouches: [T2(p2)] }));
+          document.dispatchEvent(new TouchEvent('touchmove', { bubbles: true, cancelable: true, touches: [T2(q2)], changedTouches: [T2(q2)] }));
+          document.dispatchEvent(new TouchEvent('touchend', { bubbles: true, cancelable: true, touches: [], changedTouches: [T2(q2)] })); await sleep(250); })();
+        const nC = cleared.length;
+        paTab = 'sheet'; paRender(); await sleep(300);
+        ok('…she leaves the map with one out: cleared from the others too', cleared.length > nC, JSON.stringify([nC, cleared.length]));
+      } catch(e){ ok('round 419 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
+      finally {
+        if (keepLive !== undefined) window.realtimeLive = keepLive;
+        B._tool = ''; B._rulerSent = false; B._rulerLegs = null; B._rulerLast = null;
+        if (saved){ B._tokens = keepT; B._drawings = keepD; B._fog = keepF; }
+        paTab = keepTab; try { paRender(); } catch(e){}
+      }
+    }
+    // -- Round 420: a player dragging their creature — the way and its feet go to the DM's screen as they go, and are cleared a moment after the drop --
+    if (PLAYER){
+      const keepTab = paTab, B = panelDefs.battlemap;
+      let keepT = null, keepD = null, keepF, keepSnap, keepLive, saved = false;
+      try {
+        if (paMyIdx() < 0) paSetPc('zoey');
+        paTab = 'map'; paRender(); await sleep(900);
+        keepT = B._tokens.slice(); keepD = B._drawings.slice(); keepF = B._fog; keepSnap = B._snapToGrid; saved = true;
+        const cs = B._csScreen(), me = paPc();
+        const sent = [], cleared = [];
+        keepLive = window.realtimeLive;
+        window.realtimeLive = Object.assign({}, keepLive || {}, { push: (c, v) => { if (/^ruler_/.test(c)) sent.push([c, JSON.parse(JSON.stringify(v))]); }, clear: c => { if (/^ruler_/.test(c)) cleared.push(c); }, patch: () => {} });
+        const z = { id: 't420z', cid: me.id, label: me.name, isPC: true, x: 2.5 * cs, y: 2.5 * cs, size: 1 };
+        B._tokens = [z]; B._drawings = []; B._fog = null; B._snapToGrid = true; B._tool = ''; B._rulerSent = false; B._render(); await sleep(150);
+        const el = document.querySelector('#pa-screen .map-token[data-tid="t420z"]');
+        const st = B._body.querySelector('#map-stage'), zz = B._screenScale();
+        const at = (gx, gy) => { const r = st.getBoundingClientRect(); return { x: r.left + gx * cs * zz, y: r.top + gy * cs * zz }; };
+        const T = p => new Touch({ identifier: 8, target: el, clientX: p.x, clientY: p.y });
+        const p = at(2.5, 2.5), q = at(5.5, 2.5);
+        el.dispatchEvent(new TouchEvent('touchstart', { bubbles: true, cancelable: true, touches: [T(p)], changedTouches: [T(p)] }));
+        for (let k = 1; k <= 8; k++){ const m = { x: p.x + (q.x - p.x) * k / 8, y: p.y }; document.dispatchEvent(new TouchEvent('touchmove', { bubbles: true, cancelable: true, touches: [T(m)], changedTouches: [T(m)] })); await sleep(8); }
+        await sleep(150);
+        const mid = sent[sent.length - 1];
+        ok('phone: dragging her creature, its way and feet go out as she goes', !!mid && /ft/.test(mid[1].t) && /zoey/i.test(mid[1].by) && mid[1].p.length >= 4, JSON.stringify(mid));
+        document.dispatchEvent(new TouchEvent('touchend', { bubbles: true, cancelable: true, touches: [], changedTouches: [T(q)] })); await sleep(250);
+        const last = sent[sent.length - 1];
+        ok('…the last sent is where she stopped: 15 ft (of her 30)', z.x === 5.5 * cs && /^15 (\/ 30 )?ft/.test(last[1].t) && last[1].p[last[1].p.length - 2] === Math.round(5.5 * cs), JSON.stringify([z.x / cs, last]));
+        ok('…not cleared at once (it lingers, as hers does)', !cleared.length);
+        await sleep(1700);
+        ok('…cleared a moment after the drop', cleared.length >= 1);
+      } catch(e){ ok('round 420 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
+      finally {
+        if (keepLive !== undefined) window.realtimeLive = keepLive;
+        B._rulerSent = false;
         if (saved){ B._tokens = keepT; B._drawings = keepD; B._fog = keepF; B._snapToGrid = keepSnap; }
         try { B._render(); } catch(e){}
         paTab = keepTab; try { paRender(); } catch(e){}
