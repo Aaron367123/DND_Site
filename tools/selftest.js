@@ -23341,6 +23341,96 @@ for (const cls of Object.keys(rule)) for (let L = 1; L <= 20; L++) for (const sc
         closePanel('battlemap');
       }
     }
+    // -- Round 415: ruler waypoints — let go, press on the end and carry on: the whole length and each leg; a redraw keeps the legs; pressed elsewhere it starts afresh --
+    {
+      const B = panelDefs.battlemap;
+      let keepT = null, keepD = null, keepF, keepTool, saved = false;
+      try {
+        openPanel('battlemap'); await sleep(600);
+        keepT = B._tokens.slice(); keepD = B._drawings.slice(); keepF = B._fog; keepTool = B._tool; saved = true;
+        B._tokens = []; B._drawings = []; B._fog = null; B._tool = 'ruler'; B._render(); await sleep(150);
+        const cs = B._csScreen();
+        const st = () => B._body.querySelector('#map-stage');
+        const cl = (sx, sy) => { const r = st().getBoundingClientRect(), z = B._screenScale(); return { x: Math.round(r.left + sx * z), y: Math.round(r.top + sy * z) }; };
+        const drag = async (a, b) => {
+          const p = cl(a[0] * cs, a[1] * cs), q = cl(b[0] * cs, b[1] * cs);
+          const tg = B._body.querySelector('#draw-canvas') || st();
+          tg.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, cancelable: true, clientX: p.x, clientY: p.y, button: 0 }));
+          for (let k = 1; k <= 6; k++) document.dispatchEvent(new MouseEvent('mousemove', { bubbles: true, clientX: Math.round(p.x + (q.x - p.x) * k / 6), clientY: Math.round(p.y + (q.y - p.y) * k / 6) }));
+          document.dispatchEvent(new MouseEvent('mouseup', { bubbles: true, clientX: q.x, clientY: q.y }));
+          await sleep(60);
+        };
+        const label = () => (B._body.querySelector('.bm-measure-l') || {}).textContent || '';
+        await drag([2, 2], [5, 2]);
+        ok('ruler: 15 ft', /^15 ft/.test(label()), label());
+        await drag([5, 2], [5, 6]);
+        ok('…pressed on its end and carried on: 35 ft, each leg shown', /^35 ft/.test(label()) && /\(15 \+ 20\)/.test(label()), label());
+        const pl = B._body.querySelector('.bm-measure-path');
+        ok('…drawn through the corner', !!pl && pl.style.display !== 'none' && pl.getAttribute('points').split(' ').length === 3, pl && pl.getAttribute('points'));
+        B._render(); await sleep(120);
+        ok('…a redraw keeps both legs', /^35 ft/.test(label()) && /\(15 \+ 20\)/.test(label()), label());
+        await drag([5, 6], [8, 6]);
+        ok('…a third leg', /^50 ft/.test(label()) && /\(15 \+ 20 \+ 15\)/.test(label()), label());
+        await drag([2, 9], [4, 9]);
+        ok('pressed somewhere else: a fresh measure', /^10 ft/.test(label()) && !/\+/.test(label()), label());
+        B._body.querySelector('[data-mact="tool-ruler"]').click(); await sleep(80);
+        ok('the ruler put down: the legs go', !B._rulerLegs && !B._body.querySelector('.bm-measure'));
+      } catch(e){ ok('round 415 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
+      finally {
+        if (saved){ B._tokens = keepT; B._drawings = keepD; B._fog = keepF; B._tool = keepTool; }
+        B._rulerLegs = null;
+        try { B._measureHide(); B._render(); } catch(e){}
+        closePanel('battlemap');
+      }
+    }
+    // -- Round 416: a group of tokens — Shift+click (or Shift+drag a box) to gather them; drag one and the rest come, as they stood; the arrows move them all; Esc, a plain press elsewhere or the bare map lets them go --
+    {
+      const B = panelDefs.battlemap;
+      let keepT = null, keepD = null, keepF, keepSnap, keepTool, saved = false;
+      try {
+        openPanel('battlemap'); await sleep(700);
+        keepT = B._tokens.slice(); keepD = B._drawings.slice(); keepF = B._fog; keepSnap = B._snapToGrid; keepTool = B._tool; saved = true;
+        const cs = B._csScreen();
+        const A = { id: 't416a', label: 'r416 A', x: 3.5 * cs, y: 3.5 * cs, size: 1 }, Bt = { id: 't416b', label: 'r416 B', x: 4.5 * cs, y: 3.5 * cs, size: 1 }, C = { id: 't416c', label: 'r416 C', x: 10.5 * cs, y: 9.5 * cs, size: 1 };
+        B._tokens = [A, Bt, C]; B._drawings = []; B._fog = null; B._snapToGrid = true; B._tool = ''; B._group = null; B._render(); await sleep(150);
+        const st = () => B._body.querySelector('#map-stage');
+        const cl = (sx, sy) => { const r = st().getBoundingClientRect(), z = B._screenScale(); return { x: Math.round(r.left + sx * z), y: Math.round(r.top + sy * z) }; };
+        const tok = id => B._body.querySelector('.map-token[data-tid="' + id + '"]');
+        const click = async (t, shift) => { const p = cl(t.x, t.y); tok(t.id).dispatchEvent(new MouseEvent('mousedown', { bubbles: true, cancelable: true, clientX: p.x, clientY: p.y, button: 0, shiftKey: !!shift })); document.dispatchEvent(new MouseEvent('mouseup', { bubbles: true, clientX: p.x, clientY: p.y, shiftKey: !!shift })); await sleep(60); };
+        const grouped = id => !!tok(id) && tok(id).classList.contains('grouped');
+        await click(A, true); await click(Bt, true);
+        ok('Shift+click two tokens: they’re a group', grouped('t416a') && grouped('t416b') && !grouped('t416c'));
+        // drag A three squares right
+        { const p = cl(A.x, A.y), q = cl(A.x + 3 * cs, A.y);
+          tok('t416a').dispatchEvent(new MouseEvent('mousedown', { bubbles: true, cancelable: true, clientX: p.x, clientY: p.y, button: 0 }));
+          for (let k = 1; k <= 6; k++) document.dispatchEvent(new MouseEvent('mousemove', { bubbles: true, clientX: Math.round(p.x + (q.x - p.x) * k / 6), clientY: p.y }));
+          document.dispatchEvent(new MouseEvent('mouseup', { bubbles: true, clientX: q.x, clientY: q.y })); await sleep(120); }
+        ok('…drag one: both go, as they stood; the third stays', A.x === 6.5 * cs && Bt.x === 7.5 * cs && A.y === 3.5 * cs && Bt.y === 3.5 * cs && C.x === 10.5 * cs, JSON.stringify([A.x / cs, Bt.x / cs, C.x / cs]));
+        // the arrows
+        const win = B._body.closest('.window'); if (win) win.classList.add('focused');
+        document.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowRight', bubbles: true, cancelable: true })); await sleep(120);
+        ok('…the arrow key moves them all', A.x === 7.5 * cs && Bt.x === 8.5 * cs, JSON.stringify([A.x / cs, Bt.x / cs]));
+        document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true })); await sleep(80);
+        ok('Esc lets them go', !grouped('t416a') && !grouped('t416b') && (!B._group || !B._group.size));
+        // Shift+drag a box round A and B
+        { const p = cl(6.9 * cs, 2.9 * cs), q = cl(9.1 * cs, 4.1 * cs);
+          (document.elementFromPoint(p.x, p.y) || st()).dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, cancelable: true, clientX: p.x, clientY: p.y, button: 0, shiftKey: true, pointerId: 3 }));
+          document.dispatchEvent(new PointerEvent('pointermove', { bubbles: true, clientX: q.x, clientY: q.y, pointerId: 3 }));
+          document.dispatchEvent(new PointerEvent('pointerup', { bubbles: true, clientX: q.x, clientY: q.y, pointerId: 3 })); await sleep(100); }
+        ok('Shift+drag a box: the tokens in it are a group', grouped('t416a') && grouped('t416b') && !grouped('t416c'));
+        await click(C, false);
+        ok('…a plain press on another token lets them go', !grouped('t416a') && !grouped('t416b'));
+        await click(A, true); await click(Bt, true);
+        { const p = cl(2.5 * cs, 10.5 * cs); B._body.querySelector('#map-scroll').dispatchEvent(new MouseEvent('mousedown', { bubbles: true, cancelable: true, clientX: p.x, clientY: p.y, button: 0 })); await sleep(80); document.dispatchEvent(new MouseEvent('mouseup', { bubbles: true, clientX: p.x, clientY: p.y })); await sleep(80); }
+        ok('…and so does a click on the bare map', !grouped('t416a') && !grouped('t416b'));
+      } catch(e){ ok('round 416 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
+      finally {
+        B._group = null;
+        if (saved){ B._tokens = keepT; B._drawings = keepD; B._fog = keepF; B._snapToGrid = keepSnap; B._tool = keepTool; try { B._saveMap(); } catch(e){} }
+        try { B._closePanel(); B._render(); } catch(e){}
+        closePanel('battlemap');
+      }
+    }
     // -- Class features: represented, not just text ------------------------
     {
       try {

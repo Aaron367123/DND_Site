@@ -2879,6 +2879,8 @@ body.player-mode #campaign-btn{display:none !important}
 .bm-set-load-init{margin-top:12px;font-size:var(--fs-md);padding:9px 14px}
 .map-token:hover{box-shadow:0 0 0 2px var(--accent);z-index:3}
 .map-token.selected{box-shadow:0 0 0 3px white;z-index:4}
+/* One of a group moved together (Shift+click) */
+.map-token.grouped{box-shadow:0 0 0 3px #2ec4ff;z-index:4}
 .map-token.pc{background:linear-gradient(135deg,#4a3d2a,#6b5439)}
 .map-token.npc-t{background:linear-gradient(135deg,#3d2a2a,#6b3939)}
 .map-token.dead{opacity:.4;filter:grayscale(1)}

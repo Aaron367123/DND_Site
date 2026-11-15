@@ -778,12 +778,30 @@ registerPanel('battlemap',{
     document.addEventListener('keydown', onKey, true);
     wf.off = () => { offBox(); document.removeEventListener('keydown', onKey, true); };
   },
+  // ─── A group of tokens ─────────────────────────────────────────────────────
+  // The party walking down a corridor, a pack of wolves: Shift+click tokens
+  // (or Shift+drag a box over them) and they move together — drag any one,
+  // or the arrow keys. Esc, or a click on the bare map, lets them go. The
+  // DM's, on this screen.
+  _groupToggle(id){
+    const g = this._group || (this._group = new Set());
+    if (g.has(id)) g.delete(id); else g.add(id);
+    this._renderTokens();
+    if (g.size === 2 && typeof showToast === 'function') showToast('Tokens together: drag one to move them all (Esc lets go).');
+  },
+  _groupClear(){ if (!this._group || !this._group.size) return; this._group.clear(); this._renderTokens(); },
+  _groupBox(box){
+    const g = this._group || (this._group = new Set()), was = g.size;
+    (this._tokens || []).forEach(t => { if (t && t.x != null && t.x >= box.x0 && t.x <= box.x1 && t.y >= box.y0 && t.y <= box.y1) g.add(t.id); });
+    this._renderTokens();
+    if (g.size > 1 && was < 2 && typeof showToast === 'function') showToast(g.size + ' tokens together: drag one to move them all (Esc lets go).');
+  },
   // A box dragged on the map — mouse, pen or finger — while active() says
   // so: done(box in stage px, its outline on the map). Returns the off switch.
   _boxOnMap(active, done){
     const b = this._body;
     const onDown = e => {
-      if (!active()) return;
+      if (!active(e)) return;
       const st = b.querySelector('#map-stage');
       if (!st || !st.contains(e.target) || (e.button != null && e.button !== 0)) return;
       e.preventDefault(); e.stopPropagation();
@@ -1428,6 +1446,17 @@ registerPanel('battlemap',{
       const isPlayer = document.body.classList.contains('player-mode');
       if (isPlayer){ if (typeof paTab === 'undefined' || paTab !== 'map') return; }
       else { const win = this._body && this._body.closest('.window'); if (!win || !win.classList.contains('focused')) return; }
+      if (e.key === 'Escape' && this._group && this._group.size){ this._groupClear(); if (!this._tool && !this._selected) return; }
+      // The arrows move a group together: the one furthest that way first,
+      // so none is set beside another still to move.
+      { const gd = { ArrowLeft: [-1, 0], ArrowRight: [1, 0], ArrowUp: [0, -1], ArrowDown: [0, 1] }[e.key];
+        if (gd && !isPlayer && this._group && this._group.size > 1){
+          e.preventDefault();
+          const mem = [...this._group].map(id => (this._tokens || []).find(x => x && x.id === id)).filter(m => m && m.x != null);
+          mem.sort((p, q) => (q.x * gd[0] + q.y * gd[1]) - (p.x * gd[0] + p.y * gd[1]));
+          mem.forEach(m => this._keyMove(m, gd[0], gd[1]));
+          return;
+        } }
       if (e.key === 'Escape'){
         if (!this._tool && !this._selected) return;
         if (this._tool){ this._tool = ''; this._measureHide(); }
@@ -3205,6 +3234,7 @@ registerPanel('battlemap',{
       + ((extra && extra.why && mult > 1) || dt ? ' (costs ' + show(cost) + ')' : '');
     l.textContent = before || crawlNote ? show(ft) + unit + crawlNote + ' · ' + show(cost + before) + (speed != null ? ' / ' + show(speed) : '') + unit + ' this turn'
       : show(ft) + (speed != null ? ' / ' + show(speed) : '') + unit;
+    if (walked && walked.legs && walked.legs.length > 1) l.textContent += ' (' + walked.legs.map(show).join(' + ') + ')';
     l.classList.toggle('over', !!over);
     l.style.left = x1 + 'px'; l.style.top = y1 + 'px'; l.style.fontSize = (13 * k).toFixed(2) + 'px';
     l.style.transform = 'translate(' + (14 * k) + 'px, ' + (-30 * k) + 'px)';
@@ -3214,7 +3244,7 @@ registerPanel('battlemap',{
     return ft;
   },
   _measureLinger(){ clearTimeout(this._measureT); const m = this._body?.querySelector('#map-stage .bm-measure'); if (m) m.classList.add('fading'); this._measureT = setTimeout(() => { if (this._tool !== 'ruler') this._measureHide(); }, 1500); },
-  _measureHide(){ this._body?.querySelector('#map-stage .bm-measure')?.remove(); this._measureFt = null; if (this._tool !== 'ruler') this._rulerLast = null; },
+  _measureHide(){ this._body?.querySelector('#map-stage .bm-measure')?.remove(); this._measureFt = null; if (this._tool !== 'ruler'){ this._rulerLast = null; this._rulerLegs = null; } },
   // Measure from (ax, ay) to wherever the pointer goes, until it's let go.
   // Shared by a press on the map and a press on a token (with the ruler out,
   // pressing a token measures from it instead of moving it).
@@ -3223,24 +3253,44 @@ registerPanel('battlemap',{
   // the edge of one's space to the edge of the other's, height included (the
   // Turn View's measure, the one its attacks use). Middle to middle put a
   // Large ogre beside the fighter at 10 ft and ignored the eagle overhead.
-  _rulerDrag(ax, ay, touch, from){
+  //
+  // Waypoints: the measurement stays after it's let go, and pressing again
+  // on its end carries on from there — another leg, as many as wanted (the
+  // way round a pillar, a route through two doors) — with the whole length
+  // and each leg's on the label. Pressed anywhere else, it starts afresh.
+  // Mouse or finger alike: no key to hold. (px, py: where it was pressed.)
+  _rulerDrag(ax, ay, touch, from, px, py){
     const ref = this._body && (this._body.querySelector('#draw-canvas') || this._body.querySelector('#map-stage')); if (!ref) return;
-    this._measureShow(ax, ay, ax, ay);
+    const cs = this._csScreen() || 50, legs = this._rulerLegs;
+    const last = legs && legs.length ? legs[legs.length - 1] : null;
+    const goOn = !from && last && px != null && Math.hypot(px - last[0], py - last[1]) <= cs * 0.6;
+    const pts = goOn ? legs.slice() : [[ax, ay]];
+    if (goOn){ ax = last[0]; ay = last[1]; }
+    this._rulerLegs = null;
+    const showLegs = (bx, by) => {
+      if (pts.length < 2){ this._measureShow(ax, ay, bx, by); return [bx, by]; }
+      const all = pts.concat([[bx, by]]), each = [];
+      for (let i = 1; i < all.length; i++) each.push(this._feetBetweenPts(all[i - 1][0], all[i - 1][1], all[i][0], all[i][1], 0));
+      this._measureShow(pts[0][0], pts[0][1], bx, by, null, 0, null, 0, 0, { ft: each.reduce((a, b) => a + b, 0), pts: all, legs: each });
+      return [bx, by];
+    };
+    let end = showLegs(ax, ay);
     const T = panelDefs.turnview;
     if (from && T) T._mapCache = null;
     const to = (cx, cy) => {
       const p = this._stagePoint(cx, cy, ref);
       const on = from && T && typeof T._edgeFeet === 'function' ? this._tokenAt(p.x, p.y, from) : null;
-      if (on){ this._measureShow(ax, ay, on.x, on.y, null, 0, null, 0, 0, { ft: T._edgeFeet(from, on), pts: [] }); return; }
-      const b = this._rulerPoint(p.x, p.y); this._measureShow(ax, ay, b.x, b.y);
+      if (on){ this._measureShow(ax, ay, on.x, on.y, null, 0, null, 0, 0, { ft: T._edgeFeet(from, on), pts: [] }); end = null; return; }
+      const b = this._rulerPoint(p.x, p.y); end = showLegs(b.x, b.y);
     };
+    const done = () => { if (!from && end) this._rulerLegs = pts.concat([end]); };
     if (touch){
       const onMove = ev => { if (ev.touches.length !== 1) return; ev.preventDefault(); to(ev.touches[0].clientX, ev.touches[0].clientY); };
-      const onEnd = () => { document.removeEventListener('touchmove', onMove); document.removeEventListener('touchend', onEnd); document.removeEventListener('touchcancel', onEnd); };
+      const onEnd = () => { done(); document.removeEventListener('touchmove', onMove); document.removeEventListener('touchend', onEnd); document.removeEventListener('touchcancel', onEnd); };
       document.addEventListener('touchmove', onMove, { passive:false }); document.addEventListener('touchend', onEnd); document.addEventListener('touchcancel', onEnd);
     } else {
       const onMove = ev => to(ev.clientX, ev.clientY);
-      const onUp = () => { document.removeEventListener('mousemove', onMove); document.removeEventListener('mouseup', onUp); };
+      const onUp = () => { done(); document.removeEventListener('mousemove', onMove); document.removeEventListener('mouseup', onUp); };
       document.addEventListener('mousemove', onMove); document.addEventListener('mouseup', onUp);
     }
   },
@@ -4161,6 +4211,7 @@ registerPanel('battlemap',{
   },
   // A tap on the map with no tool up. Only a door's handle answers it.
   _tapMap(x, y, cx, cy){
+    if (this._group && this._group.size) this._groupClear();
     const nt = this._noteAt(x, y);
     if (nt){ this._showNoteCard(nt, cx, cy); return true; }
     const d = this._doorAt(x, y); if (!d) return false;
@@ -5310,7 +5361,13 @@ registerPanel('battlemap',{
     };
     // A redraw (another device moved a token) rebuilds the stage: the ruler's
     // line comes back rather than vanishing under the player's finger.
-    if (this._tool === 'ruler' && this._rulerLast) setTimeout(() => { if (this._tool === 'ruler' && this._rulerLast) this._measureShow(...this._rulerLast); }, 0);
+    if (this._tool === 'ruler' && this._rulerLast) setTimeout(() => {
+      if (this._tool !== 'ruler' || !this._rulerLast) return;
+      // (every leg, not the straight line from first to last)
+      const L = this._rulerLegs;
+      if (L && L.length > 2){ const each = []; for (let i = 1; i < L.length; i++) each.push(this._feetBetweenPts(L[i - 1][0], L[i - 1][1], L[i][0], L[i][1], 0)); this._measureShow(L[0][0], L[0][1], L[L.length - 1][0], L[L.length - 1][1], null, 0, null, 0, 0, { ft: each.reduce((a, b) => a + b, 0), pts: L, legs: each }); }
+      else this._measureShow(...this._rulerLast);
+    }, 0);
     this._drawAllStrokes();
     this._renderTokens();
     // Size the zoom wrappers to match the stage we just built. Must happen
@@ -5564,7 +5621,7 @@ registerPanel('battlemap',{
       if (this._tool === 'ruler'){
         e.preventDefault(); e.stopPropagation();
         const a = this._rulerPoint(x, y);
-        this._rulerDrag(a.x, a.y, false);
+        this._rulerDrag(a.x, a.y, false, null, x, y);
         return;
       }
       if (this._tool !== 'draw') return;
@@ -5651,7 +5708,7 @@ registerPanel('battlemap',{
       if (this._tool === 'ruler'){
         e.preventDefault(); e.stopPropagation();
         const a = this._rulerPoint(x, y);
-        this._rulerDrag(a.x, a.y, true);
+        this._rulerDrag(a.x, a.y, true, null, x, y);
         return;
       }
       if (this._tool !== 'draw') return;
@@ -6070,6 +6127,12 @@ registerPanel('battlemap',{
     // (A phone follows a tap with a made-up mouse press at the same spot; it
     // would be a second tap, and the door it opened would shut again.)
     scrollEl.addEventListener('mousedown', e => { if (e.button === 0 && Date.now() - (this._touchAt || 0) > 800) holdStart(e.clientX, e.clientY, e.target, false); });
+    // Shift+drag on the bare map (the DM's, no tool up): a box, and the tokens in it join the group.
+    if (!b._groupBoxWired && !document.body.classList.contains('player-mode')){
+      b._groupBoxWired = true;
+      this._boxOnMap(e => !!(e && e.shiftKey) && !this._tool && !this._fogTool && !this._wallFind && !this._wallErasing && !(e.target && e.target.closest && e.target.closest('.map-token')),
+        (box, rect) => { rect.remove(); this._groupBox(box); });
+    }
     scrollEl.addEventListener('touchstart', e => {
       this._touchAt = Date.now();
       if (e.touches.length === 1) holdStart(e.touches[0].clientX, e.touches[0].clientY, e.target, true);
@@ -7603,7 +7666,7 @@ registerPanel('battlemap',{
       // PCs only show their first name on the map ("Zindle" instead of the
       // full "Zindle \"Deathwhistle\" Farrago"). NPCs keep their full label.
       const displayLabel = this._tokenDisplayLabel(t);
-      el.className=`map-token ${t.isPC?'pc':'npc-t'} ${t.dead?'dead':''} ${this._selected===t.id?'selected':''}${hasIcon?' has-icon':''}`
+      el.className=`map-token ${t.isPC?'pc':'npc-t'} ${t.dead?'dead':''} ${this._selected===t.id?'selected':''}${hasIcon?' has-icon':''}${this._group && this._group.has(t.id) ? ' grouped' : ''}`
         + (t.hidden ? ' tok-hidden' : '') + (this._woundOf(t) ? ' ' + this._woundOf(t) : '');
       el.dataset.tid=t.id;
       el.title = this._tokenTitle(t) + (t.hidden ? ' · hidden from players' : '');
@@ -7735,6 +7798,9 @@ registerPanel('battlemap',{
         // something to move.
         if (this._tool === 'ruler'){ this._rulerDrag(t.x, t.y, false, t); return; }
         if (this._tool === 'area'){ const p = this._stagePoint(e.clientX, e.clientY, stage); this._areaPointerDown(p.x, p.y, e.clientX, e.clientY, false, t); return; }
+        // Shift+click (the DM's, no tool up): this token into the group, or out.
+        if (!isPlayer && e.shiftKey && !this._tool){ this._groupToggle(t.id); return; }
+        if (this._group && this._group.size && !this._group.has(t.id)) this._groupClear();
         // A player moves (or rubs out) only what is theirs.
         if (isPlayer && !sktPlayerMayMoveToken(t)) return;
 
@@ -7767,6 +7833,10 @@ registerPanel('battlemap',{
         // _applyViewScale — but a saved-map restore mid-drag still can.)
         this._drag = { moved:false, startPx:t.x, startPy:t.y };
         const _oaFrom = { x:t.x, y:t.y };   // origin for the opportunity-attack check
+        // Dragging one of a group moves the rest with it, as they stand.
+        const grp = !isPlayer && this._group && this._group.size > 1 && this._group.has(t.id)
+          ? [...this._group].filter(id => id !== t.id).map(id => { const m = (this._tokens || []).find(x => x && x.id === id); return m && m.x != null ? { t: m, el: stage.querySelector('.map-token[data-tid="' + CSS.escape(String(id)) + '"]'), sx: m.x, sy: m.y } : null; }).filter(Boolean)
+          : null;
 
         const onMove=ev=>{
           // Token positions are stored in stage-pixel coords, but the cursor
@@ -7784,6 +7854,7 @@ registerPanel('battlemap',{
           curPy = this._drag.startPy + dy;
           el.style.left=curPx+'px';
           el.style.top=curPy+'px';
+          if (grp) grp.forEach(m => { if (m.el){ m.el.style.left = (m.sx + curPx - this._drag.startPx) + 'px'; m.el.style.top = (m.sy + curPy - this._drag.startPy) + 'px'; } });
           this._auraFollow(t, curPx, curPy);
           this._measureMove(t, this._drag.startPx, this._drag.startPy, curPx, curPy);
           this._broadcastTokenTick(t.id, curPx, curPy);
@@ -7812,6 +7883,8 @@ registerPanel('battlemap',{
             if (this._fearBlocks(t, land, _oaFrom)){ land.x = _oaFrom.x; land.y = _oaFrom.y; land.moved = false; }
             { const ws = this._wallStop(t, land, _oaFrom, this._drag && this._drag.path); if (ws){ land.x = ws.x; land.y = ws.y; land.moved = false; } }
             t.x = land.x; t.y = land.y;
+            // The group: each where it stood, moved as far as this one went (on the map).
+            if (grp){ const ddx = t.x - _oaFrom.x, ddy = t.y - _oaFrom.y; grp.forEach(m => { const mh = (m.t.size || 1) * this._tokenUnitScreen() / 2; m.t.x = Math.max(mh, Math.min(stageW - mh, m.sx + ddx)); m.t.y = Math.max(mh, Math.min(stageH - mh, m.sy + ddy)); }); }
             if (land.moved) this._landingNote();
             this._noteTurnMove(t, _oaFrom, this._drag && this._drag.path);
             this._saveMap();
