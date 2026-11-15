@@ -2468,8 +2468,9 @@ registerPanel('turnview', {
   // big creature: whichever of its squares does best. Corners sit a hair
   // inside their square, so a wall drawn along a grid line isn't "touching"
   // a corner and missed.) → 0, 2, 5 or 'total'. Squares only.
-  _wallCover(c, t){
-    const A = this._tokenFor(c), T = this._tokenFor(t);
+  _wallCover(c, t){ return this._wallCoverAt(this._tokenFor(c), this._tokenFor(t)); },
+  // The same between two places ({x, y, size}): where a creature was, say.
+  _wallCoverAt(A, T){
     if (!A || !T || A.x == null || T.x == null || typeof sktSightSrc !== 'function') return 0;
     const m = this._map(); if (m.gridType === 'hex') return 0;
     const S = sktSightSrc(m); if (!S.walls.length) return 0;
@@ -5367,7 +5368,10 @@ registerPanel('turnview', {
       if (this._sideOf(c) === this._sideOf(mover)) return false;
       const t = this._tokenFor(c); if (!t) return false;
       const reach = this._reachOf(c);
-      return ft(t, at) <= reach && ft(t, now) > reach;   // had them, doesn't now
+      if (!(ft(t, at) <= reach && ft(t, now) > reach)) return false;   // had them, doesn't now
+      // …unless a wall stood between them (total cover): a goblin walking off
+      // along the far side of a wall was offered to the fighter through it.
+      return this._wallCoverAt(t, at) !== 'total';
     });
   },
   // Sentinel (the feat): a character who has it.

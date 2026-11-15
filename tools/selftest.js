@@ -23247,6 +23247,34 @@ for (const cls of Object.keys(rule)) for (let L = 1; L <= 20; L++) for (const sc
         closePanel('battlemap');
       }
     }
+    // -- Round 411: an opportunity attack isn't offered through a wall — a goblin walking off along the far side of one doesn't provoke the fighter; in the open it does --
+    {
+      const B = panelDefs.battlemap, TV = panelDefs.turnview;
+      let keepT = null, keepD = null, keepF, saved = false;
+      const keepC = JSON.stringify(state.combatants);
+      try {
+        openPanel('battlemap'); await sleep(600);
+        keepT = JSON.parse(JSON.stringify(B._tokens)); keepD = B._drawings.slice(); keepF = B._fog; saved = true;
+        const cs = B._csScreen();
+        const ul = B._tokens.find(t => t.cid === 'ulrick'), wf = B._tokens.find(t => t.cid === 'wolf');
+        B._tokens.forEach((t, i) => { if (t !== ul && t !== wf){ t.x = (15 + i) * cs + cs / 2; t.y = 12.5 * cs; } });
+        ul.x = 5.5 * cs; ul.y = 5.5 * cs; ul.size = 1; wf.x = 6.5 * cs; wf.y = 5.5 * cs; wf.size = 1;
+        state.combatants.forEach(c => { c.reactionUsed = false; if (c.id === 'wolf' || c.id === 'ulrick'){ c.hp = Math.max(1, c.hp || 1); c.conditions = []; } });
+        const wolf = state.combatants.find(x => x.id === 'wolf');
+        const from = { x: 6.5 * cs, y: 5.5 * cs };
+        const provokers = draw => { B._drawings = draw; B._saveMap(); TV._mapCache = null; wf.x = 9.5 * cs; B._saveMap(); TV._mapCache = null; const r = TV._provokedBy(wolf, from).map(c => c.id); wf.x = 6.5 * cs; return r; };
+        ok('in the open: the werewolf walking off provokes the fighter beside it', provokers([]).includes('ulrick'));
+        ok('…with a wall between them: it doesn’t', !provokers([{ k: 'tpl', id: 'r411w', shape: 'wall', pts: [6 * cs, 0, 6 * cs, 12 * cs] }]).includes('ulrick'));
+        ok('…an open door between them: it does', provokers([{ k: 'tpl', id: 'r411d', shape: 'wall', door: true, open: true, pts: [6 * cs, 5 * cs, 6 * cs, 6 * cs] }, { k: 'tpl', id: 'r411w1', shape: 'wall', pts: [6 * cs, 0, 6 * cs, 5 * cs] }, { k: 'tpl', id: 'r411w2', shape: 'wall', pts: [6 * cs, 6 * cs, 6 * cs, 12 * cs] }]).includes('ulrick'));
+      } catch(e){ ok('round 411 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
+      finally {
+        state.combatants = JSON.parse(keepC);
+        if (saved){ B._tokens = keepT; B._drawings = keepD; B._fog = keepF; try { B._saveMap(); } catch(e){} }
+        if (TV) TV._mapCache = null;
+        try { B._render(); } catch(e){}
+        closePanel('battlemap');
+      }
+    }
     // -- Class features: represented, not just text ------------------------
     {
       try {
