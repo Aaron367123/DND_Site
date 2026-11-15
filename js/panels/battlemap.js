@@ -1500,9 +1500,14 @@ registerPanel('battlemap',{
   // Whose eyes a screen sees with: a player's own creatures (their character,
   // their companions), or the whole party's when none of theirs is on the
   // map; the DM's Sight preview, the party's.
+  // (The DM's preview can look through one character's eyes — "See as" —
+  // when the party has split up; the party's otherwise.)
   _sightViewers(){
     const pcs = (this._tokens || []).filter(t => t && t.isPC && t.x != null && !t.dead);
-    if (!document.body.classList.contains('player-mode')) return pcs;
+    if (!document.body.classList.contains('player-mode')){
+      const one = this._seeAs && pcs.find(t => String(t.id) === String(this._seeAs));
+      return one ? [one] : pcs;
+    }
     const mine = (this._tokens || []).filter(t => t && t.x != null && !t.dead && typeof sktPlayerMayMoveToken === 'function' && sktPlayerMayMoveToken(t));
     return mine.length ? mine : pcs;
   },
@@ -5109,6 +5114,7 @@ registerPanel('battlemap',{
       // its sub-controls (paint mode, brush radius, hide/show all) appear.
       +'<button class="btn '+(this._fog!==null?'active':'')+'" data-mact="fog-toggle" style="flex-shrink:0" title="Toggle Fog of War">'+ICO('i-cloud')+'<span class="bt-l">Fog</span></button>'
       +(this._sightSrc().on ? '<button class="btn '+(this._dmSight?'active':'')+'" data-mact="dm-sight" style="flex-shrink:0" title="Shade the map as the party sees it: light, darkvision and walls">'+ICO('i-eye')+'<span class="bt-l">Sight</span></button>' : '')
+      +(this._sightSrc().on && this._dmSight ? (() => { const pcs = (this._tokens || []).filter(t => t && t.isPC && t.x != null && !t.dead); return pcs.length > 1 ? '<select id="bm-seeas" title="Whose eyes the shade is for" style="flex-shrink:0;max-width:130px;font-size:var(--fs-sm);padding:2px 4px"><option value="">The party</option>' + pcs.map(t => '<option value="' + esc(String(t.id)) + '"' + (String(this._seeAs) === String(t.id) ? ' selected' : '') + '>' + esc(this._tokenDisplayLabel ? this._tokenDisplayLabel(t) : t.label) + '</option>').join('') + '</select>' : ''; })() : '')
       +(this._fog!==null?'<button class="btn icon-btn '+(this._fogTool?'active':'')+'" data-mact="fog-paint" style="flex-shrink:0" title="Paint to reveal fog">'+ICO('i-pencil')+'</button>':'')
       +(this._fog!==null&&this._fogTool?'<input type="range" id="fog-radius" min="1" max="5" value="'+(this._fogRadius||1)+'" style="width:50px;flex-shrink:0" title="Brush size">':'')
       +(this._fog!==null?'<button class="btn icon-btn" data-mact="fog-hide-all" style="flex-shrink:0" title="Hide entire map (fog everything)">'+ICO('i-eye-off')+'</button>':'')
@@ -5288,6 +5294,8 @@ registerPanel('battlemap',{
     // Draw canvas needs to receive clicks for the pencil AND for the eraser
     // (to remove strokes). Other tools/no-tool let clicks pass through.
     drawCanvas.style.pointerEvents = (this._tool === 'draw' || this._tool === 'erase' || this._tool === 'area' || this._tool === 'ruler') ? 'auto' : 'none';
+    const saSel = this._body.querySelector('#bm-seeas');
+    if (saSel) saSel.onchange = () => { this._seeAs = saSel.value || null; this._renderSight(); };
     const flSel = this._body.querySelector('#bm-floor');
     if (flSel) flSel.onchange = () => this._switchFloor(flSel.value);
     const tplSel = this._body.querySelector('#tpl-shape');

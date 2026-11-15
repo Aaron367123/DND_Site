@@ -23310,6 +23310,37 @@ for (const cls of Object.keys(rule)) for (let L = 1; L <= 20; L++) for (const sc
         closePanel('battlemap');
       }
     }
+    // -- Round 413: the DM's Sight can be seen as one character — the party split by a wall, each sees their own side --
+    {
+      const B = panelDefs.battlemap;
+      let keepT = null, keepD = null, keepF, keepL, keepS, keepSA, saved = false;
+      try {
+        openPanel('battlemap'); await sleep(600);
+        keepT = JSON.parse(JSON.stringify(B._tokens)); keepD = B._drawings.slice(); keepF = B._fog; keepL = B._light; keepS = B._dmSight; keepSA = B._seeAs; saved = true;
+        const cs = B._csScreen();
+        const zo = B._tokens.find(t => t.cid === 'zoey'), ul = B._tokens.find(t => t.cid === 'ulrick');
+        B._tokens = [zo, ul];
+        zo.x = 2.5 * cs; zo.y = 5.5 * cs; zo.lt = { b: 20, d: 20 }; zo.dv = 0;
+        ul.x = 9.5 * cs; ul.y = 5.5 * cs; ul.lt = { b: 20, d: 20 }; ul.dv = 0;
+        B._drawings = [{ k: 'tpl', id: 'r413w', shape: 'wall', pts: [6 * cs, 0, 6 * cs, 14 * cs] }];
+        B._fog = null; B._light = 'dark'; B._dmSight = true; B._seeAs = null; B._render(); await sleep(200);
+        const sel = B._body.querySelector('#bm-seeas');
+        ok('Sight on, the party split: “See as” — the party, or one of them', !!sel && sel.options.length === 3 && sel.options[0].textContent === 'The party');
+        B._renderSight();
+        const a = (sx, sy) => { const cv = B._body.querySelector('#sight-layer'); const k = cv.width / B._cols; return cv.getContext('2d').getImageData(Math.floor(sx / cs * k), Math.floor(sy / cs * k), 1, 1).data[3]; };
+        const left = [3.5 * cs, 5.5 * cs], right = [8.5 * cs, 5.5 * cs];
+        ok('…the party: both rooms seen', a(...left) < 20 && a(...right) < 20, JSON.stringify([a(...left), a(...right)]));
+        sel.value = String(zo.id); sel.dispatchEvent(new Event('change')); await sleep(60);
+        ok('…as Zoey: her room seen, the other side of the wall not', a(...left) < 20 && a(...right) > 100, JSON.stringify([a(...left), a(...right)]));
+        sel.value = String(ul.id); sel.dispatchEvent(new Event('change')); await sleep(60);
+        ok('…as Ulrick: the other way round', a(...left) > 100 && a(...right) < 20, JSON.stringify([a(...left), a(...right)]));
+      } catch(e){ ok('round 413 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
+      finally {
+        if (saved){ B._tokens = keepT; B._drawings = keepD; B._fog = keepF; B._light = keepL; B._dmSight = keepS; B._seeAs = keepSA; }
+        try { B._render(); } catch(e){}
+        closePanel('battlemap');
+      }
+    }
     // -- Class features: represented, not just text ------------------------
     {
       try {
@@ -26965,6 +26996,49 @@ for (const cls of Object.keys(rule)) for (let L = 1; L <= 20; L++) for (const sc
       finally {
         if (saved){ B._tokens = keepT; B._drawings = keepD; B._fog = keepF; B._snapToGrid = keepSnap; }
         try { B._render(); } catch(e){}
+        paTab = keepTab; try { paRender(); } catch(e){}
+      }
+    }
+    // -- Round 414: a screen with no character of its own (the TV) follows the turn on the map — but not to a creature the players can't see --
+    if (PLAYER){
+      const keepTab = paTab, B = panelDefs.battlemap;
+      const keepMe = localStorage.getItem('skt-me-v1'), keepA = state.activeCombatantId, keepR = state.combatRound;
+      let keepT = null, keepF, saved = false;
+      try {
+        try { localStorage.removeItem('skt-me-v1'); } catch(e){}
+        paTab = 'map'; paRender(); await sleep(900);
+        ok('a screen with no character (the TV)', !paPc());
+        keepT = JSON.parse(JSON.stringify(B._tokens)); saved = true;
+        const cs = B._csScreen();
+        B._applyViewScale(2.5); B._render(); await sleep(200);
+        const tokOf = id => B._tokens.find(t => t.cid === id);
+        const ul = tokOf('ulrick'), og = tokOf('ogre1');
+        keepF = B._fog; B._fog = null;   // (the test map's fog would hide the ogre: a turn not followed, rightly)
+        ul.x = 6.5 * cs; ul.y = 6.5 * cs; og.x = 13.5 * cs; og.y = 8.5 * cs; delete og.hidden;
+        B._render(); await sleep(150);
+        const off = id => { const sc = document.querySelector('.pa-mount #map-scroll'), el = document.querySelector('.pa-mount .map-token[data-tid="' + tokOf(id).id + '"]'); if (!sc || !el) return null; const r = el.getBoundingClientRect(), s = sc.getBoundingClientRect(); return Math.hypot(r.left + r.width / 2 - s.left - s.width / 2, r.top + r.height / 2 - s.top - s.height / 2); };
+        state.combatRound = 7; state.activeCombatantId = 'ulrick'; paRender(); await sleep(900);
+        ok('…the turn passes to Ulrick: the map goes to him', off('ulrick') != null && off('ulrick') < 40, off('ulrick'));
+        state.activeCombatantId = 'ogre1'; paRender(); await sleep(900);
+        ok('…to the ogre: the map goes to it', off('ogre1') != null && off('ogre1') < 40, off('ogre1'));
+        // A hidden creature's turn: the map stays put
+        state.activeCombatantId = 'ulrick'; paRender(); await sleep(900);
+        og.hidden = true; B._render(); await sleep(150);
+        const before = document.querySelector('.pa-mount #map-scroll').scrollLeft;
+        state.activeCombatantId = 'ogre1'; paRender(); await sleep(900);
+        ok('…a hidden creature’s turn: the map stays where it was', Math.abs(document.querySelector('.pa-mount #map-scroll').scrollLeft - before) < 2);
+        // A phone with a character keeps to its own: someone else's turn doesn't move it
+        delete og.hidden; B._render(); await sleep(150); localStorage.setItem('skt-me-v1', JSON.stringify({ pcId: 'zoey', id: 'zoey', name: 'zoey' })); state.activeCombatantId = 'ulrick'; paRender(); await sleep(400);
+        paMapHeld = true;   // (the player has touched their map: it no longer settles on their token by itself)
+        const mine = document.querySelector('.pa-mount #map-scroll').scrollLeft;
+        state.combatRound = 8; state.activeCombatantId = 'ogre1'; paRender(); await sleep(900);   // (a turn it hasn't seen)
+        ok('a phone with its own character isn’t moved by another’s turn', !!paPc() && Math.abs(document.querySelector('.pa-mount #map-scroll').scrollLeft - mine) < 2);
+      } catch(e){ ok('round 414 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
+      finally {
+        if (keepMe != null) localStorage.setItem('skt-me-v1', keepMe);
+        state.activeCombatantId = keepA; state.combatRound = keepR;
+        if (saved){ B._tokens = keepT; B._fog = keepF; }
+        try { B._applyViewScale(1); B._render(); } catch(e){}
         paTab = keepTab; try { paRender(); } catch(e){}
       }
     }

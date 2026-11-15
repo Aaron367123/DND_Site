@@ -715,6 +715,7 @@ function paRenderTurn(){
   const list = all.filter(c => !hid.has(c.id));
   if (!paShared().has('combat') || !list.length){ el.innerHTML = ''; el.hidden = true; paTurnAlert(null, false, null); return; }
   el.hidden = false;
+  paFollowTurn();
   const meC = paCombatant();
   const activeId = state.activeCombatantId;
   const i = all.findIndex(c => c.id === activeId);
@@ -962,6 +963,26 @@ function paMyToken(){
 const PA_MIN_SQUARE = 32;
 function paCenterOnMe(smooth, zoomIn){
   const t = paMyToken(); if (!t) return false;
+  return paCenterOnToken(t, smooth, zoomIn);
+}
+// A screen with no character of its own — the table's TV — keeps whoever's
+// turn it is in view: when the turn passes, the map goes to them. Not to a
+// creature the players can't see (hidden by the DM, under the fog), which
+// would give it away.
+let paFollowKey = null;
+function paFollowTurn(){
+  if (paPc() || paTab !== 'map') return;
+  const B = panelDefs.battlemap; if (!B || !B._body) return;
+  const id = state.activeCombatantId, key = (state.combatRound || 1) + ':' + id;
+  if (!id || key === paFollowKey) return;
+  paFollowKey = key;
+  const c = (state.combatants || []).find(x => x.id === id); if (!c) return;
+  const t = typeof sktTokenForCombatant === 'function' ? sktTokenForCombatant(B._tokens || [], c) : null;
+  if (!t || t.hidden || (typeof B._shownToPlayers === 'function' && !B._shownToPlayers(t))) return;
+  setTimeout(() => paCenterOnToken(t, true), 60);
+}
+function paCenterOnToken(t, smooth, zoomIn){
+  if (!t) return false;
   const host = document.getElementById('pa-screen');
   const sc = host && host.querySelector('.pa-mount #map-scroll');
   const B = panelDefs.battlemap;
@@ -978,7 +999,7 @@ function paCenterOnMe(smooth, zoomIn){
   const r = el.getBoundingClientRect(), s = sc.getBoundingClientRect();
   sc.scrollTo({ left: sc.scrollLeft + (r.left + r.width / 2) - (s.left + s.width / 2),
                 top: sc.scrollTop + (r.top + r.height / 2) - (s.top + s.height / 2), behavior: smooth ? 'smooth' : 'auto' });
-  paMapLast = t.x + ',' + t.y;
+  if (t === paMyToken()) paMapLast = t.x + ',' + t.y;
   return true;
 }
 function paWatchMap(host){
