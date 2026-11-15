@@ -2777,6 +2777,16 @@ body.player-mode #campaign-btn{display:none !important}
 }
 /* A ping by finger: said on a phone's map, not on a computer's. */
 .map-foot-touch{display:none}
+/* In a fight: "Moved 15 / 30 ft" and Take back, in place of the hints. */
+.map-foot-move{display:inline-flex;align-items:center;gap:8px;white-space:nowrap}
+.map-foot-move[hidden]{display:none}
+.map-foot-move strong{color:var(--text)}
+.map-foot-move.over strong{color:var(--danger)}
+.map-foot.has-move .map-foot-hint,.map-foot.has-move .map-foot-touch{display:none}
+/* A touch-sized button (36 px, as small buttons are on a phone) that doesn't
+   make the strip taller: the phone's map tools float just above it. */
+.map-foot .map-foot-back{padding:0 10px;font-size:var(--fs-xs);line-height:1.5;margin:-2px 0}
+@media (pointer:coarse){.map-foot .map-foot-back{min-height:36px;padding:0 14px;margin:-9px 0}}
 #map-scroll.map-drop-active{outline:2px dashed var(--accent);outline-offset:-4px;background:rgba(212,165,116,.06)}
 .map-container{flex:1;overflow:hidden;position:relative;cursor:crosshair}
 #battle-map-canvas{display:block;image-rendering:pixelated}

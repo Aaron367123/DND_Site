@@ -181,6 +181,21 @@ const window = {};
       if (t2 == null) return { ok: false, why: 'the ring stayed on Zoey after the turn passed' };
       return lat(t1);
     });
+    await step('Zoey walks away from a goblin on her phone → the DM is asked about its opportunity attack; she taps Take back → back on the DM’s map, the question gone', async () => {
+      const set = await dm.ev("openPanel('battlemap'); openPanel('turnview'); await new Promise(r=>setTimeout(r,500)); const B = panelDefs.battlemap, T = panelDefs.turnview, cs = B._csScreen(); const z = state.combatants.find(c => /zoey/i.test(c.name)); if (!z) return 'no Zoey in the fight'; const zt = sktTokenForCombatant(B._tokens, z); if (!zt) return 'no token for Zoey'; const g = state.combatants.find(c => !c.isPC && (c.hp || 0) > 0 && sktTokenForCombatant(B._tokens, c)); if (!g) return 'no goblin on the map'; const gt = sktTokenForCombatant(B._tokens, g); delete gt.hidden; gt.x = zt.x + cs; gt.y = zt.y; delete gt.elev; delete zt.elev; delete zt.mvBack; g.reactionUsed = false; z.reactionUsed = false; state.combatRound = Math.max(1, +state.combatRound || 0); state.activeCombatantId = z.id; T._pending = null; save(); B._saveMap(); B._render(); T._mapCache = null; T._render(); const ft = T._ftBetween(g, z); return ft != null && ft <= 5 ? 'ok:' + zt.x : 'not next to each other: ' + ft");
+      if (!/^ok:/.test(set)) return { ok: false, why: set };
+      const x0 = +set.slice(3);
+      const ready = await W(pl, "paTab = 'map'; paRender(); const B = panelDefs.battlemap, z = state.combatants.find(c => c.id === state.activeCombatantId), t = z && sktTokenForCombatant(B._tokens, z); return /zoey/i.test(z && z.name) && t && Math.abs(t.x - " + x0 + ") < 1 && !!document.querySelector('#pa-screen .map-foot-move:not([hidden])') ? 1 : 0", 10000);
+      if (ready == null) return { ok: false, why: 'the phone never had Zoey’s turn on its map' };
+      await pl.ev("const B = panelDefs.battlemap, z = state.combatants.find(c => c.id === state.activeCombatantId), t = sktTokenForCombatant(B._tokens, z); B._keyMove(t, -1, 0); B._keyMove(t, -1, 0); return 1");
+      const asked = await W(dm, "const T = panelDefs.turnview, o = T._pending; return o && o.kind === 'move' && /zoey/i.test(o.mover.name) && !!T._body.querySelector('.tv-react [data-tv=\"oa\"][data-id]') ? 1 : 0", 10000);
+      if (asked == null) return { ok: false, why: 'the DM was never asked: ' + await dm.ev("const B = panelDefs.battlemap, T = panelDefs.turnview, z = state.combatants.find(c => c.id === state.activeCombatantId), t = sktTokenForCombatant(B._tokens, z); return JSON.stringify({ x0: " + x0 + ", x: t && t.x, mv: t && t.mv, pending: T._pending && T._pending.kind })") };
+      const btn = await pl.ev("for (let i = 0; i < 2; i++){ const b = document.querySelector('#pa-screen .map-foot-back'); if (!b) return i; b.click(); } return 2");
+      if (btn !== 2) return { ok: false, why: 'Take back on the phone: tapped ' + btn + ' of 2 times' };
+      const back = await W(dm, "const B = panelDefs.battlemap, T = panelDefs.turnview, z = state.combatants.find(c => c.id === state.activeCombatantId), t = sktTokenForCombatant(B._tokens, z); return !T._pending && t && Math.abs(t.x - " + x0 + ") < 1 && sktTurnMoved(t) === 0 && !t.mvBack ? 1 : 0", 10000);
+      if (back == null) return { ok: false, why: 'the DM: ' + await dm.ev("const B = panelDefs.battlemap, T = panelDefs.turnview, z = state.combatants.find(c => c.id === state.activeCombatantId), t = sktTokenForCombatant(B._tokens, z); return JSON.stringify({ x0: " + x0 + ", x: t && t.x, mv: t && t.mv, pending: T._pending && T._pending.kind })") };
+      return lat(asked);
+    });
     await step('DM hides a goblin on the map → it leaves the phone’s turn strip; revealed → back by name', async () => {
       const id = await dm.ev("const c = state.combatants.filter(c => !c.isPC).pop(); if (!c) return ''; c.e2eName = c.name; c.name = 'e2e Sneak'; save(); openPanel('battlemap'); await new Promise(r=>setTimeout(r,300)); const B = panelDefs.battlemap; B._tokens = B._tokens.filter(t => t.id !== 'e2e-sneak'); B._tokens.push({ id: 'e2e-sneak', cid: c.id, label: 'e2e Sneak', x: 400, y: 300, size: 1, hidden: true }); B._saveMap(); B._render(); return c.id");
       if (!id) return { ok: false, why: 'no monster in the fight' };

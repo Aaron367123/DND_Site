@@ -1270,6 +1270,7 @@ registerPanel('battlemap',{
         el.classList.toggle('turn', this._isTurn(t));
         el.title = this._tokenTitle(t) + (t.hidden ? ' · hidden from players' : '');
       });
+      this._footMove();
       return;
     }
     this._structSig = struct;
@@ -1607,6 +1608,7 @@ registerPanel('battlemap',{
   _setElev(t, v){
     v = Math.max(-1000, Math.min(10000, Math.round(+v || 0)));
     const was = +t.elev || 0, dz = v - was; if (!dz) return;
+    if (typeof sktMoveBackMark === 'function') sktMoveBackMark(this._tokens, t, t.x, t.y);
     if (v) t.elev = v; else delete t.elev;
     if (typeof sktDragHeld === 'function') sktDragHeld(this._tokens, t, 0, 0, dz);
     if (typeof sktNoteMove === 'function' && sktNoteMove(this._tokens, t, Math.abs(dz), 0)) panelDefs.turnview?._syncMoved?.();
@@ -2634,6 +2636,76 @@ registerPanel('battlemap',{
     const pct = (hp / max) * 100;
     return pct <= 25 ? 'wound-low' : pct <= 50 ? 'wound-half' : '';
   },
+  // ─── Moved this turn, and Take back ───────────────────────────────────────
+  // The creature whose turn it is, when this screen moves it: the DM's any
+  // creature's, a phone only its own (the TV none).
+  _myTurnTok(){
+    if (typeof state === 'undefined' || !(+state.combatRound > 0) || state.activeCombatantId == null) return null;
+    const c = (state.combatants || []).find(x => x && x.id === state.activeCombatantId);
+    const t = c && typeof sktTokenForCombatant === 'function' ? sktTokenForCombatant(this._tokens || [], c) : null;
+    if (!t) return null;
+    if (document.body.classList.contains('player-mode') && !sktPlayerMayMoveToken(t)) return null;
+    return t;
+  },
+  // Under the map: "Moved 15 / 30 ft", red past it, and Take back while
+  // there is a move this turn to take back. A phone showed the count only
+  // while a finger was dragging.
+  _footMove(){
+    const f = this._body && this._body.querySelector('.map-foot'), el = f && f.querySelector('.map-foot-move');
+    if (!el) return;
+    const t = this._myTurnTok(), mi = t && this._moveInfo(t);
+    f.classList.toggle('has-move', !!mi);
+    if (!mi){ el.hidden = true; el.dataset.k = ''; el.innerHTML = ''; return; }
+    el.hidden = false;
+    const back = typeof sktMoveBackable === 'function' && sktMoveBackable(this._tokens, t);
+    const key = [t.id, mi.moved, mi.budget, back].join('|');
+    if (el.dataset.k === key) return;
+    el.dataset.k = key;
+    const c = this._combatantFor(t), nm = (c && c.name) || t.label || '';
+    el.classList.toggle('over', mi.budget != null && mi.moved > mi.budget);
+    el.innerHTML = '<span title="' + esc(nm) + '’s movement this turn">Moved <strong>' + mi.moved + '</strong>' + (mi.budget != null ? ' / ' + mi.budget : '') + ' ft</span>'
+      + (back ? '<button class="btn small map-foot-back" type="button" title="' + esc(nm) + ' back where it stood before its last move, and those feet back">Take back</button>' : '');
+    const b = el.querySelector('.map-foot-back');
+    if (b) b.addEventListener('click', e => { e.stopPropagation(); this._takeBack(); });
+  },
+  // The last move of the creature whose turn it is, undone: where it stood,
+  // what it holds, the feet. An opportunity attack it drew and nobody has
+  // answered goes with it (one answered fixes the move: see the Turn View).
+  _takeBack(){
+    const t = this._myTurnTok();
+    if (!t || typeof sktMoveBack !== 'function' || !sktMoveBack(this._tokens, t)) return false;
+    const T = (typeof panelDefs !== 'undefined') && panelDefs.turnview;
+    if (T && typeof T._moveTakenBack === 'function') T._moveTakenBack(t);
+    this._measureHide();
+    this._saveMap();
+    this._renderTokens();
+    if (T && typeof T._syncMoved === 'function') T._syncMoved();
+    return true;
+  },
+  // A move made on another screen (a player's phone): the DM's Turn View
+  // asks about opportunity attacks as it does for one made here. Measured:
+  // walking Zoey away from an ogre on her phone asked nothing at all.
+  // _turnTokAt before the tokens are replaced, _turnTokMoved after. A move
+  // taken back (fewer feet walked than before) withdraws the question.
+  _turnTokAt(){
+    if (document.body.classList.contains('player-mode') || typeof sktTurnMoved !== 'function') return null;
+    if (typeof state === 'undefined' || !(+state.combatRound > 0) || state.activeCombatantId == null) return null;
+    const c = (state.combatants || []).find(x => x && x.id === state.activeCombatantId);
+    const t = c && sktTokenForCombatant(this._tokens || [], c);
+    return t && t.id != null ? { id: t.id, x: t.x, y: t.y, elev: +t.elev || 0, ft: sktTurnMoved(t) } : null;
+  },
+  _turnTokMoved(was){
+    if (!was) return;
+    const t = (this._tokens || []).find(k => k && k.id === was.id);
+    if (!t || (t.x === was.x && t.y === was.y && (+t.elev || 0) === was.elev)) return;
+    const T = (typeof panelDefs !== 'undefined') && panelDefs.turnview;
+    if (!T || !T._body) return;
+    T._mapCache = null;
+    try {
+      if (sktTurnMoved(t) < was.ft){ if (typeof T._moveTakenBack === 'function') T._moveTakenBack(t); }
+      else if (typeof T._checkProvoke === 'function') T._checkProvoke(t, { x: was.x, y: was.y, elev: was.elev });
+    } catch(e){}
+  },
   // Whose turn it is, in a fight that's under way: their token wears a ring.
   _isTurn(t){
     if (!t || typeof state === 'undefined' || !(+state.combatRound > 0) || state.activeCombatantId == null) return false;
@@ -3253,6 +3325,7 @@ registerPanel('battlemap',{
   // A grappler brings what it holds along.
   _noteTurnMove(t, from, path){
     if (!from || (t.x === from.x && t.y === from.y)) return;
+    if (typeof sktMoveBackMark === 'function') sktMoveBackMark(this._tokens, t, from.x, from.y);
     if (typeof sktDragHeld === 'function') sktDragHeld(this._tokens, t, t.x - from.x, t.y - from.y);
     // A held creature moved out of its grappler's reach is free.
     if (!document.body.classList.contains('player-mode') && panelDefs.combat?._releaseGrapples?.()){ panelDefs.combat._render?.(); panelDefs.turnview?._render?.(); }
@@ -4745,12 +4818,20 @@ registerPanel('battlemap',{
     const byId = new Map();
     incoming.forEach(t => { if (t && t.id != null) byId.set(t.id, t); });
     let moved = false;
+    const turnWas = this._turnTokAt();
     this._tokens.forEach(t => {
       const src = (t && t.id != null) ? byId.get(t.id) : null;
       if (!src) return;
+      const was = moved;
       if (typeof src.x === 'number' && src.x !== t.x){ t.x = src.x; moved = true; }
       if (typeof src.y === 'number' && src.y !== t.y){ t.y = src.y; moved = true; }
+      // The feet walked come with the move that walked them (as on Firebase).
+      if (moved && !was){
+        if (src.mv && typeof src.mv === 'object') t.mv = src.mv; else delete t.mv;
+        if (src.mvBack && typeof src.mvBack === 'object') t.mvBack = src.mvBack; else delete t.mvBack;
+      }
     });
+    if (moved) this._turnTokMoved(turnWas);
     return moved;
   },
 
@@ -4800,6 +4881,7 @@ registerPanel('battlemap',{
       this._bgMapScale, this._mapRotation, this._gridOffsetX, this._gridOffsetY, this._floorName || '', this._exploreEpoch || 0].join('|');
     const structBefore = struct();
 
+    const turnWas = src.tokens ? this._turnTokAt() : null;
     if (src.tokens)   this._tokens   = src.tokens;
     if (src.cellSize) this._cellSize = src.cellSize;
     if (src.cols)     this._cols     = src.cols;
@@ -4849,6 +4931,7 @@ registerPanel('battlemap',{
     const looksChanged = looks() !== looksBefore;
     this._bgMapPath = nextPath;
 
+    this._turnTokMoved(turnWas);
     // Three tiers, most expensive first. Only the last one is common.
     if (nextPath && (nextPath !== prevPath || !this._bgMapNaturalW)){
       // A different map, or one whose image this device hasn't loaded yet.
@@ -5387,6 +5470,9 @@ registerPanel('battlemap',{
       +'<span>1 '+(this._gridType==='hex'?'hex':'sq')+' = <strong>'+_bmDist(ft)+'</strong></span>'
       +'<span class="bt-l" style="color:var(--text-dim)">'+this._cols+'×'+this._rows+' '+(this._gridType==='hex'?'hexes':'squares')+' ('+_bmDist(this._cols*ft)+' × '+_bmDist(this._rows*ft)+')</span>'
       +'<span style="flex:1"></span>'
+      // In a fight: how far the creature whose turn it is has moved, and
+      // Take back (see _footMove).
+      +'<span class="map-foot-move" hidden></span>'
       // Hidden on touch by CSS: there is no right-click on a phone, so this
       // hint spent a row of a 390px screen telling you to do something you
       // can't.
@@ -7787,6 +7873,7 @@ registerPanel('battlemap',{
   _renderTokens(){
     const b=this._body;if(!b)return;
     const stage=b.querySelector('#map-stage');if(!stage)return;
+    this._footMove();
     // For fog-cell mapping and default placement we want the on-screen cell
     // size (tokens are stored in stage-pixel coords). Visual diameter still
     // uses the natural cellSize × scale via tokScale below.

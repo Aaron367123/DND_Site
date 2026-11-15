@@ -5348,6 +5348,13 @@ registerPanel('turnview', {
     this._render();
   },
 
+  // The mover's last move taken back: the opportunity attack it drew, unanswered, goes.
+  _moveTakenBack(tok){
+    const o = this._pending;
+    if (!o || o.kind !== 'move' || !o.mover || !tok) return;
+    const mt = this._tokenFor(o.mover);
+    if (mt && (mt === tok || (mt.id != null && mt.id === tok.id))){ this._pending = null; if (this._body) this._render(); }
+  },
   _provokedBy(mover, fromXY){
     const now = this._tokenFor(mover);
     if (!now) return [];
@@ -5428,6 +5435,13 @@ registerPanel('turnview', {
     this._pending = null;
     if (!who){ this._render(); return; }
     who.reactionUsed = true;
+    // Someone answered the move with an attack: it happened, and can't be
+    // taken back now.
+    { const B = this._bm(), mt = this._tokenFor(o.mover), live = mt && B && (B._tokens || []).find(k => k && k.id === mt.id);
+      const had = !!((mt && mt.mvBack) || (live && live.mvBack));
+      if (mt) delete mt.mvBack;
+      if (live) delete live.mvBack;
+      if (had && live){ try { B._saveMap(); B._footMove && B._footMove(); } catch(e){} } }
     const list = this._attacksFor(who);
     const melee = list.find(a => !a.save && (a.pc ? a.dmgText : (a.parts || []).length));
     if (melee){
@@ -5892,6 +5906,7 @@ registerPanel('turnview', {
       // The feet walked, on the turn's count — the battle map's own measure
       // when it is set up (it knows a hex grid), else the squares here.
       // A grappler brings what it holds along.
+      if (d.from && (tok.x !== d.from.x || tok.y !== d.from.y) && typeof sktMoveBackMark === 'function') sktMoveBackMark(this._map().tokens, tok, d.from.x, d.from.y);
       const held = d.from && typeof sktDragHeld === 'function' ? sktDragHeld(this._map().tokens, tok, tok.x - d.from.x, tok.y - d.from.y) : [];
       if (d.from && typeof sktNoteMove === 'function' && (tok.x !== d.from.x || tok.y !== d.from.y)){
         const cs = this._cs() || 50, prev = typeof sktTurnDiag === 'function' ? sktTurnDiag(tok) : 0;
@@ -5905,7 +5920,7 @@ registerPanel('turnview', {
       }
       if (B && B._body){
         const live = (B._tokens || []).find(x => x && x.id === tok.id);
-        if (live && live !== tok){ live.x = tok.x; live.y = tok.y; live.mv = tok.mv; }
+        if (live && live !== tok){ live.x = tok.x; live.y = tok.y; live.mv = tok.mv; if (tok.mvBack) live.mvBack = tok.mvBack; else delete live.mvBack; }
         held.forEach(h => { const lh = (B._tokens || []).find(x => x && x.id === h.id); if (lh && lh !== h){ lh.x = h.x; lh.y = h.y; } });
         B._renderTokens?.(); B._saveMap?.();
       }

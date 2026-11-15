@@ -2983,6 +2983,42 @@ function sktTurnDiag(tok){
 // Prone, it crawls: "each foot of movement costs 1 extra foot".
 // `extra`: feet on top that crawling doesn't multiply — difficult terrain's
 // extra foot a foot (crawling through rubble is 3 ft a foot, not 4).
+// TAKING A MOVE BACK. A drag that went wrong (a finger slipped on a phone)
+// used the feet up for good: nothing put the token back or gave them back.
+// Each move a creature makes on its own turn is kept now, the last eight:
+// where it stood (and how high), what it had walked by then, and where the
+// creatures it holds stood. Mark before the move changes anything.
+// sktMoveBack puts the last one back. Only on that turn.
+function sktMoveBackMark(tokens, tok, fromX, fromY){
+  if (!tok) return;
+  const c = sktMoverOf(tokens, tok);
+  if (!c){ delete tok.mvBack; return; }
+  const k = sktMoveKey();
+  const st = tok.mvBack && tok.mvBack.k === k && Array.isArray(tok.mvBack.s) ? tok.mvBack : { k, s: [] };
+  const step = { x: fromX, y: fromY, e: +tok.elev || 0 };
+  if (tok.mv && tok.mv.k === k) step.mv = Object.assign({}, tok.mv);
+  const held = sktHeldBy(c).map(o => sktTokenForCombatant(tokens, o)).filter(o => o && o !== tok && o.id != null)
+    .map(o => [o.id, o.x, o.y, +o.elev || 0]);
+  if (held.length) step.h = held;
+  st.s.push(step);
+  if (st.s.length > 8) st.s.shift();
+  tok.mvBack = st;
+}
+function sktMoveBackable(tokens, tok){
+  const st = tok && tok.mvBack;
+  return !!(st && st.k === sktMoveKey() && Array.isArray(st.s) && st.s.length && sktMoverOf(tokens, tok));
+}
+// → the step taken back, or null when there is none to take.
+function sktMoveBack(tokens, tok){
+  if (!sktMoveBackable(tokens, tok)) return null;
+  const st = tok.mvBack, s = st.s.pop();
+  const put = (t, x, y, e) => { t.x = x; t.y = y; if (+e) t.elev = +e; else delete t.elev; };
+  put(tok, s.x, s.y, s.e);
+  if (s.mv) tok.mv = s.mv; else delete tok.mv;
+  (s.h || []).forEach(h => { const o = (tokens || []).find(t => t && t.id === h[0]); if (o) put(o, h[1], h[2], h[3]); });
+  if (!st.s.length) delete tok.mvBack;
+  return s;
+}
 function sktNoteMove(tokens, tok, ft, diag, extra){
   const c = sktMoverOf(tokens, tok);
   if (!c || !(ft > 0)) return null;

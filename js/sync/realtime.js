@@ -1248,7 +1248,8 @@ function _merge3(base, mine, theirs, baseKnown, opts){
 // other device takes it as a plain update.
 const _REC_HP = { delta: new Set(['hp', 'tempHp']), tie: 'mine' };
 // (a token's feet walked this turn come with the move that walked them)
-const _REC_TOKEN = { groups: [['x', 'y', 'mv']], tie: 'mine' };
+// (…and the moves it can take back)
+const _REC_TOKEN = { groups: [['x', 'y', 'mv', 'mvBack']], tie: 'mine' };
 function _mergeRecordStr(baseStr, mineStr, theirsStr, opts){
   let base, mine, theirs;
   try { base = JSON.parse(baseStr); mine = JSON.parse(mineStr); theirs = JSON.parse(theirsStr); }

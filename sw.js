@@ -34,10 +34,10 @@
  */
 'use strict';
 
-const BUILD = '30bf8f8fd4';
+const BUILD = '67d492ecb6';
 const PRECACHE = [
   'skt-workspace.html',
-  'styles/main.css?v=f1ef75c6d0',
+  'styles/main.css?v=c823a7dff3',
   'styles/theme.css?v=490a0ae264',
   'js/core/errors.js?v=67c70f2e1d',
   'js/core/data.js?v=183a16905e',
@@ -46,7 +46,7 @@ const PRECACHE = [
   'js/generated/token-index.js?v=2840810fc7',
   'js/generated/species-portraits.js?v=56581792b0',
   'js/core/campaign.js?v=171a617f55',
-  'js/core/utils.js?v=db879f5d4c',
+  'js/core/utils.js?v=30b9be43d5',
   'js/ui/dice-fx.js?v=1acff2694d',
   'js/core/state.js?v=8030e53453',
   'js/core/undo.js?v=63ed223198',
@@ -57,7 +57,7 @@ const PRECACHE = [
   'js/panels/attacks.js?v=99097afcf2',
   'js/generated/reactions.js?v=0e74ab8786',
   'js/generated/rules.js?v=8efb8beae9',
-  'js/panels/turnview.js?v=f47d01d34f',
+  'js/panels/turnview.js?v=db58c086d9',
   'js/panels/party.js?v=61af31ece1',
   'js/panels/shop.js?v=8f95de4cf4',
   'js/sync/notes-sync.js?v=7ee89969f6',
@@ -70,7 +70,7 @@ const PRECACHE = [
   'js/panels/quests.js?v=36e3261d56',
   'js/panels/factions.js?v=39b868d6d9',
   'js/panels/homebrew.js?v=3e3c4f0d84',
-  'js/panels/battlemap.js?v=ab383f4568',
+  'js/panels/battlemap.js?v=d9c312739f',
   'js/panels/npc-library.js?v=84a549ccbc',
   'js/panels/bestiary.js?v=55d56a8c0d',
   'js/panels/content-panel.js?v=1a060dfd0b',
@@ -102,7 +102,7 @@ const PRECACHE = [
   'js/features/pdf-import.js?v=95d9f5740f',
   'js/player/player-app.js?v=b75cc82951',
   'js/ui/player-view.js?v=2481f28c78',
-  'js/sync/realtime.js?v=c75f9ba193',
+  'js/sync/realtime.js?v=342982c633',
   'js/sync/presence.js?v=50e9bead2e',
   'js/ui/tutorial.js?v=7427317caa',
   'js/ui/onboarding.js?v=af17803033',

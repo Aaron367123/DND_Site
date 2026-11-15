@@ -23699,6 +23699,82 @@ for (const cls of Object.keys(rule)) for (let L = 1; L <= 20; L++) for (const sc
         closePanel('battlemap');
       }
     }
+    // -- Round 425: Take back — under the map, how far the creature whose turn it is has moved and a button that undoes its last move (where it stood, how high, what it holds, the feet), only on that turn; a move made on another screen (a phone) asks the DM about opportunity attacks; taken back, the question goes; an attack taken fixes the move --
+    if (!PLAYER){
+      const B = panelDefs.battlemap, T = panelDefs.turnview;
+      let keepT = null, keepC = null, keepR, keepA, keepD, saved = false;
+      try {
+        openPanel('battlemap'); await sleep(700);
+        keepT = B._tokens.slice(); keepC = (state.combatants || []).slice(); keepR = state.combatRound; keepA = state.activeCombatantId; keepD = B._drawings; saved = true;
+        B._drawings = [];
+        const cs = B._csScreen();
+        state.combatants = [{ id: 'r425s', name: 'r425 Scout', hp: 16, hpMax: 16, initiative: 15 }, { id: 'r425i', name: 'r425 Imp', hp: 10, hpMax: 10, initiative: 9 }];
+        state.combatRound = 1; state.activeCombatantId = 'r425s'; save();
+        const scout = { id: 't425s', cid: 'r425s', label: 'r425 Scout', x: 3.5 * cs, y: 3.5 * cs, size: 1 };
+        const imp = { id: 't425i', cid: 'r425i', label: 'r425 Imp', x: 3.5 * cs, y: 5.5 * cs, size: 1 };
+        B._tokens = [scout, imp]; B._render(); await sleep(150);
+        const foot = () => B._body.querySelector('.map-foot-move');
+        const btn = () => B._body.querySelector('.map-foot-back');
+        const fx = () => scout.x / cs;
+        ok('a fight: under the map, how far the scout has moved this turn — nothing to take back yet', !!foot() && !foot().hidden && /Moved\s*0\b/.test(foot().textContent) && !btn(), foot() && foot().outerHTML);
+        B._keyMove(scout, 1, 0); B._keyMove(scout, 1, 0);
+        ok('two steps: 10 ft walked, and Take back', /Moved\s*10\b/.test(foot().textContent) && !!btn() && fx() === 5.5, foot().textContent + ' x=' + fx());
+        btn().click();
+        ok('Take back: one step back, 5 ft back', fx() === 4.5 && sktTurnMoved(scout) === 5 && /Moved\s*5\b/.test(foot().textContent) && !!btn(), fx() + ' ' + sktTurnMoved(scout));
+        btn().click();
+        ok('…and the next: where it started, nothing walked, nothing left to take back', fx() === 3.5 && sktTurnMoved(scout) === 0 && !btn() && !scout.mvBack, fx() + ' ' + sktTurnMoved(scout) + ' ' + JSON.stringify(scout.mvBack));
+        // up, then back down
+        B._setElev(scout, 20);
+        ok('up 20 ft is 20 ft of its movement…', sktTurnMoved(scout) === 20 && !!btn());
+        btn().click();
+        ok('…taken back: on the ground, the feet back', !scout.elev && sktTurnMoved(scout) === 0);
+        // what it holds comes back with it
+        state.combatants[1] = { ...state.combatants[1], conditions: ['Grappled'], grappledBy: { id: 'r425s', name: 'r425 Scout' } }; save();
+        B._keyMove(scout, 1, 0);
+        ok('dragging the imp it grapples along…', fx() === 4.5 && imp.x / cs === 4.5, imp.x / cs);
+        btn().click();
+        ok('…taken back: the imp is back where it was too', fx() === 3.5 && imp.x / cs === 3.5, imp.x / cs);
+        state.combatants[1] = { ...state.combatants[1], conditions: [], grappledBy: null }; save();
+        // only on that turn
+        B._keyMove(scout, 1, 0);
+        state.activeCombatantId = 'r425i'; save(); await sleep(150);
+        ok('the turn passes: no Take back for the scout’s move, and the count is the imp’s', !btn() && sktMoveBack(B._tokens, scout) === null && fx() === 4.5 && /Moved\s*0\b/.test(foot().textContent));
+        state.combatRound = 0; save(); await sleep(150);
+        ok('no fight: nothing under the map', foot().hidden && !B._body.querySelector('.map-foot.has-move'));
+        // a move from a phone → the opportunity attack question; taken back → gone
+        openPanel('turnview'); await sleep(700);
+        state.combatants = [{ id: 'r425h', name: 'r425 Hero', isPC: true, hp: 30, hpMax: 30, initiative: 18 }, { id: 'r425o', name: 'r425 Ogre', hp: 59, hpMax: 59, initiative: 8 }];
+        state.combatRound = 1; state.activeCombatantId = 'r425h'; save();
+        const hero = { id: 't425h', cid: 'r425h', label: 'r425 Hero', isPC: true, x: 3.5 * cs, y: 3.5 * cs, size: 1 };
+        const ogre = { id: 't425o', cid: 'r425o', label: 'r425 Ogre', x: 4.5 * cs, y: 3.5 * cs, size: 1 };
+        B._tokens = [hero, ogre]; B._render(); B._saveMap(); T._pending = null; T._mapCache = null; T._render(); await sleep(200);
+        const snap = (x, ft, back) => { const s = { tokens: JSON.parse(JSON.stringify(B._tokens)), cols: B._cols, rows: B._rows, cellSize: B._cellSize, gridType: B._gridType, bgMapPath: B._bgMapPath };
+          const h = s.tokens.find(t => t.id === 't425h'); h.x = x * cs; if (ft) h.mv = { k: sktMoveKey(), ft, dg: 0 }; else delete h.mv; if (back) h.mvBack = back; else delete h.mvBack; return s; };
+        const back1 = { k: sktMoveKey(), s: [{ x: 3.5 * cs, y: 3.5 * cs, e: 0 }] };
+        B.applyMapState(snap(0.5, 15, back1)); await sleep(150);
+        const q = () => T._pending && T._pending.kind === 'move' && T._pending.mover && T._pending.mover.id === 'r425h';
+        ok('the hero walks away from the ogre on a phone: the DM is asked about the opportunity attack', q() && !!T._body.querySelector('.tv-react [data-tv="oa"][data-id="r425o"]'), JSON.stringify(T._pending && T._pending.kind));
+        B.applyMapState(snap(3.5, 0, null)); await sleep(150);
+        ok('…the player takes it back: the question goes', !T._pending && !T._body.querySelector('.tv-react [data-tv="oa"][data-id]'));
+        B.applyMapState(snap(0.5, 15, back1)); await sleep(150);
+        ok('…walks away again: asked again', q());
+        T._useOA('r425o'); await sleep(100);
+        const liveHero = B._tokens.find(t => t.id === 't425h');
+        ok('…the ogre takes its attack: the move happened — nothing to take back', !liveHero.mvBack && !sktMoveBackable(B._tokens, liveHero) && !btn());
+        // a player's tab in this browser
+        state.combatants[1].reactionUsed = false; T._pending = null;
+        B._tokens = [{ ...hero, x: 3.5 * cs }, { ...ogre }]; B._render(); T._mapCache = null; await sleep(100);
+        const moved = B._mergeTokenPositions(snap(0.5, 15, back1).tokens);
+        ok('a player’s tab in this browser: the move, its feet and the question too', moved && sktTurnMoved(B._tokens[0]) === 15 && sktMoveBackable(B._tokens, B._tokens[0]) && q());
+      } catch(e){ ok('round 425 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
+      finally {
+        try { T._pending = null; T._render(); } catch(e){}
+        if (saved){ B._tokens = keepT; B._drawings = keepD; state.combatants = keepC; state.combatRound = keepR; state.activeCombatantId = keepA; try { save(); B._saveMap(); } catch(e){} }
+        try { B._closePanel(); B._render(); } catch(e){}
+        try { closePanel('turnview'); } catch(e){}
+        closePanel('battlemap');
+      }
+    }
     // -- Class features: represented, not just text ------------------------
     {
       try {
@@ -27535,6 +27611,39 @@ for (const cls of Object.keys(rule)) for (let L = 1; L <= 20; L++) for (const sc
       } catch(e){ ok('round 424 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
       finally {
         if (saved){ B._tokens = keepT; state.combatants = keepC; state.combatRound = keepR; state.activeCombatantId = keepA; B._fog = keepF; }
+        try { B._render(); } catch(e){}
+        paTab = keepTab; try { paRender(); } catch(e){}
+      }
+    }
+    // -- Round 426: on a phone, her turn: under the map how far she has moved (always, not only mid-drag) and Take back, a button a finger can hit; someone else's turn: none of it, and the ping hint back --
+    if (PLAYER){
+      const keepTab = paTab, B = panelDefs.battlemap;
+      let keepT = null, keepC = null, keepR, keepA, keepF, keepD, saved = false;
+      try {
+        if (paMyIdx() < 0) paSetPc('zoey');
+        paTab = 'map'; paRender(); await sleep(900);
+        keepT = B._tokens.slice(); keepC = (state.combatants || []).slice(); keepR = state.combatRound; keepA = state.activeCombatantId; keepF = B._fog; keepD = B._drawings; saved = true; B._fog = null; B._drawings = [];
+        const cs = B._csScreen(), me = paPc();
+        state.combatants = [{ id: me.id, name: me.name, isPC: true, hp: 20, hpMax: 30, init: 18 }, { id: 'r426g', name: 'r426 Goblin', hp: 7, hpMax: 7, init: 10 }];
+        state.combatRound = 1; state.activeCombatantId = me.id;
+        const z = { id: 't426z', cid: me.id, label: me.name, isPC: true, x: 3.5 * cs, y: 3.5 * cs, size: 1 };
+        const g = { id: 't426g', cid: 'r426g', label: 'r426 Goblin', x: 8.5 * cs, y: 3.5 * cs, size: 1 };
+        B._tokens = [z, g]; B._render(); await sleep(150); B._syncFromCombat();
+        const q = s => document.querySelector('#pa-screen ' + s);
+        const shown = s => { const e = q(s); return !!e && e.getClientRects().length > 0 && getComputedStyle(e).display !== 'none'; };
+        const sp = B._tokenSpeed(z);
+        ok('phone, her turn: under the map, what she has walked of her speed', shown('.map-foot-move') && new RegExp('Moved\\s*0\\s*/\\s*' + sp + '\\s*ft').test(q('.map-foot-move').textContent) && !shown('.map-foot-touch'), (q('.map-foot-move') || {}).textContent + ' sp=' + sp);
+        B._keyMove(z, 1, 0);
+        const b = q('.map-foot-back'), r = b && b.getBoundingClientRect();
+        ok('…a step: 5 ft, and Take back, big enough for a finger, on the screen, the strip no taller (the map tools float just above it)', /Moved\s*5\b/.test(q('.map-foot-move').textContent) && !!r && r.height >= 28 && r.right <= innerWidth && r.bottom <= innerHeight && q('.map-foot').getBoundingClientRect().height <= 30, r && JSON.stringify([r.left, r.top, r.right, r.bottom, r.height, q('.map-foot').getBoundingClientRect().height]));
+        b.click();
+        ok('…tapped: back where she stood, nothing walked', z.x / cs === 3.5 && sktTurnMoved(z) === 0 && !q('.map-foot-back'));
+        B._keyMove(z, 1, 0);
+        state.activeCombatantId = 'r426g'; B._syncFromCombat();
+        ok('the goblin’s turn: no count and no Take back on her phone; the ping hint is back', !shown('.map-foot-move') && !q('.map-foot-back') && shown('.map-foot-touch'));
+      } catch(e){ ok('round 426 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
+      finally {
+        if (saved){ B._tokens = keepT; state.combatants = keepC; state.combatRound = keepR; state.activeCombatantId = keepA; B._fog = keepF; B._drawings = keepD; }
         try { B._render(); } catch(e){}
         paTab = keepTab; try { paRender(); } catch(e){}
       }
