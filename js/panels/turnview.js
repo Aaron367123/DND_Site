@@ -5356,6 +5356,9 @@ registerPanel('turnview', {
     // up moving away from the fighter below never had it in reach).
     const at = { x: fromXY.x, y: fromXY.y, size: now.size, elev: fromXY.elev != null ? fromXY.elev : now.elev };
     const ft = (t, q) => this._edgeFeet(t, q);
+    // "A hostile creature that you can see moves out of your reach": the map's
+    // light and walls, once for all of them.
+    const S = typeof sktSightSrc === 'function' ? sktSightSrc(this._map()) : null;
     // The entire purpose of the Disengage action. The panel has detected
     // opportunity attacks since it could read token positions, and spent
     // and logged the action since the economy bar existed, but never
@@ -5371,7 +5374,14 @@ registerPanel('turnview', {
       if (!(ft(t, at) <= reach && ft(t, now) > reach)) return false;   // had them, doesn't now
       // …unless a wall stood between them (total cover): a goblin walking off
       // along the far side of a wall was offered to the fighter through it.
-      return this._wallCoverAt(t, at) !== 'total';
+      if (this._wallCoverAt(t, at) === 'total') return false;
+      // …or it couldn't see it go: in the dark without darkvision, or blinded
+      // (blindsight that reaches it still counts).
+      const sn = typeof sktTokenSenses === 'function' ? sktTokenSenses(t) : {};
+      const blind = (c.conditions || []).some(k => String(k).toLowerCase() === 'blinded');
+      if (blind && !((+sn.blindsight || 0) >= ft(t, at))) return false;
+      if (!blind && S && S.on && typeof sktCanSee === 'function' && !sktCanSee(S, t, at, sn)) return false;
+      return true;
     });
   },
   // Sentinel (the feat): a character who has it.

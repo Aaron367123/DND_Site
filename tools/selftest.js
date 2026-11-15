@@ -23275,6 +23275,41 @@ for (const cls of Object.keys(rule)) for (let L = 1; L <= 20; L++) for (const sc
         closePanel('battlemap');
       }
     }
+    // -- Round 412: an opportunity attack needs a creature that can see the one leaving — in the dark without darkvision it isn't offered, with darkvision it is; blinded, not unless blindsight reaches --
+    {
+      const B = panelDefs.battlemap, TV = panelDefs.turnview;
+      let keepT = null, keepD = null, keepF, keepL, saved = false;
+      const keepC = JSON.stringify(state.combatants);
+      try {
+        openPanel('battlemap'); await sleep(600);
+        keepT = JSON.parse(JSON.stringify(B._tokens)); keepD = B._drawings.slice(); keepF = B._fog; keepL = B._light; saved = true;
+        const cs = B._csScreen();
+        const ul = B._tokens.find(t => t.cid === 'ulrick'), wf = B._tokens.find(t => t.cid === 'wolf');
+        B._tokens.forEach((t, i) => { if (t !== ul && t !== wf){ t.x = (15 + i) * cs + cs / 2; t.y = 12.5 * cs; delete t.lt; } });
+        ul.x = 5.5 * cs; ul.y = 5.5 * cs; ul.size = 1; wf.x = 6.5 * cs; wf.y = 5.5 * cs; wf.size = 1; delete ul.lt; delete wf.lt;
+        B._drawings = []; B._fog = null;
+        state.combatants.forEach(c => { c.reactionUsed = false; if (c.id === 'wolf' || c.id === 'ulrick'){ c.hp = Math.max(1, c.hp || 1); c.conditions = []; } });
+        const wolf = state.combatants.find(x => x.id === 'wolf'), ulc = state.combatants.find(x => x.id === 'ulrick');
+        const from = { x: 6.5 * cs, y: 5.5 * cs };
+        const provoked = () => { wf.x = 9.5 * cs; B._saveMap(); TV._mapCache = null; const r = TV._provokedBy(wolf, from).map(c => c.id).includes('ulrick'); wf.x = 6.5 * cs; B._saveMap(); TV._mapCache = null; return r; };
+        B._light = 'bright'; ul.dv = 0;
+        ok('in daylight it provokes', provoked());
+        B._light = 'dark';
+        ok('…in the dark, to a fighter without darkvision: no attack (it can’t see it go)', !provoked());
+        ul.dv = 60;
+        ok('…with darkvision: it does', provoked());
+        B._light = 'bright'; ulc.conditions = ['blinded'];
+        ok('blinded: no attack', !provoked());
+        ul.dv = 0;
+      } catch(e){ ok('round 412 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
+      finally {
+        state.combatants = JSON.parse(keepC);
+        if (saved){ B._tokens = keepT; B._drawings = keepD; B._fog = keepF; B._light = keepL; try { B._saveMap(); } catch(e){} }
+        if (TV) TV._mapCache = null;
+        try { B._render(); } catch(e){}
+        closePanel('battlemap');
+      }
+    }
     // -- Class features: represented, not just text ------------------------
     {
       try {
