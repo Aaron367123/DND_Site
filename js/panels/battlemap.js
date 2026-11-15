@@ -2649,6 +2649,40 @@ registerPanel('battlemap',{
   // copied when the token was made, so a picture uploaded later reaches the
   // map. Not the species portrait the sheet falls back to: on the map Aaron
   // wants a character without a picture to stay their emoji.
+  // A picture of the DM's own on a monster's or NPC's token (the panel's
+  // Picture…, or a picture file dropped on the token): squared off round its
+  // middle and made small (128 px) so it rides along with the token. WebP,
+  // which keeps the clear corners token art comes with (PNG where WebP can't
+  // be written). ✕ puts back the one it had. Not a character's: theirs is
+  // the one on their sheet.
+  _setTokenPicture(t, file){
+    if (!t || t.isPC) return Promise.resolve(false);
+    const done = () => { this._saveMap(); this._renderTokens(); if (this._selected === t.id){ const tp = this._body && this._body.querySelector('#token-panel'); if (tp && tp.style.display !== 'none') this._showPanel(t); } };
+    if (!file){
+      if (!t.picOwn) return Promise.resolve(false);
+      if (t.picWas) t.portrait = t.picWas; else delete t.portrait;
+      delete t.picWas; delete t.picOwn; done();
+      return Promise.resolve(true);
+    }
+    if (!/^image\//.test(file.type || '')){ if (typeof showToast === 'function') showToast('That isn’t a picture: use a PNG, JPG or WebP.'); return Promise.resolve(false); }
+    return new Promise(res => {
+      const url = URL.createObjectURL(file), img = new Image();
+      img.onerror = () => { URL.revokeObjectURL(url); if (typeof showToast === 'function') showToast('That picture couldn’t be read.'); res(false); };
+      img.onload = () => {
+        URL.revokeObjectURL(url);
+        const N = 128, c = document.createElement('canvas'); c.width = c.height = N;
+        const k = Math.max(N / img.width, N / img.height), w = img.width * k, h = img.height * k;
+        c.getContext('2d').drawImage(img, (N - w) / 2, (N - h) / 2, w, h);
+        let u = c.toDataURL('image/webp', 0.85);
+        if (u.indexOf('data:image/webp') !== 0) u = c.toDataURL('image/png');
+        if (!t.picOwn){ if (t.portrait) t.picWas = t.portrait; else delete t.picWas; }
+        t.portrait = u; t.picOwn = true; done();
+        if (typeof showToast === 'function') showToast('A new picture on ' + (t.label || 'the token') + '.');
+        res(true);
+      };
+      img.src = url;
+    });
+  },
   _tokenFace(t){
     if (t && t.isPC){
       const party = (typeof state !== 'undefined' && state.party) || [];
@@ -5347,6 +5381,10 @@ registerPanel('battlemap',{
       +'<input type="text" id="tp-label" style="margin-bottom:6px;font-size:var(--fs-sm)">'
       +'<label class="field-label">Color</label>'
       +'<input type="color" id="tp-color" style="width:100%;height:26px;margin-bottom:6px;cursor:pointer">'
+      +'<div id="tp-pic-row" style="display:flex;gap:4px;margin-bottom:6px;align-items:center">'
+        +'<button class="btn small" id="tp-pic" style="flex:1" title="A picture of your own on this token — a named NPC, art you found. Or drop a picture file onto the token.">Picture…</button>'
+        +'<button class="btn icon-btn" id="tp-pic-x" title="Back to its own picture" style="padding:1px 6px">'+ICO('i-close')+'</button>'
+      +'</div>'
       +'<label class="field-label">Size (cells)</label>'
       +'<div style="display:flex;gap:4px;margin-bottom:8px;align-items:center">'
         +'<button class="btn icon-btn" id="tp-size-down" title="Smaller (¼ cell)" style="padding:1px 6px;font-size:var(--fs-lg)">−</button>'
@@ -6332,6 +6370,13 @@ registerPanel('battlemap',{
         e.preventDefault(); e.stopPropagation();
         const file = [...(e.dataTransfer.files || [])][0];
         if (!file) return;
+        // Dropped on a creature: its picture, not a new map.
+        const onTok = e.target && e.target.closest && e.target.closest('.map-token');
+        const dropT = onTok && (this._tokens || []).find(k => String(k.id) === onTok.dataset.tid);
+        if (dropT){
+          if (dropT.isPC){ showToast('A character’s picture is the one on their sheet: change it there.'); return; }
+          this._setTokenPicture(dropT, file); return;
+        }
         if (!/^image\//.test(file.type || '')){ showToast('That isn’t a picture: drop a PNG, JPG or WebP map.'); return; }
         // A new map clears this one's walls, doors, drawings and fog, and
         // that can't be undone: ask, when there's something to lose.
@@ -8191,6 +8236,15 @@ registerPanel('battlemap',{
     };
     rewire('#tp-label','change',e=>{t.label=e.target.value;b.querySelector('#tp-name').textContent=t.label;this._saveMap();this._renderTokens();});
     rewire('#tp-color','change',e=>{t.color=e.target.value;this._saveMap();this._renderTokens();});
+    // (a character's picture is their sheet's)
+    const picRow = b.querySelector('#tp-pic-row'); if (picRow) picRow.style.display = t.isPC ? 'none' : 'flex';
+    rewire('#tp-pic','click', () => {
+      const inp = document.createElement('input'); inp.type = 'file'; inp.accept = 'image/*';
+      inp.onchange = () => { const f = inp.files && inp.files[0]; if (f) this._setTokenPicture(t, f); };
+      inp.click();
+    });
+    rewire('#tp-pic-x','click', () => this._setTokenPicture(t, null));
+    { const px = b.querySelector('#tp-pic-x'); if (px) px.style.display = t.picOwn ? '' : 'none'; }
     // Slider live-updates the readout on input; commits + re-renders on release.
     rewire('#tp-size','input', e => { setSizeLabel(clampSize(parseFloat(e.target.value)||1)); });
     rewire('#tp-size','change',e=>{t.size=clampSize(parseFloat(e.target.value)||1);setSizeLabel(t.size);this._saveMap();this._renderTokens();});

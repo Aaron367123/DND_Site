@@ -23533,6 +23533,72 @@ for (const cls of Object.keys(rule)) for (let L = 1; L <= 20; L++) for (const sc
         closePanel('battlemap');
       }
     }
+    // -- Round 421: a picture of the DM's own on a monster's token — Picture… or a file dropped on the token; small, square, clear corners kept; ✕ gives back its own; a character's isn't changed this way; a file dropped on a token isn't taken for a new map --
+    if (!PLAYER){
+      const B = panelDefs.battlemap;
+      let keepT = null, keepD = null, keepF, keepBg, saved = false;
+      try {
+        openPanel('battlemap'); await sleep(700);
+        keepT = B._tokens.slice(); keepD = B._drawings.slice(); keepF = B._fog; keepBg = B._bgMapPath; saved = true;
+        const cs = B._csScreen();
+        const npc = { id: 't421n', label: 'r421 Captain', x: 3.5 * cs, y: 3.5 * cs, size: 1, portrait: 'img/bestiary/tokens/MM/Goblin.webp', icon: '🗡' };
+        const pc = { id: 't421p', label: 'Zoey', cid: 'zoey', isPC: true, x: 6.5 * cs, y: 3.5 * cs, size: 1 };
+        B._tokens = [npc, pc]; B._drawings = [{ k: 'tpl', id: 'r421w', shape: 'wall', pts: [0, 0, cs, 0] }]; B._fog = null; B._tool = ''; B._render(); await sleep(150);
+        // token art: a red disc on clear ground, wider than tall
+        const art = async (w, h, col, name, type) => { const c = document.createElement('canvas'); c.width = w; c.height = h; const g = c.getContext('2d'); g.fillStyle = col; g.beginPath(); g.arc(w / 2, h / 2, Math.min(w, h) * 0.4, 0, 7); g.fill();
+          const blob = await new Promise(r => c.toBlob(r, 'image/png')); return new File([blob], name, { type: type || 'image/png' }); };
+        const f1 = await art(300, 200, '#d22', 'captain.png');
+        B._selected = npc.id; B._showPanel(npc); await sleep(50);
+        const row = () => B._body.querySelector('#tp-pic-row'), x = () => B._body.querySelector('#tp-pic-x');
+        ok('a monster’s panel offers Picture…; no ✕ while it has its own', !!row() && row().style.display !== 'none' && x().style.display === 'none');
+        const r1 = await B._setTokenPicture(npc, f1);
+        const u1 = npc.portrait || '';
+        const sv0 = ((JSON.parse(localStorage.getItem('skt-battlemap-v1') || '{}').tokens) || []).find(t => t.id === 't421n');
+        ok('…saved with the map as it’s set', !!sv0 && sv0.portrait === u1 && sv0.picOwn === true);
+        ok('…a picture chosen: on the token, small (a few KB), its old one kept to go back to', r1 === true && /^data:image\/(webp|png)/.test(u1) && u1.length < 40000 && npc.picOwn === true && npc.picWas === 'img/bestiary/tokens/MM/Goblin.webp', JSON.stringify([r1, u1.slice(0, 30), u1.length, npc.picWas]));
+        const im = await new Promise(r => { const i = new Image(); i.onload = () => r(i); i.onerror = () => r(null); i.src = u1; });
+        let corner = 255, mid = 0, rim = 0;
+        if (im){ const c = document.createElement('canvas'); c.width = im.width; c.height = im.height; const g = c.getContext('2d'); g.drawImage(im, 0, 0); corner = g.getImageData(1, 1, 1, 1).data[3]; mid = g.getImageData(64, 64, 1, 1).data[0]; rim = g.getImageData(64, 19, 1, 1).data[3]; }
+        ok('…square, 128 px, cut round the art’s middle (filling it, not shrunk to fit), its clear corners still clear', !!im && im.width === 128 && im.height === 128 && corner < 10 && mid > 180 && rim > 200, JSON.stringify([im && im.width, im && im.height, corner, mid, rim]));
+        const img = () => { const el = B._body.querySelector('.map-token[data-tid="t421n"] img'); return el ? el.getAttribute('src') : ''; };
+        ok('…drawn on the map', img() === u1, img().slice(0, 40));
+        ok('…the panel now offers ✕', x().style.display !== 'none');
+        const f2 = await art(100, 100, '#22d', 'b.png');
+        await B._setTokenPicture(npc, f2);
+        ok('a second picture: its own one is still the one kept', npc.portrait !== u1 && npc.picWas === 'img/bestiary/tokens/MM/Goblin.webp');
+        B._body.querySelector('#tp-pic-x').click(); await sleep(60);
+        ok('✕: back to its own picture', npc.portrait === 'img/bestiary/tokens/MM/Goblin.webp' && !npc.picOwn && !('picWas' in npc));
+        // a character
+        B._selected = pc.id; B._showPanel(pc); await sleep(50);
+        ok('a character’s panel has no Picture… (theirs is their sheet’s)', row().style.display === 'none');
+        const r2 = await B._setTokenPicture(pc, f1);
+        ok('…nor does it change one', r2 === false && !pc.portrait && !pc.picOwn);
+        B._closePanel();
+        // dropped on the token
+        const drop = (el, file) => { const dt = new DataTransfer(); dt.items.add(file); el.dispatchEvent(new DragEvent('drop', { bubbles: true, cancelable: true, dataTransfer: dt })); };
+        const bgWas = B._bgMapPath, toasts = []; const keepToast = window.showToast; window.showToast = (m, o) => { toasts.push(String(m)); return keepToast && keepToast(m, o); };
+        try {
+          drop(B._body.querySelector('.map-token[data-tid="t421n"]'), f1);
+          for (let i = 0; i < 30 && !npc.picOwn; i++) await sleep(50);
+          ok('a picture file dropped on a monster: its picture — not a new map, nothing asked', npc.picOwn === true && /^data:image/.test(npc.portrait) && B._bgMapPath === bgWas && !document.querySelector('.modal-backdrop') && B._walls().length === 1);
+          drop(B._body.querySelector('.map-token[data-tid="t421p"]'), f1); await sleep(200);
+          ok('…on a character: told where theirs is changed, nothing else', !pc.portrait && !document.querySelector('.modal-backdrop') && B._bgMapPath === bgWas && toasts.some(m => /sheet/.test(m)), JSON.stringify(toasts));
+          const was = npc.portrait;
+          drop(B._body.querySelector('.map-token[data-tid="t421n"]'), new File(['hello'], 'notes.txt', { type: 'text/plain' })); await sleep(200);
+          ok('…a file that isn’t a picture: said so, nothing changed', npc.portrait === was && toasts.some(m => /isn’t a picture/.test(m)) && !document.querySelector('.modal-backdrop'));
+        } finally { window.showToast = keepToast; }
+        B._saveMap(); await sleep(50);
+        const st = JSON.parse(localStorage.getItem('skt-battlemap-v1') || '{}');
+        const sv = (st.tokens || []).find(t => t.id === 't421n');
+        ok('it’s kept with the map', !!sv && sv.portrait === npc.portrait && sv.picOwn === true);
+      } catch(e){ ok('round 421 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
+      finally {
+        document.querySelectorAll('.modal-backdrop').forEach(m => m.remove());
+        if (saved){ B._tokens = keepT; B._drawings = keepD; B._fog = keepF; try { B._saveMap(); } catch(e){} }
+        try { B._closePanel(); B._render(); } catch(e){}
+        closePanel('battlemap');
+      }
+    }
     // -- Class features: represented, not just text ------------------------
     {
       try {

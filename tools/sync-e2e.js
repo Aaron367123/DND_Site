@@ -324,6 +324,41 @@ const window = {};
       return lat(t1);
     });
 
+    await step('phone measures → the DM sees Zoey’s ruler and its feet; put away → gone; the DM’s reaches the phone only with “Show players”', async () => {
+      await dm.ev("openPanel('battlemap'); await new Promise(r=>setTimeout(r,300)); localStorage.setItem('skt-bm-ruler-share-v1', '0'); return 1");
+      const lbl = await pl.ev("paTab = 'map'; paRender(); await new Promise(r=>setTimeout(r,500)); const B = panelDefs.battlemap, cs = B._csScreen(); B._tool = 'ruler'; B._render(); B._measureShow(2.5 * cs, 2.5 * cs, 2.5 * cs, 6.5 * cs); return document.querySelector('#map-stage .bm-measure:not(.remote) .bm-measure-l').textContent");
+      // (what the phone's own label says, whatever this campaign's grid is left as)
+      const t1 = await W(dm, "return [...document.querySelectorAll('#map-stage .bm-measure.remote')].some(e => e.textContent === 'Zoey: ' + " + JSON.stringify(lbl) + ") ? 1 : 0", 8000);
+      if (t1 == null) return { ok: false, why: 'the DM never saw the phone’s ruler' };
+      await pl.ev("const B = panelDefs.battlemap; B._tool = ''; B._measureHide(); B._render(); return 1");
+      const t2 = await W(dm, "return document.querySelector('#map-stage .bm-measure.remote') ? 0 : 1", 8000);
+      if (t2 == null) return { ok: false, why: 'the phone’s ruler stayed on the DM’s screen once put away' };
+      await dm.ev("const B = panelDefs.battlemap, cs = B._csScreen(); B._tool = 'ruler'; B._render(); B._measureShow(1.5 * cs, 1.5 * cs, 5.5 * cs, 1.5 * cs); return 1");
+      await sleep(2500);
+      const leak = await pl.ev("return document.querySelector('#map-stage .bm-measure.remote') ? 1 : 0");
+      if (leak) return { ok: false, why: 'the DM’s ruler reached the phone without “Show players”' };
+      await dm.ev("const B = panelDefs.battlemap; localStorage.setItem('skt-bm-ruler-share-v1', '1'); B._measureShow(1.5 * cs0(), 1.5 * cs0(), 5.5 * cs0(), 1.5 * cs0()); function cs0(){ return B._csScreen(); } return 1");
+      const t3 = await W(pl, "return [...document.querySelectorAll('#map-stage .bm-measure.remote')].some(e => /^DM: [0-9]+ ft/.test(e.textContent)) ? 1 : 0", 8000);
+      await dm.ev("const B = panelDefs.battlemap; B._tool = ''; B._measureHide(); B._render(); localStorage.setItem('skt-bm-ruler-share-v1', '0'); return 1");
+      if (t3 == null) return { ok: false, why: 'with “Show players” the phone never saw the DM’s ruler' };
+      const t4 = await W(pl, "return document.querySelector('#map-stage .bm-measure.remote') ? 0 : 1", 8000);
+      if (t4 == null) return { ok: false, why: 'the DM’s ruler stayed on the phone once put away' };
+      return lat(t1);
+    });
+
+    await step('DM puts a picture of its own on a monster’s token (a noisy photo, the biggest kind) → the phone’s map shows it; ✕ → its own again', async () => {
+      const len = await dm.ev("openPanel('battlemap'); await new Promise(r=>setTimeout(r,300)); const B = panelDefs.battlemap, cs = B._csScreen(); B._tokens = B._tokens.filter(t => t.id !== 'e2e-pic'); const t = { id: 'e2e-pic', label: 'e2e Captain', x: 7.5 * cs, y: 7.5 * cs, size: 1, icon: '🗡' }; B._tokens.push(t); B._render();"
+        + " const c = document.createElement('canvas'); c.width = c.height = 600; const g = c.getContext('2d'), d = g.createImageData(600, 600); for (let i = 0; i < d.data.length; i++) d.data[i] = (Math.random() * 256) | 0; g.putImageData(d, 0, 0);"
+        + " const f = new File([await new Promise(r => c.toBlob(r, 'image/png'))], 'noise.png', { type: 'image/png' }); await B._setTokenPicture(t, f); return t.portrait.length");
+      const t1 = await W(pl, "paTab = 'map'; paRender(); const im = document.querySelector('#map-stage .map-token[data-tid=\"e2e-pic\"] img'); return im && /^data:image/.test(im.getAttribute('src')) && im.getAttribute('src').length === " + len + " ? 1 : 0", 12000);
+      if (t1 == null) return { ok: false, why: 'the phone never showed the picture (' + len + ' characters)' };
+      await dm.ev("const B = panelDefs.battlemap; await B._setTokenPicture(B._tokens.find(t => t.id === 'e2e-pic'), null); return 1");
+      const t2 = await W(pl, "paRender(); const el = document.querySelector('#map-stage .map-token[data-tid=\"e2e-pic\"]'); return el && !el.querySelector('img') ? 1 : 0", 12000);
+      await dm.ev("const B = panelDefs.battlemap; B._tokens = B._tokens.filter(t => t.id !== 'e2e-pic'); B._saveMap(); B._render(); return 1");
+      if (t2 == null) return { ok: false, why: '✕ didn’t reach the phone' };
+      return { ok: true, lat: t1, why: undefined };
+    });
+
     await step('DM puts a door beside Zoey → phone taps it open → the DM sees it open; DM locks it → phone can’t', async () => {
       const ZOEY = "t.isPC && t.label === 'Zoey'";
       const put = await dm.ev("openPanel('battlemap'); await new Promise(r=>setTimeout(r,300)); const B = panelDefs.battlemap, cs = B._csScreen(); const z = (B._tokens||[]).find(t => " + ZOEY + "); if (!z) return 'no Zoey on the map'; B._drawings = B._drawings.filter(s => s.id !== 'e2e-door'); B._drawings.push({ k: 'tpl', id: 'e2e-door', shape: 'wall', door: true, pts: [z.x - cs / 2, z.y + cs / 2, z.x + cs / 2, z.y + cs / 2] }); B._saveMap(); B._render(); return 'ok'");
