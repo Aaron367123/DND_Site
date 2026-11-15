@@ -704,8 +704,13 @@ function paRenderTurn(){
   // A creature the DM has hidden on the map isn't in the players' order:
   // its name in the strip gave the ambush away. On its turn the strip says
   // only that it's the DM's.
+  // (The map's tokens as synced — the map panel holds them only while the
+  // Map tab is open, and the strip shows on every tab.)
   const B = typeof panelDefs !== 'undefined' && panelDefs.battlemap;
-  const hid = new Set(((B && B._tokens) || []).filter(t => t && t.hidden && t.cid).map(t => t.cid));
+  let toks = null;
+  if (B && B._body && Array.isArray(B._tokens)) toks = B._tokens;
+  else { try { toks = (JSON.parse(localStorage.getItem('skt-battlemap-v1') || '{}') || {}).tokens; } catch(e){} }
+  const hid = new Set((Array.isArray(toks) ? toks : []).filter(t => t && t.hidden && t.cid).map(t => t.cid));
   const all = state.combatants || [];
   const list = all.filter(c => !hid.has(c.id));
   if (!paShared().has('combat') || !list.length){ el.innerHTML = ''; el.hidden = true; paTurnAlert(null, false, null); return; }

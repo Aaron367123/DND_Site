@@ -26349,6 +26349,27 @@ for (const cls of Object.keys(rule)) for (let L = 1; L <= 20; L++) for (const sc
       } catch(e){ ok('round 399 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
       finally { B._floorName = keepName; paTab = keepTab; try { paRender(); } catch(e){} }
     }
+    // -- Round 400: on any tab, not just the Map: a creature hidden on the map isn't in the phone's turn strip --
+    if (PLAYER){
+      const keepTab = paTab, B = panelDefs.battlemap;
+      const S0 = localStorage.getItem('skt-battlemap-v1'), keepA = state.activeCombatantId;
+      try {
+        if (paMyIdx() < 0) paSetPc('zoey');
+        paTab = 'you'; paRender(); await sleep(300);
+        // The map as synced, with the Ogre's token hidden — the map panel isn't open
+        const S = JSON.parse(S0 || '{}');
+        (S.tokens || []).forEach(t => { if (t.cid === 'ogre1') t.hidden = true; });
+        localStorage.setItem('skt-battlemap-v1', JSON.stringify(S));
+        state.activeCombatantId = 'wolf'; paRender(); await sleep(250);
+        const strip = () => (document.querySelector('#pa-turn') || {}).textContent || '';
+        ok('phone, You tab: a creature hidden on the map isn’t in the turn strip', !B._body && /Werewolf/.test(strip()) && !/Ogre 1/.test(strip()), JSON.stringify([!!B._body, strip()]));
+      } catch(e){ ok('round 400 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
+      finally {
+        if (S0 != null) localStorage.setItem('skt-battlemap-v1', S0);
+        state.activeCombatantId = keepA;
+        paTab = keepTab; try { paRender(); } catch(e){}
+      }
+    }
   }
 
   // ══════════════════════════════════════════════════════════ mobile / phone

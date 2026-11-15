@@ -170,6 +170,19 @@ const window = {};
       const who = await dm.ev("return (state.combatants.find(c=>c.id===state.activeCombatantId)||{}).name");
       return lat(await W(pl, "return state.combatants.length >= 7 && (state.combatants.find(c=>c.id===state.activeCombatantId)||{}).name === " + JSON.stringify(who) + " && (document.querySelector('#pa-turn, .pa-turn')||document.body).textContent.includes(" + JSON.stringify(who.split(' ')[0]) + ")"));
     });
+    await step('DM hides a goblin on the map → it leaves the phone’s turn strip; revealed → back by name', async () => {
+      const id = await dm.ev("const c = state.combatants.filter(c => !c.isPC).pop(); if (!c) return ''; c.e2eName = c.name; c.name = 'e2e Sneak'; save(); openPanel('battlemap'); await new Promise(r=>setTimeout(r,300)); const B = panelDefs.battlemap; B._tokens = B._tokens.filter(t => t.id !== 'e2e-sneak'); B._tokens.push({ id: 'e2e-sneak', cid: c.id, label: 'e2e Sneak', x: 400, y: 300, size: 1, hidden: true }); B._saveMap(); B._render(); return c.id");
+      if (!id) return { ok: false, why: 'no monster in the fight' };
+      const strip = "(document.querySelector('#pa-turn') || {}).textContent || ''";
+      const t1 = await W(pl, "paRender(); return state.combatants.some(c => c.name === 'e2e Sneak') && (JSON.parse(localStorage.getItem('skt-battlemap-v1') || '{}').tokens || []).some(t => t.id === 'e2e-sneak' && t.hidden) && !(" + strip + ").includes('e2e Sneak') ? 1 : 0", 10000);
+      if (t1 == null) return { ok: false, why: 'phone: ' + await pl.ev("paRender(); const el = document.querySelector('#pa-turn'); return JSON.stringify({ strip: " + strip + ", el: !!el, hidden: el && el.hidden, names: state.combatants.map(c => c.name), tok: (JSON.parse(localStorage.getItem('skt-battlemap-v1') || '{}').tokens || []).filter(t => t.id === 'e2e-sneak'), shared: [...paShared()] })") };
+      await dm.ev("const B = panelDefs.battlemap; const t = B._tokens.find(t => t.id === 'e2e-sneak'); delete t.hidden; B._saveMap(); B._render(); return 1");
+      const t2 = await W(pl, "paRender(); return (" + strip + ").includes('e2e Sneak') ? 1 : 0", 10000);
+      // Tidy: its name back, the token gone.
+      await dm.ev("const c = state.combatants.find(c => c.id === " + JSON.stringify(id) + "); if (c && c.e2eName){ c.name = c.e2eName; delete c.e2eName; save(); } const B = panelDefs.battlemap; B._tokens = B._tokens.filter(t => t.id !== 'e2e-sneak'); B._saveMap(); B._render(); return 1");
+      if (t2 == null) return { ok: false, why: 'revealed, but not back in the phone’s strip' };
+      return lat(t1);
+    });
     await step('DM damages a goblin → both phones', async () => {
       const r = await dm.ev("const i = state.combatants.findIndex(c=>!c.isPC); panelDefs.combat._applyHpDelta(i, -3, 'slashing'); return { id: state.combatants[i].id, hp: state.combatants[i].hp }");
       const js = "return (state.combatants.find(c=>c.id==='" + r.id + "')||{}).hp === " + r.hp;
