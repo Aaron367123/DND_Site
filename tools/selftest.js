@@ -23133,6 +23133,76 @@ for (const cls of Object.keys(rule)) for (let L = 1; L <= 20; L++) for (const sc
         closePanel('battlemap');
       }
     }
+    // -- Round 409: walls block an area — a fireball catches the goblin in its room, not the one through the wall; a closed door shields, an open one doesn't; an emanation the same; a Large creature half round a corner is in it; the highlight and the save list agree --
+    {
+      const B = panelDefs.battlemap;
+      let keepT = null, keepD = null, keepF, saved = false;
+      try {
+        openPanel('battlemap'); await sleep(700);
+        keepT = B._tokens.slice(); keepD = B._drawings.slice(); keepF = B._fog; saved = true;
+        const cs = B._csScreen();
+        const near = { id: 't409a', cid: 'wolf', label: 'r409 Near goblin', x: 2.5 * cs, y: 5.5 * cs, size: 1 };
+        const far = { id: 't409b', cid: 'ogre1', label: 'r409 Far goblin', x: 7.5 * cs, y: 5.5 * cs, size: 1 };
+        const pal = { id: 't409p', label: 'r409 Paladin', x: 4.5 * cs, y: 5.5 * cs, size: 1, isPC: true };
+        B._tokens = [near, far, pal]; B._fog = null;
+        const ball = { k: 'tpl', id: 'r409f', shape: 'circle', x: 4.5 * cs, y: 5.5 * cs, ft: 20, c: '#f60' };
+        const wallsSolid = [{ k: 'tpl', id: 'r409w', shape: 'wall', pts: [6 * cs, 0, 6 * cs, 12 * cs] }];
+        B._drawings = [ball]; B._render(); await sleep(150);
+        const ids = () => B._areaTargets(ball);
+        ok('no walls: the fireball has both goblins', B._tokensInArea(ball).some(t => t === near) && B._tokensInArea(ball).some(t => t === far));
+        B._drawings = [ball].concat(wallsSolid); B._render(); await sleep(150);
+        const inIt = t => B._tokensInArea(ball).includes(t);
+        ok('a wall between: the goblin through it isn’t in the fireball; the one in the room is', inIt(near) && !inIt(far));
+        const hl = id => B._body.querySelector('.map-token[data-tid="' + id + '"]').classList.contains('in-area');
+        ok('…the highlight says the same', hl('t409a') && !hl('t409b'));
+        // its drawing is cut to where it reaches
+        const clipPoly = id => { const cp = B._body.querySelector('#tpl-layer clipPath#ac-' + id + ' polygon'); return cp ? cp.getAttribute('points').split(' ').map(p => p.split(',').map(Number)) : null; };
+        const inside = (P, x, y) => { let c = false; for (let i = 0, j = P.length - 1; i < P.length; j = i++){ const [xi, yi] = P[i], [xj, yj] = P[j]; if ((yi > y) !== (yj > y) && x < (xj - xi) * (y - yi) / (yj - yi) + xi) c = !c; } return c; };
+        const P = clipPoly('r409f');
+        ok('…its drawing stops at the wall (the near goblin’s side drawn, the far one’s not)', !!P && inside(P, near.x, near.y) && !inside(P, far.x, far.y), P && P.length);
+        // Spreads around corners
+        B._areaMenu(ball, 300, 300, ball.x, ball.y); await sleep(80);
+        const rc = [...document.querySelectorAll('.ctx-menu-item')].find(e => /Spreads around corners/.test(e.textContent));
+        ok('its menu: Spreads around corners', !!rc);
+        if (rc) rc.click(); await sleep(80);
+        document.querySelectorAll('.ctx-menu').forEach(m => m.remove());
+        ok('…on: the far goblin is in it, and nothing’s cut', ball.round === true && inIt(far) && !clipPoly('r409f'));
+        delete ball.round; B._render(); await sleep(60);
+        // Magical darkness spreads around corners, always
+        const dk = { k: 'tpl', id: 'r409k', shape: 'darkness', x: 4.5 * cs, y: 5.5 * cs, ft: 20 };
+        B._drawings = [dk].concat(wallsSolid); B._render(); await sleep(80);
+        ok('magical darkness: through the wall too, and not cut', B._tokensInArea(dk).includes(far) && !clipPoly('r409k'));
+        B._drawings = [ball].concat(wallsSolid); B._render(); await sleep(80);
+        // A door in the wall
+        const door = { k: 'tpl', id: 'r409d', shape: 'wall', door: true, pts: [6 * cs, 5 * cs, 6 * cs, 6 * cs] };
+        B._drawings = [ball, { k: 'tpl', id: 'r409w1', shape: 'wall', pts: [6 * cs, 0, 6 * cs, 5 * cs] }, door, { k: 'tpl', id: 'r409w2', shape: 'wall', pts: [6 * cs, 6 * cs, 6 * cs, 12 * cs] }];
+        B._render(); await sleep(100);
+        ok('a closed door shields the far goblin', !inIt(far));
+        door.open = true; B._render(); await sleep(100);
+        ok('…an open one doesn’t (the line from the centre goes through it)', inIt(far));
+        delete door.open;
+        // An emanation round the paladin
+        const aura = { k: 'tpl', id: 'r409e', shape: 'aura', tok: 't409p', ft: 15, c: '#fd0' };
+        B._drawings = [aura].concat(wallsSolid); B._render(); await sleep(100);
+        ok('…the one through the wall isn’t; the one beside the paladin is', B._tokensInArea(aura).includes(near) && !B._tokensInArea(aura).includes(far));
+        // A Large creature, half round the corner of a wall that ends
+        const ogre = { id: 't409o', label: 'r409 Ogre', x: 7 * cs, y: 7.5 * cs, size: 2 };
+        B._tokens = [near, far, pal, ogre];
+        B._drawings = [Object.assign({}, ball, { ft: 25 }), { k: 'tpl', id: 'r409w3', shape: 'wall', pts: [6 * cs, 0, 6 * cs, 7 * cs] }];
+        B._render(); await sleep(100);
+        const ball2 = B._drawings[0];
+        ok('a Large creature with a square the blast reaches round the wall’s end is in it', B._tokensInArea(ball2).includes(ogre));
+        // The save list (Roll saves for the targets) agrees
+        B._drawings = [ball].concat(wallsSolid); B._tokens = [near, far, pal]; B._render(); await sleep(80);
+        const tg = B._areaTargets(ball);
+        ok('…and the save list has the near one, not the far one', tg.includes('wolf') && !tg.includes('ogre1'), JSON.stringify(tg));
+      } catch(e){ ok('round 409 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
+      finally {
+        if (saved){ B._tokens = keepT; B._drawings = keepD; B._fog = keepF; }
+        try { B._render(); } catch(e){}
+        closePanel('battlemap');
+      }
+    }
     // -- Class features: represented, not just text ------------------------
     {
       try {

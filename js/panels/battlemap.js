@@ -3657,7 +3657,8 @@ registerPanel('battlemap',{
       return '<rect x="' + x.toFixed(1) + '" y="' + y.toFixed(1) + '" width="' + w.toFixed(1) + '" height="' + h.toFixed(1) + '" fill="url(#bm-dt-hatch)" stroke="#7a5230" stroke-opacity=".7" stroke-width="' + (1.5 / vs).toFixed(2) + '" data-dt="' + r.id + '"><title>Difficult terrain</title></rect>';
     }).join('') + (preview && preview.shape === 'terrain' ? (() => { if (Array.isArray(preview.hexes)) return hexSvg(preview, 'stroke-dasharray="6 4"'); const x = Math.min(preview.x, preview.x2), y = Math.min(preview.y, preview.y2);
       return '<rect x="' + x + '" y="' + y + '" width="' + Math.abs(preview.x2 - preview.x) + '" height="' + Math.abs(preview.y2 - preview.y) + '" fill="url(#bm-dt-hatch)" stroke="#7a5230" stroke-dasharray="6 4" stroke-width="' + (1.5 / vs).toFixed(2) + '"/>'; })() : '');
-    svg.innerHTML = hatch + rough + this._areas().map(t => this._areaSvg(t, 'data-tpl="' + t.id + '"' + (t.dm ? ' stroke-dasharray="' + (6 / vs).toFixed(1) + ' ' + (4 / vs).toFixed(1) + '"' : ''))).join('')
+    const SW = this._areaWalls();
+    svg.innerHTML = hatch + rough + this._areas().map(t => this._clipArea(t, this._areaSvg(t, 'data-tpl="' + t.id + '"' + (t.dm ? ' stroke-dasharray="' + (6 / vs).toFixed(1) + ' ' + (4 / vs).toFixed(1) + '"' : '')), SW)).join('')
       + labels
       + handles
       + (preview && !this._isFixture(preview) ? this._areaSvg(preview, 'stroke-dasharray="6 4"') : '')
@@ -3688,29 +3689,90 @@ registerPanel('battlemap',{
   // the area covers — the Dungeon Master's Guide's "an area covers at least
   // half a square". Only the token's centre was tested, so a Large or Huge
   // creature with half its space in a fireball was left out of the saves.
-  _tokenInArea(a, tok){
+  //
+  // Walls: "a spell's effect expands in straight lines from the point of
+  // origin; if no unblocked straight line extends from the point of origin
+  // to a location within the area, that location isn't included" (PHB). A
+  // fireball in one room caught the goblins through the wall in the next.
+  // A square counts only if a line from the origin — a sphere's centre, a
+  // cone's or line's start, a cube's face, an emanation's creature — reaches
+  // it without crossing a wall or a closed door. (S: the walls, gathered
+  // once by a caller testing many.)
+  _tokenInArea(a, tok, S){
     if (!tok || tok.x == null) return false;
     if (a.shape === 'aura' && tok.id === a.tok && !a.self) return false;   // its own creature, unless chosen
     // Height above the area's origin: an emanation's is its creature's.
     const o = a.shape === 'aura' ? this._auraTok(a) : null;
     const z = (+tok.elev || 0) - (o ? (+o.tok.elev || 0) : (+a.z || 0));
+    if (S === undefined) S = this._areaWalls();
+    if (this._roundsCorners(a)) S = null;
+    const ox = o ? o.x : +a.x, oy = o ? o.y : +a.y;
+    const reach = (px, py) => !S || !sktWallBetween(S, ox, oy, px, py);
     const s = Math.max(1, Math.round(+tok.size || 1));
-    if (s === 1) return this._inArea(a, tok.x, tok.y, z);
+    if (s === 1) return this._inArea(a, tok.x, tok.y, z) && reach(tok.x, tok.y);
     const u = this._tokenUnitScreen() || this._csScreen() || 50, per = this._ftPerCell || 5;
     // A big creature is as tall as it is wide: any of its cubes will do.
-    for (let k = 0; k < s; k++) for (let i = 0; i < s; i++) for (let j = 0; j < s; j++)
-      if (this._inArea(a, tok.x + (i - (s - 1) / 2) * u, tok.y + (j - (s - 1) / 2) * u, z + k * per)) return true;
+    for (let k = 0; k < s; k++) for (let i = 0; i < s; i++) for (let j = 0; j < s; j++){
+      const px = tok.x + (i - (s - 1) / 2) * u, py = tok.y + (j - (s - 1) / 2) * u;
+      if (this._inArea(a, px, py, z + k * per) && reach(px, py)) return true;
+    }
     return false;
   },
+  // The walls an area's lines can't cross (null: none on the map).
+  _areaWalls(){
+    const S = sktSightSrc({ drawings: this._drawings, cs: this._csScreen() || 50, ftPerCell: this._ftPerCell, gridType: this._gridType, light: 'bright' });
+    return S.walls.length ? S : null;
+  },
+  // Some spells say they spread around corners (Darkness; the 2014
+  // Fireball): the area's menu says which, and darkness always does.
+  _roundsCorners(a){ return !!a && (a.round || a.shape === 'darkness'); },
+  // Where an area can reach from its origin within R: the shape a light
+  // there would light, walls and closed doors stopping it — rays to every
+  // wall end (and just either side), nearest wall hit on each, in turn.
+  _reachPoly(S, ox, oy, R){
+    const segD = (w) => { const dx = w[2] - w[0], dy = w[3] - w[1], L = dx * dx + dy * dy; const u = L ? Math.max(0, Math.min(1, ((ox - w[0]) * dx + (oy - w[1]) * dy) / L)) : 0; return Math.hypot(ox - w[0] - u * dx, oy - w[1] - u * dy); };
+    const near = S.walls.filter(w => segD(w) < R);
+    if (!near.length) return null;
+    const box = [[ox - R, oy - R, ox + R, oy - R], [ox + R, oy - R, ox + R, oy + R], [ox + R, oy + R, ox - R, oy + R], [ox - R, oy + R, ox - R, oy - R]];
+    const all = near.concat(box), angs = [];
+    for (const w of all) for (const [px, py] of [[w[0], w[1]], [w[2], w[3]]]){ const a = Math.atan2(py - oy, px - ox); angs.push(a - 1e-4, a, a + 1e-4); }
+    angs.sort((p, q) => p - q);
+    const pts = [];
+    for (const a of angs){
+      const dx = Math.cos(a), dy = Math.sin(a); let best = Infinity;
+      for (const w of all){
+        const ex = w[2] - w[0], ey = w[3] - w[1], den = dx * ey - dy * ex;
+        if (Math.abs(den) < 1e-12) continue;
+        const t = ((w[0] - ox) * ey - (w[1] - oy) * ex) / den, u = ((w[0] - ox) * dy - (w[1] - oy) * dx) / den;
+        if (t > 0 && u >= 0 && u <= 1 && t < best) best = t;
+      }
+      if (best < Infinity) pts.push([ox + dx * best, oy + dy * best]);
+    }
+    return pts.length > 2 ? pts : null;
+  },
+  // An area's drawing, cut to where it reaches (S: the walls, or null).
+  _clipArea(t, html, S){
+    if (!S || !html || this._roundsCorners(t)) return html;
+    const g = this._areaGeom(t); if (!g) return html;
+    let ox, oy, R;
+    if (g.aura){ ox = g.aura.x; oy = g.aura.y; R = (g.aura.h + g.aura.r) * 1.5; }
+    else if (g.circle){ ox = g.circle.x; oy = g.circle.y; R = g.circle.r * 1.05; }
+    else { ox = +t.x; oy = +t.y; R = Math.max(...g.poly.map(p => Math.hypot(p[0] - ox, p[1] - oy))) * 1.05; }
+    const poly = this._reachPoly(S, ox, oy, R); if (!poly) return html;
+    const id = 'ac-' + String(t.id).replace(/[^\w-]/g, '');
+    return '<clipPath id="' + id + '"><polygon points="' + poly.map(p => p[0].toFixed(1) + ',' + p[1].toFixed(1)).join(' ') + '"/></clipPath><g clip-path="url(#' + id + ')">' + html + '</g>';
+  },
   _tokensInArea(t){
-    return (this._tokens || []).filter(tok => this._tokenInArea(t, tok));
+    const S = this._areaWalls();
+    return (this._tokens || []).filter(tok => this._tokenInArea(t, tok, S));
   },
   _markTokensInAreas(preview){
     const b = this._body; if (!b) return;
     const areas = this._areas().concat(preview && !this._isFixture(preview) ? [preview] : []);
+    const S = areas.length ? this._areaWalls() : null;
     b.querySelectorAll('.map-token').forEach(el => {
       const tok = (this._tokens || []).find(t => String(t.id) === el.dataset.tid);
-      el.classList.toggle('in-area', !!tok && areas.some(a => this._tokenInArea(a, tok)));
+      el.classList.toggle('in-area', !!tok && areas.some(a => this._tokenInArea(a, tok, S)));
     });
   },
   // Press on an area and drag: the area MOVES. Press its handle and drag:
@@ -4141,6 +4203,10 @@ registerPanel('battlemap',{
         this._saveMap(); this._renderAreas();
       }});
     }
+    if (t.shape !== 'darkness') items.push({ label: 'Spreads around corners', checked: !!t.round, onClick: () => {
+      if (t.round) delete t.round; else t.round = true;
+      this._saveMap(); this._renderAreas();
+    }});
     if (!isPlayer) items.push({ label: t.dm ? '👁 Show it to the players' : '🙈 Hide it from the players', onClick: () => {
       if (t.dm) delete t.dm; else t.dm = true;
       this._saveMap(); this._renderAreas();
