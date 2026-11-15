@@ -2655,7 +2655,7 @@ registerPanel('battlemap',{
   // which keeps the clear corners token art comes with (PNG where WebP can't
   // be written). ✕ puts back the one it had. Not a character's: theirs is
   // the one on their sheet.
-  _setTokenPicture(t, file){
+  _setTokenPicture(t, file, frame){
     if (!t || t.isPC) return Promise.resolve(false);
     const done = () => { this._saveMap(); this._renderTokens(); if (this._selected === t.id){ const tp = this._body && this._body.querySelector('#token-panel'); if (tp && tp.style.display !== 'none') this._showPanel(t); } };
     if (!file){
@@ -2665,6 +2665,16 @@ registerPanel('battlemap',{
       return Promise.resolve(true);
     }
     if (!/^image\//.test(file.type || '')){ if (typeof showToast === 'function') showToast('That isn’t a picture: use a PNG, JPG or WebP.'); return Promise.resolve(false); }
+    const put = u => {
+      if (!t.picOwn){ if (t.portrait) t.picWas = t.portrait; else delete t.picWas; }
+      t.portrait = u; t.picOwn = true; done();
+      if (typeof showToast === 'function') showToast('A new picture on ' + (t.label || 'the token') + '.');
+      return true;
+    };
+    // Picture…: framed by the DM, as a character's portrait is (a dropped
+    // file goes straight on, round its middle).
+    if (frame && typeof showCropModal === 'function')
+      return showCropModal(file, { size: 128, shape: 'circle', title: 'Frame the token’s picture', type: 'image/webp' }).then(u => u ? put(u) : false);
     return new Promise(res => {
       const url = URL.createObjectURL(file), img = new Image();
       img.onerror = () => { URL.revokeObjectURL(url); if (typeof showToast === 'function') showToast('That picture couldn’t be read.'); res(false); };
@@ -2675,10 +2685,7 @@ registerPanel('battlemap',{
         c.getContext('2d').drawImage(img, (N - w) / 2, (N - h) / 2, w, h);
         let u = c.toDataURL('image/webp', 0.85);
         if (u.indexOf('data:image/webp') !== 0) u = c.toDataURL('image/png');
-        if (!t.picOwn){ if (t.portrait) t.picWas = t.portrait; else delete t.picWas; }
-        t.portrait = u; t.picOwn = true; done();
-        if (typeof showToast === 'function') showToast('A new picture on ' + (t.label || 'the token') + '.');
-        res(true);
+        res(put(u));
       };
       img.src = url;
     });
@@ -2688,6 +2695,12 @@ registerPanel('battlemap',{
       const party = (typeof state !== 'undefined' && state.party) || [];
       const pm = party.find(p => p.id === t.cid) || party.find(p => p.name === t.label);
       if (pm) return pm.portrait || pm.icon || t.icon || '⚔';
+    }
+    // A monster given a picture in the Combat Tracker shows it here too —
+    // unless the DM gave the token one of its own.
+    if (t && !t.picOwn && t.cid != null){
+      const c = ((typeof state !== 'undefined' && state.combatants) || []).find(k => k && k.id === t.cid);
+      if (c && typeof c.portrait === 'string' && c.portrait.indexOf('data:image/') === 0) return c.portrait;
     }
     return t ? (t.portrait || t.icon) : '';
   },
@@ -8240,7 +8253,7 @@ registerPanel('battlemap',{
     const picRow = b.querySelector('#tp-pic-row'); if (picRow) picRow.style.display = t.isPC ? 'none' : 'flex';
     rewire('#tp-pic','click', () => {
       const inp = document.createElement('input'); inp.type = 'file'; inp.accept = 'image/*';
-      inp.onchange = () => { const f = inp.files && inp.files[0]; if (f) this._setTokenPicture(t, f); };
+      inp.onchange = () => { const f = inp.files && inp.files[0]; if (f) this._setTokenPicture(t, f, true); };
       inp.click();
     });
     rewire('#tp-pic-x','click', () => this._setTokenPicture(t, null));

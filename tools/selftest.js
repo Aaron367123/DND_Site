@@ -23599,6 +23599,67 @@ for (const cls of Object.keys(rule)) for (let L = 1; L <= 20; L++) for (const sc
         closePanel('battlemap');
       }
     }
+    // -- Round 422: Picture… lets the DM frame the token's picture (the portrait cropper, kept clear where the art is clear; Cancel changes nothing; every other cropper still JPEG); a picture given in the Combat Tracker shows on that monster's token, unless the token has one of its own --
+    if (!PLAYER){
+      const B = panelDefs.battlemap;
+      let keepT = null, keepC = null, saved = false;
+      try {
+        openPanel('battlemap'); await sleep(700);
+        keepT = B._tokens.slice(); keepC = (state.combatants || []).slice(); saved = true;
+        const cs = B._csScreen();
+        const art = async () => { const c = document.createElement('canvas'); c.width = 240; c.height = 240; const g = c.getContext('2d'); g.fillStyle = '#d22'; g.beginPath(); g.arc(120, 120, 60, 0, 7); g.fill();
+          return new File([await new Promise(r => c.toBlob(r, 'image/png'))], 'art.png', { type: 'image/png' }); };
+        const f = await art();
+        const npc = { id: 't422n', label: 'r422 Captain', x: 3.5 * cs, y: 3.5 * cs, size: 1, portrait: 'img/bestiary/tokens/MM/Goblin.webp' };
+        B._tokens = [npc]; B._render(); await sleep(100);
+        const crop = () => document.querySelector('.crop-overlay');
+        const decode = u => new Promise(r => { const i = new Image(); i.onload = () => { const c = document.createElement('canvas'); c.width = i.width; c.height = i.height; const g = c.getContext('2d'); g.drawImage(i, 0, 0); r({ w: i.width, corner: g.getImageData(1, 1, 1, 1).data[3] }); }; i.onerror = () => r(null); i.src = u; });
+        // Picture… in the panel: the file chooser, then the cropper to frame it
+        B._selected = npc.id; B._showPanel(npc); await sleep(50);
+        let chooser = null; const keepClick = HTMLInputElement.prototype.click;
+        HTMLInputElement.prototype.click = function(){ if (this.type === 'file') chooser = this; else return keepClick.call(this); };
+        try { B._body.querySelector('#tp-pic').click(); } finally { HTMLInputElement.prototype.click = keepClick; }
+        ok('Picture…: a file chooser for pictures', !!chooser && /image/.test(chooser.accept));
+        if (chooser){ const dt = new DataTransfer(); dt.items.add(f); chooser.files = dt.files; chooser.dispatchEvent(new Event('change')); }
+        for (let i = 0; i < 40 && !crop(); i++) await sleep(50);
+        ok('…a picture chosen: the cropper opens to frame it', !!crop());
+        crop() && crop().querySelector('[data-act="save"]').click();
+        for (let i = 0; i < 40 && !npc.picOwn; i++) await sleep(50);
+        const r1 = npc.picOwn === true, d1 = await decode(npc.portrait || '');
+        B._closePanel();
+        let p;
+        ok('…saved: on the token, 128 px, WebP with its clear corners clear', r1 === true && npc.picOwn && /^data:image\/webp/.test(npc.portrait) && d1 && d1.w === 128 && d1.corner < 10, JSON.stringify([r1, (npc.portrait || '').slice(0, 24), d1]));
+        const u1 = npc.portrait;
+        p = B._setTokenPicture(npc, f, true);
+        for (let i = 0; i < 40 && !crop(); i++) await sleep(50);
+        crop() && crop().querySelector('[data-act="cancel"]').click();
+        const r2 = await p;
+        ok('…Cancel: nothing changed', r2 === false && npc.portrait === u1 && !crop());
+        // the other croppers
+        p = showCropModal(f, { size: 96, shape: 'circle', title: 'x' });
+        for (let i = 0; i < 40 && !crop(); i++) await sleep(50);
+        crop() && crop().querySelector('[data-act="save"]').click();
+        const u3 = await p;
+        ok('the cropper anywhere else still gives a JPEG, 96 px', /^data:image\/jpeg/.test(u3 || '') && ((await decode(u3)) || {}).w === 96, String(u3).slice(0, 24));
+        // the Combat Tracker's picture
+        const pic = 'data:image/png;base64,' + btoa('r422-tracker');
+        state.combatants = [{ id: 'r422c', name: 'r422 Brute', hp: 10, hpMax: 10, init: 5, portrait: pic }, { id: 'r422d', name: 'r422 Imp', hp: 5, hpMax: 5, init: 4, portrait: 'img/bestiary/tokens/MM/Imp.webp' }];
+        const brute = { id: 't422b', cid: 'r422c', label: 'r422 Brute', x: 6.5 * cs, y: 3.5 * cs, size: 1, portrait: 'img/bestiary/tokens/MM/Ogre.webp' };
+        const imp = { id: 't422i', cid: 'r422d', label: 'r422 Imp', x: 8.5 * cs, y: 3.5 * cs, size: 1, portrait: 'img/bestiary/tokens/MM/Imp-old.webp' };
+        B._tokens = [npc, brute, imp]; B._renderTokens(); await sleep(100);
+        const src = id => { const el = B._body.querySelector('.map-token[data-tid="' + id + '"] img'); return el ? el.getAttribute('src') : ''; };
+        ok('a monster given a picture in the Combat Tracker: its token shows it', B._tokenFace(brute) === pic && src('t422b') === pic, src('t422b').slice(0, 40));
+        ok('…one whose tracker picture is just its book’s: the token keeps its own', B._tokenFace(imp) === imp.portrait);
+        npc.cid = 'r422c'; B._renderTokens(); await sleep(50);
+        ok('…a token the DM gave its own picture keeps that, whatever the tracker has', B._tokenFace(npc) === u1 && src('t422n') === u1);
+      } catch(e){ ok('round 422 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
+      finally {
+        document.querySelectorAll('.crop-overlay').forEach(m => m.remove());
+        if (saved){ B._tokens = keepT; state.combatants = keepC; try { B._saveMap(); } catch(e){} }
+        try { B._closePanel(); B._render(); } catch(e){}
+        closePanel('battlemap');
+      }
+    }
     // -- Class features: represented, not just text ------------------------
     {
       try {

@@ -393,7 +393,7 @@ function showCropModal(file, opts) {
     const reader = new FileReader();
     reader.onload = () => {
       const img = new Image();
-      img.onload = () => _runCrop(img, size, shape, title, resolve);
+      img.onload = () => _runCrop(img, size, shape, title, resolve, opts);
       img.onerror = () => resolve(null);
       img.src = reader.result;
     };
@@ -402,7 +402,8 @@ function showCropModal(file, opts) {
   });
 }
 
-function _runCrop(img, outSize, shape, title, resolve) {
+function _runCrop(img, outSize, shape, title, resolve, opts) {
+  opts = opts || {};
   // Viewport is a fixed on-screen square; the image is positioned inside via
   // CSS transform. We track translate (tx, ty) in viewport pixels and a uniform
   // scale (s) where s=1 means "cover-fit". The user can zoom up to 5×.
@@ -520,7 +521,10 @@ function _runCrop(img, outSize, shape, title, resolve) {
     canvas.width = canvas.height = outSize;
     const ctx = canvas.getContext('2d');
     ctx.drawImage(img, srcX, srcY, srcW, srcH, 0, 0, outSize, outSize);
-    const url = canvas.toDataURL('image/jpeg', 0.85);
+    // opts.type: 'image/webp' keeps clear parts clear (token art); PNG where
+    // WebP can't be written. JPEG otherwise, as it always was.
+    let url = opts.type ? canvas.toDataURL(opts.type, 0.85) : canvas.toDataURL('image/jpeg', 0.85);
+    if (opts.type && url.indexOf('data:' + opts.type) !== 0) url = canvas.toDataURL('image/png');
     cleanup();
     resolve(url);
   });
