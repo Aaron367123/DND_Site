@@ -121,6 +121,246 @@ function sktDetectGrid(img){
   if (Math.min(bands(true, ax.p, ax.ph), bands(false, ay.p, ay.ph)) < 3) return null;
   return { size: size / k, ox: ax.ph / k, oy: ay.ph / k };
 }
+// ─── The walls drawn on a map picture ───────────────────────────────────────
+// Walls for line of sight without drawing each one: Build → Find walls.
+// Two ways to read a map, because maps are drawn two ways:
+//   lines — walls drawn as thick dark strokes. The dark pixels, the distance
+//     from each to the nearest light one, thinned to centre lines; kept where
+//     as thick as this map's walls (its thickest long lines: a high
+//     percentile of the centre lines' thickness), so grid lines, furniture
+//     and hatching drop out; small pieces on their own (a letter, a compass)
+//     go; the rest traced and straightened. A door or window drawn as a
+//     light break in the wall stays a gap.
+//   edges — walls where the floor stops: hatched rock, a dark void. The
+//     picture smoothed so hatching reads as grey, the large light areas taken
+//     as floor (furniture holes filled), and their outlines traced.
+// Tried on adventure maps of each kind: a tavern drawn in black lines came
+// out wall for wall by lines; Undermountain's hatched dungeon room for room
+// by edges; painted maps less well — so the DM sees what was found first,
+// can switch the way, and keeps it or not.
+// Auto: both ways; drawn walls (lines) when they make up a fair share of
+// what the floor's edges do — on a map drawn with thick black walls the
+// lines came to 0.39 of the edges' length (the edges run both sides of each
+// wall), on hatched and painted maps 0.04–0.08 — and lie beside the floor
+// (the tavern's: all of them; a long-stroke hatch traced as "walls": 0.12).
+function sktDetectWalls(img, cell, opt){
+  opt = opt || {};
+  if (opt.mode === 'line' || opt.mode === 'edge') return sktWallsByLine(img, cell, opt);
+  const a = sktWallsByLine(img, cell, Object.assign({}, opt, { mode: 'line' }));
+  const b = sktWallsByLine(img, cell, Object.assign({}, opt, { mode: 'edge' }));
+  const len = r => r.segs.reduce((t, q) => t + Math.hypot(q[2] - q[0], q[3] - q[1]), 0);
+  const la = len(a), lb = len(b);
+  if (!lb) return a;
+  // …and drawn walls have floor beside them: most of their length lies near
+  // the floor's edges. Long parallel strokes in the rock (a hatch, planks,
+  // water lines) traced as "walls" lie nowhere near a floor.
+  const cell1 = cell > 4 ? cell : 50, reach = 0.6 * cell1, bk = Math.max(8, cell1), bucket = new Map();
+  b.segs.forEach((s, i) => { for (let x = Math.floor(Math.min(s[0], s[2]) / bk) - 1; x <= Math.floor(Math.max(s[0], s[2]) / bk) + 1; x++) for (let y = Math.floor(Math.min(s[1], s[3]) / bk) - 1; y <= Math.floor(Math.max(s[1], s[3]) / bk) + 1; y++){ const k = x * 1048576 + y; let l = bucket.get(k); if (!l) bucket.set(k, l = []); l.push(i); } });
+  const dist = (px, py, s) => { const dx = s[2] - s[0], dy = s[3] - s[1], L = dx * dx + dy * dy; const u = L ? Math.max(0, Math.min(1, ((px - s[0]) * dx + (py - s[1]) * dy) / L)) : 0; return Math.hypot(px - s[0] - u * dx, py - s[1] - u * dy); };
+  let tot = 0, on = 0;
+  for (const s of a.segs){ const L = Math.hypot(s[2] - s[0], s[3] - s[1]), n = Math.max(1, Math.ceil(L / (cell1 / 4)));
+    for (let j = 0; j <= n; j++){ const px = s[0] + (s[2] - s[0]) * j / n, py = s[1] + (s[3] - s[1]) * j / n; tot++;
+      const l = bucket.get(Math.floor(px / bk) * 1048576 + Math.floor(py / bk)); if (l && l.some(i => dist(px, py, b.segs[i]) <= reach)) on++; } }
+  const agree = tot ? on / tot : 0;
+  a.info.agree = +agree.toFixed(2); a.info.ratio = +(la / lb).toFixed(2); b.info.agree = a.info.agree; b.info.ratio = a.info.ratio;
+  return la / lb >= 0.2 && agree >= 0.6 ? a : b;
+}
+function sktWallsByLine(img, cell, opt){
+  opt = opt || {};
+  const cr = opt.crop || { x: 0, y: 0, w: img.naturalWidth, h: img.naturalHeight };
+  const W0 = Math.max(1, Math.round(cr.w)), H0 = Math.max(1, Math.round(cr.h));
+  cell = cell > 4 ? cell : 50;
+  const ppc = opt.ppc || 28;                       // working pixels per square
+  let k = Math.min(1, ppc / cell);
+  if (Math.max(W0, H0) * k > 3000) k = 3000 / Math.max(W0, H0);
+  const W = Math.max(1, Math.round(W0 * k)), H = Math.max(1, Math.round(H0 * k));
+  const P = cell * k;                              // one square, in working px
+  const c = document.createElement('canvas'); c.width = W; c.height = H;
+  const g = c.getContext('2d', { willReadFrequently: true });
+  g.fillStyle = '#fff'; g.fillRect(0, 0, W, H);    // transparent = floor, not wall
+  g.drawImage(img, cr.x, cr.y, cr.w, cr.h, 0, 0, W, H);
+  let d; try { d = g.getImageData(0, 0, W, H).data; } catch(e){ return { segs: [], info: { error: 'tainted' } }; }
+  const N = W * H, L = new Uint8Array(N);
+  for (let i = 0, j = 0; i < N; i++, j += 4) L[i] = (0.299 * d[j] + 0.587 * d[j + 1] + 0.114 * d[j + 2]) | 0;
+  if (opt.mode === 'edge') return sktWallsFromFloorEdges(L, W, H, P, k, opt, cr);
+  // Dark: below a threshold between the dark and light halves of the picture (Otsu), nudged by opt.dark.
+  const hist = new Float64Array(256); for (let i = 0; i < N; i++) hist[L[i]]++;
+  let sum = 0; for (let t = 0; t < 256; t++) sum += t * hist[t];
+  let wB = 0, sB = 0, best = 0, T = 100;
+  for (let t = 0; t < 256; t++){ wB += hist[t]; if (!wB) continue; const wF = N - wB; if (!wF) break; sB += t * hist[t]; const mB = sB / wB, mF = (sum - sB) / wF, v = wB * wF * (mB - mF) * (mB - mF); if (v > best){ best = v; T = t; } }
+  T = Math.min(T, opt.maxDark || 110) * (opt.dark || 1);
+  const B = new Uint8Array(N);
+  for (let i = 0; i < N; i++) B[i] = L[i] < T ? 1 : 0;
+  // Distance to the nearest light pixel (chamfer 3-4, /3 = px)
+  const D = new Float32Array(N);
+  const INF = 1e9;
+  for (let i = 0; i < N; i++) D[i] = B[i] ? INF : 0;
+  for (let y = 0; y < H; y++) for (let x = 0; x < W; x++){ const i = y * W + x; if (!B[i]) continue; let m = D[i];
+    if (x > 0) m = Math.min(m, D[i - 1] + 3); if (y > 0){ m = Math.min(m, D[i - W] + 3); if (x > 0) m = Math.min(m, D[i - W - 1] + 4); if (x < W - 1) m = Math.min(m, D[i - W + 1] + 4); }
+    if (x === 0 || y === 0 || x === W - 1 || y === H - 1) m = Math.min(m, 3);
+    D[i] = m; }
+  for (let y = H - 1; y >= 0; y--) for (let x = W - 1; x >= 0; x--){ const i = y * W + x; if (!B[i]) continue; let m = D[i];
+    if (x < W - 1) m = Math.min(m, D[i + 1] + 3); if (y < H - 1){ m = Math.min(m, D[i + W] + 3); if (x < W - 1) m = Math.min(m, D[i + W + 1] + 4); if (x > 0) m = Math.min(m, D[i + W - 1] + 4); }
+    D[i] = m; }
+  for (let i = 0; i < N; i++) D[i] /= 3;
+  // Thin to centre lines (Zhang–Suen)
+  const S = B.slice();
+  const nb = (i) => { const x = i % W; return [S[i - W], S[i - W + 1], S[i + 1], S[i + W + 1], S[i + W], S[i + W - 1], S[i - 1], S[i - W - 1]]; };
+  let changed = true, iter = 0;
+  for (let y = 0; y < H; y++){ S[y * W] = 0; S[y * W + W - 1] = 0; } for (let x = 0; x < W; x++){ S[x] = 0; S[(H - 1) * W + x] = 0; }
+  while (changed && iter++ < 200){
+    changed = false;
+    for (let pass = 0; pass < 2; pass++){
+      const del = [];
+      for (let y = 1; y < H - 1; y++) for (let x = 1; x < W - 1; x++){
+        const i = y * W + x; if (!S[i]) continue;
+        const p = nb(i); let bn = 0; for (const v of p) bn += v;
+        if (bn < 2 || bn > 6) continue;
+        let a = 0; for (let q = 0; q < 8; q++) if (!p[q] && p[(q + 1) % 8]) a++;
+        if (a !== 1) continue;
+        if (pass === 0){ if (p[0] * p[2] * p[4]) continue; if (p[2] * p[4] * p[6]) continue; }
+        else { if (p[0] * p[2] * p[6]) continue; if (p[0] * p[4] * p[6]) continue; }
+        del.push(i);
+      }
+      if (del.length){ changed = true; for (const i of del) S[i] = 0; }
+    }
+  }
+  // Keep the centre line of what's as thick as this map's walls, and not a filled mass.
+  // A map's walls are its thickest long lines: their half-thickness is taken
+  // as a high percentile of the centre lines' (opt.wallPct), and anything much
+  // thinner (grid lines, furniture, hatching) goes.
+  const tMin0 = (opt.minThick || 0.05) * P / 2, tMax = (opt.maxThick || 0.75) * P / 2;
+  const ds = []; for (let i = 0; i < N; i++) if (S[i] && D[i] >= tMin0 && D[i] <= tMax) ds.push(D[i]);
+  ds.sort((a, b) => a - b);
+  const Dw = ds.length ? ds[Math.min(ds.length - 1, Math.floor(ds.length * (opt.wallPct || 0.9)))] : tMin0;
+  const tMin = Math.max(tMin0, Dw * (opt.thin || 0.6));
+  for (let i = 0; i < N; i++) if (S[i] && (D[i] < tMin || D[i] > tMax)) S[i] = 0;
+  // Small pieces on their own — a letter, a compass rose, a chair — aren't walls.
+  { const lab = new Int32Array(N), minPix = (opt.minPiece || 2.5) * P; let cur = 0; const st = [];
+    for (let i = 0; i < N; i++){ if (!S[i] || lab[i]) continue; cur++; const mem = [i]; lab[i] = cur; st.push(i);
+      while (st.length){ const p = st.pop(); for (const o of [-W - 1, -W, -W + 1, -1, 1, W - 1, W, W + 1]){ const q = p + o; if (q >= 0 && q < N && S[q] && !lab[q] && Math.abs((q % W) - (p % W)) <= 1){ lab[q] = cur; st.push(q); mem.push(q); } } }
+      if (mem.length < minPix) for (const p of mem) S[p] = 0; } }
+  // Trace chains between ends and junctions
+  const deg = i => { let n = 0; const x = i % W; for (const o of [-W - 1, -W, -W + 1, -1, 1, W - 1, W, W + 1]) if (S[i + o]) n++; return n; };
+  const used = new Uint8Array(N), chains = [];
+  const offs = [-W - 1, -W, -W + 1, -1, 1, W - 1, W, W + 1];
+  const nexts = i => offs.map(o => i + o).filter(j => j >= 0 && j < N && S[j] && Math.abs((j % W) - (i % W)) <= 1);
+  const isNode = i => deg(i) !== 2;
+  const walk = (start, first) => {
+    const pts = [start]; let prev = start, cur = first;
+    for (let guard = 0; guard < N; guard++){
+      pts.push(cur); used[cur] = 1;
+      if (isNode(cur)) break;
+      const nx = nexts(cur).filter(j => j !== prev && !(pts.length > 2 && j === pts[pts.length - 3]));
+      if (!nx.length) break;
+      // prefer an unvisited 4-neighbour
+      nx.sort((a, b) => (used[a] - used[b]) || (Math.abs(a - cur) === 1 || Math.abs(a - cur) === W ? -1 : 1));
+      if (used[nx[0]] && !isNode(nx[0])) break;
+      prev = cur; cur = nx[0];
+    }
+    return pts;
+  };
+  for (let i = 0; i < N; i++){
+    if (!S[i] || !isNode(i) || deg(i) === 0) continue;
+    for (const j of nexts(i)) if (!used[j] || isNode(j)){ const ch = walk(i, j); if (ch.length > 1) chains.push(ch); }
+    used[i] = 1;
+  }
+  for (let i = 0; i < N; i++) if (S[i] && !used[i]){ const nx = nexts(i); if (nx.length){ used[i] = 1; const ch = walk(i, nx[0]); if (ch.length > 1) chains.push(ch); } }
+  // Each chain to straight pieces (Douglas–Peucker)
+  const tol = (opt.tol || 0.12) * P;
+  const dp = (pts, a, b, out) => {
+    const ax = pts[a] % W, ay = (pts[a] / W) | 0, bx = pts[b] % W, by = (pts[b] / W) | 0;
+    let md = -1, mi = -1; const dx = bx - ax, dy = by - ay, len = Math.hypot(dx, dy) || 1;
+    for (let q = a + 1; q < b; q++){ const px = pts[q] % W, py = (pts[q] / W) | 0; const dd = Math.abs(dy * px - dx * py + bx * ay - by * ax) / len; if (dd > md){ md = dd; mi = q; } }
+    if (md > tol){ dp(pts, a, mi, out); dp(pts, mi, b, out); } else out.push([ax, ay, bx, by]);
+  };
+  let segs = [];
+  for (const ch of chains){ const out = []; dp(ch, 0, ch.length - 1, out); segs.push(...out); }
+  // Drop the crumbs
+  const minLen = (opt.minLen || 0.35) * P;
+  segs = segs.filter(s => Math.hypot(s[2] - s[0], s[3] - s[1]) >= minLen);
+  // Square to the axes when nearly so
+  segs.forEach(s => { const dx = s[2] - s[0], dy = s[3] - s[1]; const a = Math.abs(Math.atan2(dy, dx)) % Math.PI;
+    if (Math.abs(dy) <= Math.abs(dx) * 0.06){ const m = (s[1] + s[3]) / 2; s[1] = s[3] = m; }
+    else if (Math.abs(dx) <= Math.abs(dy) * 0.06){ const m = (s[0] + s[2]) / 2; s[0] = s[2] = m; } });
+  // Ends that nearly meet, meet
+  const snap = (opt.snap || 0.3) * P, ends = [];
+  segs.forEach((s, i) => { ends.push([i, 0]); ends.push([i, 2]); });
+  for (let a = 0; a < ends.length; a++) for (let b = a + 1; b < ends.length; b++){
+    const [i, p] = ends[a], [j, q] = ends[b]; if (i === j) continue;
+    const s = segs[i], t = segs[j];
+    if (Math.hypot(s[p] - t[q], s[p + 1] - t[q + 1]) <= snap){ const mx = (s[p] + t[q]) / 2, my = (s[p + 1] + t[q + 1]) / 2; s[p] = t[q] = mx; s[p + 1] = t[q + 1] = my; }
+  }
+  return { segs: segs.map(s => [s[0] / k + cr.x, s[1] / k + cr.y, s[2] / k + cr.x, s[3] / k + cr.y]), info: { W, H, k, T, P, mode: 'line' } };
+}
+
+// Edge mode: walls are where the floor stops (hatched rock, a dark void).
+// The picture smoothed (so hatching reads as grey), the large light areas
+// taken as floor (furniture holes filled), and their outlines traced.
+function sktWallsFromFloorEdges(L, W, H, P, k, opt, cr){
+  const N = W * H;
+  // box blur, radius ~0.15 square, twice
+  const r = Math.max(1, Math.round((opt.blur || 0.15) * P));
+  let A = Float32Array.from(L);
+  const blur = (src) => {
+    const tmp = new Float32Array(N), out = new Float32Array(N);
+    for (let y = 0; y < H; y++){ let acc = 0, n = 0; const row = y * W;
+      for (let x = -r; x < W; x++){ if (x + r < W){ acc += src[row + x + r]; n++; } if (x - r - 1 >= 0){ acc -= src[row + x - r - 1]; n--; } if (x >= 0) tmp[row + x] = acc / n; } }
+    for (let x = 0; x < W; x++){ let acc = 0, n = 0;
+      for (let y = -r; y < H; y++){ if (y + r < H){ acc += tmp[(y + r) * W + x]; n++; } if (y - r - 1 >= 0){ acc -= tmp[(y - r - 1) * W + x]; n--; } if (y >= 0) out[y * W + x] = acc / n; } }
+    return out;
+  };
+  A = blur(blur(A));
+  // floor: brighter than Otsu's split of the smoothed picture
+  const hist = new Float64Array(256); for (let i = 0; i < N; i++) hist[Math.max(0, Math.min(255, A[i] | 0))]++;
+  let sum = 0; for (let t = 0; t < 256; t++) sum += t * hist[t];
+  let wB = 0, sB = 0, best = 0, T = 128;
+  for (let t = 0; t < 256; t++){ wB += hist[t]; if (!wB) continue; const wF = N - wB; if (!wF) break; sB += t * hist[t]; const mB = sB / wB, mF = (sum - sB) / wF, v = wB * wF * (mB - mF) * (mB - mF); if (v > best){ best = v; T = t; } }
+  T = T * (opt.floor || 1);
+  const F = new Uint8Array(N); for (let i = 0; i < N; i++) F[i] = A[i] > T ? 1 : 0;
+  // components: small floor bits go; small non-floor holes (furniture, pillars under a square) are filled
+  const comp = (val, minArea, setTo) => {
+    const lab = new Int32Array(N); let cur = 0; const st = [];
+    for (let i = 0; i < N; i++){ if (F[i] !== val || lab[i]) continue; cur++; const mem = [i]; lab[i] = cur; st.push(i); let edge = false;
+      while (st.length){ const p = st.pop(); const x = p % W, y = (p / W) | 0; if (x === 0 || y === 0 || x === W - 1 || y === H - 1) edge = true;
+        for (const q of [p - 1, p + 1, p - W, p + W]){ if (q < 0 || q >= N) continue; if (Math.abs((q % W) - x) > 1) continue; if (F[q] === val && !lab[q]){ lab[q] = cur; st.push(q); mem.push(q); } } }
+      if (mem.length < minArea && !(val === 0 && edge)) for (const p of mem) F[p] = setTo; }
+  };
+  comp(1, (opt.minRoom || 2) * P * P, 0);
+  comp(0, (opt.fillUnder || 0.8) * P * P, 1);
+  // outline of the floor: floor pixels next to non-floor (not at the picture's edge)
+  const E = new Uint8Array(N);
+  for (let y = 1; y < H - 1; y++) for (let x = 1; x < W - 1; x++){ const i = y * W + x; if (F[i] && (!F[i - 1] || !F[i + 1] || !F[i - W] || !F[i + W])) E[i] = 1; }
+  // trace the outlines as chains (8-connected walk), straighten, tidy
+  const used = new Uint8Array(N), chains = [];
+  const offs = [-W - 1, -W, -W + 1, 1, W + 1, W, W - 1, -1];
+  for (let i = 0; i < N; i++){
+    if (!E[i] || used[i]) continue;
+    const ch = [i]; used[i] = 1; let cur = i;
+    for (let guard = 0; guard < N; guard++){
+      let nx = -1;
+      for (const o of offs){ const q = cur + o; if (q >= 0 && q < N && E[q] && !used[q] && Math.abs((q % W) - (cur % W)) <= 1){ nx = q; break; } }
+      if (nx < 0) break; used[nx] = 1; ch.push(nx); cur = nx;
+    }
+    if (ch.length > 2) chains.push(ch);
+  }
+  const tol = (opt.tol || 0.15) * P;
+  const dp = (pts, a, b, out) => {
+    const ax = pts[a] % W, ay = (pts[a] / W) | 0, bx = pts[b] % W, by = (pts[b] / W) | 0;
+    let md = -1, mi = -1; const dx = bx - ax, dy = by - ay, len = Math.hypot(dx, dy) || 1;
+    for (let q = a + 1; q < b; q++){ const px = pts[q] % W, py = (pts[q] / W) | 0; const dd = Math.abs(dy * px - dx * py + bx * ay - by * ax) / len; if (dd > md){ md = dd; mi = q; } }
+    if (md > tol){ dp(pts, a, mi, out); dp(pts, mi, b, out); } else out.push([ax, ay, bx, by]);
+  };
+  let segs = [];
+  for (const ch of chains){ const out = []; dp(ch, 0, ch.length - 1, out); segs.push(...out); }
+  const minLen = (opt.minLen || 0.35) * P;
+  segs = segs.filter(s => Math.hypot(s[2] - s[0], s[3] - s[1]) >= minLen);
+  segs.forEach(s => { const dx = s[2] - s[0], dy = s[3] - s[1];
+    if (Math.abs(dy) <= Math.abs(dx) * 0.06){ const m = (s[1] + s[3]) / 2; s[1] = s[3] = m; }
+    else if (Math.abs(dx) <= Math.abs(dy) * 0.06){ const m = (s[0] + s[2]) / 2; s[0] = s[2] = m; } });
+  return { segs: segs.map(s => [s[0] / k + cr.x, s[1] / k + cr.y, s[2] / k + cr.x, s[3] / k + cr.y]), info: { W, H, k, T, P, mode: 'edge' } };
+}
+
 // A map file often says its size in squares in its name — "Tavern 30x20.jpg",
 // "[22x30]" — which settles the square size exactly. Width × height, or the
 // other way round if that's the one the picture's shape agrees with.
@@ -469,6 +709,95 @@ registerPanel('battlemap',{
       this._restoreMapSnapshot(snap);
       this._render();
     });
+  },
+  // ─── Find walls ────────────────────────────────────────────────────────────
+  // Build → Find walls…: drag a box round the rooms (or Whole map) — a title,
+  // a legend or a compass outside it isn't searched, and the walls' thickness
+  // is judged from the rooms — see what was found, dashed, switch the way of
+  // reading the map if it's wrong, and keep them or not. Kept, they're walls
+  // like any other: Build → Wall, click one to change or remove it.
+  _findWalls(){
+    if (!_mapBgImage || document.body.classList.contains('player-mode')) return;
+    const b = this._body, stage = b && b.querySelector('#map-stage'); if (!stage) return;
+    this._endWallFind();
+    const wf = this._wallFind = { box: null, segs: null, mode: 'auto' };
+    const bar = document.createElement('div');
+    bar.className = 'map-place-hint'; bar.dataset.wallFind = '1';
+    bar.innerHTML = '<span>Drag a box around the rooms to look in</span><button class="btn small" data-wf="all">Whole map</button><button class="btn small" data-wf="cancel">Cancel</button>';
+    (b.querySelector('.bm-main') || b).appendChild(bar);
+    wf.bar = bar;
+    bar.addEventListener('click', e => {
+      const a = e.target.closest('[data-wf]'); if (!a) return;
+      e.stopPropagation();
+      const k = a.dataset.wf;
+      if (k === 'cancel') this._endWallFind();
+      else if (k === 'all') this._runWallFind(null, 'auto');
+      else if (k === 'keep') this._keepFoundWalls();
+    });
+    bar.addEventListener('change', e => { const s = e.target.closest('[data-wf="mode"]'); if (s) this._runWallFind(wf.box, s.value); });
+    // The box: pressed and dragged on the map.
+    const onDown = e => {
+      if (!this._wallFind || this._wallFind.segs) return;
+      const st = b.querySelector('#map-stage');
+      if (!st || !st.contains(e.target) || (e.button != null && e.button !== 0)) return;
+      e.preventDefault(); e.stopPropagation();
+      const p0 = this._stagePoint(e.clientX, e.clientY, st);
+      const rect = document.createElement('div'); rect.className = 'map-wall-box'; st.appendChild(rect);
+      wf.rect = rect;
+      const place = p => { const x = Math.min(p0.x, p.x), y = Math.min(p0.y, p.y); rect.style.cssText = 'left:' + x + 'px;top:' + y + 'px;width:' + Math.abs(p.x - p0.x) + 'px;height:' + Math.abs(p.y - p0.y) + 'px'; };
+      place(p0);
+      const mv = ev => place(this._stagePoint(ev.clientX, ev.clientY, st));
+      const up = ev => {
+        document.removeEventListener('pointermove', mv); document.removeEventListener('pointerup', up);
+        const p = this._stagePoint(ev.clientX, ev.clientY, st), cs = this._csScreen() || 50;
+        const box = { x0: Math.min(p0.x, p.x), y0: Math.min(p0.y, p.y), x1: Math.max(p0.x, p.x), y1: Math.max(p0.y, p.y) };
+        // A click, not a box: the whole map.
+        this._runWallFind(box.x1 - box.x0 < cs || box.y1 - box.y0 < cs ? null : box, 'auto');
+      };
+      document.addEventListener('pointermove', mv); document.addEventListener('pointerup', up);
+    };
+    const onKey = e => { if (e.key === 'Escape' && this._wallFind){ e.stopPropagation(); this._endWallFind(); } };
+    b.addEventListener('pointerdown', onDown, true);
+    document.addEventListener('keydown', onKey, true);
+    wf.off = () => { b.removeEventListener('pointerdown', onDown, true); document.removeEventListener('keydown', onKey, true); };
+  },
+  // Look (in the box, or everywhere), and show what was found.
+  _runWallFind(box, mode){
+    const wf = this._wallFind, img = _mapBgImage; if (!wf || !img) return;
+    wf.box = box;
+    const natW = this._bgMapNaturalW || img.naturalWidth, toImg = img.naturalWidth / natW, sc = this._bgMapScale || 1;
+    const crop = box ? (() => {
+      const x = Math.max(0, box.x0 / sc * toImg), y = Math.max(0, box.y0 / sc * toImg);
+      return { x, y, w: Math.max(1, Math.min(img.naturalWidth, box.x1 / sc * toImg) - x), h: Math.max(1, Math.min(img.naturalHeight, box.y1 / sc * toImg) - y) };
+    })() : null;
+    wf.bar.innerHTML = '<span>Looking for walls…</span>';
+    setTimeout(() => {
+      if (this._wallFind !== wf) return;
+      let R = null; try { R = sktDetectWalls(img, this._cellSize * toImg, { mode, crop }); } catch(e){ R = null; }
+      const segs = R ? R.segs.map(s => s.map(v => v / toImg * sc)) : [];
+      wf.segs = segs; wf.mode = R ? R.info.mode : mode;
+      const sel = '<select data-wf="mode" title="How this map draws its walls"><option value="line"' + (wf.mode === 'line' ? ' selected' : '') + '>Drawn walls (lines)</option><option value="edge"' + (wf.mode === 'edge' ? ' selected' : '') + '>Edges of the floor</option></select>';
+      wf.bar.innerHTML = (segs.length ? '<span>Found ' + segs.length + ' wall' + (segs.length === 1 ? '' : 's') + '</span>' : '<span>No walls found here</span>')
+        + sel + (segs.length ? '<button class="btn small primary" data-wf="keep">Keep them</button>' : '') + '<button class="btn small" data-wf="cancel">Cancel</button>';
+      if (wf.rect){ wf.rect.remove(); wf.rect = null; }
+      this._renderAreas();
+    }, 30);
+  },
+  _keepFoundWalls(){
+    const wf = this._wallFind; if (!wf || !wf.segs || !wf.segs.length) return;
+    const n = wf.segs.length;
+    wf.segs.forEach(s => this._drawings.push({ k: 'tpl', id: 'wall_' + (typeof uid === 'function' ? uid() : Math.random().toString(36).slice(2)), shape: 'wall', pts: s.map(v => Math.round(v * 10) / 10) }));
+    this._endWallFind();
+    this._saveMap(); this._render();
+    if (typeof showToast === 'function') showToast(n + ' wall' + (n === 1 ? '' : 's') + ' added. Click one with Build → Wall up to change or remove it.');
+  },
+  _endWallFind(){
+    const wf = this._wallFind; if (!wf) return;
+    this._wallFind = null;
+    if (wf.off) wf.off();
+    if (wf.bar) wf.bar.remove();
+    if (wf.rect) wf.rect.remove();
+    this._renderAreas();
   },
   // Up or down the stairs: token t onto floor id, where it stands now.
   _tokenToFloor(t, id){
@@ -3101,6 +3430,7 @@ registerPanel('battlemap',{
       +   '<span style="font-size:var(--fs-xs);color:var(--text-muted)">ft</span>'
       + '</span>'
       + '<input type="color" id="tpl-color" value="' + this._tplColor + '" style="width:24px;height:22px;padding:1px;border-radius:3px;flex-shrink:0;cursor:pointer;display:' + (this._tplHas(this._tplShape, 'colour') ? '' : 'none') + '" title="Colour">'
+      + (build && _mapBgImage ? '<button class="btn" data-mact="find-walls" style="flex-shrink:0" title="Look for the walls drawn on the map, see them, and keep them if they’re right">Find walls…</button>' : '')
       + (!build && this._areas().length ? '<button class="btn" data-mact="clear-areas" style="flex-shrink:0" title="Remove every area from the map">Clear areas</button>' : '');
   },
   // Outline in stage px: {circle:{x,y,r}} or {poly:[[x,y]…]}.
@@ -3509,7 +3839,8 @@ registerPanel('battlemap',{
       + (up ? '<circle cx="' + l.x + '" cy="' + l.y + '" r="' + ((+l.ft || 0) * ppf).toFixed(1) + '" fill="none" stroke="#ffd36b" stroke-opacity=".7" stroke-dasharray="' + (5 / vs) + ' ' + (4 / vs) + '" stroke-width="' + (1.5 / vs) + '"/>'
             + '<circle cx="' + l.x + '" cy="' + l.y + '" r="' + (((+l.ft || 0) + (+l.w || 0)) * ppf).toFixed(1) + '" fill="none" stroke="#ffd36b" stroke-opacity=".4" stroke-dasharray="' + (3 / vs) + ' ' + (5 / vs) + '" stroke-width="' + (1.5 / vs) + '"/>' : '')
       + '<circle cx="' + l.x + '" cy="' + l.y + '" r="' + (7 / vs).toFixed(1) + '" fill="#ffd36b" stroke="#7a4a00" stroke-width="' + (1.5 / vs) + '"><title>Light: ' + (+l.ft || 0) + ' ft bright, ' + (+l.w || 0) + ' ft dim</title></circle></g>').join('');
-    return walls + lamps + this._doors().map(d => this._doorHandleSvg(d, vs)).join('');   // (notes: their own layer, over the tokens — _renderAreas)
+    const found = this._wallFind && this._wallFind.segs ? this._wallFind.segs.map(s => '<line data-wall-found x1="' + s[0].toFixed(1) + '" y1="' + s[1].toFixed(1) + '" x2="' + s[2].toFixed(1) + '" y2="' + s[3].toFixed(1) + '" stroke="#2ec4ff" stroke-width="' + (4 / vs).toFixed(2) + '" stroke-linecap="round" stroke-dasharray="' + (7 / vs).toFixed(1) + ' ' + (4 / vs).toFixed(1) + '"/>').join('') : '';
+    return walls + lamps + this._doors().map(d => this._doorHandleSvg(d, vs)).join('') + found;   // (notes: their own layer, over the tokens — _renderAreas)
   },
   // ─── Notes on the map ──────────────────────────────────────────────────────
   // The DM's own: what's in room 3, who waits behind the bar. A pin with its
@@ -4852,6 +5183,7 @@ registerPanel('battlemap',{
         // pointer-events:none.
         this._render();
       }
+      else if(act==='find-walls') this._findWalls();
       else if(act==='sync-combat') this._syncParty();
       else if(act==='dm-sight'){ this._dmSight = !this._dmSight; this._render(); }
       else if(act==='clear-areas'){
@@ -5513,7 +5845,7 @@ registerPanel('battlemap',{
     // it: where the trap is, where I'm going. (A token held opens its panel;
     // tokens keep their own presses, so they never get here.)
     const holdStart = (cx, cy, target, touch) => {
-      if (this._tool || this._fogTool || this._movingEntry) return;
+      if (this._tool || this._fogTool || this._movingEntry || this._wallFind) return;
       if (target && target.closest && (target.closest('.map-token') || target.closest('button'))) return;
       clearTimeout(this._holdT);
       // The spot pressed, read now: where the finger went down, even if the

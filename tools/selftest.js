@@ -22924,6 +22924,113 @@ for (const cls of Object.keys(rule)) for (let L = 1; L <= 20; L++) for (const sc
         closePanel('battlemap');
       }
     }
+    // -- Round 404: Find walls — walls drawn in black found wall for wall (not the grid, a table or a title); a door's gap left open; hatched rock read by its floor's edges; box, preview, switch, keep, cancel; the sight index gives the same answers --
+    {
+      const B = panelDefs.battlemap;
+      const S0 = localStorage.getItem('skt-battlemap-v1'), P0 = B._bgMapPath, I0 = _mapBgImage, W0 = B._bgMapNaturalW, H0 = B._bgMapNaturalH;
+      const keep = { cs: B._cellSize, ox: B._gridOffsetX, oy: B._gridOffsetY, cols: B._cols, rows: B._rows, sc: B._bgMapScale, lts: B._lastTokenScale, tool: B._tool, shape: B._tplShape };
+      let keepT = null, keepD = null, keepF, fogSaved = false;
+      try {
+        // 1. The sight index answers as testing every wall did
+        let sd = 9; const rnd = () => (sd = (sd * 16807) % 2147483647) / 2147483647;
+        const walls = []; for (let i = 0; i < 2000; i++){ const x = rnd() * 3000, y = rnd() * 3000, a = rnd() * 6.283, l = 20 + rnd() * 200; walls.push([x, y, x + Math.cos(a) * l, y + Math.sin(a) * l]); }
+        for (let i = 0; i < 60; i++){ const v = 200 * Math.floor(rnd() * 15); walls.push([v, rnd() * 3000, v, rnd() * 3000]); walls.push([rnd() * 3000, v, rnd() * 3000, v]); }   // along the index's own lines
+        const S = { walls, unit: 50 };
+        const brute = (ax, ay, bx, by) => walls.some(w => _sktCrosses(w, ax, ay, bx, by));
+        let diff = 0, n = 0;
+        for (let i = 0; i < 3000; i++){
+          let ax = rnd() * 3000, ay = rnd() * 3000, bx = rnd() * 3000, by = rnd() * 3000;
+          if (i % 5 === 0){ ax = 100 * Math.round(ax / 100); bx = 100 * Math.round(bx / 100); }   // through the index's corners
+          if (i % 7 === 0) by = ay;                                                               // level
+          if (i % 11 === 0) bx = ax;                                                              // plumb
+          if (sktWallBetween(S, ax, ay, bx, by) !== brute(ax, ay, bx, by)) diff++; n++;
+        }
+        ok('sight with many walls: the index gives the same answer as testing every wall (3,000 lines)', diff === 0, diff + ' of ' + n + ' differ');
+
+        // 2. A map drawn in black lines
+        const mk = async (draw, w, h, type) => { const c = document.createElement('canvas'); c.width = w; c.height = h; draw(c.getContext('2d'), w, h); const img = new Image(); await new Promise(r => { img.onload = r; img.src = c.toDataURL(type || 'image/png'); }); return img; };
+        const lineMap = await mk((g, w, h) => {
+          g.fillStyle = '#fff'; g.fillRect(0, 0, w, h);
+          g.fillStyle = '#ddd'; g.fillRect(100, 150, 600, 500);
+          g.strokeStyle = '#aaa'; g.lineWidth = 1; for (let x = 0; x <= w; x += 50){ g.beginPath(); g.moveTo(x + .5, 0); g.lineTo(x + .5, h); g.stroke(); } for (let y = 0; y <= h; y += 50){ g.beginPath(); g.moveTo(0, y + .5); g.lineTo(w, y + .5); g.stroke(); }
+          g.fillStyle = '#111';   // walls 10 px: a room from (100,150) to (700,650), a door gap in its right wall at y 350–400
+          g.fillRect(95, 145, 610, 10); g.fillRect(95, 645, 610, 10); g.fillRect(95, 145, 10, 510); g.fillRect(695, 145, 10, 205); g.fillRect(695, 400, 10, 255);
+          g.strokeStyle = '#111'; g.lineWidth = 2; g.strokeRect(697, 352, 6, 46);            // the door, drawn thin in its gap
+          g.strokeRect(300, 350, 150, 80);                                                   // a table
+          g.font = 'bold 56px serif'; g.fillText('THE TEST TAVERN', 760, 80);               // a title
+          g.fillStyle = '#111'; g.fillRect(900, 600, 500, 10);                               // a wall out past the box
+        }, 1500, 900);
+        openPanel('battlemap'); await sleep(600);
+        keepT = B._tokens.slice(); keepD = B._drawings.slice(); keepF = B._fog; fogSaved = true;
+        B._tokens = []; B._drawings = []; B._fog = null;
+        _mapBgImage = lineMap; B._bgMapPath = null; B._bgMapNaturalW = 1500; B._bgMapNaturalH = 900; B._bgMapScale = 1; B._lastTokenScale = 1;
+        B._cellSize = 50; B._gridOffsetX = 0; B._gridOffsetY = 0; B._fitGridToBg();
+        B._tool = 'area'; B._tplShape = 'wall'; B._render(); await sleep(200);
+        const fb = B._body.querySelector('[data-mact="find-walls"]');
+        ok('Build: Find walls…', !!fb);
+        fb.click(); await sleep(100);
+        const bar = () => B._body.querySelector('[data-wall-find]');
+        ok('…asks for a box round the rooms, or the whole map', !!bar() && /Drag a box/.test(bar().textContent) && !!bar().querySelector('[data-wf="all"]'));
+        // drag a box round the room (not the title)
+        const st = B._body.querySelector('#map-stage'), cl = (sx, sy) => { const r = st.getBoundingClientRect(), z = B._screenScale(); return { x: Math.round(r.left + sx * z), y: Math.round(r.top + sy * z) }; };
+        const a = cl(60, 110), bpt = cl(740, 690);
+        const tgt = document.elementFromPoint(a.x, a.y) || st;
+        tgt.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, cancelable: true, clientX: a.x, clientY: a.y, button: 0, pointerId: 1 }));
+        document.dispatchEvent(new PointerEvent('pointermove', { bubbles: true, clientX: bpt.x, clientY: bpt.y, pointerId: 1 }));
+        ok('…the box shows as it’s dragged', !!st.querySelector('.map-wall-box'));
+        document.dispatchEvent(new PointerEvent('pointerup', { bubbles: true, clientX: bpt.x, clientY: bpt.y, pointerId: 1 }));
+        for (let i = 0; i < 60 && !/Found|No walls/.test(bar().textContent); i++) await sleep(100);
+        const segs = B._wallFind && B._wallFind.segs || [];
+        const near = (px, py) => Math.min(...segs.map(s => { const dx = s[2] - s[0], dy = s[3] - s[1], L = dx * dx + dy * dy; const u = L ? Math.max(0, Math.min(1, ((px - s[0]) * dx + (py - s[1]) * dy) / L)) : 0; return Math.hypot(px - s[0] - u * dx, py - s[1] - u * dy); }));
+        const along = (x0, y0, x1, y1) => { const out = []; for (let t = 0.05; t <= 0.95; t += 0.05) out.push([x0 + (x1 - x0) * t, y0 + (y1 - y0) * t]); return out; };
+        const wallPts = [...along(100, 150, 700, 150), ...along(100, 650, 700, 650), ...along(100, 150, 100, 650), ...along(700, 160, 700, 340), ...along(700, 410, 700, 640)];
+        const covered = wallPts.filter(p => near(p[0], p[1]) <= 12).length;
+        ok('…its four walls found (the drawn walls, within a quarter square)', segs.length > 0 && covered >= wallPts.length * 0.95, covered + ' of ' + wallPts.length + ' points; ' + segs.length + ' walls');
+        ok('…drawn walls, by lines', B._wallFind.mode === 'line' && /Drawn walls/.test(bar().querySelector('[data-wf="mode"]').selectedOptions[0].textContent));
+        ok('…the door’s gap left open', near(700, 375) > 15, near(700, 375));
+        ok('…and only inside the box (not the wall out past it)', near(1150, 605) > 40, near(1150, 605));
+        ok('…nothing on the table or the grid', near(375, 350) > 15 && near(300, 390) > 15 && near(450, 390) > 15 && near(375, 430) > 15 && near(400, 500) > 15 && near(250, 300) > 15);
+        ok('…shown dashed before anything is kept', B._body.querySelectorAll('#tpl-layer [data-wall-found]').length === segs.length && B._walls().length === 0);
+        // Cancel keeps nothing
+        bar().querySelector('[data-wf="cancel"]').click(); await sleep(100);
+        ok('Cancel: no walls, no bar, no dashes', !bar() && B._walls().length === 0 && !B._body.querySelector('#tpl-layer [data-wall-found]'));
+        // Whole map, at twice the scale: keep them
+        B._bgMapScale = 2; B._lastTokenScale = 2; B._render(); await sleep(150);
+        B._body.querySelector('[data-mact="find-walls"]').click(); await sleep(100);
+        bar().querySelector('[data-wf="all"]').click();
+        for (let i = 0; i < 60 && !/Found|No walls/.test(bar().textContent); i++) await sleep(100);
+        bar().querySelector('[data-wf="keep"]').click(); await sleep(200);
+        const kept = B._walls();
+        const nearK = (px, py) => Math.min(...kept.map(w => { const s = w.pts, dx = s[2] - s[0], dy = s[3] - s[1], L = dx * dx + dy * dy; const u = L ? Math.max(0, Math.min(1, ((px - s[0]) * dx + (py - s[1]) * dy) / L)) : 0; return Math.hypot(px - s[0] - u * dx, py - s[1] - u * dy); }));
+        ok('Keep: walls on the map, where the picture’s are at its scale', kept.length > 0 && nearK(2 * 100, 2 * 400) <= 24 && nearK(2 * 400, 2 * 150) <= 24 && !bar(), JSON.stringify([kept.length, nearK(200, 800), nearK(800, 300)]));
+        // Esc cancels too
+        B._body.querySelector('[data-mact="find-walls"]').click(); await sleep(100);
+        document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true })); await sleep(80);
+        ok('Esc cancels it', !bar() && !B._wallFind);
+        // 3. Hatched rock: read by the floor's edges, on its own
+        const hatch = await mk((g, w, h) => {
+          g.fillStyle = '#fff'; g.fillRect(0, 0, w, h);
+          g.strokeStyle = '#222'; g.lineWidth = 2; for (let t = -h; t < w; t += 7){ g.beginPath(); g.moveTo(t, 0); g.lineTo(t + h, h); g.stroke(); }
+          g.fillStyle = '#fff'; g.fillRect(200, 150, 500, 400); g.fillRect(700, 300, 300, 100);   // a room and a corridor out of it
+          g.strokeStyle = '#ccc'; g.lineWidth = 1; for (let x = 200; x <= 1000; x += 50){ g.beginPath(); g.moveTo(x + .5, 150); g.lineTo(x + .5, 550); g.stroke(); }
+        }, 1200, 700);
+        _mapBgImage = hatch; B._bgMapNaturalW = 1200; B._bgMapNaturalH = 700; B._bgMapScale = 1; B._lastTokenScale = 1; B._drawings = []; B._fitGridToBg(); B._render(); await sleep(150);
+        const R = sktDetectWalls(hatch, 50, {});
+        const nearR = (px, py) => Math.min(...R.segs.map(s => { const dx = s[2] - s[0], dy = s[3] - s[1], L = dx * dx + dy * dy; const u = L ? Math.max(0, Math.min(1, ((px - s[0]) * dx + (py - s[1]) * dy) / L)) : 0; return Math.hypot(px - s[0] - u * dx, py - s[1] - u * dy); }));
+        ok('hatched rock: read by the floor’s edges, by itself', R.info.mode === 'edge', R.info.mode);
+        ok('…the room’s sides found, and the corridor left open', nearR(450, 150) <= 15 && nearR(450, 550) <= 15 && nearR(200, 350) <= 15 && nearR(700, 200) <= 15 && nearR(700, 350) > 20, JSON.stringify([nearR(450, 150), nearR(450, 550), nearR(200, 350), nearR(700, 200), nearR(700, 350)]));
+      } catch(e){ ok('round 404 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
+      finally {
+        try { B._endWallFind(); } catch(e){}
+        if (fogSaved) B._fog = keepF;
+        B._cellSize = keep.cs; B._gridOffsetX = keep.ox; B._gridOffsetY = keep.oy; B._cols = keep.cols; B._rows = keep.rows; B._bgMapScale = keep.sc; B._lastTokenScale = keep.lts; B._tool = keep.tool; B._tplShape = keep.shape;
+        _mapBgImage = I0; B._bgMapPath = P0; B._bgMapNaturalW = W0; B._bgMapNaturalH = H0;
+        if (keepT){ B._tokens = keepT; B._drawings = keepD; }
+        if (S0 != null) localStorage.setItem('skt-battlemap-v1', S0);
+        try { B._render(); } catch(e){}
+        closePanel('battlemap');
+      }
+    }
     // -- Class features: represented, not just text ------------------------
     {
       try {

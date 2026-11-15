@@ -3116,12 +3116,44 @@ function sktSightSrc(src){
 }
 // Does the line from (ax,ay) to (bx,by) pass through a wall? (Touching a
 // wall's end doesn't count: a line along a corner isn't stopped by it.)
-function sktWallBetween(S, ax, ay, bx, by){
+//
+// With many walls (found on a map picture: a dungeon came to 1,700) testing
+// every wall for every line was 86 ms a shade on a computer — a token
+// dragged in the dark stuttered. So walls are filed by the squares (two
+// grid squares a side) their extent touches, and a line tests only those
+// filed in the squares it passes through (walked square by square,
+// Amanatides–Woo). Same answer: a wall the line crosses crosses it at a
+// point in a square the line passes through, and is filed there.
+function _sktCrosses(w, ax, ay, bx, by){
   const cr = (ox, oy, px, py, qx, qy) => (px - ox) * (qy - oy) - (py - oy) * (qx - ox);
-  for (const w of S.walls){
-    const d1 = cr(w[0], w[1], w[2], w[3], ax, ay), d2 = cr(w[0], w[1], w[2], w[3], bx, by);
-    const d3 = cr(ax, ay, bx, by, w[0], w[1]), d4 = cr(ax, ay, bx, by, w[2], w[3]);
-    if (((d1 > 0 && d2 < 0) || (d1 < 0 && d2 > 0)) && ((d3 > 0 && d4 < 0) || (d3 < 0 && d4 > 0))) return true;
+  const d1 = cr(w[0], w[1], w[2], w[3], ax, ay), d2 = cr(w[0], w[1], w[2], w[3], bx, by);
+  const d3 = cr(ax, ay, bx, by, w[0], w[1]), d4 = cr(ax, ay, bx, by, w[2], w[3]);
+  return ((d1 > 0 && d2 < 0) || (d1 < 0 && d2 > 0)) && ((d3 > 0 && d4 < 0) || (d3 < 0 && d4 > 0));
+}
+function _sktWallGrid(S){
+  const c = Math.max(20, (S.unit || 50) * 2), cells = new Map(), K = 1 << 20;
+  S.walls.forEach((w, i) => {
+    const x0 = Math.floor((Math.min(w[0], w[2]) - 1) / c), x1 = Math.floor((Math.max(w[0], w[2]) + 1) / c);
+    const y0 = Math.floor((Math.min(w[1], w[3]) - 1) / c), y1 = Math.floor((Math.max(w[1], w[3]) + 1) / c);
+    for (let gx = x0; gx <= x1; gx++) for (let gy = y0; gy <= y1; gy++){ const key = gx * K + gy; let a = cells.get(key); if (!a) cells.set(key, a = []); a.push(i); }
+  });
+  return { c, cells, K, stamp: new Int32Array(S.walls.length), tick: 0 };
+}
+function sktWallBetween(S, ax, ay, bx, by){
+  const ws = S.walls;
+  if (ws.length < 48){ for (const w of ws) if (_sktCrosses(w, ax, ay, bx, by)) return true; return false; }
+  const G = S._wg || (S._wg = _sktWallGrid(S)), c = G.c, tick = ++G.tick;
+  let gx = Math.floor(ax / c), gy = Math.floor(ay / c);
+  const ex = Math.floor(bx / c), ey = Math.floor(by / c), dx = bx - ax, dy = by - ay;
+  const sx = dx > 0 ? 1 : -1, sy = dy > 0 ? 1 : -1;
+  let tx = dx !== 0 ? (sx > 0 ? (gx + 1) * c - ax : ax - gx * c) / Math.abs(dx) : Infinity;
+  let ty = dy !== 0 ? (sy > 0 ? (gy + 1) * c - ay : ay - gy * c) / Math.abs(dy) : Infinity;
+  const tdx = dx !== 0 ? c / Math.abs(dx) : Infinity, tdy = dy !== 0 ? c / Math.abs(dy) : Infinity;
+  for (let n = 0; n < 100000; n++){
+    const a = G.cells.get(gx * G.K + gy);
+    if (a) for (const i of a){ if (G.stamp[i] === tick) continue; G.stamp[i] = tick; if (_sktCrosses(ws[i], ax, ay, bx, by)) return true; }
+    if (gx === ex && gy === ey) break;
+    if (tx < ty){ tx += tdx; gx += sx; } else { ty += tdy; gy += sy; }
   }
   return false;
 }
