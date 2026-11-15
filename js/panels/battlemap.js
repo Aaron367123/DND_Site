@@ -3087,9 +3087,27 @@ registerPanel('battlemap',{
       if (d[0] > d[1] && d[0] > d[2]) r[0] = -r[1] - r[2]; else if (d[1] > d[2]) r[1] = -r[0] - r[2]; else r[2] = -r[0] - r[1];
       return r;
     };
+    // A player's path doesn't go through a wall (or a closed door): a square
+    // that would is refused — a diagonal tries its two sides first — and the
+    // path waits at the wall till the finger goes somewhere it can follow.
+    // So the ruler shows the way the creature can actually walk.
+    const pl = document.body.classList.contains('player-mode');
+    if (pl && !path.walls) path.walls = sktSightSrc({ drawings: this._drawings, cs: this._csScreen() || 50, ftPerCell: this._ftPerCell, gridType: this._gridType, light: 'bright' });
+    const W = pl && path.walls.walls.length ? path.walls : null, cs0 = this._csScreen() || 50;
+    const ctr = c => path.hex ? this._hexCentre(c) : [path.ox + c[0] * cs0, path.oy + c[1] * cs0];
+    const blocked = (a, b) => { if (!W) return false; const p = ctr(a), q = ctr(b); return sktWallBetween(W, p[0], p[1], q[0], q[1]); };
     let guard = 0;
     for (let cur = cells[cells.length - 1]; !same(cur, to) && guard++ < 2000; cur = cells[cells.length - 1]){
-      const nx = step(cur);
+      let nx = step(cur);
+      if (blocked(cur, nx)){
+        const alt = path.hex ? [] : [[nx[0], cur[1]], [cur[0], nx[1]]].filter(c => !same(c, cur) && !blocked(cur, c));
+        if (!alt.length) break;
+        // (nearer as the crow flies: a step along the wall may not shorten the count of squares)
+        const d2 = c => c.reduce((s, v, i) => s + (v - to[i]) * (v - to[i]), 0);
+        alt.sort((p, q) => d2(p) - d2(q));
+        nx = alt[0];
+        if (d2(nx) >= d2(cur)) break;   // no nearer that way: wait here
+      }
       const back = cells.findIndex(c => same(c, nx));
       if (back >= 0){ cells.length = back + 1; continue; }
       // (as often as it holds: set down beside someone in the way, the last

@@ -26749,6 +26749,48 @@ for (const cls of Object.keys(rule)) for (let L = 1; L <= 20; L++) for (const sc
         paTab = keepTab; try { paRender(); } catch(e){}
       }
     }
+    // -- Round 408: on a phone, the drag's path (the ruler) stops at a wall and goes round it as the finger does; the move counts the way walked --
+    if (PLAYER){
+      const keepTab = paTab, B = panelDefs.battlemap;
+      let keepT = null, keepD = null, keepF, keepSnap, saved = false;
+      try {
+        if (paMyIdx() < 0) paSetPc('zoey');
+        paTab = 'map'; paRender(); await sleep(900);
+        keepT = B._tokens.slice(); keepD = B._drawings.slice(); keepF = B._fog; keepSnap = B._snapToGrid; saved = true;
+        const cs = B._csScreen(), me = paPc();
+        const z = { id: 't408z', cid: me.id, label: me.name, isPC: true, x: 3.5 * cs, y: 5.5 * cs, size: 1 };
+        B._tokens = [z]; B._fog = null; B._snapToGrid = true;
+        B._drawings = [{ k: 'tpl', id: 'r408w', shape: 'wall', pts: [6 * cs, 0, 6 * cs, 7 * cs] }];
+        B._render(); await sleep(150);
+        const el = document.querySelector('#pa-screen .map-token[data-tid="t408z"]');
+        const st = B._body.querySelector('#map-stage'), zz = B._screenScale();
+        const at = (gx, gy) => { const r = st.getBoundingClientRect(); return { x: r.left + gx * cs * zz, y: r.top + gy * cs * zz }; };
+        const T = p => new Touch({ identifier: 8, target: el, clientX: p.x, clientY: p.y });
+        let p = at(3.5, 5.5);
+        el.dispatchEvent(new TouchEvent('touchstart', { bubbles: true, cancelable: true, touches: [T(p)], changedTouches: [T(p)] }));
+        const go = async (gx, gy) => { const q = at(gx, gy); for (let k = 1; k <= 8; k++){ const m = { x: p.x + (q.x - p.x) * k / 8, y: p.y + (q.y - p.y) * k / 8 }; document.dispatchEvent(new TouchEvent('touchmove', { bubbles: true, cancelable: true, touches: [T(m)], changedTouches: [T(m)] })); await sleep(8); } p = q; };
+        await go(8.5, 5.5);
+        const cells = () => (B._drag && B._drag.path && B._drag.path.cells) || [];
+        const last = () => { const c = cells()[cells().length - 1]; return c ? [3.5 + c[0], 5.5 + c[1]] : null; };
+        ok('phone: dragged at a wall, the path stops on this side of it', !!last() && last()[0] < 6, JSON.stringify(last()));
+        // Mid-drag the phone's screen is redrawn (the DM changed someone's hit points; the rules data arrived): the drag carries on
+        paRender(); await sleep(60);
+        ok('…a redraw mid-drag doesn’t take the token out from under the finger', st.isConnected && el.isConnected && !!B._drag);
+        await go(8.5, 8.5); await go(8.5, 5.5);
+        ok('…and follows the finger round its end to the far side', !!last() && Math.abs(last()[0] - 8.5) < 0.01 && Math.abs(last()[1] - 5.5) < 0.01 && !cells().some(c => c[1] + 5.5 < 7 && c[0] + 3.5 > 6 && false), JSON.stringify(cells()));
+        const crossed = cells().some((c, i) => i && sktWallBetween(sktSightSrc({ drawings: B._drawings, cs, ftPerCell: 5 }), (3.5 + cells()[i - 1][0]) * cs, (5.5 + cells()[i - 1][1]) * cs, (3.5 + c[0]) * cs, (5.5 + c[1]) * cs));
+        ok('…never through it', !crossed);
+        const steps = cells().length - 1;
+        document.dispatchEvent(new TouchEvent('touchend', { bubbles: true, cancelable: true, touches: [], changedTouches: [T(p)] }));
+        await sleep(120);
+        ok('…let go: it’s there, the long way round (more than the 5 squares straight across)', Math.abs(z.x / cs - 8.5) < 0.01 && Math.abs(z.y / cs - 5.5) < 0.01 && steps > 5, JSON.stringify([z.x / cs, z.y / cs, steps]));
+      } catch(e){ ok('round 408 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
+      finally {
+        if (saved){ B._tokens = keepT; B._drawings = keepD; B._fog = keepF; B._snapToGrid = keepSnap; }
+        try { B._render(); } catch(e){}
+        paTab = keepTab; try { paRender(); } catch(e){}
+      }
+    }
   }
 
   // ══════════════════════════════════════════════════════════ mobile / phone

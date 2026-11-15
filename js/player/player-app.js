@@ -1158,11 +1158,21 @@ function paDraw(act){
   if (old) old.remove();
   if (host) paAddDrawBar(host);
 }
+let paRefreshT = null;
 function paRefreshMount(tab){
   const id = tab === 'map' ? 'battlemap' : tab === 'notes' ? 'notes'
            : tab === 'world' ? 'world' : null;
   if (!id) return;
   const def = panelDefs[id];
+  // Not under a finger. A redraw while the player dragged their token (the
+  // rules data arriving, the DM changing someone's hit points) rebuilt the
+  // map and the dragged token with it: the move was lost. It waits till
+  // the drag, stroke or brush is done — as the map's own sync already did.
+  if (def && typeof def._gestureBusy === 'function' && def._gestureBusy()){
+    clearTimeout(paRefreshT);
+    paRefreshT = setTimeout(() => { if (paTab === tab) paRefreshMount(tab); }, 150);
+    return;
+  }
   try { def && def._render && def._render(); } catch(e){}
 }
 
