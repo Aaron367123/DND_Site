@@ -361,6 +361,36 @@ function sktWallsFromFloorEdges(L, W, H, P, k, opt, cr){
   return { segs: segs.map(s => [s[0] / k + cr.x, s[1] / k + cr.y, s[2] / k + cr.x, s[3] / k + cr.y]), info: { W, H, k, T, P, mode: 'edge' } };
 }
 
+// The gaps between wall ends that line up — a door's place, most often (on
+// the Elfsong Tavern, 21 found, nearly all its doors; its windows, drawn as a
+// row of panes, left no walls to line up). segs: [[x1,y1,x2,y2]], cell: a
+// square, in the same units. Each end pairs once, nearest first; an end
+// another wall shares (a corner) isn't a gap's.
+function sktWallGaps(segs, cell, opt){
+  opt = opt || {};
+  const minG = (opt.min || 0.4) * cell, maxG = (opt.max || 1.6) * cell, tol = 0.06 * cell + 2;
+  // ends shared by no other wall (a corner's end isn't a gap's)
+  const ends = [];
+  segs.forEach((s, i) => { for (const e of [0, 2]){ const x = s[e], y = s[e + 1];
+    const shared = segs.some((t, j) => j !== i && (Math.hypot(t[0] - x, t[1] - y) <= tol || Math.hypot(t[2] - x, t[3] - y) <= tol));
+    if (!shared) ends.push({ i, x, y, dx: e === 0 ? s[0] - s[2] : s[2] - s[0], dy: e === 0 ? s[1] - s[3] : s[3] - s[1] }); } });
+  const cands = [];
+  for (let a = 0; a < ends.length; a++) for (let b = a + 1; b < ends.length; b++){
+    const A = ends[a], Bn = ends[b]; if (A.i === Bn.i) continue;
+    const gx = Bn.x - A.x, gy = Bn.y - A.y, g = Math.hypot(gx, gy);
+    if (g < minG || g > maxG) continue;
+    const la = Math.hypot(A.dx, A.dy) || 1, lb = Math.hypot(Bn.dx, Bn.dy) || 1;
+    // A's wall points out of A toward B; B's toward A; the gap runs the same way
+    const ca = (A.dx * gx + A.dy * gy) / (la * g), cb = (-Bn.dx * gx - Bn.dy * gy) / (lb * g);
+    if (ca < 0.97 || cb < 0.97) continue;
+    cands.push({ a, b, g });
+  }
+  cands.sort((p, q) => p.g - q.g);
+  const used = new Set(), out = [];
+  for (const c of cands){ if (used.has(c.a) || used.has(c.b)) continue; used.add(c.a); used.add(c.b); out.push([ends[c.a].x, ends[c.a].y, ends[c.b].x, ends[c.b].y]); }
+  return out;
+}
+
 // A map file often says its size in squares in its name — "Tavern 30x20.jpg",
 // "[22x30]" — which settles the square size exactly. Width × height, or the
 // other way round if that's the one the picture's shape agrees with.
@@ -734,32 +764,69 @@ registerPanel('battlemap',{
       else if (k === 'all') this._runWallFind(null, 'auto');
       else if (k === 'keep') this._keepFoundWalls();
     });
-    bar.addEventListener('change', e => { const s = e.target.closest('[data-wf="mode"]'); if (s) this._runWallFind(wf.box, s.value); });
-    // The box: pressed and dragged on the map.
+    bar.addEventListener('change', e => {
+      const s = e.target.closest('[data-wf="mode"]'); if (s){ this._runWallFind(wf.box, s.value); return; }
+      const d = e.target.closest('[data-wf="doors"]'); if (d){ wf.doors = d.checked; this._renderAreas(); }
+    });
+    // The box: pressed and dragged on the map. (A click, not a box: the whole map.)
+    const offBox = this._boxOnMap(() => this._wallFind === wf && !wf.segs, (box, rect) => {
+      wf.rect = rect;
+      const cs = this._csScreen() || 50;
+      this._runWallFind(box.x1 - box.x0 < cs || box.y1 - box.y0 < cs ? null : box, 'auto');
+    });
+    const onKey = e => { if (e.key === 'Escape' && this._wallFind){ e.stopPropagation(); this._endWallFind(); } };
+    document.addEventListener('keydown', onKey, true);
+    wf.off = () => { offBox(); document.removeEventListener('keydown', onKey, true); };
+  },
+  // A box dragged on the map — mouse, pen or finger — while active() says
+  // so: done(box in stage px, its outline on the map). Returns the off switch.
+  _boxOnMap(active, done){
+    const b = this._body;
     const onDown = e => {
-      if (!this._wallFind || this._wallFind.segs) return;
+      if (!active()) return;
       const st = b.querySelector('#map-stage');
       if (!st || !st.contains(e.target) || (e.button != null && e.button !== 0)) return;
       e.preventDefault(); e.stopPropagation();
       const p0 = this._stagePoint(e.clientX, e.clientY, st);
       const rect = document.createElement('div'); rect.className = 'map-wall-box'; st.appendChild(rect);
-      wf.rect = rect;
       const place = p => { const x = Math.min(p0.x, p.x), y = Math.min(p0.y, p.y); rect.style.cssText = 'left:' + x + 'px;top:' + y + 'px;width:' + Math.abs(p.x - p0.x) + 'px;height:' + Math.abs(p.y - p0.y) + 'px'; };
       place(p0);
       const mv = ev => place(this._stagePoint(ev.clientX, ev.clientY, st));
       const up = ev => {
         document.removeEventListener('pointermove', mv); document.removeEventListener('pointerup', up);
-        const p = this._stagePoint(ev.clientX, ev.clientY, st), cs = this._csScreen() || 50;
-        const box = { x0: Math.min(p0.x, p.x), y0: Math.min(p0.y, p.y), x1: Math.max(p0.x, p.x), y1: Math.max(p0.y, p.y) };
-        // A click, not a box: the whole map.
-        this._runWallFind(box.x1 - box.x0 < cs || box.y1 - box.y0 < cs ? null : box, 'auto');
+        const p = this._stagePoint(ev.clientX, ev.clientY, st);
+        done({ x0: Math.min(p0.x, p.x), y0: Math.min(p0.y, p.y), x1: Math.max(p0.x, p.x), y1: Math.max(p0.y, p.y) }, rect);
       };
       document.addEventListener('pointermove', mv); document.addEventListener('pointerup', up);
     };
-    const onKey = e => { if (e.key === 'Escape' && this._wallFind){ e.stopPropagation(); this._endWallFind(); } };
     b.addEventListener('pointerdown', onDown, true);
-    document.addEventListener('keydown', onKey, true);
-    wf.off = () => { b.removeEventListener('pointerdown', onDown, true); document.removeEventListener('keydown', onKey, true); };
+    return () => b.removeEventListener('pointerdown', onDown, true);
+  },
+  // A wall's menu → Remove walls and doors in an area: drag a box; every wall
+  // and door whose middle is in it goes (Undo puts them back) — the stray
+  // walls Find walls drew round a legend, all at once.
+  _removeWallsInBox(){
+    const b = this._body; if (!b) return;
+    this._endWallFind();
+    const bar = document.createElement('div');
+    bar.className = 'map-place-hint'; bar.dataset.wallErase = '1';
+    bar.innerHTML = '<span>Drag a box over the walls and doors to remove</span><button class="btn small" data-we="cancel">Cancel</button>';
+    (b.querySelector('.bm-main') || b).appendChild(bar);
+    let off = null;
+    const key = e => { if (e.key === 'Escape'){ e.stopPropagation(); end(); } };
+    const end = () => { if (off) off(); off = null; bar.remove(); document.removeEventListener('keydown', key, true); this._wallErasing = false; };
+    bar.addEventListener('click', e => { if (e.target.closest('[data-we="cancel"]')){ e.stopPropagation(); end(); } });
+    this._wallErasing = true;
+    off = this._boxOnMap(() => this._wallErasing, (box, rect) => {
+      rect.remove(); end();
+      const inside = w => { const p = w.pts, n = p.length, mx = (+p[0] + +p[n - 2]) / 2, my = (+p[1] + +p[n - 1]) / 2; return mx >= box.x0 && mx <= box.x1 && my >= box.y0 && my <= box.y1; };
+      const gone = this._walls().filter(inside);
+      if (!gone.length){ if (typeof showToast === 'function') showToast('No walls or doors in that box.'); return; }
+      this._drawings = this._drawings.filter(s => !gone.includes(s));
+      this._saveMap(); this._render();
+      if (typeof showToast === 'function') showToast(gone.length + ' removed. Undo (Ctrl+Z) puts them back.');
+    });
+    document.addEventListener('keydown', key, true);
   },
   // Look (in the box, or everywhere), and show what was found.
   _runWallFind(box, mode){
@@ -776,20 +843,27 @@ registerPanel('battlemap',{
       let R = null; try { R = sktDetectWalls(img, this._cellSize * toImg, { mode, crop }); } catch(e){ R = null; }
       const segs = R ? R.segs.map(s => s.map(v => v / toImg * sc)) : [];
       wf.segs = segs; wf.mode = R ? R.info.mode : mode;
+      // Doors in the gaps between wall ends that line up — on by default
+      // where the walls were drawn (their gaps are the doors drawn in them).
+      wf.gaps = R && R.segs.length ? sktWallGaps(R.segs, this._cellSize * toImg).map(s => s.map(v => v / toImg * sc)) : [];
+      if (wf.doors == null) wf.doors = wf.mode === 'line';
       const sel = '<select data-wf="mode" title="How this map draws its walls"><option value="line"' + (wf.mode === 'line' ? ' selected' : '') + '>Drawn walls (lines)</option><option value="edge"' + (wf.mode === 'edge' ? ' selected' : '') + '>Edges of the floor</option></select>';
       wf.bar.innerHTML = (segs.length ? '<span>Found ' + segs.length + ' wall' + (segs.length === 1 ? '' : 's') + '</span>' : '<span>No walls found here</span>')
-        + sel + (segs.length ? '<button class="btn small primary" data-wf="keep">Keep them</button>' : '') + '<button class="btn small" data-wf="cancel">Cancel</button>';
+        + sel + (wf.gaps.length ? '<label class="wf-doors" title="A door in each gap between wall ends that line up (closed: it blocks sight until opened)"><input type="checkbox" data-wf="doors"' + (wf.doors ? ' checked' : '') + '> Doors in the ' + wf.gaps.length + ' gap' + (wf.gaps.length === 1 ? '' : 's') + '</label>' : '')
+        + (segs.length ? '<button class="btn small primary" data-wf="keep">Keep them</button>' : '') + '<button class="btn small" data-wf="cancel">Cancel</button>';
       if (wf.rect){ wf.rect.remove(); wf.rect = null; }
       this._renderAreas();
     }, 30);
   },
   _keepFoundWalls(){
     const wf = this._wallFind; if (!wf || !wf.segs || !wf.segs.length) return;
-    const n = wf.segs.length;
-    wf.segs.forEach(s => this._drawings.push({ k: 'tpl', id: 'wall_' + (typeof uid === 'function' ? uid() : Math.random().toString(36).slice(2)), shape: 'wall', pts: s.map(v => Math.round(v * 10) / 10) }));
+    const n = wf.segs.length, id = () => 'wall_' + (typeof uid === 'function' ? uid() : Math.random().toString(36).slice(2));
+    wf.segs.forEach(s => this._drawings.push({ k: 'tpl', id: id(), shape: 'wall', pts: s.map(v => Math.round(v * 10) / 10) }));
+    const nd = wf.doors && wf.gaps ? wf.gaps.length : 0;
+    if (nd) wf.gaps.forEach(s => this._drawings.push({ k: 'tpl', id: id(), shape: 'wall', door: true, pts: s.map(v => Math.round(v * 10) / 10) }));
     this._endWallFind();
     this._saveMap(); this._render();
-    if (typeof showToast === 'function') showToast(n + ' wall' + (n === 1 ? '' : 's') + ' added. Click one with Build → Wall up to change or remove it.');
+    if (typeof showToast === 'function') showToast(n + ' wall' + (n === 1 ? '' : 's') + (nd ? ' and ' + nd + ' door' + (nd === 1 ? '' : 's') : '') + ' added. Click one with Build → Wall up to change or remove it.');
   },
   _endWallFind(){
     const wf = this._wallFind; if (!wf) return;
@@ -3817,6 +3891,7 @@ registerPanel('battlemap',{
       { label: '✕ Remove this ' + kind, onClick: () => { this._drawings = this._drawings.filter(s => s !== f); redo(); } },
       { label: '✕ Remove all ' + kind + 's', onClick: () => { this._drawings = this._drawings.filter(s => !same(s)); redo(); } },
     );
+    if (f.shape === 'wall') items.push({ label: '✕ Remove walls and doors in an area…', onClick: () => this._removeWallsInBox() });
     if (typeof showContextMenu === 'function') showContextMenu(cx, cy, items);
   },
   // Walls and lights, drawn on the DM's map (a player sees the light they
@@ -3839,7 +3914,8 @@ registerPanel('battlemap',{
       + (up ? '<circle cx="' + l.x + '" cy="' + l.y + '" r="' + ((+l.ft || 0) * ppf).toFixed(1) + '" fill="none" stroke="#ffd36b" stroke-opacity=".7" stroke-dasharray="' + (5 / vs) + ' ' + (4 / vs) + '" stroke-width="' + (1.5 / vs) + '"/>'
             + '<circle cx="' + l.x + '" cy="' + l.y + '" r="' + (((+l.ft || 0) + (+l.w || 0)) * ppf).toFixed(1) + '" fill="none" stroke="#ffd36b" stroke-opacity=".4" stroke-dasharray="' + (3 / vs) + ' ' + (5 / vs) + '" stroke-width="' + (1.5 / vs) + '"/>' : '')
       + '<circle cx="' + l.x + '" cy="' + l.y + '" r="' + (7 / vs).toFixed(1) + '" fill="#ffd36b" stroke="#7a4a00" stroke-width="' + (1.5 / vs) + '"><title>Light: ' + (+l.ft || 0) + ' ft bright, ' + (+l.w || 0) + ' ft dim</title></circle></g>').join('');
-    const found = this._wallFind && this._wallFind.segs ? this._wallFind.segs.map(s => '<line data-wall-found x1="' + s[0].toFixed(1) + '" y1="' + s[1].toFixed(1) + '" x2="' + s[2].toFixed(1) + '" y2="' + s[3].toFixed(1) + '" stroke="#2ec4ff" stroke-width="' + (4 / vs).toFixed(2) + '" stroke-linecap="round" stroke-dasharray="' + (7 / vs).toFixed(1) + ' ' + (4 / vs).toFixed(1) + '"/>').join('') : '';
+    const wf = this._wallFind, fl = (s, attr, col, w) => '<line ' + attr + ' x1="' + s[0].toFixed(1) + '" y1="' + s[1].toFixed(1) + '" x2="' + s[2].toFixed(1) + '" y2="' + s[3].toFixed(1) + '" stroke="' + col + '" stroke-width="' + (w / vs).toFixed(2) + '" stroke-linecap="round" stroke-dasharray="' + (7 / vs).toFixed(1) + ' ' + (4 / vs).toFixed(1) + '"/>';
+    const found = wf && wf.segs ? wf.segs.map(s => fl(s, 'data-wall-found', '#2ec4ff', 4)).join('') + (wf.doors && wf.gaps ? wf.gaps.map(s => fl(s, 'data-door-found', '#b07a3a', 6)).join('') : '') : '';
     return walls + lamps + this._doors().map(d => this._doorHandleSvg(d, vs)).join('') + found;   // (notes: their own layer, over the tokens — _renderAreas)
   },
   // ─── Notes on the map ──────────────────────────────────────────────────────
@@ -5845,7 +5921,7 @@ registerPanel('battlemap',{
     // it: where the trap is, where I'm going. (A token held opens its panel;
     // tokens keep their own presses, so they never get here.)
     const holdStart = (cx, cy, target, touch) => {
-      if (this._tool || this._fogTool || this._movingEntry || this._wallFind) return;
+      if (this._tool || this._fogTool || this._movingEntry || this._wallFind || this._wallErasing) return;
       if (target && target.closest && (target.closest('.map-token') || target.closest('button'))) return;
       clearTimeout(this._holdT);
       // The spot pressed, read now: where the finger went down, even if the

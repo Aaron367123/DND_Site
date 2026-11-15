@@ -23031,6 +23031,82 @@ for (const cls of Object.keys(rule)) for (let L = 1; L <= 20; L++) for (const sc
         closePanel('battlemap');
       }
     }
+    // -- Round 405: Find walls puts doors in the gaps between wall ends that line up (on by default for drawn walls; untick to leave them open); a wall's menu removes every wall and door in a box, and Undo brings them back --
+    {
+      const B = panelDefs.battlemap;
+      const S0 = localStorage.getItem('skt-battlemap-v1'), P0 = B._bgMapPath, I0 = _mapBgImage, W0 = B._bgMapNaturalW, H0 = B._bgMapNaturalH;
+      const keep = { cs: B._cellSize, ox: B._gridOffsetX, oy: B._gridOffsetY, cols: B._cols, rows: B._rows, sc: B._bgMapScale, lts: B._lastTokenScale, tool: B._tool, shape: B._tplShape };
+      let keepT = null, keepD = null, keepF, fogSaved = false;
+      try {
+        // the gap finder on its own: two walls in line with a square's gap; a corner isn't a gap
+        const G = sktWallGaps([[0, 0, 200, 0], [250, 0, 400, 0], [400, 0, 400, 200], [600, 0, 800, 0], [800, 40, 900, 40]], 50);
+        ok('gaps: the space between two walls in line is one; an offset end isn’t', G.length === 1 && G[0][0] === 200 && G[0][2] === 250, JSON.stringify(G));
+        // a corner's end (another wall turns there) doesn't start a gap: on the tavern those "gaps" were walls the finder had missed
+        const G2 = sktWallGaps([[0, 0, 100, 0], [100, 0, 100, 100], [150, 0, 300, 0]], 50);
+        ok('…nor does a corner’s end', G2.length === 0, JSON.stringify(G2));
+        const c = document.createElement('canvas'); c.width = 900; c.height = 800; const g = c.getContext('2d');
+        g.fillStyle = '#fff'; g.fillRect(0, 0, 900, 800); g.fillStyle = '#ddd'; g.fillRect(100, 150, 600, 500);
+        g.fillStyle = '#111'; g.fillRect(95, 145, 610, 10); g.fillRect(95, 645, 610, 10); g.fillRect(95, 145, 10, 510); g.fillRect(695, 145, 10, 205); g.fillRect(695, 400, 10, 255);
+        g.strokeStyle = '#111'; g.lineWidth = 2; g.strokeRect(697, 352, 6, 46);
+        const img = new Image(); await new Promise(r => { img.onload = r; img.src = c.toDataURL(); });
+        openPanel('battlemap'); await sleep(600);
+        keepT = B._tokens.slice(); keepD = B._drawings.slice(); keepF = B._fog; fogSaved = true;
+        B._tokens = []; B._drawings = []; B._fog = null;
+        _mapBgImage = img; B._bgMapPath = null; B._bgMapNaturalW = 900; B._bgMapNaturalH = 800; B._bgMapScale = 1; B._lastTokenScale = 1;
+        B._cellSize = 50; B._gridOffsetX = 0; B._gridOffsetY = 0; B._fitGridToBg();
+        B._tool = 'area'; B._tplShape = 'wall'; B._render(); await sleep(200);
+        const bar = () => B._body.querySelector('[data-wall-find]');
+        B._body.querySelector('[data-mact="find-walls"]').click(); await sleep(100);
+        bar().querySelector('[data-wf="all"]').click();
+        for (let i = 0; i < 60 && !/Found|No walls/.test(bar().textContent); i++) await sleep(100);
+        const box = () => bar().querySelector('[data-wf="doors"]');
+        ok('Find walls: “Doors in the 1 gap”, ticked (walls drawn as lines)', !!box() && box().checked && /Doors in the 1 gap/.test(bar().textContent), bar().textContent);
+        ok('…the door shown in the gap, in brown', B._body.querySelectorAll('#tpl-layer [data-door-found]').length === 1);
+        box().checked = false; box().dispatchEvent(new Event('change', { bubbles: true })); await sleep(60);
+        ok('…unticked: no door shown', B._body.querySelectorAll('#tpl-layer [data-door-found]').length === 0);
+        box().checked = true; box().dispatchEvent(new Event('change', { bubbles: true })); await sleep(60);
+        bar().querySelector('[data-wf="keep"]').click(); await sleep(200);
+        const doors = B._doors();
+        ok('Keep: the door, in the gap, closed', doors.length === 1 && Math.abs(doors[0].pts[0] - 700) <= 12 && Math.abs(doors[0].pts[2] - 700) <= 12 && Math.min(doors[0].pts[1], doors[0].pts[3]) >= 330 && Math.max(doors[0].pts[1], doors[0].pts[3]) <= 420 && !doors[0].open, JSON.stringify(doors.map(d => d.pts)));
+        ok('…and it blocks sight until it’s opened', sktWallBetween(B._sightSrc(), 650, 375, 760, 375) && (doors[0].open = true, !sktWallBetween(B._sightSrc(), 650, 375, 760, 375)));
+        delete doors[0].open;
+        // Remove the walls and doors in a box
+        const nAll = B._walls().length;
+        const left = B._walls().find(w => Math.abs(w.pts[0] - 100) <= 12 && Math.abs(w.pts[2] - 100) <= 12);
+        B._fixtureMenu(left, 300, 300, left.pts[0], left.pts[1]); await sleep(80);
+        const it = [...document.querySelectorAll('.ctx-menu-item')].find(e => /Remove walls and doors in an area/.test(e.textContent));
+        ok('a wall’s menu: Remove walls and doors in an area…', !!it);
+        it.click(); await sleep(80);
+        const ebar = () => B._body.querySelector('[data-wall-erase]');
+        ok('…asks for a box', !!ebar() && /Drag a box/.test(ebar().textContent));
+        const st = B._body.querySelector('#map-stage'), cl = (sx, sy) => { const r = st.getBoundingClientRect(), z = B._screenScale(); return { x: Math.round(r.left + sx * z), y: Math.round(r.top + sy * z) }; };
+        const a = cl(60, 100), bb = cl(160, 700);   // round the left wall only
+        (document.elementFromPoint(a.x, a.y) || st).dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, cancelable: true, clientX: a.x, clientY: a.y, button: 0, pointerId: 2 }));
+        document.dispatchEvent(new PointerEvent('pointermove', { bubbles: true, clientX: bb.x, clientY: bb.y, pointerId: 2 }));
+        document.dispatchEvent(new PointerEvent('pointerup', { bubbles: true, clientX: bb.x, clientY: bb.y, pointerId: 2 }));
+        await sleep(150);
+        const after = B._walls().length;
+        ok('…the walls in it go, the rest stay', after < nAll && after > 0 && !B._walls().some(w => Math.abs(w.pts[0] - 100) <= 12 && Math.abs(w.pts[2] - 100) <= 12) && B._doors().length === 1 && !ebar()
+          && B._walls().some(w => !w.door && Math.abs(w.pts[1] - 150) <= 12 && Math.abs(w.pts[3] - 150) <= 12) && B._walls().some(w => !w.door && Math.abs(w.pts[0] - 700) <= 12 && Math.abs(w.pts[2] - 700) <= 12), JSON.stringify([nAll, after]));
+        B._body.querySelector('[data-mact="undo"]').click(); await sleep(200);   // (the toolbar's Undo, as the DM would)
+        ok('…and Undo brings them back', B._walls().length === nAll, B._walls().length);
+        // Esc cancels the box
+        B._removeWallsInBox(); await sleep(60);
+        document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true })); await sleep(60);
+        ok('Esc puts the box away, nothing removed', !ebar() && !B._wallErasing && B._walls().length === nAll);
+      } catch(e){ ok('round 405 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
+      finally {
+        try { B._endWallFind(); } catch(e){}
+        document.querySelectorAll('.ctx-menu, [data-wall-erase]').forEach(m => m.remove()); B._wallErasing = false;
+        if (fogSaved) B._fog = keepF;
+        B._cellSize = keep.cs; B._gridOffsetX = keep.ox; B._gridOffsetY = keep.oy; B._cols = keep.cols; B._rows = keep.rows; B._bgMapScale = keep.sc; B._lastTokenScale = keep.lts; B._tool = keep.tool; B._tplShape = keep.shape;
+        _mapBgImage = I0; B._bgMapPath = P0; B._bgMapNaturalW = W0; B._bgMapNaturalH = H0;
+        if (keepT){ B._tokens = keepT; B._drawings = keepD; }
+        if (S0 != null) localStorage.setItem('skt-battlemap-v1', S0);
+        try { B._render(); } catch(e){}
+        closePanel('battlemap');
+      }
+    }
     // -- Class features: represented, not just text ------------------------
     {
       try {

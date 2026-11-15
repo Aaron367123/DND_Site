@@ -2798,6 +2798,7 @@ body.player-mode #campaign-btn{display:none !important}
 .map-wall-box{position:absolute;border:2px dashed #2ec4ff;background:rgba(46,196,255,.08);pointer-events:none;z-index:6}
 .map-place-hint select{font-size:var(--fs-sm);padding:2px 4px;flex-shrink:0;width:auto}
 .map-place-hint[data-wall-find] span,.map-place-hint[data-wall-find] .btn{white-space:nowrap}
+.map-place-hint .wf-doors{display:inline-flex;align-items:center;gap:5px;white-space:nowrap;font-size:var(--fs-sm);cursor:pointer}
 /* Which floor of the building is on screen (footer) */
 .map-floor{font-weight:600;color:var(--text)}
 /* A map note read on the map */
