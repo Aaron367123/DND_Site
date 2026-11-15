@@ -1247,16 +1247,19 @@ registerPanel('battlemap',{
     if (!this._body || this._drag) return;
     // A character's face is drawn from the party (_tokenFace), so a new
     // picture is a reason to redraw too.
+    // So is a picture given a monster in the tracker (it's on its token too),
+    // and whose turn it is (the ring).
     const face = p => { const f = String(p.portrait || p.icon || ''); return f.length + f.slice(-24); };
+    const turn = '@' + (+state.combatRound || 0) + ':' + (state.activeCombatantId == null ? '' : state.activeCombatantId);
     const sig = (state.combatants || [])
-      .map(c => c.id + ':' + (c.hp || 0) + ':' + (c.hpMax || 0) + ':' + (c.dead ? 1 : 0)).join('|')
-      + '#' + (state.party || []).map(p => p.id + ':' + face(p)).join('|');
+      .map(c => c.id + ':' + (c.hp || 0) + ':' + (c.hpMax || 0) + ':' + (c.dead ? 1 : 0) + ':' + face(c)).join('|')
+      + '#' + (state.party || []).map(p => p.id + ':' + face(p)).join('|') + turn;
     if (sig === this._woundSig) return;
     this._woundSig = sig;
     // Only hit points moved (the same creatures, alive or dead as before, the
     // same faces): the wound tint and the tooltip, in place. Rebuilding every
     // token for one point of damage cost ~35 ms a hit in a big fight.
-    const struct = (state.combatants || []).map(c => c.id + ':' + (c.dead ? 1 : 0)).join('|')
+    const struct = (state.combatants || []).map(c => c.id + ':' + (c.dead ? 1 : 0) + ':' + face(c)).join('|')
       + '#' + (state.party || []).map(p => p.id + ':' + face(p)).join('|');
     const els = this._body.querySelectorAll('.map-token');
     if (struct === this._structSig && els.length){
@@ -1264,6 +1267,7 @@ registerPanel('battlemap',{
         const t = (this._tokens || []).find(x => x && x.id === el.dataset.tid); if (!t) return;
         el.classList.remove('wound-low', 'wound-half');
         const w = this._woundOf(t); if (w) el.classList.add(w);
+        el.classList.toggle('turn', this._isTurn(t));
         el.title = this._tokenTitle(t) + (t.hidden ? ' · hidden from players' : '');
       });
       return;
@@ -2629,6 +2633,12 @@ registerPanel('battlemap',{
     }
     const pct = (hp / max) * 100;
     return pct <= 25 ? 'wound-low' : pct <= 50 ? 'wound-half' : '';
+  },
+  // Whose turn it is, in a fight that's under way: their token wears a ring.
+  _isTurn(t){
+    if (!t || typeof state === 'undefined' || !(+state.combatRound > 0) || state.activeCombatantId == null) return false;
+    const c = this._combatantFor(t);
+    return !!c && c.id === state.activeCombatantId;
   },
   _tokenTitle(t){
     const c = this._combatantFor(t);
@@ -7824,7 +7834,7 @@ registerPanel('battlemap',{
       // full "Zindle \"Deathwhistle\" Farrago"). NPCs keep their full label.
       const displayLabel = this._tokenDisplayLabel(t);
       el.className=`map-token ${t.isPC?'pc':'npc-t'} ${t.dead?'dead':''} ${this._selected===t.id?'selected':''}${hasIcon?' has-icon':''}${this._group && this._group.has(t.id) ? ' grouped' : ''}`
-        + (t.hidden ? ' tok-hidden' : '') + (this._woundOf(t) ? ' ' + this._woundOf(t) : '');
+        + (t.hidden ? ' tok-hidden' : '') + (this._woundOf(t) ? ' ' + this._woundOf(t) : '') + (this._isTurn(t) ? ' turn' : '');
       el.dataset.tid=t.id;
       el.title = this._tokenTitle(t) + (t.hidden ? ' · hidden from players' : '');
       // Two font-size regimes:

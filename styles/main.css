@@ -2881,6 +2881,12 @@ body.player-mode #campaign-btn{display:none !important}
 .map-token.selected{box-shadow:0 0 0 3px white;z-index:4}
 /* One of a group moved together (Shift+click) */
 .map-token.grouped{box-shadow:0 0 0 3px #2ec4ff;z-index:4}
+/* Whose turn it is: a ring just outside the token (clear of the wound
+   outline), breathing slowly. ::before, as ::after is the touch target. */
+.map-token.turn{z-index:3}
+.map-token.turn::before{content:'';position:absolute;inset:-8px;border-radius:50%;border:3px solid var(--accent);box-shadow:0 0 0 1px rgba(0,0,0,.6),inset 0 0 0 1px rgba(0,0,0,.6),0 0 10px var(--accent);pointer-events:none;animation:tok-turn 2.2s ease-in-out infinite}
+@keyframes tok-turn{0%,100%{opacity:1}50%{opacity:.65}}
+@media (prefers-reduced-motion: reduce){.map-token.turn::before{animation:none}}
 .map-token.pc{background:linear-gradient(135deg,#4a3d2a,#6b5439)}
 .map-token.npc-t{background:linear-gradient(135deg,#3d2a2a,#6b3939)}
 .map-token.dead{opacity:.4;filter:grayscale(1)}

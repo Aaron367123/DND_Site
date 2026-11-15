@@ -23660,6 +23660,45 @@ for (const cls of Object.keys(rule)) for (let L = 1; L <= 20; L++) for (const sc
         closePanel('battlemap');
       }
     }
+    // -- Round 423: whose turn it is — a ring on that creature's token, moving as the turn passes, gone when the fight ends; a picture given a monster in the Combat Tracker reaches its token at once --
+    if (!PLAYER){
+      const B = panelDefs.battlemap;
+      let keepT = null, keepC = null, keepR, keepA, saved = false;
+      try {
+        openPanel('battlemap'); await sleep(700);
+        keepT = B._tokens.slice(); keepC = (state.combatants || []).slice(); keepR = state.combatRound; keepA = state.activeCombatantId; saved = true;
+        const cs = B._csScreen();
+        state.combatants = [{ id: 'r423a', name: 'r423 Ogre', hp: 50, hpMax: 59, init: 15 }, { id: 'r423b', name: 'r423 Imp', hp: 10, hpMax: 10, init: 9 }];
+        state.combatRound = 1; state.activeCombatantId = 'r423a';
+        B._tokens = [{ id: 't423a', cid: 'r423a', label: 'r423 Ogre', x: 3.5 * cs, y: 3.5 * cs, size: 1 }, { id: 't423b', cid: 'r423b', label: 'r423 Imp', x: 6.5 * cs, y: 3.5 * cs, size: 1 }, { id: 't423c', label: 'r423 Barrel', x: 9.5 * cs, y: 3.5 * cs, size: 1 }];
+        B._render(); await sleep(150); B._syncFromCombat();
+        const el = id => B._body.querySelector('.map-token[data-tid="' + id + '"]');
+        const on = id => !!el(id) && el(id).classList.contains('turn');
+        ok('the creature whose turn it is wears a ring; no one else', on('t423a') && !on('t423b') && !on('t423c'));
+        const cssB = getComputedStyle(el('t423a'), '::before');
+        ok('…drawn just outside the token, where nothing else is', cssB.content !== 'none' && cssB.position === 'absolute' && cssB.pointerEvents === 'none' && parseFloat(cssB.borderTopWidth) >= 2, JSON.stringify([cssB.content, cssB.position, cssB.borderTopWidth]));
+        ok('…not on a token whose turn it isn’t', getComputedStyle(el('t423b'), '::before').content === 'none');
+        const keepNode = el('t423a');
+        state.activeCombatantId = 'r423b'; save(); await sleep(120);
+        ok('the turn passes (Next): the ring goes with it', !on('t423a') && on('t423b'));
+        ok('…without redrawing every token', el('t423a') === keepNode);
+        state.combatants[1].hp = 2; save(); await sleep(120);
+        ok('a badly hurt one on its turn: the ring and the wound both', on('t423b') && el('t423b').classList.contains('wound-low') && !on('t423a'));
+        state.combatRound = 0; save(); await sleep(120);
+        ok('the fight over: no ring anywhere', !on('t423a') && !on('t423b'));
+        state.combatRound = 2; save(); await sleep(120);
+        // the tracker's picture
+        const pic = 'data:image/png;base64,' + btoa('r423-pic');
+        state.combatants[0] = { ...state.combatants[0], portrait: pic }; save(); await sleep(150);
+        const img = el('t423a') && el('t423a').querySelector('img');
+        ok('a picture given the monster in the Combat Tracker is on its token at once', !!img && img.getAttribute('src') === pic, img && img.getAttribute('src'));
+      } catch(e){ ok('round 423 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
+      finally {
+        if (saved){ B._tokens = keepT; state.combatants = keepC; state.combatRound = keepR; state.activeCombatantId = keepA; try { save(); B._saveMap(); } catch(e){} }
+        try { B._closePanel(); B._render(); } catch(e){}
+        closePanel('battlemap');
+      }
+    }
     // -- Class features: represented, not just text ------------------------
     {
       try {
@@ -27472,6 +27511,30 @@ for (const cls of Object.keys(rule)) for (let L = 1; L <= 20; L++) for (const sc
         if (keepLive !== undefined) window.realtimeLive = keepLive;
         B._rulerSent = false;
         if (saved){ B._tokens = keepT; B._drawings = keepD; B._fog = keepF; B._snapToGrid = keepSnap; }
+        try { B._render(); } catch(e){}
+        paTab = keepTab; try { paRender(); } catch(e){}
+      }
+    }
+    // -- Round 424: on a phone, whose turn it is shows on the map too — her own token on hers, a monster's on its — and moves when the turn does --
+    if (PLAYER){
+      const keepTab = paTab, B = panelDefs.battlemap;
+      let keepT = null, keepC = null, keepR, keepA, keepF, saved = false;
+      try {
+        if (paMyIdx() < 0) paSetPc('zoey');
+        paTab = 'map'; paRender(); await sleep(900);
+        keepT = B._tokens.slice(); keepC = (state.combatants || []).slice(); keepR = state.combatRound; keepA = state.activeCombatantId; keepF = B._fog; saved = true; B._fog = null;
+        const cs = B._csScreen(), me = paPc();
+        state.combatants = [{ id: me.id, name: me.name, isPC: true, hp: 20, hpMax: 30, init: 18 }, { id: 'r424g', name: 'r424 Goblin', hp: 7, hpMax: 7, init: 10 }];
+        state.combatRound = 1; state.activeCombatantId = me.id;
+        B._tokens = [{ id: 't424z', cid: me.id, label: me.name, isPC: true, x: 3.5 * cs, y: 3.5 * cs, size: 1 }, { id: 't424g', cid: 'r424g', label: 'r424 Goblin', x: 5.5 * cs, y: 3.5 * cs, size: 1 }];
+        B._render(); await sleep(150); B._syncFromCombat();
+        const on = id => { const e = document.querySelector('#pa-screen .map-token[data-tid="' + id + '"]'); return !!e && e.classList.contains('turn'); };
+        ok('phone: her turn — her token wears the ring', on('t424z') && !on('t424g'));
+        state.activeCombatantId = 'r424g'; B._syncFromCombat();   // (looked at at once: the phone redraws on its own clock too)
+        ok('…the goblin’s turn (as it arrives from the DM): the ring moves to it', !on('t424z') && on('t424g'), JSON.stringify([B._isTurn(B._tokens[1]), !!B._body, B._drag, B._body && B._body.querySelectorAll('.map-token').length, document.querySelectorAll('#pa-screen .map-token').length, B._body && B._body.isConnected, [...document.querySelectorAll('#pa-screen .map-token')].map(e => e.className)]));
+      } catch(e){ ok('round 424 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
+      finally {
+        if (saved){ B._tokens = keepT; state.combatants = keepC; state.combatRound = keepR; state.activeCombatantId = keepA; B._fog = keepF; }
         try { B._render(); } catch(e){}
         paTab = keepTab; try { paRender(); } catch(e){}
       }

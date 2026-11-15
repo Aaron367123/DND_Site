@@ -170,6 +170,17 @@ const window = {};
       const who = await dm.ev("return (state.combatants.find(c=>c.id===state.activeCombatantId)||{}).name");
       return lat(await W(pl, "return state.combatants.length >= 7 && (state.combatants.find(c=>c.id===state.activeCombatantId)||{}).name === " + JSON.stringify(who) + " && (document.querySelector('#pa-turn, .pa-turn')||document.body).textContent.includes(" + JSON.stringify(who.split(' ')[0]) + ")"));
     });
+    await step('DM passes the turn to Zoey → her token on the phone’s map wears the turn ring; passed on → it goes', async () => {
+      const ok1 = await dm.ev("openPanel('battlemap'); await new Promise(r=>setTimeout(r,300)); const z = state.combatants.find(c => c.id === 'zoey' || /zoey/i.test(c.name)); if (!z) return 'no Zoey in the fight'; const B = panelDefs.battlemap; if (!sktTokenForCombatant(B._tokens, z)){ B._syncTokensFromCombat && B._syncTokensFromCombat(); } if (!sktTokenForCombatant(B._tokens, z)) return 'no token for Zoey'; state.activeCombatantId = z.id; save(); return 'ok'");
+      if (ok1 !== 'ok') return { ok: false, why: ok1 };
+      const ring = "const B = panelDefs.battlemap, z = state.combatants.find(c => c.id === state.activeCombatantId), t = z && sktTokenForCombatant(B._tokens || [], z); const el = t && document.querySelector('#map-stage .map-token[data-tid=\"' + t.id + '\"]'); return el && el.classList.contains('turn') && /zoey/i.test(z.name) && document.querySelectorAll('#map-stage .map-token.turn').length === 1 ? 1 : 0";
+      const t1 = await W(pl, "paTab = 'map'; paRender(); " + ring, 10000);
+      if (t1 == null) return { ok: false, why: 'the phone’s map never ringed Zoey: ' + await pl.ev("return JSON.stringify([state.activeCombatantId, [...document.querySelectorAll('#map-stage .map-token.turn')].map(e => e.dataset.tid)])") };
+      await dm.ev("const i = state.combatants.findIndex(c => c.id === state.activeCombatantId); state.activeCombatantId = state.combatants[(i + 1) % state.combatants.length].id; save(); return 1");
+      const t2 = await W(pl, "return !document.querySelector('#map-stage .map-token.turn[data-tid]') || ![...document.querySelectorAll('#map-stage .map-token.turn')].some(e => /zoey/i.test(e.textContent + e.title)) ? 1 : 0", 10000);
+      if (t2 == null) return { ok: false, why: 'the ring stayed on Zoey after the turn passed' };
+      return lat(t1);
+    });
     await step('DM hides a goblin on the map → it leaves the phone’s turn strip; revealed → back by name', async () => {
       const id = await dm.ev("const c = state.combatants.filter(c => !c.isPC).pop(); if (!c) return ''; c.e2eName = c.name; c.name = 'e2e Sneak'; save(); openPanel('battlemap'); await new Promise(r=>setTimeout(r,300)); const B = panelDefs.battlemap; B._tokens = B._tokens.filter(t => t.id !== 'e2e-sneak'); B._tokens.push({ id: 'e2e-sneak', cid: c.id, label: 'e2e Sneak', x: 400, y: 300, size: 1, hidden: true }); B._saveMap(); B._render(); return c.id");
       if (!id) return { ok: false, why: 'no monster in the fight' };
