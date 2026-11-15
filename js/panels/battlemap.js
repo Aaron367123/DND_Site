@@ -3216,6 +3216,25 @@ registerPanel('battlemap',{
       + handles
       + (preview && !this._isFixture(preview) ? this._areaSvg(preview, 'stroke-dasharray="6 4"') : '')
       + this._fixturesSvg(preview, vs);
+    // The DM's notes over the tokens (an ogre standing on one hid it), under
+    // the sight shade. A pin catches a click while no tool is up — it reads
+    // the note, not the token under it; with a tool up the press goes
+    // through to the map, and Build finds the note there.
+    let nl = stage.querySelector('#note-layer');
+    const notes = document.body.classList.contains('player-mode') ? [] : this._mapNotes();
+    if (!notes.length){ if (nl) nl.remove(); }
+    else {
+      if (!nl){
+        nl = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+        nl.id = 'note-layer';
+        nl.style.cssText = 'position:absolute;top:0;left:0;z-index:5;pointer-events:none;overflow:visible';
+        stage.appendChild(nl);
+      }
+      nl.setAttribute('width', this._cols * cs); nl.setAttribute('height', this._rows * cs);
+      nl.innerHTML = notes.map(n => this._noteSvg(n, vs)).join('');
+      const live = !this._tool && !this._fogTool;
+      nl.querySelectorAll('[data-note]').forEach(g => { g.style.pointerEvents = live ? 'auto' : 'none'; g.style.cursor = live ? 'pointer' : ''; });
+    }
     this._sightSoon();
     this._markTokensInAreas(preview);
   },
@@ -3490,7 +3509,7 @@ registerPanel('battlemap',{
       + (up ? '<circle cx="' + l.x + '" cy="' + l.y + '" r="' + ((+l.ft || 0) * ppf).toFixed(1) + '" fill="none" stroke="#ffd36b" stroke-opacity=".7" stroke-dasharray="' + (5 / vs) + ' ' + (4 / vs) + '" stroke-width="' + (1.5 / vs) + '"/>'
             + '<circle cx="' + l.x + '" cy="' + l.y + '" r="' + (((+l.ft || 0) + (+l.w || 0)) * ppf).toFixed(1) + '" fill="none" stroke="#ffd36b" stroke-opacity=".4" stroke-dasharray="' + (3 / vs) + ' ' + (5 / vs) + '" stroke-width="' + (1.5 / vs) + '"/>' : '')
       + '<circle cx="' + l.x + '" cy="' + l.y + '" r="' + (7 / vs).toFixed(1) + '" fill="#ffd36b" stroke="#7a4a00" stroke-width="' + (1.5 / vs) + '"><title>Light: ' + (+l.ft || 0) + ' ft bright, ' + (+l.w || 0) + ' ft dim</title></circle></g>').join('');
-    return walls + lamps + this._doors().map(d => this._doorHandleSvg(d, vs)).join('') + this._mapNotes().map(n => this._noteSvg(n, vs)).join('');
+    return walls + lamps + this._doors().map(d => this._doorHandleSvg(d, vs)).join('');   // (notes: their own layer, over the tokens — _renderAreas)
   },
   // ─── Notes on the map ──────────────────────────────────────────────────────
   // The DM's own: what's in room 3, who waits behind the bar. A pin with its

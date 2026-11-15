@@ -22723,7 +22723,7 @@ for (const cls of Object.keys(rule)) for (let L = 1; L <= 20; L++) for (const sc
         await sleep(150);
         const nt = B._mapNotes()[0];
         ok('…a note, where it was pressed', !!nt && nt.title === 'Room 3: the bar' && nt.x === 4 * cs && nt.y === 3 * cs && nt.link === 'n_secret' && /\n/.test(nt.text), JSON.stringify(nt));
-        const pin = B._body.querySelector('#tpl-layer [data-note="' + (nt && nt.id) + '"]');
+        const pin = B._body.querySelector('#note-layer [data-note="' + (nt && nt.id) + '"]');
         ok('…drawn on the map as a pin with its title', !!pin && /Room 3: the bar/.test(pin.textContent));
         ok('…and not an area (no labels, not counted)', B._areas().length === 0);
         // No tool up: a click on the pin reads it
@@ -22882,6 +22882,45 @@ for (const cls of Object.keys(rule)) for (let L = 1; L <= 20; L++) for (const sc
       finally {
         document.querySelectorAll('.ctx-menu').forEach(m => m.remove());
         if (saved){ B._light = keepL; B._exploreEpoch = keepE; try { B._saveMap(); B._render(); } catch(e){} }
+        closePanel('battlemap');
+      }
+    }
+    // -- Round 403: a note under a monster shows over it; clicked, it reads the note (not the monster's panel); with Build up, the press reaches the note's menu --
+    {
+      const B = panelDefs.battlemap;
+      let keepT = null, keepD = null, keepF, fogSaved = false; const keepTool = B._tool, keepShape = B._tplShape;
+      try {
+        openPanel('battlemap'); await sleep(700);
+        keepT = B._tokens.slice(); keepD = B._drawings.slice(); keepF = B._fog; fogSaved = true; B._fog = null;
+        const cs = B._csScreen();
+        B._tokens = [{ id: 't403o', label: 'r403 Ogre', x: 5 * cs, y: 5 * cs, size: 2 }];
+        B._drawings = [{ k: 'tpl', id: 'r403n', shape: 'note', x: 5 * cs, y: 5 * cs, title: 'r403 Under the ogre', text: 'trapdoor' }];
+        B._tool = ''; B._render(); await sleep(200);
+        const st = B._body.querySelector('#map-stage').getBoundingClientRect(), z = B._screenScale();
+        const px = Math.round(st.left + 5 * cs * z), py = Math.round(st.top + 5 * cs * z);
+        const top = document.elementFromPoint(px, py);
+        ok('a note under a monster: its pin is on top', !!top && !!top.closest('#note-layer [data-note="r403n"]'), top && top.outerHTML.slice(0, 80));
+        top.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, cancelable: true, clientX: px, clientY: py, button: 0 }));
+        await sleep(90); document.dispatchEvent(new MouseEvent('mouseup', { bubbles: true, clientX: px, clientY: py })); await sleep(150);
+        const card = document.querySelector('.map-note-card');
+        const tp = B._body.querySelector('#token-panel');
+        ok('…a click reads the note, not the monster', !!card && /Under the ogre/.test(card.textContent) && (!tp || getComputedStyle(tp).display === 'none'));
+        document.querySelectorAll('.map-note-card').forEach(c => c.remove());
+        // Build → Note: the press goes through the pin, and finds the note
+        B._tool = 'area'; B._tplShape = 'note'; B._render(); await sleep(150);
+        const under = document.elementFromPoint(px, py);
+        ok('…with a tool up, the pin lets the press through', !!under && !under.closest('#note-layer'));
+        under.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, cancelable: true, clientX: px, clientY: py, button: 0 }));
+        await sleep(60); document.dispatchEvent(new MouseEvent('mouseup', { bubbles: true, clientX: px, clientY: py })); await sleep(120);
+        ok('…and Build opens the note’s menu', [...document.querySelectorAll('.ctx-menu-item')].some(e => /Edit the note/.test(e.textContent)));
+        document.querySelectorAll('.ctx-menu, .modal-backdrop').forEach(m => m.remove());
+      } catch(e){ ok('round 403 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
+      finally {
+        document.querySelectorAll('.ctx-menu, .modal-backdrop, .map-note-card').forEach(m => m.remove());
+        if (fogSaved) B._fog = keepF;
+        B._tool = keepTool; B._tplShape = keepShape;
+        if (keepT){ B._tokens = keepT; B._drawings = keepD; try { B._saveMap(); } catch(e){} }
+        try { B._closePanel(); B._render(); } catch(e){}
         closePanel('battlemap');
       }
     }
