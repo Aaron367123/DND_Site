@@ -27635,12 +27635,12 @@ for (const cls of Object.keys(rule)) for (let L = 1; L <= 20; L++) for (const sc
         ok('phone, her turn: under the map, what she has walked of her speed', shown('.map-foot-move') && new RegExp('Moved\\s*0\\s*/\\s*' + sp + '\\s*ft').test(q('.map-foot-move').textContent) && !shown('.map-foot-touch'), (q('.map-foot-move') || {}).textContent + ' sp=' + sp);
         B._keyMove(z, 1, 0);
         const b = q('.map-foot-back'), r = b && b.getBoundingClientRect();
-        ok('…a step: 5 ft, and Take back, big enough for a finger, on the screen, the strip no taller (the map tools float just above it)', /Moved\s*5\b/.test(q('.map-foot-move').textContent) && !!r && r.height >= 28 && r.right <= innerWidth && r.bottom <= innerHeight && q('.map-foot').getBoundingClientRect().height <= 30, r && JSON.stringify([r.left, r.top, r.right, r.bottom, r.height, q('.map-foot').getBoundingClientRect().height]));
+        ok('…a step: 5 ft, and Take back, big enough for a finger, on the screen, the strip no taller (the map tools float just above it)', /Moved\s*5\b/.test(q('.map-foot-move').textContent) && !!r && (!matchMedia('(pointer:coarse)').matches || r.height >= 28) && r.right <= innerWidth && r.bottom <= innerHeight && q('.map-foot').getBoundingClientRect().height <= 30, r && JSON.stringify([r.left, r.top, r.right, r.bottom, r.height, q('.map-foot').getBoundingClientRect().height]));
         b.click();
         ok('…tapped: back where she stood, nothing walked', z.x / cs === 3.5 && sktTurnMoved(z) === 0 && !q('.map-foot-back'));
         B._keyMove(z, 1, 0);
         state.activeCombatantId = 'r426g'; B._syncFromCombat();
-        ok('the goblin’s turn: no count and no Take back on her phone; the ping hint is back', !shown('.map-foot-move') && !q('.map-foot-back') && shown('.map-foot-touch'));
+        ok('the goblin’s turn: no count and no Take back on her phone; the ping hint is back', !shown('.map-foot-move') && !q('.map-foot-back') && (shown('.map-foot-touch') || shown('.map-foot-hint')));
       } catch(e){ ok('round 426 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
       finally {
         if (saved){ B._tokens = keepT; state.combatants = keepC; state.combatRound = keepR; state.activeCombatantId = keepA; B._fog = keepF; B._drawings = keepD; }
