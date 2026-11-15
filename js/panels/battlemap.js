@@ -636,6 +636,7 @@ registerPanel('battlemap',{
         this._cellHighlight = !!d.cellHighlight;
         this._bgMapScale = d.bgMapScale || 1;
         this._floorName = d.floorName || null;
+        this._exploreEpoch = d.exploreEpoch || 0;
         this._bgMapSize = d.bgMapSize || null;
         this._snapToGrid = !!d.snapToGrid;
         this._gridOffsetX = d.gridOffsetX || 0;
@@ -794,7 +795,7 @@ registerPanel('battlemap',{
     else this._captureUndo();
     try{
       const fogArr=this._fog?Array.from(this._fog):null;
-      localStorage.setItem('skt-battlemap-v1',JSON.stringify({tokens:this._tokens,cellSize:this._cellSize,cols:this._cols,rows:this._rows,bgColor:this._bgColor,fog:fogArr,bgMapPath:this._bgMapPath,showGrid:this._showGrid,gridType:this._gridType,cellHighlight:this._cellHighlight,bgMapScale:this._bgMapScale,bgMapSize:this._bgMapSize||null,snapToGrid:this._snapToGrid,floorName:this._floorName||null,drawings:this._drawings,gridOffsetX:this._gridOffsetX,gridOffsetY:this._gridOffsetY,mapRotation:this._mapRotation,ftPerCell:this._ftPerCell,diagRule:this._diagRule||'five',fogHardness:this._fogHardness,light:this._light||'bright',gridOpacity:this._gridOpacity,gridColor:this._gridColor,gridWidth:this._gridWidth,tokensVisible:this._tokensVisible,namesVisible:this._namesVisible,pcsVisible:this._pcsVisible,npcsVisible:this._npcsVisible,fogPaintMode:this._fogPaintMode,fogBrushMode:this._fogBrushMode,fogBrushShape:this._fogBrushShape,fogStrokes:this._fogStrokes}));
+      localStorage.setItem('skt-battlemap-v1',JSON.stringify({tokens:this._tokens,cellSize:this._cellSize,cols:this._cols,rows:this._rows,bgColor:this._bgColor,fog:fogArr,bgMapPath:this._bgMapPath,showGrid:this._showGrid,gridType:this._gridType,cellHighlight:this._cellHighlight,bgMapScale:this._bgMapScale,bgMapSize:this._bgMapSize||null,snapToGrid:this._snapToGrid,floorName:this._floorName||null,exploreEpoch:this._exploreEpoch||0,drawings:this._drawings,gridOffsetX:this._gridOffsetX,gridOffsetY:this._gridOffsetY,mapRotation:this._mapRotation,ftPerCell:this._ftPerCell,diagRule:this._diagRule||'five',fogHardness:this._fogHardness,light:this._light||'bright',gridOpacity:this._gridOpacity,gridColor:this._gridColor,gridWidth:this._gridWidth,tokensVisible:this._tokensVisible,namesVisible:this._namesVisible,pcsVisible:this._pcsVisible,npcsVisible:this._npcsVisible,fogPaintMode:this._fogPaintMode,fogBrushMode:this._fogBrushMode,fogBrushShape:this._fogBrushShape,fogStrokes:this._fogStrokes}));
     }catch(e){
       // Fog sets and freehand strokes grow without bound on large maps — this
       // is a realistic place to hit the quota, and silently dropping the write
@@ -1054,8 +1055,44 @@ registerPanel('battlemap',{
     if (this._mapKeyHandler){ document.removeEventListener('keydown', this._mapKeyHandler); this._mapKeyHandler = null; }
   },
   // LIGHT AND SIGHT (rules in sktSightSrc / sktSeePoint, js/core/utils.js).
+  // (A hidden token's torch isn't drawn: a lit patch in the dark showed the
+  // players where the ambush waited. The rules — who sees whom in the Turn
+  // View — still count it; it's there.)
   _sightSrc(){
-    return sktSightSrc({ tokens: this._tokens, drawings: this._drawings, cs: this._csScreen() || 50, ftPerCell: this._ftPerCell, gridType: this._gridType, light: this._light });
+    return sktSightSrc({ tokens: (this._tokens || []).filter(t => !(t && t.hidden)), drawings: this._drawings, cs: this._csScreen() || 50, ftPerCell: this._ftPerCell, gridType: this._gridType, light: this._light });
+  },
+  // ─── What the party has explored ──────────────────────────────────────────
+  // On a player's screen, ground their creatures have seen stays faintly
+  // there after they move on — the shape of the rooms behind them — though
+  // nobody in it is shown until it's seen again. Kept on each device (each
+  // player knows what they've seen), per map and floor, as a bit per sample
+  // of the sight shade. The DM's Map ▾ → Forget clears every screen's (the
+  // epoch, sent with the map).
+  _exploredKey: 'skt-bm-explored-v1',
+  _exploredFor(nx, ny){
+    const key = [this._bgMapPath || '-', this._floorName || '', nx, ny, this._exploreEpoch || 0].join('|');
+    if (this._explored && this._explored.key === key) return this._explored;
+    let bits = new Uint8Array(nx * ny);
+    try {
+      const all = JSON.parse(localStorage.getItem(this._exploredKey) || '{}') || {};
+      if (all[key]){ const raw = atob(all[key]); if (raw.length === bits.length) for (let i = 0; i < raw.length; i++) bits[i] = raw.charCodeAt(i); }
+    } catch(e){}
+    this._explored = { key, bits };
+    return this._explored;
+  },
+  _saveExploredSoon(){
+    clearTimeout(this._exploredT);
+    this._exploredT = setTimeout(() => {
+      const ex = this._explored; if (!ex) return;
+      try {
+        const all = JSON.parse(localStorage.getItem(this._exploredKey) || '{}') || {};
+        delete all[ex.key];
+        let s = ''; for (let i = 0; i < ex.bits.length; i += 8192) s += String.fromCharCode.apply(null, ex.bits.subarray(i, i + 8192));
+        all[ex.key] = btoa(s);
+        const keys = Object.keys(all); while (keys.length > 30) delete all[keys.shift()];   // the 30 maps seen last
+        localStorage.setItem(this._exploredKey, JSON.stringify(all));
+      } catch(e){}
+    }, 800);
   },
   // Whose eyes a screen sees with: a player's own creatures (their character,
   // their companions), or the whole party's when none of theirs is on the
@@ -1102,14 +1139,19 @@ registerPanel('battlemap',{
     const ctx = cv.getContext('2d'), img = ctx.createImageData(nx, ny);
     const eyes = this._sightViewers().map(t => ({ x: t.x, y: t.y, z: +t.elev || 0, senses: sktTokenSenses(t) }));
     const shade = [0.95, 0.66, 0.4, 0].map(a => a * (pl ? 1 : 0.55));
+    // Explored but not seen now: dark, with the map showing through.
+    const ex = pl && eyes.length ? this._exploredFor(nx, ny) : null, EXPLORED = 0.82;
+    let added = false;
     for (let j = 0; j < ny; j++) for (let i = 0; i < nx; i++){
       const x = (i + 0.5) * cs / k, y = (j + 0.5) * cs / k, L = sktLightAt(S, x, y, 0);
       let best = eyes.length ? 0 : Math.max(0, L + 1);
       for (const v of eyes){ const s = sktSeePoint(S, v, x, y, 0, L); if (s > best){ best = s; if (best === 3) break; } }
-      const o = (j * nx + i) * 4;
-      img.data[o] = 4; img.data[o + 1] = 6; img.data[o + 2] = 14; img.data[o + 3] = Math.round(shade[best] * 255);
+      const n = j * nx + i, o = n * 4;
+      if (ex && best >= 1 && !ex.bits[n]){ ex.bits[n] = 1; added = true; }
+      img.data[o] = 4; img.data[o + 1] = 6; img.data[o + 2] = 14; img.data[o + 3] = Math.round((best === 0 && ex && ex.bits[n] ? EXPLORED : shade[best]) * 255);
     }
     ctx.putImageData(img, 0, 0);
+    if (added) this._saveExploredSoon();
   },
   // A light carried: one of SKT_LIGHTS by key ('none' puts it out).
   _setTokenLight(t, key){
@@ -4018,7 +4060,7 @@ registerPanel('battlemap',{
     // through to a full _render() rather than the cheap repaint.
     // (and the floor's name, which the footer shows)
     const struct = () => [this._cols, this._rows, this._cellSize, this._gridType,
-      this._bgMapScale, this._mapRotation, this._gridOffsetX, this._gridOffsetY, this._floorName || ''].join('|');
+      this._bgMapScale, this._mapRotation, this._gridOffsetX, this._gridOffsetY, this._floorName || '', this._exploreEpoch || 0].join('|');
     const structBefore = struct();
 
     if (src.tokens)   this._tokens   = src.tokens;
@@ -4045,6 +4087,7 @@ registerPanel('battlemap',{
     }
     if (src.mapRotation != null) this._mapRotation = src.mapRotation;
     if ('floorName' in src) this._floorName = src.floorName || null;
+    if ('exploreEpoch' in src) this._exploreEpoch = src.exploreEpoch || 0;
     if ('bgMapSize' in src) this._bgMapSize = src.bgMapSize || null;
     if (src.gridOpacity != null) this._gridOpacity = src.gridOpacity;
     if ('gridColor' in src) this._gridColor = src.gridColor || null;
@@ -4824,6 +4867,11 @@ registerPanel('battlemap',{
           items.push({ label: 'Rename this floor…', onClick: () => this._renameFloor() });
           items.push({ label: 'Remove this floor…', danger: true, onClick: () => this._removeFloor() });
         }
+        // What the players' screens remember of where they've been (sight on).
+        if (this._sightSrc().on) items.push({ label: 'Forget what the players have explored', onClick: () => {
+          this._exploreEpoch = Date.now(); this._saveMap(); this._render();
+          if (typeof showToast === 'function') showToast('The players’ maps forget where they’ve been.');
+        } });
         // The ambush sprung: every hidden token onto the players' map at once.
         const hid = (this._tokens || []).filter(t => t && t.hidden);
         if (hid.length) items.push({ label: '👁 Reveal all hidden tokens (' + hid.length + ')', onClick: () => {

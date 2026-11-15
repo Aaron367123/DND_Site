@@ -22860,6 +22860,31 @@ for (const cls of Object.keys(rule)) for (let L = 1; L <= 20; L++) for (const sc
         closePanel('battlemap');
       }
     }
+    // -- Round 402: the DM's Map ▾ → Forget what the players have explored: there when the map has dark or walls, and it goes out with the map --
+    {
+      const B = panelDefs.battlemap; let keepL, keepE, saved = false;
+      try {
+        openPanel('battlemap'); await sleep(600);
+        keepL = B._light; keepE = B._exploreEpoch; saved = true;
+        B._light = 'bright'; B._render(); await sleep(100);
+        const item = () => [...document.querySelectorAll('.ctx-menu-item')].find(e => /Forget what the players have explored/.test(e.textContent));
+        B._body.querySelector('[data-mact="map-menu"]').click(); await sleep(100);
+        ok('Map ▾ in daylight with no walls: nothing to forget', !item());
+        document.querySelectorAll('.ctx-menu').forEach(m => m.remove());
+        B._light = 'dark'; B._render(); await sleep(100);
+        B._body.querySelector('[data-mact="map-menu"]').click(); await sleep(100);
+        const it = item();
+        ok('…in the dark: Forget what the players have explored', !!it);
+        const before = B._exploreEpoch || 0;
+        if (it) it.click(); await sleep(100);
+        ok('…pressed: a new epoch, sent with the map', (B._exploreEpoch || 0) > before && JSON.parse(localStorage.getItem('skt-battlemap-v1')).exploreEpoch === B._exploreEpoch);
+      } catch(e){ ok('round 402 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
+      finally {
+        document.querySelectorAll('.ctx-menu').forEach(m => m.remove());
+        if (saved){ B._light = keepL; B._exploreEpoch = keepE; try { B._saveMap(); B._render(); } catch(e){} }
+        closePanel('battlemap');
+      }
+    }
     // -- Class features: represented, not just text ------------------------
     {
       try {
@@ -26367,6 +26392,50 @@ for (const cls of Object.keys(rule)) for (let L = 1; L <= 20; L++) for (const sc
       finally {
         if (S0 != null) localStorage.setItem('skt-battlemap-v1', S0);
         state.activeCombatantId = keepA;
+        paTab = keepTab; try { paRender(); } catch(e){}
+      }
+    }
+    // -- Round 401: on a phone in the dark — where you've been stays faintly on the map (kept on reload, forgotten when the DM says); a hidden creature's torch doesn't give it away --
+    if (PLAYER){
+      const keepTab = paTab, B = panelDefs.battlemap;
+      let keepT = null, keepD = null, keepF, keepL, keepE, fogSaved = false;
+      try {
+        try { localStorage.removeItem('skt-bm-explored-v1'); } catch(e){}
+        if (paMyIdx() < 0) paSetPc('zoey');
+        paTab = 'map'; paRender(); await sleep(900);
+        keepT = B._tokens.slice(); keepD = B._drawings.slice(); keepF = B._fog; fogSaved = true; keepL = B._light; keepE = B._exploreEpoch;
+        const cs = B._csScreen();
+        const me = paPc();
+        const z = { id: 't401z', cid: me.id, label: me.name, isPC: true, x: 3.5 * cs, y: 3.5 * cs, size: 1, lt: { b: 20, d: 20 } };
+        B._tokens = [z]; B._drawings = []; B._fog = null; B._light = 'dark'; B._exploreEpoch = 0; B._explored = null;
+        B._render(); await sleep(200); B._renderSight();
+        const a = (sx, sy) => { const cv = B._body.querySelector('#sight-layer'); const k = cv.width / B._cols; return cv.getContext('2d').getImageData(Math.floor(sx / cs * k), Math.floor(sy / cs * k), 1, 1).data[3]; };
+        const here = [3.5 * cs, 3.5 * cs], never = [3.5 * cs, 12.5 * cs];
+        ok('phone, dark map: her torch lights where she stands; far off it’s dark', a(...here) === 0 && a(...never) > 230, JSON.stringify([a(...here), a(...never)]));
+        z.x = 17.5 * cs; z.lt = { b: 5, d: 5 }; B._renderSight();
+        const ex = a(...here);
+        ok('…she walks on: where she was stays faintly there — darker than seen, lighter than never seen', ex > 150 && ex < 230 && a(...never) > 230, JSON.stringify([ex, a(...never)]));
+        await sleep(1000);   // (saved a moment after)
+        B._explored = null; B._renderSight();
+        ok('…and it’s still there after a reload', Math.abs(a(...here) - ex) <= 1, a(...here));
+        // The DM forgets it for everyone
+        const S = JSON.parse(localStorage.getItem('skt-battlemap-v1') || '{}');
+        B.applyMapState(Object.assign({}, S, { tokens: B._tokens, drawings: [], fog: null, light: 'dark', exploreEpoch: 401401 }), { source: 'fb' }); await sleep(300);
+        B._renderSight();
+        ok('the DM’s “forget”: dark again', a(...here) > 230, a(...here));
+        // A hidden goblin with a torch, out where she can't see
+        const gob = { id: 't401g', label: 'r401 Goblin', x: 9.5 * cs, y: 9.5 * cs, size: 1, hidden: true, lt: { b: 20, d: 20 } };
+        B._tokens = [z, gob]; B._renderSight();
+        ok('a hidden goblin’s torch: no light on her map', a(9.5 * cs, 9.5 * cs) > 230, a(9.5 * cs, 9.5 * cs));
+        delete gob.hidden; B._renderSight();
+        ok('…revealed, its light shows', a(9.5 * cs, 9.5 * cs) < 60, a(9.5 * cs, 9.5 * cs));
+      } catch(e){ ok('round 401 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
+      finally {
+        try { localStorage.removeItem('skt-bm-explored-v1'); } catch(e){}
+        if (fogSaved){ B._fog = keepF; B._light = keepL; B._exploreEpoch = keepE; }
+        if (keepT){ B._tokens = keepT; B._drawings = keepD; }
+        B._explored = null;
+        try { B._render(); } catch(e){}
         paTab = keepTab; try { paRender(); } catch(e){}
       }
     }
