@@ -27132,6 +27132,38 @@ for (const cls of Object.keys(rule)) for (let L = 1; L <= 20; L++) for (const sc
         paTab = keepTab; try { paRender(); } catch(e){}
       }
     }
+    // -- Round 417: a wall that runs through the middle of the next square (walls found on a picture lie anywhere; snapping off) still stops a player's creature — by drag and by key --
+    if (PLAYER){
+      const keepTab = paTab, B = panelDefs.battlemap;
+      let keepT = null, keepD = null, keepF, keepSnap, saved = false;
+      try {
+        if (paMyIdx() < 0) paSetPc('zoey');
+        paTab = 'map'; paRender(); await sleep(900);
+        keepT = B._tokens.slice(); keepD = B._drawings.slice(); keepF = B._fog; keepSnap = B._snapToGrid; saved = true;
+        const cs = B._csScreen(), me = paPc();
+        const z = { id: 't417z', cid: me.id, label: me.name, isPC: true, x: 3.5 * cs, y: 5.5 * cs, size: 1 };
+        B._tokens = [z]; B._fog = null; B._snapToGrid = false;
+        B._drawings = [{ k: 'tpl', id: 'r417w', shape: 'wall', pts: [4.5 * cs, 0, 4.5 * cs, 12 * cs] }];   // through the next square's middle
+        B._render(); await sleep(150);
+        const el = document.querySelector('#pa-screen .map-token[data-tid="t417z"]');
+        const st = B._body.querySelector('#map-stage'), zz = B._screenScale();
+        const at = (gx, gy) => { const r = st.getBoundingClientRect(); return { x: r.left + gx * cs * zz, y: r.top + gy * cs * zz }; };
+        const T = p => new Touch({ identifier: 5, target: el, clientX: p.x, clientY: p.y });
+        let p = at(3.5, 5.5); const q = at(6.5, 5.5);
+        el.dispatchEvent(new TouchEvent('touchstart', { bubbles: true, cancelable: true, touches: [T(p)], changedTouches: [T(p)] }));
+        for (let k = 1; k <= 8; k++){ const m = { x: p.x + (q.x - p.x) * k / 8, y: p.y }; document.dispatchEvent(new TouchEvent('touchmove', { bubbles: true, cancelable: true, touches: [T(m)], changedTouches: [T(m)] })); await sleep(8); }
+        document.dispatchEvent(new TouchEvent('touchend', { bubbles: true, cancelable: true, touches: [], changedTouches: [T(q)] })); await sleep(150);
+        ok('phone: a wall through the next square’s middle stops her too (she doesn’t step onto it and off)', z.x < 4.5 * cs, (z.x / cs).toFixed(2));
+        z.x = 3.5 * cs; B._render(); await sleep(80);
+        B._keyMove(z, 1, 0); await sleep(60);
+        ok('…nor by key', z.x === 3.5 * cs, (z.x / cs).toFixed(2));
+      } catch(e){ ok('round 417 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
+      finally {
+        if (saved){ B._tokens = keepT; B._drawings = keepD; B._fog = keepF; B._snapToGrid = keepSnap; }
+        try { B._render(); } catch(e){}
+        paTab = keepTab; try { paRender(); } catch(e){}
+      }
+    }
   }
 
   // ══════════════════════════════════════════════════════════ mobile / phone

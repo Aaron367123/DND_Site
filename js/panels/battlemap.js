@@ -2584,12 +2584,23 @@ registerPanel('battlemap',{
     }
     pts.push([to.x, to.y]);
     for (let i = 1; i < pts.length; i++){
-      if (!sktWallBetween(S, pts[i - 1][0], pts[i - 1][1], pts[i][0], pts[i][1])) continue;
+      if (!this._stepBlocked(S, pts[i - 1][0], pts[i - 1][1], pts[i][0], pts[i][1])) continue;
       if (cells && i < cells.length) cells.length = i;
       if (typeof showToast === 'function') showToast('A wall’s in the way.');
       return { x: pts[i - 1][0], y: pts[i - 1][1] };
     }
     return null;
+  },
+  // A step from (ax, ay) to (bx, by) that meets a wall — crossing it, or
+  // ending on it. The line test counts only a crossing, so a step onto a
+  // wall's line and the next off it went through it (measured on the real
+  // map: a found wall through a square's middle, a token off the grid).
+  // Stretched a pixel past each end, a step that reaches the wall crosses it.
+  _stepBlocked(S, ax, ay, bx, by){
+    const dx = bx - ax, dy = by - ay, L = Math.hypot(dx, dy);
+    if (!L) return false;
+    const ux = dx / L, uy = dy / L;
+    return sktWallBetween(S, ax - ux, ay - uy, bx + ux, by + uy);
   },
   _combatantFor(t){
     if (!t || typeof state === 'undefined' || !Array.isArray(state.combatants)) return null;
@@ -3129,7 +3140,7 @@ registerPanel('battlemap',{
     if (pl && !path.walls) path.walls = sktSightSrc({ drawings: this._drawings, cs: this._csScreen() || 50, ftPerCell: this._ftPerCell, gridType: this._gridType, light: 'bright' });
     const W = pl && path.walls.walls.length ? path.walls : null, cs0 = this._csScreen() || 50;
     const ctr = c => path.hex ? this._hexCentre(c) : [path.ox + c[0] * cs0, path.oy + c[1] * cs0];
-    const blocked = (a, b) => { if (!W) return false; const p = ctr(a), q = ctr(b); return sktWallBetween(W, p[0], p[1], q[0], q[1]); };
+    const blocked = (a, b) => { if (!W) return false; const p = ctr(a), q = ctr(b); return this._stepBlocked(W, p[0], p[1], q[0], q[1]); };
     let guard = 0;
     for (let cur = cells[cells.length - 1]; !same(cur, to) && guard++ < 2000; cur = cells[cells.length - 1]){
       let nx = step(cur);
