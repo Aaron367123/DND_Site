@@ -23876,6 +23876,65 @@ for (const cls of Object.keys(rule)) for (let L = 1; L <= 20; L++) for (const sc
         closePanel('battlemap');
       }
     }
+    // -- Round 430: Add to the fight from the map — a group of hidden goblin markers goes into the tracker as those tokens (where they stand, still hidden, nothing new placed); a name with more than one printing opens the picker on it and the pick is this marker; a character's token joins from the party; a second "Ogre" put down by hand isn't the one in the fight --
+    if (!PLAYER){
+      const B = panelDefs.battlemap;
+      let keepT = null, keepC = null, keepR, keepA, saved = false;
+      try {
+        openPanel('battlemap'); await sleep(700);
+        for (let i = 0; i < 40 && !(typeof _5eData !== 'undefined' && _5eData.length); i++) await sleep(250);
+        keepT = B._tokens.slice(); keepC = (state.combatants || []).slice(); keepR = state.combatRound; keepA = state.activeCombatantId; saved = true;
+        const cs = B._csScreen();
+        const pool = sktMonsterPool('encounter'), cnt = n => pool.filter(d => d.name.toLowerCase() === n.toLowerCase()).length;
+        const one = ['Goblin', 'Gnoll', 'Kobold', 'Wolf'].find(n => cnt(n) === 1), two = ['Ogre', 'Bandit', 'Owlbear'].find(n => cnt(n) > 1);
+        state.combatants = []; state.combatRound = 0; state.activeCombatantId = null; save();
+        B._tokens = [{ id: 't430a', label: one, x: 4.5 * cs, y: 4.5 * cs, size: 1, hidden: true }, { id: 't430b', label: one, x: 6.5 * cs, y: 4.5 * cs, size: 1, hidden: true },
+                     { id: 't430c', label: one, x: 8.5 * cs, y: 4.5 * cs, size: 1 }];
+        B._renderTokens(); B._saveMap(); await sleep(60);
+        const tok = id => B._tokens.find(t => t.id === id);
+        const jb = () => B._body.querySelector('#tp-join');
+        B._group = new Set(['t430b', 't430c']); B._selected = 't430b'; B._showPanel(tok('t430b')); await sleep(60);
+        ok('a marker not in the fight: Add to the fight on its panel — for the group, “these 2”', jb() && jb().style.display !== 'none' && /these 2/.test(jb().textContent), jb() && jb().textContent);
+        jb().click(); await sleep(300);
+        const cb = sktTokenForCombatant(B._tokens, state.combatants[0]), cc = sktTokenForCombatant(B._tokens, state.combatants[1]);
+        ok('…the two in the group are in the fight as those two tokens, where they stood; nothing new placed; the other marker left out', state.combatants.length === 2 && B._tokens.length === 3 && cb && cc && cb.id === 't430b' && cc.id === 't430c'
+          && tok('t430b').x === 6.5 * cs && tok('t430c').x === 8.5 * cs && tok('t430b').hidden && !tok('t430a').cid && !document.getElementById('mp-back'),
+          JSON.stringify([state.combatants.map(c => c.name), B._tokens.map(t => [t.id, t.label, t.cid || ''])]));
+        ok('…its stat block came with it', state.combatants[0].hpMax > 0 && state.combatants[0]._slug);
+        B._group.clear(); B._showPanel(tok('t430b')); await sleep(40);
+        ok('…in the fight now: no Add, its hit points instead', jb().style.display === 'none' && B._body.querySelector('#tp-hp').style.display !== 'none');
+        // the first marker, added later, is a third — not the first's
+        B._selected = 't430a'; B._showPanel(tok('t430a')); await sleep(40); jb().click(); await sleep(300);
+        ok('…the one left, added on its own: a third, its own token', state.combatants.length === 3 && sktTokenForCombatant(B._tokens, state.combatants[2]).id === 't430a' && B._tokens.length === 3, JSON.stringify(B._tokens.map(t => [t.id, t.label, t.cid || ''])));
+        // more than one printing: the picker, on that name
+        B._tokens.push({ id: 't430o', label: two, x: 10.5 * cs, y: 6.5 * cs, size: 1 }); B._renderTokens();
+        B._selected = 't430o'; B._showPanel(tok('t430o')); await sleep(40); jb().click(); await sleep(300);
+        const mp = document.getElementById('mp-back');
+        ok('a name in more than one book (' + two + '): the monster picker opens on it', !!mp && mp.querySelector('#mp-q').value === two, mp && mp.querySelector('#mp-q').value);
+        if (mp){ const row = [...mp.querySelectorAll('.mp-row')].find(r => r.querySelector('.mp-row-name').firstChild.textContent.trim().toLowerCase() === two.toLowerCase()); row && row.click(); await sleep(50); mp.querySelector('[data-mp="add"]').click(); await sleep(300); }
+        const og = state.combatants.find(c => (c.baseName || c.name) === two);
+        ok('…picked: in the fight as that marker, and the picker closes (another pick would take the marker again)', !document.getElementById('mp-back') && !!og && sktTokenForCombatant(B._tokens, og) === tok('t430o') && tok('t430o').cid === og.id, JSON.stringify(state.combatants.map(c => c.name)));
+        // a second marker of the same name, by hand: not the one in the fight
+        B._tokens.push({ id: 't430o2', label: og.name, x: 12.5 * cs, y: 6.5 * cs, size: 1 }); B._renderTokens(); await sleep(40);
+        state.combatRound = 1; state.activeCombatantId = og.id; save(); await sleep(120);
+        ok('a second “' + og.name + '” put down by hand: not the one in the fight — no ring, no hit points of its own, Add to the fight offered', !B._combatantFor(tok('t430o2')) && !B._body.querySelector('.map-token.turn[data-tid="t430o2"]') && !!B._body.querySelector('.map-token.turn[data-tid="t430o"]') && B._joinable(tok('t430o2')).length === 1);
+        // a character's token
+        const p = (state.party || [])[0];
+        if (p){
+          B._tokens.push({ id: 't430p', label: p.name, isPC: true, x: 2.5 * cs, y: 8.5 * cs, size: 1 }); B._renderTokens();
+          B._selected = 't430p'; B._showPanel(tok('t430p')); await sleep(40);
+          const shown = jb().style.display !== 'none'; jb().click(); await sleep(200);
+          ok('a character’s token not in the fight: added from the party, as that token', shown && state.combatants.some(c => c.id === p.id) && tok('t430p').cid === p.id && !document.getElementById('mp-back'));
+        }
+      } catch(e){ ok('round 430 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
+      finally {
+        document.getElementById('mp-back')?.remove();
+        try { B._group && B._group.clear(); } catch(e){}
+        if (saved){ B._tokens = keepT; state.combatants = keepC; state.combatRound = keepR; state.activeCombatantId = keepA; try { save(); B._saveMap(); } catch(e){} }
+        try { B._closePanel(); B._render(); } catch(e){}
+        closePanel('battlemap');
+      }
+    }
     // -- Class features: represented, not just text ------------------------
     {
       try {

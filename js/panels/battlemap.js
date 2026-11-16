@@ -2626,7 +2626,83 @@ registerPanel('battlemap',{
     }
     if (typeof sktNormName !== 'function') return null;
     const n = sktNormName(t.label || '');
-    return n ? state.combatants.find(c => sktNormName(c.name) === n) || null : null;
+    // By name — but not a fighter linked to a token of its own: a second
+    // "Ogre" put down by hand beside the one in the fight showed that ogre's
+    // hit points and wore its turn ring.
+    const own = c => (this._tokens || []).some(k => k && k !== t && k.cid != null && k.cid === c.id);
+    return n ? state.combatants.find(c => sktNormName(c.name) === n && !own(c)) || null : null;
+  },
+  // ─── Into the fight, from the map ─────────────────────────────────────────
+  // A marker put down with + NPC (or a character's token) not in the fight:
+  // the token panel's Add to the fight puts it in the Combat Tracker as THIS
+  // token — where it stands, hidden or not. The marker's name finds its stat
+  // block in the books in use; with none, or more than one printing, the
+  // monster picker opens on that name. A group (Shift+click) goes in together.
+  _joinable(t){
+    if (!t || document.body.classList.contains('player-mode') || typeof panelDefs === 'undefined' || !panelDefs.combat) return [];
+    const g = this._group && this._group.size > 1 && this._group.has(t.id)
+      ? [...this._group].map(id => (this._tokens || []).find(k => k && k.id === id)).filter(Boolean) : [t];
+    const inFight = new Set((state.combatants || []).map(c => c.id));
+    return g.filter(k => !k.dead && !this._combatantFor(k) && (!k.isPC || !!this._joinPc(k, inFight)));
+  },
+  _joinPc(t, inFight){
+    const n = sktNormName(t.label || ''), pi = (state.party || []).findIndex(p => p && (p.id === t.cid || sktNormName(p.name) === n));
+    return pi >= 0 && !(inFight || new Set((state.combatants || []).map(c => c.id))).has(state.party[pi].id) ? { pi } : null;
+  },
+  _joinFight(list){
+    const C = (typeof panelDefs !== 'undefined') && panelDefs.combat;
+    if (!C || !Array.isArray(list) || !list.length) return 0;
+    const before = new Map((this._tokens || []).map(k => [k.id, { label: k.label, baseName: k.baseName, cid: k.cid }]));
+    let added = 0;
+    // The fighter just added is THIS token: whatever the tracker's own
+    // placing did with it (took another marker of that name, or put down a
+    // new token) is undone.
+    const link = (t, c) => {
+      if (!c) return;
+      for (let i = this._tokens.length - 1; i >= 0; i--){
+        const k = this._tokens[i];
+        if (!k || k === t || k.cid !== c.id) continue;
+        const w = before.get(k.id);
+        if (!w){ this._tokens.splice(i, 1); continue; }
+        if (w.cid != null) k.cid = w.cid; else delete k.cid;
+        k.label = w.label; if (w.baseName) k.baseName = w.baseName; else delete k.baseName;
+      }
+      t.cid = c.id; t.label = c.name;
+      if (c.baseName) t.baseName = c.baseName; else delete t.baseName;
+      added++;
+    };
+    const one = (t, d) => {
+      if (d.pi != null){ C._addPartyToCombat(d.pi); link(t, (state.combatants || []).find(c => c.id === state.party[d.pi].id)); }
+      else { C.addMonster(d, { quiet: true }); link(t, state.combatants[state.combatants.length - 1]); }
+    };
+    const done = () => {
+      this._saveMap(); this._renderTokens();
+      try { C._render && C._render(); } catch(e){}
+      if (this._selected){ const s = this._tokens.find(k => k.id === this._selected); if (s) this._showPanel(s); }
+    };
+    const pool = typeof sktMonsterPool === 'function' ? sktMonsterPool('encounter') : [];
+    const ask = new Map();   // name → its markers, for the picker
+    list.forEach(t => {
+      if (t.isPC){ const p = this._joinPc(t); if (p) one(t, p); return; }
+      const name = String(t.baseName || t.label || '').replace(/\s+\d+$/, '').trim();
+      const hits = pool.filter(d => String(d.name).toLowerCase() === name.toLowerCase());
+      if (hits.length === 1) one(t, hits[0]);
+      else { if (!ask.has(name)) ask.set(name, []); ask.get(name).push(t); }
+    });
+    if (added) done();
+    if (added && typeof showToast === 'function') showToast(added === 1 ? list[0].label + ' is in the fight' : added + ' are in the fight');
+    // The rest, a name at a time.
+    const next = () => {
+      const e = ask.entries().next(); if (e.done) return;
+      const [name, toks] = e.value; ask.delete(name);
+      if (typeof sktPickMonster !== 'function'){ next(); return; }
+      sktPickMonster({ title: 'Which monster is “' + name + '”?', action: 'Add to the fight', scope: 'encounter', query: name,
+        onPick: d => { toks.forEach(t => one(t, d)); done();
+          // (one pick is these markers' — the picker would take more: it closes)
+          setTimeout(() => { const x = document.querySelector('#mp-back [data-mp="close"]'); if (x) x.click(); next(); }, 0); return (toks.length > 1 ? toks.length + ' × ' : '') + d.name + ' in the fight'; } });
+    };
+    next();
+    return added;
   },
   // Hurt things look hurt: a ring at half HP and a brighter one near the end.
   // Two bands, not six — the point is to read the state of a fight off the
@@ -5562,6 +5638,7 @@ registerPanel('battlemap',{
         +'</div>'
         +'<button class="btn small" id="tp-cond" style="width:100%">⚑ Conditions…</button>'
       +'</div>'
+      +'<button class="btn small" id="tp-join" style="width:100%;margin-top:6px;display:none" title="Into the Combat Tracker as this token, with its stat block">⚔ Add to the fight</button>'
       +'<button class="btn small" id="tp-hide" style="width:100%;margin-top:6px"></button>'
       +'<button class="btn small" id="tp-floor" style="width:100%;margin-top:6px;display:none" title="Up or down the stairs: onto another floor of the building">⇅ To another floor…</button>'
       +'<div style="display:flex;gap:4px;margin-top:6px">'
@@ -8421,6 +8498,13 @@ registerPanel('battlemap',{
         + ((c.conditions || []).length ? ' \u00b7 ' + c.conditions.join(', ') : '');
     };
     paintHp();
+    const joinBtn = b.querySelector('#tp-join');
+    if (joinBtn){
+      const jl = this._joinable(t);
+      joinBtn.style.display = jl.length ? 'block' : 'none';
+      joinBtn.textContent = jl.length > 1 ? '⚔ Add these ' + jl.length + ' to the fight' : '⚔ Add to the fight';
+    }
+    rewire('#tp-join','click',()=>{ this._joinFight(this._joinable(t)); });
     const hit = sign => {
       const i = idxOf(); if (i < 0 || !C) return;
       const amt = Math.max(0, parseInt((b.querySelector('#tp-amt') || {}).value, 10) || 0);
