@@ -606,6 +606,7 @@ registerPanel('loot',{
 
   // Modal: create or edit a tab group. Pass groupId to edit, or null to create.
   _openTabGroupModal(groupId){
+    if (this._isPlayer()) return;   // the DM's way of sorting the loot
     const editing = groupId ? this._findTabGroup(groupId) : null;
     const initialName = editing?.name || '';
     const initialMembers = new Set(editing?.memberIds || []);
@@ -661,12 +662,11 @@ registerPanel('loot',{
     };
     backdrop.querySelector('#cg-save').addEventListener('click', saveAction);
     backdrop.querySelector('#cg-cancel').addEventListener('click', close);
+    // (undoable: it went at once, and its items fell back to the party loot)
     backdrop.querySelector('#cg-del')?.addEventListener('click', () => {
-      this._loot.tabGroups = this._loot.tabGroups.filter(g => g.id !== editing.id);
-      if (this._view === 'tabgroup:'+editing.id) this._view = 'all';
-      this._save();
       close();
-      this._render();
+      if (this._view === 'tabgroup:'+editing.id) this._view = 'all';
+      this._undoable('Deleted the tab “' + editing.name + '”', () => { this._loot.tabGroups = this._loot.tabGroups.filter(g => g.id !== editing.id); });
     });
     backdrop.addEventListener('keydown', e => {
       if (e.key === 'Enter' && e.target.tagName === 'INPUT' && e.target.type === 'text'){
@@ -943,10 +943,10 @@ registerPanel('loot',{
       <div class="loot-sumbar">
         <span title="Everything converted to gold, and an even share for each party member">Total <strong style="color:var(--warning)">${(+totalGp).toLocaleString(undefined, { maximumFractionDigits: 2 })} gp</strong>
           · <strong style="color:var(--warning)">${(+(this._sharers().length ? totalGp / this._sharers().length : totalGp)).toLocaleString(undefined, { maximumFractionDigits: 2 })}</strong> each</span>
-        <label class="loot-encumbrance-toggle" title="Show a weight column on items and per-member encumbrance subtotals (5e: STR×15 = lbs)">
+        ${this._isPlayer() ? '' : `<label class="loot-encumbrance-toggle" title="Show a weight column on items and per-member encumbrance subtotals (5e: STR×15 = lbs)">
           <input type="checkbox" id="loot-encumbrance-toggle" ${state.settings?.lootEncumbrance?'checked':''}>
           <span>${ICO('i-scale')} Weight</span>
-        </label>
+        </label>`}
         <span style="flex:1"></span>
         ${this._isPlayer() ? '' : `<button class="btn small" id="loot-roll" title="Roll random treasure on the DMG tables">${ICO('i-dice')} Roll treasure</button>
         <button class="btn small" id="loot-divvy">Divvy up</button>`}
@@ -973,10 +973,10 @@ registerPanel('loot',{
             <span class="loot-tab-icon">${ICO('i-user')}</span>
             <span class="loot-tab-name">${esc(g.name)}</span>
             ${cnt?`<span class="loot-tab-count">${cnt}</span>`:''}
-            <span class="loot-tab-edit" data-tg-edit="${esc(g.id)}" title="Edit tab">${ICO('i-gear')}</span>
+            ${this._isPlayer() ? '' : `<span class="loot-tab-edit" data-tg-edit="${esc(g.id)}" title="Edit tab">${ICO('i-gear')}</span>`}
           </button>`;
         }).join('')}
-        <button class="loot-view-tab loot-tab-add" data-tg-add="1" title="Create a custom tab grouping party members"><span class="loot-tab-icon">${ICO('i-tag')}</span><span class="loot-tab-name">Tab</span></button>
+        ${this._isPlayer() ? '' : `<button class="loot-view-tab loot-tab-add" data-tg-add="1" title="Create a custom tab grouping party members"><span class="loot-tab-icon">${ICO('i-tag')}</span><span class="loot-tab-name">Tab</span></button>`}
         ${(() => {
           // "Group" tab = shared / unassigned loot (treats items pointing at
           // a deleted party member as unassigned too).

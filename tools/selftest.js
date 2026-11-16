@@ -24523,6 +24523,8 @@ for (const cls of Object.keys(rule)) for (let L = 1; L <= 20; L++) for (const sc
           window.showConfirm = async () => true;
           const n0 = L._loot.items.length, g0 = L._loot.gp;
           L._openTreasureRoller(); await sleep(300);
+          // (the roll is a preview now: Add to loot keeps it)
+          const tpEl = document.getElementById('loot-tp'); if (tpEl){ const g = tpEl.querySelector('[data-tpc="gp"]'); if (g && !(+g.value)) g.value = '7'; tpEl.querySelector('[data-tp="add"]').click(); await sleep(40); }
           const added = L._loot.items.length !== n0 || L._loot.gp !== g0;
           sktUndo(); await sleep(40);
           ok('rolled treasure added, then Undo: the loot as it was', added && L._loot.items.length === n0 && L._loot.gp === g0, n0 + '/' + L._loot.items.length);
@@ -24596,6 +24598,13 @@ for (const cls of Object.keys(rule)) for (let L = 1; L <= 20; L++) for (const sc
           tp().querySelector('[data-tp="cancel"]').click(); await sleep(20);
           ok('Cancel: nothing added', !tp() && L._loot.gp === g0);
         }
+        // a custom tab deleted, then Undo
+        L._loot.tabGroups = [{ id: 'tg_r447', name: 'r447 Frontline', memberIds: [] }]; L._save(); L._render(); await sleep(20);
+        L._openTabGroupModal('tg_r447'); await sleep(40);
+        document.querySelector('#cg-del').click(); await sleep(30);
+        const gone = !L._loot.tabGroups.length;
+        sktUndo(); await sleep(40);
+        ok('a custom tab deleted, then Undo: it is back (it went at once)', gone && L._loot.tabGroups.length === 1 && L._loot.tabGroups[0].name === 'r447 Frontline');
       } catch(e){ ok('round 447 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
       finally {
         window.showToast = kt; window.showModal = km; window.showContextMenu = kcm;
@@ -28572,6 +28581,7 @@ for (const cls of Object.keys(rule)) for (let L = 1; L <= 20; L++) for (const sc
         L._save(); L._render(); await sleep(30);
         const scr = document.getElementById('pa-screen'), row = id => scr.querySelector('.loot-item[data-i="' + L._loot.items.findIndex(x => x.id === id) + '"]');
         ok('phone: no Roll treasure, no Divvy up (paying out writes into every sheet)', !scr.querySelector('#loot-roll') && !scr.querySelector('#loot-divvy'));
+        ok('…nor the Weight switch or new tabs: both are the DM’s, for everyone (a player ticking Weight turned it on for the table)', !scr.querySelector('#loot-encumbrance-toggle') && !scr.querySelector('[data-tg-add]'));
         ok('…the party’s rope: theirs to change, delete or claim', !!row('r446a').querySelector('[data-lact="del"]') && !!row('r446a').querySelector('.loot-name-input'));
         const opts = [...row('r446a').querySelectorAll('.loot-assign option')].map(o => o.value);
         ok('…and the only one they can give it to is themselves', opts.length === 2 && opts[0] === '' && opts[1] === me.id, JSON.stringify(opts));
