@@ -21,22 +21,42 @@ registerPanel('encounter',{
   // Library of saved encounters — each is {id, name, monsters, ts}. Lets
   // the DM stage two or three fights for a session and switch between them.
   _saved:[],
+  // Party members sitting this fight out (ids). Everyone else in the Party
+  // Tracker (not a rival) is in it, at their own level.
+  _out:[],
   mount(body){
     this._body=body;
-    try{const r=localStorage.getItem('skt-enc-v1');if(r){const d=JSON.parse(r);this._monsters=d.monsters||[];this._partyLevel=d.partyLevel||6;this._partySize=d.partySize||state.party.length||5;this._saved=Array.isArray(d.saved)?d.saved:[];if(d.system==='2014'||d.system==='2024')this._system=d.system;}}catch(e){}
-    this._partySize=state.party.length||this._partySize;
+    try{const r=localStorage.getItem('skt-enc-v1');if(r){const d=JSON.parse(r);this._monsters=d.monsters||[];this._partyLevel=d.partyLevel||6;this._partySize=d.partySize||state.party.length||5;this._saved=Array.isArray(d.saved)?d.saved:[];if(d.system==='2014'||d.system==='2024')this._system=d.system;this._out=Array.isArray(d.out)?d.out:[];}}catch(e){}
     this._render();
   },
   unmount(){
     this._body=null;
   },
-  _save(){saveJson('skt-enc-v1', {monsters:this._monsters,partyLevel:this._partyLevel,partySize:this._partySize,saved:this._saved,system:this._system}, 'encounters');},
+  _save(){saveJson('skt-enc-v1', {monsters:this._monsters,partyLevel:this._partyLevel,partySize:this._partySize,saved:this._saved,system:this._system,out:this._out}, 'encounters');},
+  // THE PARTY. It was a level and a size typed in (6 and 5 until changed),
+  // never the party's: a table of seven read as five, and a mixed party (a
+  // 3rd-level newcomer among 6ths) couldn't be said at all — both DMGs add
+  // up each character at their OWN level. Now: the Party Tracker's
+  // characters (not rivals), each at their level, ticked in or out of this
+  // fight. With no party, the typed level and size as before.
+  _members(){ return ((typeof state !== 'undefined' && state.party) || []).filter(p => p && !p.foe); },
+  _lvlOf(p){ const n = parseInt(p && (p.level || (p.sheet && p.sheet.level)), 10); return n >= 1 ? Math.min(20, n) : Math.min(Math.max(this._partyLevel, 1), 20); },
+  // The levels of everyone in this fight, one per character.
+  _levels(){
+    const m = this._members();
+    if (!m.length) return Array.from({ length: Math.max(1, this._partySize | 0) }, () => Math.min(Math.max(this._partyLevel, 1), 20));
+    return m.filter(p => !this._out.includes(p.id)).map(p => this._lvlOf(p));
+  },
+  _count(){ return this._levels().length; },
+  // 2014: Easy/Medium/Hard/Deadly for the whole party, each at their level.
+  _thresh2014(){
+    return this._levels().reduce((t, l) => { const r = XP_THRESH[l - 1] || XP_THRESH[0]; return t.map((v, i) => v + r[i]); }, [0, 0, 0, 0]);
+  },
   _systemMode(){ return this._system==='2014' ? '2014' : '2024'; },
   // 2024 party XP budget for the current level + size (per-char × size).
   _budget2024(){
-    const lvl=Math.min(Math.max(this._partyLevel,1),20)-1;
-    const b=XP_BUDGET_2024[lvl]||XP_BUDGET_2024[0];
-    return {low:b[0]*this._partySize, moderate:b[1]*this._partySize, high:b[2]*this._partySize};
+    const t = this._levels().reduce((s, l) => { const b = XP_BUDGET_2024[l - 1] || XP_BUDGET_2024[0]; return s.map((v, i) => v + b[i]); }, [0, 0, 0]);
+    return {low:t[0], moderate:t[1], high:t[2]};
   },
   // 2024 difficulty from RAW monster XP (no multiplier) vs the party budget.
   _difficulty2024(rawXP){
@@ -70,16 +90,15 @@ registerPanel('encounter',{
     // own sidebar puts a single monster against six-plus characters at x0.5.
     // Stepping above the last is not, so it clamps.
     let si2 = si;
-    if (this._partySize < 3)       si2 = Math.min(steps.length - 1, si + 1);
-    else if (this._partySize >= 6) si2 = si - 1;
+    const size = this._count();
+    if (size < 3)       si2 = Math.min(steps.length - 1, si + 1);
+    else if (size >= 6) si2 = si - 1;
     const mult = si2 < 0 ? 0.5 : steps[si2][1];
     const sizeAdj = si2 === si ? 0 : (si2 > si ? 1 : -1);
     return{raw:total,adjusted:Math.round(total*mult),mult,count,sizeAdj};
   },
   _difficulty(adjXP){
-    const level=Math.min(Math.max(this._partyLevel,1),20)-1;
-    const thresh=XP_THRESH[level]||XP_THRESH[0];
-    const partyThresh=thresh.map(t=>t*this._partySize);
+    const partyThresh=this._thresh2014();
     if(adjXP<partyThresh[0])return{label:'Trivial',cls:'easy'};
     if(adjXP<partyThresh[1])return{label:'Easy',cls:'easy'};
     if(adjXP<partyThresh[2])return{label:'Medium',cls:'medium'};
@@ -121,12 +140,17 @@ registerPanel('encounter',{
       <div class="enc-left">
         <div class="enc-section">
           <h3>Party</h3>
-          <div class="enc-party-adj">
+          ${this._members().length ? `<div class="enc-party-list">${this._members().map(p => `<label class="enc-pc" title="${this._out.includes(p.id) ? 'Not in this fight' : 'In this fight'}">
+              <input type="checkbox" data-epc="${esc(p.id)}" ${this._out.includes(p.id) ? '' : 'checked'}>
+              <span class="enc-pc-n">${esc(p.name)}</span><span class="enc-pc-l">Lv ${this._lvlOf(p)}</span></label>`).join('')}</div>
+            <div class="enc-party-sum">${(() => { const L = this._levels(); if (!L.length) return 'Nobody ticked'; const lo = Math.min(...L), hi = Math.max(...L);
+              return L.length + ' character' + (L.length === 1 ? '' : 's') + ' · level ' + (lo === hi ? lo : lo + '–' + hi); })()}</div>`
+          : `<div class="enc-party-adj">
             <label>Level</label>
             <input type="number" id="enc-level" aria-label="Party level" value="${this._partyLevel}" min="1" max="20" style="font-size:var(--fs-sm);margin-bottom:6px">
             <label>Size</label>
             <input type="number" id="enc-size" aria-label="Party size" value="${this._partySize}" min="1" max="10" style="font-size:var(--fs-sm)">
-          </div>
+          </div>`}
         </div>
         <div class="enc-section" style="flex:1;overflow-y:auto">
           <h3>Monsters</h3>
@@ -188,8 +212,13 @@ registerPanel('encounter',{
       </div>
     </div></div>`;
     // Party inputs
-    b.querySelector('#enc-level').addEventListener('change',e=>{this._partyLevel=parseInt(e.target.value)||6;this._save();this._render();});
-    b.querySelector('#enc-size').addEventListener('change',e=>{this._partySize=parseInt(e.target.value)||5;this._save();this._render();});
+    b.querySelector('#enc-level')?.addEventListener('change',e=>{this._partyLevel=Math.min(20,Math.max(1,parseInt(e.target.value)||6));this._save();this._render();});
+    b.querySelector('#enc-size')?.addEventListener('change',e=>{this._partySize=Math.min(10,Math.max(1,parseInt(e.target.value)||5));this._save();this._render();});
+    b.querySelectorAll('[data-epc]').forEach(cb => cb.addEventListener('change', () => {
+      const id = cb.dataset.epc;
+      this._out = this._out.filter(x => x !== id).concat(cb.checked ? [] : [id]);
+      this._save(); this._render();
+    }));
     // Monster list
     b.querySelectorAll('[data-eact="del"]').forEach(btn=>btn.addEventListener('click',()=>{this._monsters.splice(+btn.dataset.ei,1);this._save();this._render();}));
     b.querySelectorAll('#enc-monster-list input[type="number"]').forEach(inp=>inp.addEventListener('change',e=>{this._monsters[+e.target.dataset.ei].count=parseInt(e.target.value)||1;this._save();this._render();}));
@@ -343,8 +372,7 @@ registerPanel('encounter',{
             <div class="enc-stat-box"><div class="l">High</div><div class="v" style="font-size:var(--fs-md)">${bg.high.toLocaleString()} XP</div></div>
           </div>`;
     }
-    const l = Math.min(Math.max(this._partyLevel,1),20)-1;
-    const t = XP_THRESH[l] || XP_THRESH[0];
+    const t = this._thresh2014();
     return `<div class="enc-stat-grid">
             <div class="enc-stat-box"><div class="l">Raw XP</div><div class="v">${xp.raw.toLocaleString()}</div></div>
             <div class="enc-stat-box" title="${xp.sizeAdj
@@ -357,7 +385,7 @@ registerPanel('encounter',{
           </div>
           ${this._renderDifficultyGauge(xp.adjusted)}
           <h3 style="font-size:var(--fs-xs);text-transform:uppercase;letter-spacing:.5px;color:var(--text-muted);margin:10px 0 8px">Thresholds (full party)</h3>
-          <div class="enc-stat-grid">${['Easy','Medium','Hard','Deadly'].map((lab,i)=>`<div class="enc-stat-box"><div class="l">${lab}</div><div class="v" style="font-size:var(--fs-md)">${(t[i]*this._partySize).toLocaleString()} XP</div></div>`).join('')}</div>`;
+          <div class="enc-stat-grid">${['Easy','Medium','Hard','Deadly'].map((lab,i)=>`<div class="enc-stat-box"><div class="l">${lab}</div><div class="v" style="font-size:var(--fs-md)">${t[i].toLocaleString()} XP</div></div>`).join('')}</div>`;
   },
 
   // 2024 gauge — Low / Moderate / High zones at the party budget, marker at the
@@ -385,8 +413,7 @@ registerPanel('encounter',{
   // adjusted XP sits. Gives an at-a-glance read of "how close to the next tier
   // am I?" without doing the math by hand.
   _renderDifficultyGauge(adjXP){
-    const level = Math.min(Math.max(this._partyLevel,1),20)-1;
-    const t = (XP_THRESH[level]||XP_THRESH[0]).map(x => x * this._partySize);
+    const t = this._thresh2014();
     // Zones: [0, easy), [easy, med), [med, hard), [hard, deadly), [deadly, 2×deadly)
     const maxX = Math.max(adjXP, t[3]) * 1.15 || 100;
     const pct = (v) => Math.max(0, Math.min(100, (v / maxX) * 100));
@@ -419,8 +446,7 @@ registerPanel('encounter',{
       targetMin = { Moderate:bg.low, High:bg.moderate, Deadly:bg.high }[target];
       xpAt = (f) => this._monsters.reduce((s,m)=>s+(CR_XP[m.cr]||0)*Math.max(1,Math.round((m.count||1)*f)),0);
     } else {
-      const level = Math.min(Math.max(this._partyLevel,1),20)-1;
-      const t = (XP_THRESH[level]||XP_THRESH[0]).map(x => x * this._partySize);
+      const t = this._thresh2014();
       targetMin = { Easy:t[0], Medium:t[1], Hard:t[2], Deadly:t[3] }[target];
       // Adjusted XP grows non-linearly with count (the multiplier table jumps).
       xpAt = (f) => {

@@ -2256,6 +2256,8 @@
     {
       const E = panelDefs.encounter;
       const S0 = E._partySize, M0 = JSON.stringify(E._monsters);
+      // (the typed level and size: the books' examples, with no party in the tracker)
+      const P0 = state.party; state.party = [];
       const mult = (size, count) => {
         E._partySize = size; E._monsters = [{ name:'X', cr:'1', count }];
         return E._calcXP().mult;
@@ -2367,6 +2369,7 @@
       }
       E._partyLevel = L0; E._system = SY0;
       E._partySize = S0; E._monsters = JSON.parse(M0);
+      state.party = P0;
     }
     closePanel('encounter');
 
@@ -24010,6 +24013,41 @@ for (const cls of Object.keys(rule)) for (let L = 1; L <= 20; L++) for (const sc
         B._tool = '';
         try { B._closePanel(); B._render(); } catch(e){}
         closePanel('battlemap');
+      }
+    }
+    // -- Round 434: the encounter builder's party is the Party Tracker's — each character at their own level (a mixed party adds up as the books do), ticked in or out of this fight, rivals not counted; with no party, the typed level and size --
+    if (!PLAYER){
+      const E = panelDefs.encounter;
+      const P0 = state.party, O0 = (E._out || []).slice(), M0 = JSON.stringify(E._monsters || []), SY0 = E._system;
+      try {
+        const R = window.SKT_RULES || {}, B24 = R.xpBudget2024 || [], T14 = R.xpThresholds2014 || [];
+        const lv = [6, 6, 6, 3, 5];
+        state.party = P0.slice(0, 5).map((p, i) => Object.assign({}, p, { level: lv[i] })).concat([{ id: 'r434rival', name: 'r434 Rival', foe: true, level: 10 }]);
+        E._out = []; E._system = '2024'; E._monsters = [{ name: 'Goblin', cr: '1/4', count: 4 }];
+        openPanel('encounter'); await sleep(400); E._render(); await sleep(60);
+        const rows = [...E._body.querySelectorAll('.enc-pc')];
+        ok('the party: the tracker’s five characters, each at their level; the rival not among them', rows.length === 5 && rows.map(r => r.querySelector('.enc-pc-l').textContent.replace(/\D/g, '')).join(',') === lv.join(',') && !/r434 Rival/.test(E._body.textContent), rows.map(r => r.textContent.trim()).join(' | '));
+        const sum = (tab, L) => L.reduce((t, l) => t.map((v, i) => v + tab[l - 1][i]), tab[0].map(() => 0));
+        const want = sum(B24, lv), bg = E._budget2024();
+        ok('2024: the budget is each character’s at their own level, added up (a 3rd-level one among 6ths)', bg.low === want[0] && bg.moderate === want[1] && bg.high === want[2], JSON.stringify([bg, want]));
+        ok('…and the summary says so', /5 characters · level 3–6/.test(E._body.querySelector('.enc-party-sum').textContent), E._body.querySelector('.enc-party-sum').textContent);
+        // one sits it out
+        const cb = rows[3].querySelector('input'); cb.checked = false; cb.dispatchEvent(new Event('change')); await sleep(40);
+        const want2 = sum(B24, [6, 6, 6, 5]), bg2 = E._budget2024();
+        ok('unticked (not in this fight): the budget without them, and it’s remembered', bg2.low === want2[0] && bg2.high === want2[2] && E._out.includes(state.party[3].id) && JSON.parse(localStorage.getItem('skt-enc-v1')).out.includes(state.party[3].id), JSON.stringify(bg2));
+        // 2014: the thresholds add up the same way, and the party-size rule counts who's in
+        E._system = '2014';
+        ok('2014: the thresholds are each character’s, added up', JSON.stringify(E._thresh2014()) === JSON.stringify(sum(T14, [6, 6, 6, 5])), JSON.stringify(E._thresh2014()));
+        E._out = state.party.slice(2, 5).map(p => p.id); E._render(); await sleep(30);
+        ok('…two left in the fight: the multiplier steps up (fewer than three characters)', E._calcXP().sizeAdj === 1 && E._count() === 2);
+        // no party at all
+        state.party = []; E._render(); await sleep(30);
+        ok('no party in the tracker: the typed level and size, as before', !!E._body.querySelector('#enc-level') && !!E._body.querySelector('#enc-size') && E._count() === Math.max(1, E._partySize | 0));
+      } catch(e){ ok('round 434 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
+      finally {
+        state.party = P0; E._out = O0; E._monsters = JSON.parse(M0); E._system = SY0;
+        try { E._save(); } catch(e){}
+        try { closePanel('encounter'); } catch(e){}
       }
     }
     // -- Class features: represented, not just text ------------------------
