@@ -24098,6 +24098,55 @@ for (const cls of Object.keys(rule)) for (let L = 1; L <= 20; L++) for (const sc
         try { closePanel('encounter'); } catch(e){}
       }
     }
+    // -- Round 436: saved encounters — opening one over unsaved work asks; the open one's changes go back into it with Save (no second copy), Save as new… makes another; notes are kept with each; each saved one says how hard it is for the party now --
+    if (!PLAYER){
+      const E = panelDefs.encounter;
+      const keep = { s: JSON.stringify(E._saved || []), m: JSON.stringify(E._monsters || []), c: E._cur, n: E._notes, sy: E._system, p: state.party, o: (E._out || []).slice() };
+      const kc = window.showConfirm, km = window.showModal, kt = window.showToast;
+      try {
+        let answer = false, asked = 0, suggested = null;
+        window.showConfirm = async () => { asked++; return answer; };
+        window.showModal = async (t, f) => { suggested = f[0].value; return { name: f[0].value }; };
+        window.showToast = () => {};
+        openPanel('encounter'); await sleep(400);
+        state.party = (keep.p || []).slice(0, 4).map(p => Object.assign({}, p, { level: 3 })); E._out = []; E._system = '2024';
+        E._saved = [{ id: 'enc_r436a', name: 'r436 Bridge ambush', monsters: [{ name: 'Goblin', cr: '1/4', count: 6, _source: 'MM' }], notes: 'From the reeds', ts: 1 }];
+        E._cur = null; E._notes = ''; E._monsters = [{ name: 'Ogre', cr: '2', count: 2, _source: 'MM' }];
+        E._render(); await sleep(30);
+        const q = s => E._body.querySelector(s);
+        const row = () => q('[data-eact="load-enc"][data-eid="enc_r436a"]');
+        ok('a saved encounter says how hard it is for the party now', /6 monsters/.test(row().textContent) && row().textContent.includes(E._verdictFor(E._saved[0].monsters)) && E._verdictFor(E._saved[0].monsters) !== '—', row().textContent);
+        row().click(); await sleep(40);
+        ok('opening it over two unsaved ogres asks first; No keeps the ogres', asked === 1 && E._monsters[0].name === 'Ogre' && !E._cur);
+        answer = true; row().click(); await sleep(40);
+        ok('…Yes: it is open — its goblins, its notes, its name over the list', E._cur === 'enc_r436a' && E._monsters[0].count === 6 && E._notes === 'From the reeds' && /r436 Bridge ambush/.test(q('.enc-cur').textContent) && q('#enc-notes').value === 'From the reeds');
+        ok('…nothing changed yet: Save has nothing to do', q('#enc-save-over').disabled);
+        // change it, Save
+        const inp = q('#enc-monster-list input[type="number"]'); inp.value = '8'; inp.dispatchEvent(new Event('change')); await sleep(30);
+        ok('changed: marked so, and Save is ready', /changed/.test(q('.enc-cur').textContent) && !q('#enc-save-over').disabled);
+        const n0 = E._saved.length; q('#enc-save-over').click(); await sleep(30);
+        ok('Save: the changes go back into it — the same one, not a second copy', E._saved.length === n0 && E._saved[0].id === 'enc_r436a' && E._saved[0].monsters[0].count === 8 && !/changed/.test(q('.enc-cur').textContent));
+        // notes
+        const ta = q('#enc-notes'); ta.value = 'From the reeds, at dusk'; ta.dispatchEvent(new Event('input')); await sleep(20);
+        ok('typing notes marks it changed (without redrawing the box)', q('#enc-notes') === ta && /changed/.test(q('.enc-cur').textContent) && !q('#enc-save-over').disabled);
+        q('#enc-save-over').click(); await sleep(30);
+        ok('…saved with it', E._saved[0].notes === 'From the reeds, at dusk');
+        // save as new
+        q('#enc-save-current').click(); await sleep(40);
+        ok('Save as new…: offers its own name with (2), and the copy is the one open now', suggested === 'r436 Bridge ambush (2)' && E._saved.length === n0 + 1 && E._curSaved().name === 'r436 Bridge ambush (2)' && E._saved.some(s => s.id === 'enc_r436a'));
+        // remembered
+        ok('what is open is remembered', JSON.parse(localStorage.getItem('skt-enc-v1')).cur === E._cur);
+        // clear
+        answer = true; q('#enc-clear').click(); await sleep(40);
+        ok('Clear: empty, nothing open, no notes', !E._monsters.length && !E._cur && !E._notes && !q('.enc-cur'));
+      } catch(e){ ok('round 436 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
+      finally {
+        window.showConfirm = kc; window.showModal = km; window.showToast = kt;
+        E._saved = JSON.parse(keep.s); E._monsters = JSON.parse(keep.m); E._cur = keep.c; E._notes = keep.n || ''; E._system = keep.sy; state.party = keep.p; E._out = keep.o;
+        try { E._save(); } catch(e){}
+        try { closePanel('encounter'); } catch(e){}
+      }
+    }
     // -- Class features: represented, not just text ------------------------
     {
       try {

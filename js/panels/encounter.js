@@ -24,15 +24,42 @@ registerPanel('encounter',{
   // Party members sitting this fight out (ids). Everyone else in the Party
   // Tracker (not a rival) is in it, at their own level.
   _out:[],
+  // The saved encounter being worked on (its id), and the notes that go
+  // with this one (tactics, the ground, the treasure).
+  _cur:null, _notes:'',
   mount(body){
     this._body=body;
-    try{const r=localStorage.getItem('skt-enc-v1');if(r){const d=JSON.parse(r);this._monsters=d.monsters||[];this._partyLevel=d.partyLevel||6;this._partySize=d.partySize||state.party.length||5;this._saved=Array.isArray(d.saved)?d.saved:[];if(d.system==='2014'||d.system==='2024')this._system=d.system;this._out=Array.isArray(d.out)?d.out:[];}}catch(e){}
+    try{const r=localStorage.getItem('skt-enc-v1');if(r){const d=JSON.parse(r);this._monsters=d.monsters||[];this._partyLevel=d.partyLevel||6;this._partySize=d.partySize||state.party.length||5;this._saved=Array.isArray(d.saved)?d.saved:[];if(d.system==='2014'||d.system==='2024')this._system=d.system;this._out=Array.isArray(d.out)?d.out:[];this._cur=d.cur||null;this._notes=typeof d.notes==='string'?d.notes:'';}}catch(e){}
     this._render();
   },
   unmount(){
     this._body=null;
   },
-  _save(){saveJson('skt-enc-v1', {monsters:this._monsters,partyLevel:this._partyLevel,partySize:this._partySize,saved:this._saved,system:this._system,out:this._out}, 'encounters');},
+  _save(){saveJson('skt-enc-v1', {monsters:this._monsters,partyLevel:this._partyLevel,partySize:this._partySize,saved:this._saved,system:this._system,out:this._out,cur:this._cur,notes:this._notes}, 'encounters');},
+  // SAVED ENCOUNTERS. Loading one replaced what was being built without a
+  // word, and saving after changing a loaded one offered another name
+  // ("Goblin & friends (8)" for "Bridge ambush"), so it was kept twice. The
+  // builder now knows which one it is working on: Save puts the changes back
+  // in it, Save as new… makes another; loading over unsaved work asks first.
+  _curSaved(){ return this._cur ? this._saved.find(s => s.id === this._cur) || null : null; },
+  _sameMons(a, b){ const k = l => JSON.stringify((l || []).map(m => [m.name, m._source || null, m.count || 1]).sort()); return k(a) === k(b); },
+  // Unsaved: a loaded one changed, or a new one with something in it.
+  _dirty(){
+    const s = this._curSaved();
+    if (!s) return this._monsters.length > 0 || !!this._notes.trim();
+    return !this._sameMons(s.monsters, this._monsters) || (s.notes || '') !== this._notes;
+  },
+  _storeAs(name, id){
+    const lc = name.toLowerCase();
+    const rec = { id: id || ('enc_' + (typeof uid==='function' ? uid() : Date.now().toString(36))), name, monsters: JSON.parse(JSON.stringify(this._monsters)), notes: this._notes, ts: Date.now() };
+    // one of a name: another with this name is replaced
+    this._saved = this._saved.filter(s => s.id !== rec.id && (s.name||'').toLowerCase() !== lc);
+    this._saved.unshift(rec);
+    if (this._saved.length > 30) this._saved.length = 30;
+    this._cur = rec.id;
+    this._save(); this._render();
+    if (typeof showToast==='function') showToast('Saved “' + name + '”');
+  },
   // THE PARTY. It was a level and a size typed in (6 and 5 until changed),
   // never the party's: a table of seven read as five, and a mixed party (a
   // 3rd-level newcomer among 6ths) couldn't be said at all — both DMGs add
@@ -159,7 +186,7 @@ registerPanel('encounter',{
           </div>`}
         </div>
         <div class="enc-section" style="flex:1;overflow-y:auto">
-          <h3>Monsters</h3>
+          <h3>Monsters${this._curSaved() ? ` <span class="enc-cur" title="The saved encounter you are working on">· ${esc(this._curSaved().name)}${this._dirty() ? ' <span class="enc-dirty">(changed)</span>' : ''}</span>` : ''}</h3>
           <div class="enc-monsters-list" id="enc-monster-list">
             ${!this._monsters.length?'<div style="font-size:var(--fs-sm);color:var(--text-dim)">Add monsters below.</div>':
               this._monsters.map((m,i)=>{
@@ -178,6 +205,7 @@ registerPanel('encounter',{
               }).join('')}
           </div>
           <button class="btn enc-add-btn" id="enc-add" title="Search monsters by name, CR, type or book">＋ Add monsters…</button>
+          <textarea id="enc-notes" class="enc-notes" rows="3" placeholder="Notes — tactics, the ground, treasure" aria-label="Notes for this encounter">${esc(this._notes)}</textarea>
         </div>
       </div>
       <div class="enc-right">
@@ -205,15 +233,20 @@ registerPanel('encounter',{
           </div>
           <h3 style="font-size:var(--fs-xs);text-transform:uppercase;letter-spacing:.5px;color:var(--text-muted);margin:14px 0 8px">Saved encounters</h3>
           <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:6px">
-            <button class="btn small" id="enc-save-current" ${!this._monsters.length?'disabled title="Add monsters first"':''}>${ICO('i-save')} Save current…</button>
+            ${this._curSaved()
+              ? `<button class="btn small${this._dirty() ? ' primary' : ''}" id="enc-save-over" ${this._dirty() ? '' : 'disabled title="No changes to save"'}>${ICO('i-save')} Save</button>
+                 <button class="btn small" id="enc-save-current" ${!this._monsters.length?'disabled title="Add monsters first"':''}>Save as new…</button>`
+              : `<button class="btn small" id="enc-save-current" ${!this._monsters.length?'disabled title="Add monsters first"':''}>${ICO('i-save')} Save current…</button>`}
           </div>
           <div id="enc-saved-list" style="display:flex;flex-direction:column;gap:4px">
             ${!this._saved.length
               ? '<div style="font-size:var(--fs-sm);color:var(--text-dim)">No saved encounters yet.</div>'
               : this._saved.map(s => {
                   const count = (s.monsters||[]).reduce((n,m)=>n+(m.count||1),0);
-                  return `<div class="enc-saved-row" style="display:flex;align-items:center;gap:6px;background:var(--panel-2);border:1px solid var(--border);border-radius:4px;padding:4px 6px">
-                    <button class="btn small" data-eact="load-enc" data-eid="${esc(s.id)}" style="flex:1;text-align:left;justify-content:flex-start" title="Load this encounter">${esc(s.name)} <span style="color:var(--text-dim);font-size:var(--fs-xs)">· ${count} mon</span></button>
+                  // How hard it is for the party as it stands now, in this edition.
+                  const v = this._verdictFor(s.monsters || []);
+                  return `<div class="enc-saved-row${s.id === this._cur ? ' on' : ''}" style="display:flex;align-items:center;gap:6px;background:var(--panel-2);border:1px solid var(--border);border-radius:4px;padding:4px 6px">
+                    <button class="btn small" data-eact="load-enc" data-eid="${esc(s.id)}" style="flex:1;text-align:left;justify-content:flex-start" title="${s.id === this._cur ? 'Open now' : 'Open this encounter'}${s.notes ? ' — ' + esc(String(s.notes).slice(0, 120)) : ''}">${esc(s.name)} <span style="color:var(--text-dim);font-size:var(--fs-xs)">· ${count} monster${count === 1 ? '' : 's'} · <span class="enc-sv-d">${esc(v)}</span></span></button>
                     <button class="btn icon-btn danger" data-eact="del-enc" data-eid="${esc(s.id)}" title="Delete saved encounter" style="padding:2px 5px;font-size:var(--fs-sm)">×</button>
                   </div>`;
                 }).join('')}
@@ -319,40 +352,41 @@ registerPanel('encounter',{
     b.querySelector('#enc-clear').addEventListener('click',()=>{
       showConfirm('Clear all monsters from this encounter?', {title:'Clear encounter', confirmLabel:'Clear', danger:true}).then(ok=>{
         if(!ok) return;
-        this._monsters=[]; this._save(); this._render();
+        this._monsters=[]; this._notes=''; this._cur=null; this._save(); this._render();
       });
     });
+    b.querySelector('#enc-notes')?.addEventListener('input', e => {
+      this._notes = e.target.value; this._save();
+      // the "(changed)" mark and Save, without redrawing the box being typed in
+      const h = b.querySelector('.enc-cur'); if (h){ const d = this._dirty(); let m = h.querySelector('.enc-dirty'); if (d && !m){ h.insertAdjacentHTML('beforeend', ' <span class="enc-dirty">(changed)</span>'); } else if (!d && m) m.remove(); }
+      const so = b.querySelector('#enc-save-over'); if (so){ so.disabled = !this._dirty(); so.classList.toggle('primary', this._dirty()); }
+    });
+    b.querySelector('#enc-save-over')?.addEventListener('click', () => { const s = this._curSaved(); if (s) this._storeAs(s.name, s.id); });
     // Save current encounter under a name
     b.querySelector('#enc-save-current')?.addEventListener('click', () => {
       if (!this._monsters.length) return;
-      showModal('Save encounter', [
-        { id:'name', label:'Encounter name', type:'text', value: this._suggestEncName() }
+      const open = this._curSaved();
+      showModal(open ? 'Save as a new encounter' : 'Save encounter', [
+        { id:'name', label:'Encounter name', type:'text', value: open ? open.name + ' (2)' : this._suggestEncName() }
       ], 'Save').then(r => {
         if (!r) return;
         const name = (r.name||'').trim();
         if (!name){ if (typeof showToast==='function') showToast('Name required'); return; }
-        // Replace if a saved encounter already has this name (case-insensitive)
-        const lc = name.toLowerCase();
-        this._saved = this._saved.filter(s => (s.name||'').toLowerCase() !== lc);
-        this._saved.unshift({
-          id: 'enc_' + (typeof uid==='function' ? uid() : Date.now().toString(36)),
-          name,
-          monsters: JSON.parse(JSON.stringify(this._monsters)),
-          ts: Date.now()
-        });
-        // Cap the list so it doesn't grow forever
-        if (this._saved.length > 30) this._saved.length = 30;
-        this._save(); this._render();
-        if (typeof showToast==='function') showToast('Saved "' + name + '"');
+        this._storeAs(name);
       });
     });
     // Load a saved encounter — replaces current monsters in place
     b.querySelectorAll('[data-eact="load-enc"]').forEach(btn => btn.addEventListener('click', () => {
       const s = this._saved.find(x => x.id === btn.dataset.eid);
-      if (!s) return;
-      this._monsters = JSON.parse(JSON.stringify(s.monsters||[]));
-      this._save(); this._render();
-      if (typeof showToast==='function') showToast('Loaded "' + s.name + '"');
+      if (!s || (s.id === this._cur && !this._dirty())) return;
+      const go = () => {
+        this._monsters = JSON.parse(JSON.stringify(s.monsters||[])); this._notes = s.notes || ''; this._cur = s.id;
+        this._save(); this._render();
+        if (typeof showToast==='function') showToast('Opened “' + s.name + '”');
+      };
+      if (!this._dirty()) return go();
+      const what = this._curSaved() ? 'The changes to “' + this._curSaved().name + '” aren’t saved.' : 'The encounter you’re building isn’t saved.';
+      showConfirm(what + ' Open “' + s.name + '” anyway?', { title:'Open encounter', confirmLabel:'Open' }).then(ok => { if (ok) go(); });
     }));
     // Delete a saved encounter
     b.querySelectorAll('[data-eact="del-enc"]').forEach(btn => btn.addEventListener('click', () => {
@@ -362,6 +396,7 @@ registerPanel('encounter',{
         {title:'Delete encounter', confirmLabel:'Delete', danger:true}).then(ok => {
           if (!ok) return;
           this._saved = this._saved.filter(x => x.id !== s.id);
+          if (this._cur === s.id) this._cur = null;
           this._save(); this._render();
         });
     }));
