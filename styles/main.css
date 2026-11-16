@@ -3487,10 +3487,12 @@ body.player-mode .loot-sumbar > span[style*="flex:1"]{display:none}
 .enc-sys-btn:hover{color:var(--text)}
 .enc-sys-btn.active{background:var(--accent);color:var(--on-accent)}
 .enc-stat-grid{display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-bottom:10px}
+/* an odd one out at the end takes the whole row */
+.enc-stat-grid > :last-child:nth-child(odd){grid-column:1 / -1}
 .enc-stat-box{background:var(--panel-2);padding:6px 8px;border-radius:var(--r-sm)}
 .enc-stat-box .l{font-size:var(--fs-2xs);color:var(--text-muted);text-transform:uppercase;letter-spacing:.5px}
 .enc-stat-box .v{font-size:var(--fs-xl);font-weight:600;color:var(--text)}
-.enc-stat-box .v.easy{color:var(--success)} .enc-stat-box .v.medium{color:#c9a050} .enc-stat-box .v.hard{color:var(--danger)} .enc-stat-box .v.deadly{color:#9b2020}
+.enc-stat-box .v.easy{color:var(--success)} .enc-stat-box .v.medium{color:#c9a050} .enc-stat-box .v.hard{color:var(--danger)} .enc-stat-box .v.deadly{color:#ff5e57;font-weight:700}
 /* Difficulty gauge — segmented bar (Trivial → Deadly) with a marker at the
    current adjusted XP. Each zone keeps the same color the .enc-stat-box uses
    for consistency. */

@@ -24287,6 +24287,40 @@ for (const cls of Object.keys(rule)) for (let L = 1; L <= 20; L++) for (const sc
         try { closePanel('encounter'); } catch(e){}
       }
     }
+    // -- Round 441: XP each — the monsters' own XP shared among those in the fight (in 2014 too: never the adjusted figure), following who's ticked; "Deadly" readable on its box; the 2024 bar's last band says Deadly, as the verdict does --
+    if (!PLAYER){
+      const E = panelDefs.encounter;
+      const keep = { m: JSON.stringify(E._monsters || []), sy: E._system, p: state.party, o: (E._out || []).slice() };
+      try {
+        openPanel('encounter'); await sleep(400);
+        state.party = (keep.p || []).slice(0, 4).map(p => Object.assign({}, p, { level: 2 })); E._out = [];
+        E._monsters = [{ name: 'Ogre', cr: '2', count: 3, _source: 'MM' }];   // 1,350 XP
+        const each = () => { const b = E._body.querySelector('.enc-each .v'); return b ? b.textContent : null; };
+        E._system = '2024'; E._render(); await sleep(20);
+        const a24 = each();
+        E._system = '2014'; E._render(); await sleep(20);
+        const a14 = each();
+        ok('XP each: 1,350 XP among four is 337 each, in both editions (2014: the raw XP, not the adjusted)', a24 === '337' && a14 === '337' && E._calcXP().adjusted !== 1350, a24 + ' / ' + a14);
+        E._out = [state.party[0].id]; E._render(); await sleep(20);
+        ok('…one sits it out: 450 each among three', each() === '450', each());
+        // Deadly, readable
+        E._monsters = [{ name: 'Ogre', cr: '2', count: 30, _source: 'MM' }]; E._render(); await sleep(20);
+        const v = E._body.querySelector('.enc-stat-box .v.deadly');
+        const rgb = c => { const f = /color\(srgb/.test(c), n = c.match(/[\d.]+/g).map(Number).slice(0, 3); return f ? n : n.map(x => x / 255); };
+        const L = c => { const [r, g, b] = rgb(c).map(v => v <= 0.03928 ? v / 12.92 : Math.pow((v + 0.055) / 1.055, 2.4)); return 0.2126 * r + 0.7152 * g + 0.0722 * b; };
+        let bgEl = v; while (bgEl && /rgba\(0, 0, 0, 0\)|transparent/.test(getComputedStyle(bgEl).backgroundColor)) bgEl = bgEl.parentElement;
+        const l1 = L(getComputedStyle(v).color), l2 = L(getComputedStyle(bgEl).backgroundColor), cr = (Math.max(l1, l2) + 0.05) / (Math.min(l1, l2) + 0.05);
+        ok('“Deadly” can be read on its box (contrast at least 3:1; it was about 1.6)', !!v && cr >= 3, v && (getComputedStyle(v).color + ' on ' + getComputedStyle(bgEl).backgroundColor + ' = ' + cr.toFixed(2)));
+        E._system = '2024'; E._render(); await sleep(20);
+        const words = [...E._body.querySelectorAll('.enc-gauge-axis span')].map(s => s.textContent);
+        ok('2024: the bar’s last band is called what the verdict calls it', words.includes('Deadly') && E._body.querySelector('.enc-stat-box .v.deadly').textContent === 'Deadly', words.join(','));
+      } catch(e){ ok('round 441 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
+      finally {
+        E._monsters = JSON.parse(keep.m); E._system = keep.sy; state.party = keep.p; E._out = keep.o;
+        try { E._save(); } catch(e){}
+        try { closePanel('encounter'); } catch(e){}
+      }
+    }
     // -- Class features: represented, not just text ------------------------
     {
       try {

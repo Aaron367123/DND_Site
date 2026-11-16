@@ -500,6 +500,7 @@ registerPanel('encounter',{
             <div class="enc-stat-box"><div class="l">Total XP</div><div class="v">${xp.raw.toLocaleString()}</div></div>
             <div class="enc-stat-box"><div class="l">Difficulty</div><div class="v ${diff.cls}">${diff.label}</div></div>
             <div class="enc-stat-box"><div class="l">Monster Count</div><div class="v">${xp.count}</div></div>
+            ${this._eachBox(xp.raw)}
           </div>
           ${this._renderGauge2024(xp.raw)}
           <h3 style="font-size:var(--fs-xs);text-transform:uppercase;letter-spacing:.5px;color:var(--text-muted);margin:10px 0 8px">XP budget (full party)</h3>
@@ -519,6 +520,7 @@ registerPanel('encounter',{
               xp.sizeAdj ? (xp.sizeAdj > 0 ? ' ↑' : ' ↓') : ''})</div><div class="v">${xp.adjusted.toLocaleString()}</div></div>
             <div class="enc-stat-box"><div class="l">Difficulty</div><div class="v ${diff.cls}">${diff.label}</div></div>
             <div class="enc-stat-box"><div class="l">Monster Count</div><div class="v">${xp.count}</div></div>
+            ${this._eachBox(xp.raw)}
           </div>
           ${this._renderDifficultyGauge(xp.adjusted)}
           <h3 style="font-size:var(--fs-xs);text-transform:uppercase;letter-spacing:.5px;color:var(--text-muted);margin:10px 0 8px">Thresholds (full party)</h3>
@@ -541,10 +543,18 @@ registerPanel('encounter',{
       + '<div class="enc-gauge-zone deadly" style="left:'+pct(t[2])+'%;width:'+(100-pct(t[2]))+'%" title="Beyond High · '+t[2].toLocaleString()+'+ XP"></div>'
       + '<div class="enc-gauge-marker" style="left:'+markerPct+'%" title="Total: '+rawXP.toLocaleString()+' XP"></div>'
       + '</div>'
-      + this._gaugeAxis([0, pct(t[0]), pct(t[1]), pct(t[2]), 100], ['Low', 'Moderate', 'High', 'Beyond'])
+      + this._gaugeAxis([0, pct(t[0]), pct(t[1]), pct(t[2]), 100], ['Low', 'Moderate', 'High', 'Deadly'])
       + '</div>';
   },
 
+  // What each character earns for the fight: the monsters' own XP shared
+  // among those in it — never the 2014 adjusted figure, which is only for
+  // judging difficulty (DMG p.82). D&D Beyond shows it; this didn't.
+  _eachBox(raw){
+    const n = this._count();
+    if (!raw || !n) return '';
+    return '<div class="enc-stat-box enc-each" title="The monsters’ XP shared among the ' + n + ' in the fight"><div class="l">XP each</div><div class="v">' + Math.floor(raw / n).toLocaleString() + '</div></div>';
+  },
   // The words under the bar, each in the middle of its own band. They were
   // spread evenly under bands that aren't, so "Med" sat under the line
   // between Medium and Hard. A band too narrow for its word goes without.
