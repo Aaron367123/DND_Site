@@ -210,8 +210,7 @@ registerPanel('encounter',{
   // The shared search (monster-picker.js), shaped as this panel's rows.
   _searchPool(q){
     if (typeof sktMonsterPool !== 'function') return [];
-    return sktMonsterPool('encounter').map((d, i) => [d, sktMonsterRank(d, q), i]).filter(x => x[1] < Infinity)
-      .sort((a, b) => a[1] - b[1] || a[2] - b[2]).map(x => x[0]).slice(0, 30)
+    return sktMonsterSearch('encounter', q).slice(0, 30)
       .map(d => ({ name:d.name, cr:d._cr ?? d._raw?.challenge_rating ?? '?', hp:d.hp||10, ac:d.ac||10, dex:d.dex||d._raw?.dexterity||10, _img:d._img, _source:d._source }));
   },
   // Monsters come from the shared picker. Same name AND book adds to the row

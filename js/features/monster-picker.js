@@ -47,6 +47,12 @@ function sktMonsterPool(scope){
 // sorcerer) and "goblin" every goblinoid.
 function _sktMpWords(s){ return String(s || '').toLowerCase().split(/[^a-z0-9'/]+/).filter(Boolean); }
 function sktMonsterMatches(d, q){ return sktMonsterRank(d, q) < Infinity; }
+// The search, one rule for every picker: the scope's monsters that answer q
+// (and keep(d), if given), best answers first, A–Z within each.
+function sktMonsterSearch(scope, q, keep){
+  return sktMonsterPool(scope).map((d, i) => [d, !keep || keep(d) ? sktMonsterRank(d, q) : Infinity, i])
+    .filter(x => x[1] < Infinity).sort((a, b) => a[1] - b[1] || a[2] - b[2]).map(x => x[0]);
+}
 // How well a monster answers the search, best first: the name itself, a name
 // that starts with it, a word of the name that does, the name holding it,
 // then the type line or the book. The list was A–Z whatever was typed, so
@@ -128,8 +134,7 @@ function sktPickMonster(o){
   const paint = () => {
     const q = $('#mp-q').value, cr = $('#mp-cr').value, ty = $('#mp-type').value;
     // best answers first; A–Z (the pool's order) within each
-    const matches = all.map((d, i) => [d, (!cr || _sktMpCr(d) === cr) && (!ty || _sktMpType(d) === ty) ? sktMonsterRank(d, q) : Infinity, i])
-      .filter(x => x[1] < Infinity).sort((a, b) => a[1] - b[1] || a[2] - b[2]).map(x => x[0]);
+    const matches = sktMonsterSearch(o.scope, q, d => (!cr || _sktMpCr(d) === cr) && (!ty || _sktMpType(d) === ty));
     pool = matches.slice(0, SKT_MP_LIMIT);
     list.innerHTML = pool.map((d, k) => '<div class="mp-row" role="option" data-i="' + k + '">'
       + '<span class="mp-row-name">' + esc(d.name)

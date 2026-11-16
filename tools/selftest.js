@@ -4404,7 +4404,7 @@
         ok('picker: adding the same monster again adds to its row', E._monsters.length === 1 && E._monsters[0].count === 3, JSON.stringify(E._monsters));
         document.querySelector('#mp-back [data-mp="close"]').click(); await sleep(30);
         const names = E._searchPool('goblin').map(m => m.name + '|' + m._source);
-        const shared = sktMonsterPool('encounter').filter(d => sktMonsterMatches(d, 'goblin')).slice(0, 30).map(d => d.name + '|' + d._source);
+        const shared = sktMonsterSearch('encounter', 'goblin').slice(0, 30).map(d => d.name + '|' + d._source);
         ok('picker: one search rule everywhere', JSON.stringify(names) === JSON.stringify(shared) && names.length > 3);
       } catch(e){ ok('picker: the checks ran to completion', false, e.message); }
       finally {
