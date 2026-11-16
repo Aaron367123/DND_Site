@@ -24187,6 +24187,73 @@ for (const cls of Object.keys(rule)) for (let L = 1; L <= 20; L++) for (const sc
         try { closePanel('encounter'); closePanel('combat'); } catch(e){}
       }
     }
+    // -- Round 438: the words under the difficulty bar sit in the middle of their own bands (not spread evenly under bands that aren't), in both editions, and stay on the bar --
+    if (!PLAYER){
+      const E = panelDefs.encounter;
+      const keep = { m: JSON.stringify(E._monsters || []), sy: E._system };
+      try {
+        openPanel('encounter'); await sleep(400);
+        E._monsters = [{ name: 'Ogre', cr: '2', count: 3, _source: 'MM' }];
+        const res = [];
+        for (const sys of ['2014', '2024']){
+          E._system = sys; E._render(); await sleep(30);
+          const bar = E._body.querySelector('.enc-gauge-bar').getBoundingClientRect();
+          const zones = [...E._body.querySelectorAll('.enc-gauge-zone')].map(z => z.getBoundingClientRect());
+          const spans = [...E._body.querySelectorAll('.enc-gauge-axis span')];
+          const bad = spans.filter(s => {
+            const r = s.getBoundingClientRect(), mid = r.left + r.width / 2;
+            const z = zones.find(z => mid >= z.left - 0.5 && mid <= z.right + 0.5);
+            return !z || Math.abs(mid - (z.left + z.right) / 2) > 1.5 || r.left < bar.left - 2 || r.right > bar.right + 2;
+          });
+          res.push(sys + ': ' + spans.length + ' words, ' + bad.length + ' off');
+          if (spans.length < 3 || bad.length) res.push('FAIL ' + sys + ' ' + spans.map(s => s.textContent + '@' + Math.round(s.getBoundingClientRect().left)).join(','));
+        }
+        ok('each word under the bar is in the middle of its band, and on the bar, in both editions', !res.some(r => /^FAIL/.test(r)), res.join(' | '));
+      } catch(e){ ok('round 438 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
+      finally {
+        E._monsters = JSON.parse(keep.m); E._system = keep.sy;
+        try { E._save(); } catch(e){}
+        try { closePanel('encounter'); } catch(e){}
+      }
+    }
+    // -- Round 439: pushing an encounter again while its monsters are still in the fight asks first (No adds nothing, Yes a second set); once they've gone, or the encounter changed, it doesn't ask; Push and place on map asks the same --
+    if (!PLAYER){
+      const E = panelDefs.encounter;
+      const keep = { m: JSON.stringify(E._monsters || []), h: E._hpMode, c: JSON.stringify(state.combatants || []), r: state.combatRound, a: state.activeCombatantId, p: E._pushed };
+      const kc = window.showConfirm, kt = window.showToast;
+      try {
+        for (let i = 0; i < 40 && !(typeof _5eLoaded !== 'undefined' && _5eLoaded); i++) await sleep(250);
+        let answer = false, asked = 0; window.showConfirm = async () => { asked++; return answer; }; window.showToast = () => {};
+        openPanel('encounter'); await sleep(400);
+        state.combatants = []; E._pushed = null; E._hpMode = 'avg';
+        E._monsters = [{ name: 'Goblin', cr: '1/4', count: 3, _source: 'MM' }]; E._render(); await sleep(20);
+        const press = async sel => { E._body.querySelector(sel).click(); await sleep(120); };
+        await press('#enc-push-combat');
+        ok('the first push: three goblins, no question', state.combatants.length === 3 && asked === 0);
+        await press('#enc-push-combat');
+        ok('pushed again: it asks; No adds nothing', asked === 1 && state.combatants.length === 3);
+        answer = true; await press('#enc-push-combat');
+        ok('…Yes: a second set', asked === 2 && state.combatants.length === 6);
+        // the fight cleared: no question
+        state.combatants = []; asked = 0; await press('#enc-push-combat');
+        ok('once they have left the fight, pushing doesn’t ask', asked === 0 && state.combatants.length === 3);
+        // a different encounter: no question
+        E._monsters[0].count = 4; E._render(); await sleep(20); await press('#enc-push-combat');
+        ok('a changed encounter isn’t “already in”', asked === 0 && state.combatants.length === 7);
+        // the map button asks the same
+        const B = panelDefs.battlemap, keepPlace = B && B._placeCombatants; let placed = null;
+        if (B) B._placeCombatants = ids => { placed = ids; };
+        answer = false; await press('#enc-push-map'); await sleep(450);
+        ok('Push and place on map asks the same; No: nothing added, nothing to place', asked === 1 && state.combatants.length === 7 && !placed);
+        if (B) B._placeCombatants = keepPlace;
+      } catch(e){ ok('round 439 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
+      finally {
+        window.showConfirm = kc; window.showToast = kt;
+        E._monsters = JSON.parse(keep.m); E._hpMode = keep.h; E._pushed = keep.p; state.combatants = JSON.parse(keep.c); state.combatRound = keep.r; state.activeCombatantId = keep.a;
+        try { save(); E._save(); } catch(e){}
+        try { closePanel('encounter'); closePanel('combat'); closePanel('battlemap'); } catch(e){}
+      }
+    }
     // -- Class features: represented, not just text ------------------------
     {
       try {

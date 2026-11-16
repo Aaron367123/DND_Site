@@ -315,18 +315,41 @@ registerPanel('encounter',{
     // they stand.
     b.querySelector('#enc-push-map')?.addEventListener('click', () => {
       if (!this._monsters.length) return;
-      const before = new Set(state.combatants.map(c => c.id));
-      b.querySelector('#enc-push-combat').click();
-      const fresh = state.combatants.filter(c => !before.has(c.id)).map(c => c.id);
-      if (!fresh.length) return;
-      if (!layout.battlemap?.open) openPanel('battlemap');
-      const start = () => { const B = panelDefs.battlemap;
-        if (B && B._body){ if (typeof sktEnsureCombatTokens === 'function') sktEnsureCombatTokens(true); B._placeCombatants(fresh); } };
-      setTimeout(start, 350);
+      this._confirmPush(() => {
+        const fresh = this._push(b.querySelector('#enc-push-combat'));
+        if (!fresh.length) return;
+        if (!layout.battlemap?.open) openPanel('battlemap');
+        const start = () => { const B = panelDefs.battlemap;
+          if (B && B._body){ if (typeof sktEnsureCombatTokens === 'function') sktEnsureCombatTokens(true); B._placeCombatants(fresh); } };
+        setTimeout(start, 350);
+      });
     });
     b.querySelector('#enc-push-combat').addEventListener('click', e => {
       if (!this._monsters.length) return;
       const btn = e.currentTarget;
+      this._confirmPush(() => this._push(btn));
+    });
+    this._wire2(b);
+
+  },
+  // PUSHED TWICE. A second press added a second set without a word — a
+  // double click, or a press to check it had worked, and the fight had
+  // twelve goblins. Pushing this encounter again while its monsters are
+  // still in the fight asks first (a second wave is a yes).
+  _pushSig(){ return JSON.stringify(this._monsters.map(m => [m.name, m._source || null, m.count || 1])); },
+  _alreadyIn(){
+    const p = this._pushed;
+    if (!p || p.sig !== this._pushSig()) return 0;
+    return p.ids.filter(id => (state.combatants || []).some(c => c.id === id)).length;
+  },
+  _confirmPush(go){
+    const n = this._alreadyIn();
+    if (!n) return go();
+    showConfirm('This encounter is already in the fight (' + n + ' of its monsters). Add another set of them?', { title:'Push again', confirmLabel:'Add another set' }).then(ok => { if (ok) go(); });
+  },
+  // Into the tracker: every monster, its stat block, its hit points as
+  // chosen. → the ids of the creatures added.
+  _push(btn){
       const before = new Set(state.combatants.map(c => c.id));
       let pushed = 0;
       const summaryParts = [];
@@ -353,15 +376,18 @@ registerPanel('encounter',{
       });
       // Visual confirmation on the button itself — class toggled briefly so
       // the user gets feedback even if their cursor is far from a toast.
-      btn.classList.add('enc-flash');
-      setTimeout(() => btn.classList.remove('enc-flash'), 600);
+      if (btn){ btn.classList.add('enc-flash'); setTimeout(() => btn.classList.remove('enc-flash'), 600); }
       const wasOpen = !!layout.combat?.open;
       if (!wasOpen) openPanel('combat');
       const tail = summaryParts.length > 3 ? ' + ' + (summaryParts.length-3) + ' more' : '';
       const summary = summaryParts.slice(0,3).join(', ') + tail;
       showToast(`Added ${pushed} to combat: ${summary}${wasOpen ? '' : ' · opened tracker'}`);
-      this._applyHp(state.combatants.filter(c => !before.has(c.id)).map(c => c.id));
-    });
+      const fresh = state.combatants.filter(c => !before.has(c.id)).map(c => c.id);
+      this._pushed = { sig: this._pushSig(), ids: fresh };
+      this._applyHp(fresh);
+      return fresh;
+  },
+  _wire2(b){
     // Scale-to-target: multiply every monster's count by the smallest integer
     // factor that puts adjusted XP into the target tier. Picks the threshold's
     // midpoint as the anchor so the result lands cleanly inside the zone
@@ -491,10 +517,20 @@ registerPanel('encounter',{
       + '<div class="enc-gauge-zone deadly" style="left:'+pct(t[2])+'%;width:'+(100-pct(t[2]))+'%" title="Beyond High · '+t[2].toLocaleString()+'+ XP"></div>'
       + '<div class="enc-gauge-marker" style="left:'+markerPct+'%" title="Total: '+rawXP.toLocaleString()+' XP"></div>'
       + '</div>'
-      + '<div class="enc-gauge-axis"><span>Low</span><span>Mod</span><span>High</span><span>+</span></div>'
+      + this._gaugeAxis([0, pct(t[0]), pct(t[1]), pct(t[2]), 100], ['Low', 'Moderate', 'High', 'Beyond'])
       + '</div>';
   },
 
+  // The words under the bar, each in the middle of its own band. They were
+  // spread evenly under bands that aren't, so "Med" sat under the line
+  // between Medium and Hard. A band too narrow for its word goes without.
+  _gaugeAxis(stops, labels){
+    return '<div class="enc-gauge-axis">' + labels.map((l, i) => {
+      const a = stops[i], z = stops[i + 1], w = z - a;
+      if (!(w >= 9)) return '';
+      return '<span style="left:' + ((a + z) / 2).toFixed(2) + '%">' + l + '</span>';
+    }).join('') + '</div>';
+  },
   // Difficulty gauge — horizontal bar split into Easy / Medium / Hard / Deadly
   // zones at the party's thresholds, with a marker showing where the current
   // adjusted XP sits. Gives an at-a-glance read of "how close to the next tier
@@ -515,7 +551,7 @@ registerPanel('encounter',{
       + '<div class="enc-gauge-zone deadly"  style="left:'+pct(t[3])+'%;width:'+(100-pct(t[3]))+'%" title="Deadly · '+t[3].toLocaleString()+'+ XP"></div>'
       + '<div class="enc-gauge-marker" style="left:'+markerPct+'%" title="Current: '+adjXP.toLocaleString()+' XP"></div>'
       + '</div>'
-      + '<div class="enc-gauge-axis"><span>Trivial</span><span>Easy</span><span>Med</span><span>Hard</span><span>Deadly</span></div>'
+      + this._gaugeAxis([0, pct(t[0]), pct(t[1]), pct(t[2]), pct(t[3]), 100], ['Trivial', 'Easy', 'Medium', 'Hard', 'Deadly'])
       + '</div>';
   },
 
