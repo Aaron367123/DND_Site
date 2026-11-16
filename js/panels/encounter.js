@@ -27,15 +27,43 @@ registerPanel('encounter',{
   // The saved encounter being worked on (its id), and the notes that go
   // with this one (tactics, the ground, the treasure).
   _cur:null, _notes:'',
+  // Hit points when the encounter goes to the tracker: the stat block's
+  // average, rolled from its hit dice, or rolled at the table and typed in.
+  _hpMode:'avg',
   mount(body){
     this._body=body;
-    try{const r=localStorage.getItem('skt-enc-v1');if(r){const d=JSON.parse(r);this._monsters=d.monsters||[];this._partyLevel=d.partyLevel||6;this._partySize=d.partySize||state.party.length||5;this._saved=Array.isArray(d.saved)?d.saved:[];if(d.system==='2014'||d.system==='2024')this._system=d.system;this._out=Array.isArray(d.out)?d.out:[];this._cur=d.cur||null;this._notes=typeof d.notes==='string'?d.notes:'';}}catch(e){}
+    try{const r=localStorage.getItem('skt-enc-v1');if(r){const d=JSON.parse(r);this._monsters=d.monsters||[];this._partyLevel=d.partyLevel||6;this._partySize=d.partySize||state.party.length||5;this._saved=Array.isArray(d.saved)?d.saved:[];if(d.system==='2014'||d.system==='2024')this._system=d.system;this._out=Array.isArray(d.out)?d.out:[];this._cur=d.cur||null;this._notes=typeof d.notes==='string'?d.notes:'';if(['avg','roll','mine'].includes(d.hpMode))this._hpMode=d.hpMode;}}catch(e){}
     this._render();
   },
   unmount(){
     this._body=null;
   },
-  _save(){saveJson('skt-enc-v1', {monsters:this._monsters,partyLevel:this._partyLevel,partySize:this._partySize,saved:this._saved,system:this._system,out:this._out,cur:this._cur,notes:this._notes}, 'encounters');},
+  _save(){saveJson('skt-enc-v1', {monsters:this._monsters,partyLevel:this._partyLevel,partySize:this._partySize,saved:this._saved,system:this._system,out:this._out,cur:this._cur,notes:this._notes,hpMode:this._hpMode}, 'encounters');},
+  // A creature's hit dice ("7d10 + 21"), or '' when its stat block has none.
+  _hitDice(c){
+    const d = c && typeof sktFindMonster === 'function' && c._slug ? sktFindMonster(c._slug, c._source) : null;
+    const raw = (d && d._raw) || null;
+    return raw && typeof raw.hit_dice === 'string' && /\d+d\d+/.test(raw.hit_dice) ? raw.hit_dice.replace(/\s+/g, '') : '';
+  },
+  // The creatures just added, their hit points as chosen. Rolled: each its
+  // own hit dice (a goblin is 2d6, so 2 to 12, not always 7). Mine: one box
+  // each, the average in it, for what was rolled at the table.
+  _applyHp(ids){
+    if (this._hpMode === 'avg' || !ids.length) return;
+    const list = ids.map(id => state.combatants.find(c => c.id === id)).filter(c => c && this._hitDice(c));
+    if (!list.length) return;
+    const set = (c, n) => { n = Math.max(1, Math.round(+n || 0)); if (!(n > 0)) return; c.hp = n; c.hpMax = n; };
+    const done = () => { save(); try { panelDefs.combat._render(); } catch(e){} };
+    if (this._hpMode === 'roll'){
+      list.forEach(c => set(c, sktRollDice(this._hitDice(c)).total));
+      done();
+      if (typeof showToast === 'function') showToast('Hit points rolled: ' + list.slice(0, 6).map(c => c.name + ' ' + c.hp).join(', ') + (list.length > 6 ? ' …' : ''));
+      return;
+    }
+    if (typeof showModal !== 'function') return;
+    showModal('Hit points rolled at the table', list.map(c => ({ id: 'hp_' + c.id, label: c.name + ' (' + this._hitDice(c).replace(/\+/g, ' + ') + ')', type: 'number', value: c.hpMax, min: 1 })), 'Set hit points')
+      .then(r => { if (!r) return; list.forEach(c => { const v = parseInt(r['hp_' + c.id], 10); if (v > 0) set(c, v); }); done(); });
+  },
   // SAVED ENCOUNTERS. Loading one replaced what was being built without a
   // word, and saving after changing a loaded one offered another name
   // ("Goblin & friends (8)" for "Bridge ambush"), so it was kept twice. The
@@ -226,7 +254,15 @@ registerPanel('encounter',{
             </select>
             <span style="font-size:var(--fs-xs);color:var(--text-dim)">changes how many of each</span>
           </div>
-          <div style="margin-top:12px;display:flex;gap:8px;flex-wrap:wrap">
+          <div class="enc-hp-mode">
+            <label for="enc-hp">Hit points</label>
+            <select id="enc-hp" aria-label="Monsters’ hit points when they go to the tracker">
+              <option value="avg" ${this._hpMode==='avg'?'selected':''}>Average (the stat block’s)</option>
+              <option value="roll" ${this._hpMode==='roll'?'selected':''}>Rolled from their hit dice</option>
+              <option value="mine" ${this._hpMode==='mine'?'selected':''}>I’ll roll them — ask me</option>
+            </select>
+          </div>
+          <div style="margin-top:8px;display:flex;gap:8px;flex-wrap:wrap">
             <button class="btn small primary" id="enc-push-combat" ${!this._monsters.length?'disabled':''}>▶ Push to Combat Tracker</button>
             <button class="btn small" id="enc-push-map" ${!this._monsters.length?'disabled':''} title="Add them to the fight, then click the battle map where they stand">Push and place on map</button>
             <button class="btn small danger" id="enc-clear">Clear encounter</button>
@@ -271,6 +307,7 @@ registerPanel('encounter',{
     }));
     b.querySelectorAll('#enc-monster-list input[type="number"]').forEach(inp=>inp.addEventListener('change',e=>{this._monsters[+e.target.dataset.ei].count=parseInt(e.target.value)||1;this._save();this._render();}));
     b.querySelector('#enc-add').addEventListener('click', () => this._openPicker());
+    b.querySelector('#enc-hp')?.addEventListener('change', e => { this._hpMode = e.target.value; this._save(); });
     // Push to combat — flash the button to confirm the action, open the
     // combat panel if it's not already up, and use a richer toast that names
     // a few of the monsters added (instead of just a count).
@@ -290,6 +327,7 @@ registerPanel('encounter',{
     b.querySelector('#enc-push-combat').addEventListener('click', e => {
       if (!this._monsters.length) return;
       const btn = e.currentTarget;
+      const before = new Set(state.combatants.map(c => c.id));
       let pushed = 0;
       const summaryParts = [];
       this._monsters.forEach(m => {
@@ -322,6 +360,7 @@ registerPanel('encounter',{
       const tail = summaryParts.length > 3 ? ' + ' + (summaryParts.length-3) + ' more' : '';
       const summary = summaryParts.slice(0,3).join(', ') + tail;
       showToast(`Added ${pushed} to combat: ${summary}${wasOpen ? '' : ' · opened tracker'}`);
+      this._applyHp(state.combatants.filter(c => !before.has(c.id)).map(c => c.id));
     });
     // Scale-to-target: multiply every monster's count by the smallest integer
     // factor that puts adjusted XP into the target tier. Picks the threshold's

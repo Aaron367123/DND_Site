@@ -24147,6 +24147,46 @@ for (const cls of Object.keys(rule)) for (let L = 1; L <= 20; L++) for (const sc
         try { closePanel('encounter'); } catch(e){}
       }
     }
+    // -- Round 437: hit points when an encounter goes to the tracker — the average; rolled from each one's hit dice (within the dice's range, not all the same); or rolled at the table and typed in, a box each --
+    if (!PLAYER){
+      const E = panelDefs.encounter;
+      const keep = { m: JSON.stringify(E._monsters || []), h: E._hpMode, c: JSON.stringify(state.combatants || []), r: state.combatRound, a: state.activeCombatantId };
+      const km = window.showModal, kt = window.showToast;
+      try {
+        for (let i = 0; i < 40 && !(typeof _5eLoaded !== 'undefined' && _5eLoaded); i++) await sleep(250);
+        window.showToast = () => {};
+        openPanel('encounter'); await sleep(400);
+        const push = async (mode, mons) => {
+          state.combatants = []; E._hpMode = mode; E._monsters = mons; E._render(); await sleep(20);
+          E._body.querySelector('#enc-push-combat').click(); await sleep(120);
+          return state.combatants.slice();
+        };
+        const gob = n => [{ name: 'Goblin', cr: '1/4', count: n, _source: 'MM' }];
+        let cs = await push('avg', gob(3));
+        ok('Average: each goblin 7 hit points, the stat block’s', cs.length === 3 && cs.every(c => c.hp === 7 && c.hpMax === 7), cs.map(c => c.hp).join(','));
+        cs = await push('roll', gob(12));
+        ok('Rolled: each goblin its own 2d6 — every one 2 to 12, and not all the same', cs.length === 12 && cs.every(c => c.hp >= 2 && c.hp <= 12 && c.hpMax === c.hp) && new Set(cs.map(c => c.hp)).size > 1, cs.map(c => c.hp).join(','));
+        cs = await push('roll', [{ name: 'Ogre', cr: '2', count: 30, _source: 'MM' }]);
+        ok('…thirty ogres, each 7d10 + 21: all 28 to 91', cs.length === 30 && cs.every(c => c.hp >= 28 && c.hp <= 91), cs.map(c => c.hp).join(','));
+        // at the table
+        let fields = null;
+        window.showModal = async (t, f) => { fields = f; const r = {}; f.forEach((x, i) => { r[x.id] = String(5 + i); }); return r; };
+        cs = await push('mine', gob(2)); await sleep(60);
+        ok('I’ll roll them: a box each, named, with its dice and the average in it', !!fields && fields.length === 2 && /Goblin 1 \(2d6\)/.test(fields[0].label) && +fields[0].value === 7, fields && JSON.stringify(fields.map(f => [f.label, f.value])));
+        ok('…what was typed is their hit points', state.combatants[0].hp === 5 && state.combatants[0].hpMax === 5 && state.combatants[1].hp === 6, state.combatants.map(c => c.hp).join(','));
+        window.showModal = async () => null;
+        cs = await push('mine', gob(2)); await sleep(60);
+        ok('…Cancel: the averages stay', state.combatants.every(c => c.hp === 7));
+        { const sel = E._body.querySelector('#enc-hp'); sel.value = 'roll'; sel.dispatchEvent(new Event('change')); await sleep(20);
+          ok('the choice is remembered', JSON.parse(localStorage.getItem('skt-enc-v1')).hpMode === 'roll' && E._hpMode === 'roll'); }
+      } catch(e){ ok('round 437 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
+      finally {
+        window.showModal = km; window.showToast = kt;
+        E._monsters = JSON.parse(keep.m); E._hpMode = keep.h; state.combatants = JSON.parse(keep.c); state.combatRound = keep.r; state.activeCombatantId = keep.a;
+        try { save(); E._save(); } catch(e){}
+        try { closePanel('encounter'); closePanel('combat'); } catch(e){}
+      }
+    }
     // -- Class features: represented, not just text ------------------------
     {
       try {
