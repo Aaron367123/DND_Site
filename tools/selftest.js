@@ -24050,6 +24050,54 @@ for (const cls of Object.keys(rule)) for (let L = 1; L <= 20; L++) for (const sc
         try { closePanel('encounter'); } catch(e){}
       }
     }
+    // -- Round 435: Scale to lands where it says (judged by the builder's own verdict), up and down, however far, both editions; a monster's row shows its whole name, CR, its XP and its book, and the name opens its stat block --
+    if (!PLAYER){
+      const E = panelDefs.encounter;
+      const P0 = state.party, O0 = (E._out || []).slice(), M0 = JSON.stringify(E._monsters || []), SY0 = E._system, rt = window.showToast;
+      try {
+        for (let i = 0; i < 40 && !(typeof _5eLoaded !== 'undefined' && _5eLoaded); i++) await sleep(250);
+        state.party = P0.slice(0, 4).map(p => Object.assign({}, p, { level: 5 })); E._out = [];
+        openPanel('encounter'); await sleep(400);
+        let said = ''; window.showToast = m => { said = String(m); };
+        const verdict = () => { const xp = E._calcXP(); return (E._systemMode() === '2024' ? E._difficulty2024(xp.raw) : E._difficulty(xp.adjusted)).label; };
+        const scale = async target => { const s = E._body.querySelector('#enc-scale-target'); s.value = target; s.dispatchEvent(new Event('change')); await sleep(40); };
+        const res = [];
+        for (const [sys, targets] of [['2014', ['Easy', 'Medium', 'Hard', 'Deadly']], ['2024', ['Low', 'Moderate', 'High', 'Deadly']]]){
+          E._system = sys;
+          for (const t of targets){
+            E._monsters = [{ name: 'Goblin', cr: '1/4', count: 1, _source: 'MM' }, { name: 'Hobgoblin', cr: '1/2', count: 1, _source: 'MM' }];
+            E._render(); await sleep(20); await scale(t);
+            res.push(sys + ' ' + t + ':' + verdict() + '(' + E._calcXP().count + ')');
+          }
+        }
+        ok('Scale to, from one goblin and one hobgoblin: every difficulty it offers, in both editions, is what the panel then says', res.every(r => { const [k, v] = r.split(':'); return k.split(' ')[1] === v.split('(')[0]; }), res.join(' | '));
+        // down
+        E._system = '2014'; E._monsters = [{ name: 'Goblin', cr: '1/4', count: 40, _source: 'MM' }]; E._render(); await sleep(20);
+        const before = verdict(); await scale('Medium');
+        ok('…and down: forty goblins (Deadly) scaled to Medium are Medium, fewer of them', before === 'Deadly' && verdict() === 'Medium' && E._calcXP().count < 40, before + ' → ' + verdict() + ' (' + E._calcXP().count + ')');
+        E._system = '2024'; E._monsters = [{ name: 'Goblin', cr: '1/4', count: 100, _source: 'MM' }]; E._render(); await sleep(20);
+        const b24 = verdict(); await scale('Low');
+        ok('…2024 too: a hundred goblins scaled to Low are Low', b24 !== 'Low' && verdict() === 'Low' && E._calcXP().count < 100, b24 + ' → ' + verdict() + ' (' + E._calcXP().count + ')');
+        E._system = '2014'; E._monsters = [{ name: 'Goblin', cr: '1/4', count: 40, _source: 'MM' }]; E._render(); await sleep(20); await scale('Medium');
+        await scale('Medium');
+        ok('…already there: it says so and changes nothing', /already Medium/i.test(said) && verdict() === 'Medium', said);
+        // rows
+        E._monsters = [{ name: 'Adult Red Dragon', cr: '17', count: 2, _source: 'MM' }]; E._render(); await sleep(30);
+        const row = E._body.querySelector('.enc-monster-row'), nm = row.querySelector('.enc-nm'), meta = row.querySelector('.enc-meta');
+        ok('a row: the name whole, CR, the XP of all of them, the book', nm.textContent === 'Adult Red Dragon' && /CR 17/.test(meta.textContent) && /36,000 XP/.test(meta.textContent) && meta.textContent.includes(typeof _formatSource === 'function' ? _formatSource('MM') : 'MM'), meta.textContent);
+        ok('…the name not cut short in the column', nm.scrollWidth <= nm.clientWidth + 1, nm.scrollWidth + '>' + nm.clientWidth);
+        const keepPop = window.popOutDetail; let popped = null;
+        window.popOutDetail = d => { popped = d; };
+        try { nm.click(); } finally { window.popOutDetail = keepPop; }
+        ok('…the name opens its stat block (that book’s)', !!popped && popped.name === 'Adult Red Dragon' && popped._source === 'MM');
+      } catch(e){ ok('round 435 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
+      finally {
+        window.showToast = rt;
+        state.party = P0; E._out = O0; E._monsters = JSON.parse(M0); E._system = SY0;
+        try { E._save(); } catch(e){}
+        try { closePanel('encounter'); } catch(e){}
+      }
+    }
     // -- Class features: represented, not just text ------------------------
     {
       try {

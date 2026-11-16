@@ -105,6 +105,12 @@ registerPanel('encounter',{
     if(adjXP<partyThresh[3])return{label:'Hard',cls:'hard'};
     return{label:'Deadly',cls:'deadly'};
   },
+  // A row's stat block: by name and book; a row saved without a book, by name.
+  _entryOf(m){
+    if (typeof _5eData === 'undefined' || !Array.isArray(_5eData) || !m) return null;
+    return _5eData.find(d => d.cat === 'monster' && d.name === m.name && m._source && d._source === m._source)
+      || (m._source ? null : _5eData.find(d => d.cat === 'monster' && d.name === m.name)) || null;
+  },
   // The shared search (monster-picker.js), shaped as this panel's rows.
   _searchPool(q){
     if (typeof sktMonsterPool !== 'function') return [];
@@ -159,11 +165,15 @@ registerPanel('encounter',{
               this._monsters.map((m,i)=>{
                 const srcDisplay = m._source ? (typeof _formatSource==='function' ? _formatSource(m._source) : m._source) : '';
                 const srcBadge = srcDisplay ? `<span class="enc-src-badge">${esc(srcDisplay)}</span>` : '';
+                // The name whole on its own line (a narrow column cut it to
+                // "Vampi…" beside a clipped book badge), CR, XP and the book
+                // under it; the name opens the stat block.
+                const each = CR_XP[m.cr];
                 return `<div class="enc-monster-row">
                   <input type="number" value="${m.count||1}" min="1" max="99" data-ei="${i}" aria-label="How many ${esc(m.name)}" style="width:38px;font-size:var(--fs-sm);padding:2px 4px">
-                  <span class="enc-name" title="${esc(m.name)}"><span class="enc-nm">${esc(m.name)}</span>${srcBadge}</span>
-                  <span class="enc-cr">CR ${m.cr}</span>
-                  <button class="btn icon-btn danger" data-eact="del" data-ei="${i}" style="padding:2px 5px;font-size:var(--fs-sm)">×</button>
+                  <span class="enc-name"><button class="enc-nm" data-eact="stat" data-ei="${i}" title="${esc(m.name)}: the stat block">${esc(m.name)}</button>
+                    <span class="enc-meta">CR ${esc(String(m.cr))} · ${each != null ? (each * (m.count||1)).toLocaleString() + ' XP' : 'no XP'}${srcDisplay ? ' · ' + esc(srcDisplay) : ''}</span></span>
+                  <button class="btn icon-btn danger" data-eact="del" data-ei="${i}" title="Take ${esc(m.name)} out" style="padding:2px 5px;font-size:var(--fs-sm)">×</button>
                 </div>`;
               }).join('')}
           </div>
@@ -184,9 +194,9 @@ registerPanel('encounter',{
             <label style="font-size:var(--fs-xs);color:var(--text-muted);text-transform:uppercase;letter-spacing:.5px">Scale to:</label>
             <select id="enc-scale-target" aria-label="Difficulty to scale to" style="font-size:var(--fs-sm);padding:3px 24px 3px 6px;flex:0 0 auto;background-color:var(--panel-2);border:1px solid var(--border);color:var(--text);border-radius:3px" ${!this._monsters.length?'disabled':''}>
               <option value="">—</option>
-              ${(system==='2024'?['Moderate','High','Deadly']:['Easy','Medium','Hard','Deadly']).map(o=>`<option value="${o}">${o}</option>`).join('')}
+              ${(system==='2024'?['Low','Moderate','High','Deadly']:['Easy','Medium','Hard','Deadly']).map(o=>`<option value="${o}">${o}</option>`).join('')}
             </select>
-            <span style="font-size:var(--fs-xs);color:var(--text-dim)">multiplies counts</span>
+            <span style="font-size:var(--fs-xs);color:var(--text-dim)">changes how many of each</span>
           </div>
           <div style="margin-top:12px;display:flex;gap:8px;flex-wrap:wrap">
             <button class="btn small primary" id="enc-push-combat" ${!this._monsters.length?'disabled':''}>▶ Push to Combat Tracker</button>
@@ -221,6 +231,11 @@ registerPanel('encounter',{
     }));
     // Monster list
     b.querySelectorAll('[data-eact="del"]').forEach(btn=>btn.addEventListener('click',()=>{this._monsters.splice(+btn.dataset.ei,1);this._save();this._render();}));
+    b.querySelectorAll('[data-eact="stat"]').forEach(btn => btn.addEventListener('click', () => {
+      const m = this._monsters[+btn.dataset.ei], d = m && this._entryOf(m);
+      if (d && typeof popOutDetail === 'function') popOutDetail(d);
+      else if (typeof showToast === 'function') showToast('No stat block for ' + (m ? m.name : 'that') + ' in the books in use');
+    }));
     b.querySelectorAll('#enc-monster-list input[type="number"]').forEach(inp=>inp.addEventListener('change',e=>{this._monsters[+e.target.dataset.ei].count=parseInt(e.target.value)||1;this._save();this._render();}));
     b.querySelector('#enc-add').addEventListener('click', () => this._openPicker());
     // Push to combat — flash the button to confirm the action, open the
@@ -258,10 +273,7 @@ registerPanel('encounter',{
         // Name AND source, the same rule the Bestiary's drag-to-combat uses.
         // The five-field object stays as the fallback for encounters saved
         // without a source, or before the monster data has loaded.
-        const entry = (typeof _5eLoaded !== 'undefined' && _5eLoaded && Array.isArray(_5eData))
-          ? (_5eData.find(d => d.cat === 'monster' && d.name === m.name && m._source && d._source === m._source)
-             || (m._source ? null : _5eData.find(d => d.cat === 'monster' && d.name === m.name)))
-          : null;
+        const entry = (typeof _5eLoaded !== 'undefined' && _5eLoaded) ? this._entryOf(m) : null;
         for (let k=0;k<n;k++){
           panelDefs.combat.addMonster(entry || {name:m.name,hp:m.hp,hpMax:m.hp,ac:m.ac,dex:m.dex||10});
           pushed++;
@@ -285,18 +297,19 @@ registerPanel('encounter',{
     b.querySelector('#enc-scale-target')?.addEventListener('change', e => {
       const target = e.target.value;
       if (!target || !this._monsters.length){ e.target.value=''; return; }
+      const was = this._calcXP().count;
       const factor = this._findScaleFactor(target);
       if (factor === null){
-        showToast('Already past the top tier — clear or reduce monsters first');
+        showToast('Can’t make it ' + target + ' by changing how many — add or remove a kind of monster', { alert: true });
         e.target.value=''; return;
       }
       if (factor === 1){
-        showToast('Already in ' + target + ' range');
+        showToast('It’s already ' + target);
         e.target.value=''; return;
       }
       this._monsters.forEach(m => { m.count = Math.max(1, Math.round((m.count||1) * factor)); });
       this._save(); this._render();
-      showToast('Scaled counts ×' + factor.toFixed(2) + ' → ' + target);
+      showToast(target + ': ' + was + ' monster' + (was === 1 ? '' : 's') + ' → ' + this._calcXP().count);
     });
     // 2014 ⇄ 2024 system toggle.
     b.querySelectorAll('[data-eact="sys"]').forEach(btn=>btn.addEventListener('click',()=>{
@@ -432,38 +445,32 @@ registerPanel('encounter',{
       + '</div>';
   },
 
-  // Smallest factor (≥1, multiples of 0.25) that puts adjusted XP into the
-  // target zone's midpoint. Returns 1 when already at/above target's lower
-  // bound, or null when even unbounded scaling can't reach the target (only
-  // happens with a totally empty monster list).
+  // SCALE TO. The factor on every count (each rounded, at least one) that
+  // gives the named difficulty, as near ×1 as there is: up or down. It is
+  // judged by the builder's own verdict, so it can't disagree with what the
+  // panel then says. It had a multiplier table of its own (the old wrong
+  // one): "scale to Easy" made eight goblins of one that the panel called
+  // Trivial. It only scaled up, stopped at ×10 — so one goblin could reach
+  // nothing, and was told it was "past the top tier" — and in 2024 stopped
+  // on a band's edge, which reads as the band below. 1: already there;
+  // null: no count of these monsters gives it.
+  _verdictFor(mons){
+    const keep = this._monsters; this._monsters = mons;
+    try { const xp = this._calcXP(); return (this._systemMode() === '2024' ? this._difficulty2024(xp.raw) : this._difficulty(xp.adjusted)).label; }
+    finally { this._monsters = keep; }
+  },
   _findScaleFactor(target){
-    if (!this._monsters.length) return null;
-    let targetMin, xpAt;
-    if (this._systemMode() === '2024'){
-      // 2024: target is the LOWER bound of the named band — Moderate starts just
-      // past the Low budget, High past Moderate, Deadly past High. No multiplier.
-      const bg = this._budget2024();
-      targetMin = { Moderate:bg.low, High:bg.moderate, Deadly:bg.high }[target];
-      xpAt = (f) => this._monsters.reduce((s,m)=>s+(CR_XP[m.cr]||0)*Math.max(1,Math.round((m.count||1)*f)),0);
-    } else {
-      const t = this._thresh2014();
-      targetMin = { Easy:t[0], Medium:t[1], Hard:t[2], Deadly:t[3] }[target];
-      // Adjusted XP grows non-linearly with count (the multiplier table jumps).
-      xpAt = (f) => {
-        const count = this._monsters.reduce((n,m)=>n+Math.max(1,Math.round((m.count||1)*f)),0);
-        const xp    = this._monsters.reduce((s,m)=>s+(CR_XP[m.cr]||0)*Math.max(1,Math.round((m.count||1)*f)),0);
-        const mults = [1,1.5,2,2,2,3,3,3,4,4,4,4,5];
-        return xp * (mults[Math.min(count,12)] || 5);
-      };
+    if (!this._monsters.length || !target) return null;
+    const at = f => this._monsters.map(m => Object.assign({}, m, { count: Math.max(1, Math.round((m.count || 1) * f)) }));
+    if (this._verdictFor(at(1)) === target) return 1;
+    let best = null;
+    for (let k = 1; k <= 400; k++){
+      for (const f of [Math.pow(1.02, k), Math.pow(1.02, -k)]){
+        if (this._verdictFor(at(f)) === target && (best == null || Math.abs(Math.log(f)) < Math.abs(Math.log(best)))) best = f;
+      }
+      if (best != null) break;
     }
-    if (targetMin == null) return null;
-    // Brute-force the cheapest factor (0.25 steps) that clears the target. If
-    // we're already at/above it, return 1 — "scale to fit" never reduces.
-    if (xpAt(1) >= targetMin) return 1;
-    for (let f = 1.25; f <= 10; f += 0.25){
-      if (xpAt(f) >= targetMin) return f;
-    }
-    return null;
+    return best;
   },
 
   // Default name for the Save dialog — combine the highest-CR monster's name

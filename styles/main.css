@@ -3526,8 +3526,11 @@ body.player-mode .loot-sumbar > span[style*="flex:1"]{display:none}
 .enc-search-result .enc-result-name{display:flex;align-items:center;gap:6px;flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .enc-src-badge{font-size:var(--fs-2xs);font-weight:700;color:var(--red-mid);letter-spacing:.04em;background:rgba(161,53,49,.1);border:1px solid rgba(161,53,49,.3);padding:1px 5px;border-radius:var(--r-sm);flex-shrink:0;font-variant:small-caps}
 .enc-monster-row .enc-src-badge{margin-left:6px}
-.enc-monster-row .enc-name{display:flex;align-items:center;min-width:0}
-.enc-monster-row .enc-nm{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.enc-monster-row .enc-name{display:flex;flex-direction:column;align-items:flex-start;min-width:0;white-space:normal}
+.enc-monster-row .enc-nm{min-width:0;max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;
+  background:none;border:0;padding:0;font:inherit;color:var(--text);cursor:pointer;text-align:left}
+.enc-monster-row .enc-nm:hover{text-decoration:underline}
+.enc-monster-row .enc-meta{font-size:var(--fs-xs);color:var(--text-muted);white-space:normal;max-width:100%}
 /* The name before the book: the badge gives its room up first. */
 .enc-monster-row .enc-src-badge{flex:0 100 auto;min-width:0;overflow:hidden;text-overflow:clip}
 /* ── Empty states ─────────────────────────────────────────────────────────
