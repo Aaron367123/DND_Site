@@ -23775,6 +23775,66 @@ for (const cls of Object.keys(rule)) for (let L = 1; L <= 20; L++) for (const sc
         closePanel('battlemap');
       }
     }
+    // -- Round 427: snapping lands in the drawn cells — a square grid lined up with its map (an offset), a hex map, an offset hex map; the arrow keys step hex by hex (5 ft each, up and down too); a token set down beside another on a hex map goes in the next hex --
+    if (!PLAYER){
+      const B = panelDefs.battlemap;
+      let keep = null;
+      try {
+        openPanel('battlemap'); await sleep(700);
+        keep = { t: B._tokens.slice(), d: B._drawings, g: B._gridType, sg: B._showGrid, ox: B._gridOffsetX, oy: B._gridOffsetY, sn: B._snapToGrid, c: (state.combatants || []).slice(), r: state.combatRound, a: state.activeCombatantId, vs: B._viewScale };
+        const drag = async (t, ddx, ddy) => {
+          const el = B._body.querySelector('.map-token[data-tid="' + t.id + '"]'); const r = el.getBoundingClientRect();
+          const x0 = Math.round(r.left + r.width / 2), y0 = Math.round(r.top + r.height / 2), z = B._screenScale();
+          el.dispatchEvent(new MouseEvent('mousedown', { clientX: x0, clientY: y0, button: 0, bubbles: true }));
+          for (let i = 1; i <= 5; i++){ document.dispatchEvent(new MouseEvent('mousemove', { clientX: Math.round(x0 + ddx * z * i / 5), clientY: Math.round(y0 + ddy * z * i / 5), bubbles: true })); await sleep(10); }
+          document.dispatchEvent(new MouseEvent('mouseup', { clientX: Math.round(x0 + ddx * z), clientY: Math.round(y0 + ddy * z), bubbles: true })); await sleep(40);
+        };
+        const hexOff = t => { const cs = B._csScreen(), o = B._gridOffPx(), c = sktHexAt(t.x, t.y, cs, o.x, o.y), p = B._hexAtQR(c.q, c.r); return Math.hypot(p[0] - t.x, p[1] - t.y); };
+        const sqOff = t => { const cs = B._csScreen(), o = B._gridOffPx(), f = v => ((v % 1) + 1) % 1; return Math.hypot(f((t.x - o.x) / cs) - 0.5, f((t.y - o.y) / cs) - 0.5) * cs; };
+        state.combatRound = 0; B._drawings = []; B._applyViewScale(1);
+        for (const [mode, label] of [['sq', 'a square grid lined up with its map'], ['hex', 'a hex map'], ['hexo', 'a hex map lined up with its map']]){
+          B._gridType = mode === 'sq' ? 'square' : 'hex'; B._showGrid = true; B._gridOffsetX = mode === 'hex' ? 0 : 17; B._gridOffsetY = mode === 'hex' ? 0 : 9; B._snapToGrid = true;
+          B._render(); await sleep(150);
+          const cs = B._csScreen(), worst = [];
+          for (const [ax, ay] of [[2.3, 1.2], [1.1, -2.7], [-3.4, 0.6], [0.4, 3.3]]){
+            const t = { id: 't427', label: 'r427', x: 8 * cs, y: 8 * cs, size: 1 }; B._tokens = [t]; B._renderTokens(); await sleep(20);
+            await drag(t, ax * cs, ay * cs);
+            worst.push(+(mode === 'sq' ? sqOff(t) : hexOff(t)).toFixed(1));
+          }
+          ok('snapping, ' + label + ': a dropped token sits in the middle of a drawn ' + (mode === 'sq' ? 'square' : 'hex'), worst.every(v => v < 0.6), JSON.stringify(worst));
+        }
+        // a Large token on the lined-up square grid: its middle on a drawn corner
+        B._gridType = 'square'; B._gridOffsetX = 17; B._gridOffsetY = 9; B._render(); await sleep(100);
+        { const cs = B._csScreen(), o = B._gridOffPx(), t = { id: 't427L', label: 'r427 Ogre', x: 8 * cs, y: 8 * cs, size: 2 }; B._tokens = [t]; B._renderTokens(); await sleep(20);
+          await drag(t, 1.7 * cs, 2.2 * cs);
+          const f = v => ((v % 1) + 1) % 1, fx = f((t.x - o.x) / cs), fy = f((t.y - o.y) / cs);
+          ok('…a Large one: its middle on a corner of the drawn squares', Math.min(fx, 1 - fx) < 0.01 && Math.min(fy, 1 - fy) < 0.01, fx.toFixed(2) + ',' + fy.toFixed(2)); }
+        // the arrow keys on hexes
+        B._gridType = 'hex'; B._gridOffsetX = 0; B._gridOffsetY = 0; B._render(); await sleep(100);
+        const cs = B._csScreen();
+        state.combatants = [{ id: 'r427h', name: 'r427 Hexer', hp: 10, hpMax: 10, initiative: 10 }]; state.combatRound = 1; state.activeCombatantId = 'r427h'; save();
+        const p0 = B._hexAtQR(10, 6), k = { id: 't427k', cid: 'r427h', label: 'r427 Hexer', x: p0[0], y: p0[1], size: 1 }; B._tokens = [k]; B._render(); await sleep(80);
+        const at = () => { const c = sktHexAt(k.x, k.y, cs, 0, 0); return c.q + '/' + c.r; };
+        const seen = [];
+        for (const [dx, dy] of [[1, 0], [1, 0], [1, 0], [1, 0]]){ B._keyMove(k, dx, dy); seen.push(at()); }
+        ok('arrow keys on a hex map: → four times is four hexes along, 20 ft, each in a hex’s middle', seen.join(' ') === '11/6 12/6 13/6 14/6' && sktTurnMoved(k) === 20 && hexOff(k) < 0.01, seen.join(' ') + ' ' + sktTurnMoved(k));
+        B._keyMove(k, 0, 1); const down = at(); B._keyMove(k, 0, -1); const up = at();
+        ok('…↓ and ↑ step down and up the column (they did nothing)', down === '14/7' && up === '14/6' && sktTurnMoved(k) === 30, down + ' ' + up + ' ' + sktTurnMoved(k));
+        // set down beside, on hexes
+        state.combatRound = 0;
+        const qa = B._hexAtQR(12, 8), qb = B._hexAtQR(14, 8);
+        const a = { id: 't427a', label: 'r427 A', x: qa[0], y: qa[1], size: 1 }, b = { id: 't427b', label: 'r427 B', x: qb[0], y: qb[1], size: 1 };
+        B._tokens = [a, b]; B._renderTokens(); await sleep(20);
+        const L = B._landing(b, a.x, a.y, { x: b.x, y: b.y }, false), lc = sktHexAt(L.x, L.y, cs, 0, 0), lp = B._hexAtQR(lc.q, lc.r);
+        ok('a token dropped on another on a hex map: set down in the next hex, in its middle', L.moved && sktHexSteps(a.x, a.y, L.x, L.y, cs, 0, 0) === 1 && Math.hypot(lp[0] - L.x, lp[1] - L.y) < 0.01, JSON.stringify([L, lc]));
+      } catch(e){ ok('round 427 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
+      finally {
+        if (keep){ B._tokens = keep.t; B._drawings = keep.d; B._gridType = keep.g; B._showGrid = keep.sg; B._gridOffsetX = keep.ox; B._gridOffsetY = keep.oy; B._snapToGrid = keep.sn;
+          state.combatants = keep.c; state.combatRound = keep.r; state.activeCombatantId = keep.a; try { save(); B._saveMap(); B._applyViewScale(keep.vs || 1); } catch(e){} }
+        try { B._closePanel(); B._render(); } catch(e){}
+        closePanel('battlemap');
+      }
+    }
     // -- Class features: represented, not just text ------------------------
     {
       try {
@@ -27644,6 +27704,37 @@ for (const cls of Object.keys(rule)) for (let L = 1; L <= 20; L++) for (const sc
       } catch(e){ ok('round 426 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
       finally {
         if (saved){ B._tokens = keepT; state.combatants = keepC; state.combatRound = keepR; state.activeCombatantId = keepA; B._fog = keepF; B._drawings = keepD; }
+        try { B._render(); } catch(e){}
+        paTab = keepTab; try { paRender(); } catch(e){}
+      }
+    }
+    // -- Round 428: on a phone, a finger drag on a hex map lined up with its art: the token lands in the middle of a drawn hex --
+    if (PLAYER && typeof Touch === 'function'){
+      const keepTab = paTab, B = panelDefs.battlemap;
+      let keep = null;
+      try {
+        if (paMyIdx() < 0) paSetPc('zoey');
+        paTab = 'map'; paRender(); await sleep(900);
+        keep = { t: B._tokens.slice(), d: B._drawings, f: B._fog, g: B._gridType, ox: B._gridOffsetX, oy: B._gridOffsetY, sn: B._snapToGrid, r: state.combatRound };
+        B._fog = null; B._drawings = []; B._gridType = 'hex'; B._gridOffsetX = 17; B._gridOffsetY = 9; B._snapToGrid = true; state.combatRound = 0;
+        B._render(); await sleep(200);
+        const cs = B._csScreen(), me = paPc(), o = B._gridOffPx();
+        const z = { id: 't428z', label: me.name, isPC: true, x: 4 * cs, y: 4 * cs, size: 1 };
+        B._tokens = [z]; B._renderTokens(); await sleep(60);
+        const el = document.querySelector('#pa-screen .map-token[data-tid="t428z"]');
+        el.scrollIntoView({ block: 'center', inline: 'center' }); await sleep(100);
+        const r = el.getBoundingClientRect(), x0 = Math.round(r.left + r.width / 2), y0 = Math.round(r.top + r.height / 2), sc = B._screenScale();
+        const tch = (x, y) => new Touch({ identifier: 3, target: el, clientX: x, clientY: y });
+        const pts = [1, 2, 3, 4].map(i => [Math.round(x0 + 1.3 * cs * sc * i / 4), Math.round(y0 + 0.9 * cs * sc * i / 4)]);
+        el.dispatchEvent(new TouchEvent('touchstart', { bubbles: true, cancelable: true, touches: [tch(x0, y0)], targetTouches: [tch(x0, y0)], changedTouches: [tch(x0, y0)] }));
+        for (const p of pts){ document.dispatchEvent(new TouchEvent('touchmove', { bubbles: true, cancelable: true, touches: [tch(p[0], p[1])], changedTouches: [tch(p[0], p[1])] })); await sleep(15); }
+        const last = pts[pts.length - 1];
+        document.dispatchEvent(new TouchEvent('touchend', { bubbles: true, cancelable: true, touches: [], changedTouches: [tch(last[0], last[1])] })); await sleep(80);
+        const c = sktHexAt(z.x, z.y, cs, o.x, o.y), p = B._hexAtQR(c.q, c.r), off = Math.hypot(p[0] - z.x, p[1] - z.y);
+        ok('phone: a finger drag on a lined-up hex map lands in the middle of a drawn hex', z.x !== 4 * cs && off < 0.6, JSON.stringify([z.x, z.y, off]));
+      } catch(e){ ok('round 428 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
+      finally {
+        if (keep){ B._tokens = keep.t; B._drawings = keep.d; B._fog = keep.f; B._gridType = keep.g; B._gridOffsetX = keep.ox; B._gridOffsetY = keep.oy; B._snapToGrid = keep.sn; state.combatRound = keep.r; }
         try { B._render(); } catch(e){}
         paTab = keepTab; try { paRender(); } catch(e){}
       }

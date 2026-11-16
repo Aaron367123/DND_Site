@@ -1625,10 +1625,20 @@ registerPanel('battlemap',{
   // right across the screen, which is down the map.
   _keyMove(t, dx, dy){
     { const s = this._stageDelta(dx, dy); dx = s.x; dy = s.y; }
-    if (this._gridType === 'hex' && dy) return;   // a hex row isn't a straight line down
     const cs = this._csScreen() || 50, from = { x: t.x, y: t.y };
     const half = (t.size || 1) * this._tokenUnitScreen() / 2, W = this._cols * cs, H = this._rows * cs;
-    const nx = Math.max(half, Math.min(W - half, t.x + dx * cs)), ny = Math.max(half, Math.min(H - half, t.y + dy * cs));
+    // On hexes a step is to the next hex: ↑↓ along its column, ←→ to the
+    // column beside (the same row number, which zigzags half a hex down and
+    // up — no hex is straight across from another). A fixed square's width
+    // across skipped hexes: four presses were charged 30 ft. ↑↓ did nothing.
+    let tx = t.x + dx * cs, ty = t.y + dy * cs;
+    if (this._gridType === 'hex' && typeof sktHexAt === 'function'){
+      const sx = Math.abs(dx) >= Math.abs(dy) ? Math.sign(Math.round(dx * 10)) : 0, sy = sx ? 0 : Math.sign(Math.round(dy * 10));
+      if (!sx && !sy) return;
+      const o = this._gridOffPx(), c = sktHexAt(t.x, t.y, cs, o.x, o.y), a = this._hexAtQR(c.q, c.r), b = this._hexAtQR(c.q + sx, c.r + sy);
+      tx = t.x + b[0] - a[0]; ty = t.y + b[1] - a[1];
+    }
+    const nx = Math.max(half, Math.min(W - half, tx)), ny = Math.max(half, Math.min(H - half, ty));
     if (nx === t.x && ny === t.y) return;
     const land = this._landing(t, nx, ny, from, false);
     if (this._fearBlocks(t, land, from)) return;
@@ -3244,6 +3254,21 @@ registerPanel('battlemap',{
     const cs = this._csScreen() || 50;
     return [Math.round((x - path.ox) / cs), Math.round((y - path.oy) / cs)];
   },
+  // SNAPPING, one rule for every drop, drag and placement. It was square
+  // arithmetic from the stage's corner everywhere: on a hex map a token
+  // snapped to squares that aren't drawn (between hexes, a step charged as
+  // two), and on a map whose grid was lined up with its art (an offset) it
+  // snapped a sixth and a third of a square off the drawn ones, across the
+  // lines. Now: the middle of the hex, or of the drawn square(s) — a Large
+  // token's middle on a grid corner, as before, the offset's corner.
+  _snapPt(x, y, size){
+    const cs = this._csScreen() || 50, o = this._gridOffPx(), n = size || 1;
+    if (this._gridType === 'hex' && typeof sktHexAt === 'function'){
+      const c = sktHexAt(x, y, cs, o.x, o.y), p = this._hexAtQR(c.q, c.r);
+      return { x: p[0], y: p[1] };
+    }
+    return { x: o.x + Math.round((x - o.x) / cs - n / 2) * cs + n * cs / 2, y: o.y + Math.round((y - o.y) / cs - n / 2) * cs + n * cs / 2 };
+  },
   _hexCentre(cu){
     const cs = this._csScreen() || 50, o = this._gridOffPx(), s = cs / 2, h = s * Math.sqrt(3), q = cu[0], r = cu[2] + (q - (q & 1)) / 2;
     return [q * s * 1.5 + o.x, ((q & 1) ? h / 2 : 0) + r * h + h / 2 + o.y];
@@ -3555,13 +3580,18 @@ registerPanel('battlemap',{
     const clash = (px, py) => others.some(o => Math.hypot(o.x - px, o.y - py) < (size + (o.size || 1)) / 2 * unit * 0.75);
     if (!clash(x, y)) return { x, y, moved: false };
     const inside = (px, py) => px >= half - 0.5 && px <= stageW - half + 0.5 && py >= half - 0.5 && py <= stageH - half + 0.5;
+    // The places a ring out: the squares round it, or on a hex map the hexes
+    // (square steps set it down between hexes).
+    let around = ring => { const r = []; for (let dx = -ring; dx <= ring; dx++) for (let dy = -ring; dy <= ring; dy++) if (Math.max(Math.abs(dx), Math.abs(dy)) === ring) r.push([x + dx * cs, y + dy * cs]); return r; };
+    if (this._gridType === 'hex' && typeof sktHexAt === 'function'){
+      const o = this._gridOffPx(), c0 = sktHexAt(x, y, cs, o.x, o.y), b0 = this._hexAtQR(c0.q, c0.r), ex = x - b0[0], ey = y - b0[1];
+      const cube = (q, r) => { const z = r - (q - (q & 1)) / 2; return [q, -q - z, z]; }, k0 = cube(c0.q, c0.r);
+      around = ring => { const r = []; for (let q = c0.q - ring; q <= c0.q + ring; q++) for (let rr = c0.r - ring - 1; rr <= c0.r + ring + 1; rr++){
+        const k = cube(q, rr); if (Math.max(Math.abs(k[0] - k0[0]), Math.abs(k[1] - k0[1]), Math.abs(k[2] - k0[2])) !== ring) continue;
+        const p = this._hexAtQR(q, rr); r.push([p[0] + ex, p[1] + ey]); } return r; };
+    }
     for (let ring = 1; ring <= 8; ring++){
-      const spots = [];
-      for (let dx = -ring; dx <= ring; dx++) for (let dy = -ring; dy <= ring; dy++){
-        if (Math.max(Math.abs(dx), Math.abs(dy)) !== ring) continue;
-        const px = x + dx * cs, py = y + dy * cs;
-        if (inside(px, py) && !clash(px, py)) spots.push([px, py]);
-      }
+      const spots = around(ring).filter(p => inside(p[0], p[1]) && !clash(p[0], p[1]));
       if (spots.length){
         const d = (p, q) => Math.hypot(p[0] - q.x, p[1] - q.y);
         spots.sort((a, b) => (d(a, { x, y }) - d(b, { x, y })) || (from ? d(a, from) - d(b, from) : 0));
@@ -6082,10 +6112,7 @@ registerPanel('battlemap',{
       if(cx<0||cy<0||cx>this._cols*csClick||cy>this._rows*csClick) return;
       // Snap to grid cell center if snap is on (Shift inverts).
       const wantSnap = e.shiftKey ? !this._snapToGrid : this._snapToGrid;
-      if (wantSnap){
-        cx = Math.floor(cx/csClick)*csClick + csClick/2;
-        cy = Math.floor(cy/csClick)*csClick + csClick/2;
-      }
+      if (wantSnap){ const sp = this._snapPt(cx, cy, 1); cx = sp.x; cy = sp.y; }
       // Dedupe: don't place a new token directly on top of an existing one.
       if(this._tokens.find(t => Math.abs((t.x||0)-cx) < csClick/2 && Math.abs((t.y||0)-cy) < csClick/2)) return;
       const isPC=this._tool==='add-pc';
@@ -6507,10 +6534,7 @@ registerPanel('battlemap',{
       let x = _dp.x;
       let y = _dp.y;
       const wantSnap = e.shiftKey ? !this._snapToGrid : this._snapToGrid;
-      if (wantSnap){
-        x = Math.floor(x/cs2)*cs2 + cs2/2;
-        y = Math.floor(y/cs2)*cs2 + cs2/2;
-      }
+      if (wantSnap){ const sp = this._snapPt(x, y, 1); x = sp.x; y = sp.y; }
       // Clamp to stage bounds so a token can't be dropped off the map.
       const stageW = this._cols*cs2, stageH = this._rows*cs2;
       const half = cs2/2;
@@ -8123,10 +8147,7 @@ registerPanel('battlemap',{
           if(moved){
             let nx = curPx, ny = curPy;
             const wantSnap = ev && ev.shiftKey ? !this._snapToGrid : this._snapToGrid;
-            if (wantSnap){
-              nx = Math.round(nx/cs - size/2) * cs + size*cs/2;
-              ny = Math.round(ny/cs - size/2) * cs + size*cs/2;
-            }
+            if (wantSnap){ const sp = this._snapPt(nx, ny, size); nx = sp.x; ny = sp.y; }
             const stageW = this._cols * cs, stageH = this._rows * cs;
             // `cs` (from _csScreen) already incorporates _bgMapScale, so the
             // half-extent is just size*cs/2. Multiplying by _bgMapScale again
@@ -8248,10 +8269,7 @@ registerPanel('battlemap',{
           if (longPressFired) return;
           if (moved){
             let nx = curPx, ny = curPy;
-            if (this._snapToGrid){
-              nx = Math.round(nx/cs - size/2) * cs + size*cs/2;
-              ny = Math.round(ny/cs - size/2) * cs + size*cs/2;
-            }
+            if (this._snapToGrid){ const sp = this._snapPt(nx, ny, size); nx = sp.x; ny = sp.y; }
             const stageW = this._cols * cs, stageH = this._rows * cs;
             // Same double-scale fix as the mouse handler above. `cs` already
             // includes _bgMapScale via _csScreen() — don't apply it twice.
