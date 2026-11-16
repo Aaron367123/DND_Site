@@ -26,6 +26,35 @@ registerPanel('loot',{
   },
   unmount(){this._body=null;},
   _save(){saveJson('skt-loot-v1', this._loot, 'loot');},
+  // A change the DM (or a player) can take back: made, saved, drawn, and in
+  // the undo history (Ctrl+Z, or the toast's Undo). Deleting an item had no
+  // way back at all — one stray × and it was gone. `party`: it touches the
+  // characters too (a payout).
+  _undoable(label, fn, party){
+    const keys = (party && typeof SKT_UNDO_DEFAULT_KEYS !== 'undefined' ? SKT_UNDO_DEFAULT_KEYS : []).concat(['skt-loot-v1']);
+    const run = () => { fn(); this._save(); };
+    if (typeof sktUndoable === 'function') sktUndoable(label, run, { keys }); else run();
+    this._render();
+  },
+  // ─── What a player may change ──────────────────────────────────────────────
+  // Shared with the players, a phone had every DM control: it could delete
+  // anything, hand another character's things to itself (Ulrick's half
+  // plate), roll treasure and pay the purse out into everyone's sheets. As on
+  // D&D Beyond: the party's coins and its unclaimed loot are everyone's, and a
+  // player may claim from it or give their own back. Another character's
+  // things, rolling treasure and paying out are the DM's. The TV changes
+  // nothing.
+  _isPlayer(){ return document.body.classList.contains('player-mode'); },
+  _me(){ return this._isPlayer() && typeof paPc === 'function' ? paPc() : null; },
+  _canEdit(item){
+    if (!this._isPlayer()) return true;
+    const me = this._me(); if (!me) return false;
+    if (!item || !this._isAssignedTo(item.assignedTo)) return true;     // the party's
+    return this._itemBelongsToMember(item, me.id);                      // mine (or my group's)
+  },
+  _canAdd(){ return !this._isPlayer() || !!this._me(); },
+  // The party's share: its player characters (not a rival kept in the list).
+  _sharers(){ return typeof sktPlayerParty === 'function' ? sktPlayerParty() : state.party; },
 
   // ─── Random treasure (DMG loot tables) ─────────────────────────────────────
   // data/loot.json ships with the 5etools dump but nothing read it. It holds
@@ -280,14 +309,13 @@ registerPanel('loot',{
           { title: (r.kind === 'hoard' ? 'Hoard' : 'Individual') + ' — ' + band.label,
             confirmLabel: 'Add to loot' }).then(ok => {
           if (!ok) return;
-          ['cp','sp','ep','gp','pp'].forEach(c => {
-            if (res.coins[c]) this._loot[c] = (this._loot[c] || 0) + res.coins[c];
+          this._undoable('Treasure added to the loot', () => {
+            ['cp','sp','ep','gp','pp'].forEach(c => {
+              if (res.coins[c]) this._loot[c] = (this._loot[c] || 0) + res.coins[c];
+            });
+            res.items.forEach(i => this._loot.items.push({
+              id: uid(), name: i.name, qty: i.qty, value: i.value, assignedTo: null }));
           });
-          res.items.forEach(i => this._loot.items.push({
-            id: uid(), name: i.name, qty: i.qty, value: i.value, assignedTo: null }));
-          this._save();
-          this._render();
-          if (typeof showToast === 'function') showToast('Treasure added to the loot pool');
         });
       });
     });
@@ -423,6 +451,13 @@ registerPanel('loot',{
   _assignSelect(item, idx){
     // Nobody's is the party's: assigned is the character's own.
     const opts = ['<option value="">Party loot</option>'];
+    const me = this._me();
+    if (this._isPlayer()){
+      if (me) opts.push(`<option value="${esc(me.id)}"${item.assignedTo===me.id?' selected':''}>${esc(me.name)} (me)</option>`);
+      const g = (this._loot.tabGroups || []).find(x => x.id === item.assignedTo);
+      if (g) opts.push(`<option value="${esc(g.id)}" selected>👥 ${esc(g.name)}</option>`);
+      return `<select class="loot-assign" data-lfield="assignedTo" data-li="${idx}" title="Claim it for yourself, or give it back to the party">${opts.join('')}</select>`;
+    }
     state.party.forEach(p => {
       opts.push(`<option value="${esc(p.id)}"${item.assignedTo===p.id?' selected':''}>${esc(p.name)}</option>`);
     });
@@ -634,6 +669,7 @@ registerPanel('loot',{
   },
 
   _itemRow(item, i){
+    if (!this._canEdit(item)) return this._lockedRow(item, i);
     // Who has it is the dropdown on the right. A "→ Name" pill beside the name
     // said the same thing again and took the name's room: with "→ Ulrick
     // Axeborne" in the row, "Handaxe" got a 12px box.
@@ -664,10 +700,28 @@ registerPanel('loot',{
     </div>`;
   },
 
+  // Another character's, on a player's phone: to look at, not to change.
+  _lockedRow(item, i){
+    const who = this._memberName(item.assignedTo) || 'someone';
+    return `<div class="loot-item assigned locked" data-i="${i}" title="${esc(who)}’s — only they or the DM can change it">
+      <span class="loot-drag-handle" aria-hidden="true"></span>
+      <span class="loot-paid-btn" aria-hidden="true"></span>
+      <div class="loot-name">
+        <button class="loot-info-btn" data-lact="info" data-li="${i}" title="View item details">${ICO('i-book-open')}</button>
+        <span class="loot-name-text">${esc(item.name)}</span>
+      </div>
+      <span class="loot-qty loot-ro">${item.qty||1}</span>
+      <span class="loot-val loot-ro">${esc(item.value||'')}</span>
+      <span class="loot-assign loot-ro">${esc(who)}</span>
+      <span class="loot-del-space" aria-hidden="true"></span>
+    </div>`;
+  },
   // Free-form "10 gp" / "50 sp" / "200 cp" → numeric gp. Shared between the
   // per-member and per-group totals.
   _parseGp(s){
-    const str = String(s||'').toLowerCase().trim();
+    // "10sp", "3pp", "25GP": the coin straight after the number. With no
+    // space, \bsp\b never matched, so 10 sp read as 10 gp and 3 pp as 3 gp.
+    const str = String(s||'').toLowerCase().trim().replace(/(\d)\s*(cp|sp|ep|gp|pp)\b/g, '$1 $2');
     if (!str) return 0;
     // Several coins at once — "184 gp 7 sp", as the shop writes a price.
     // Stripping every non-digit below would read that as 1847 sp.
@@ -809,20 +863,20 @@ registerPanel('loot',{
     const view = this._view;
     b.innerHTML=`<div class="loot-panel">
       <div class="loot-summary">
-        ${['cp','sp','ep','gp','pp'].map(c=>`<div class="loot-coin"><div class="l">${c.toUpperCase()}</div><input type="number" id="loot-${c}" value="${this._loot[c]||0}" min="0"></div>`).join('')}
+        ${['cp','sp','ep','gp','pp'].map(c=>`<div class="loot-coin"><div class="l">${c.toUpperCase()}</div><input type="number" id="loot-${c}" value="${this._loot[c]||0}" min="0"${this._canAdd() ? '' : ' readonly'}></div>`).join('')}
       </div>
       <div class="loot-sumbar">
         <span title="Everything converted to gold, and an even share for each party member">Total <strong style="color:var(--warning)">${(+totalGp).toLocaleString(undefined, { maximumFractionDigits: 2 })} gp</strong>
-          · <strong style="color:var(--warning)">${(+(state.party.length ? totalGp / state.party.length : totalGp)).toLocaleString(undefined, { maximumFractionDigits: 2 })}</strong> each</span>
+          · <strong style="color:var(--warning)">${(+(this._sharers().length ? totalGp / this._sharers().length : totalGp)).toLocaleString(undefined, { maximumFractionDigits: 2 })}</strong> each</span>
         <label class="loot-encumbrance-toggle" title="Show a weight column on items and per-member encumbrance subtotals (5e: STR×15 = lbs)">
           <input type="checkbox" id="loot-encumbrance-toggle" ${state.settings?.lootEncumbrance?'checked':''}>
           <span>${ICO('i-scale')} Weight</span>
         </label>
         <span style="flex:1"></span>
-        <button class="btn small" id="loot-roll" title="Roll random treasure on the DMG tables">${ICO('i-dice')} Roll treasure</button>
-        <button class="btn small" id="loot-divvy">Divvy up</button>
+        ${this._isPlayer() ? '' : `<button class="btn small" id="loot-roll" title="Roll random treasure on the DMG tables">${ICO('i-dice')} Roll treasure</button>
+        <button class="btn small" id="loot-divvy">Divvy up</button>`}
       </div>
-      <div class="loot-add-row">
+      <div class="loot-add-row"${this._canAdd() ? '' : ' hidden'}>
         <div class="loot-search-wrap">
           <input type="text" id="loot-new-name" placeholder="Item name or search 5e items..." autocomplete="off" value="${esc(this._searchQ)}">
           <div class="loot-search-dropdown" id="loot-search-results"></div>
@@ -866,7 +920,13 @@ registerPanel('loot',{
     </div>`;
 
     // Coins
-    ['cp','sp','ep','gp','pp'].forEach(c=>{b.querySelector(`#loot-${c}`).addEventListener('change',e=>{this._loot[c]=parseInt(e.target.value)||0;this._save();this._render();});});
+    // (never below nothing: −50 gp was kept as −50)
+    ['cp','sp','ep','gp','pp'].forEach(c=>{b.querySelector(`#loot-${c}`).addEventListener('change',e=>{
+      if (!this._canAdd()){ this._render(); return; }
+      const v = Math.max(0, parseInt(e.target.value)||0), was = +this._loot[c] || 0;
+      if (v === was){ e.target.value = was; return; }
+      this._undoable(c + ' ' + was.toLocaleString() + ' → ' + v.toLocaleString(), () => { this._loot[c] = v; });
+    });});
 
     // View tabs — including the "+ Tab" button (opens new-group modal) and the
     // ⚙ icon inside each custom-tab chip (opens the edit modal for that tab).
@@ -948,9 +1008,10 @@ registerPanel('loot',{
     b.querySelectorAll('[data-lact]').forEach(el=>el.addEventListener('click',e=>{
       e.stopPropagation();
       const i=+el.dataset.li;
+      if (el.dataset.lact !== 'info' && !this._canEdit(this._loot.items[i])) return;
       if(el.dataset.lact==='del'){
-        this._loot.items.splice(i,1);
-        this._save();this._render();
+        const it = this._loot.items[i]; if (!it) return;
+        this._undoable('Removed ' + it.name + (it.qty > 1 ? ' ×' + it.qty : ''), () => { this._loot.items.splice(i,1); });
       } else if (el.dataset.lact==='info'){
         this._openItemDetail(i);
       } else if (el.dataset.lact==='paid'){
@@ -967,7 +1028,10 @@ registerPanel('loot',{
     b.querySelectorAll('[data-lfield]').forEach(inp=>{
       inp.addEventListener('change', e => {
         const i=+e.target.dataset.li, f=e.target.dataset.lfield;
+        if (!this._canEdit(this._loot.items[i])){ this._render(); return; }
         let v = e.target.value;
+        // a player claims for themselves, or gives back — no one else
+        if (f==='assignedTo' && this._isPlayer()){ const me = this._me(); if (v && (!me || v !== me.id) && !this._assignedToGroup(v)){ this._render(); return; } }
         if (f==='qty') v = Math.max(1, parseInt(v)||1);
         else if (f==='assignedTo') v = v || null;
         else if (f==='weight'){
@@ -986,10 +1050,15 @@ registerPanel('loot',{
           if (!trimmed){ e.target.value = this._loot.items[i].name; return; }
           v = trimmed;
         }
+        if (f==='assignedTo'){
+          const it = this._loot.items[i], who = this._memberName(v) || 'the party';
+          this._undoable(it.name + ' → ' + who, () => { it.assignedTo = v; });
+          return;
+        }
         this._loot.items[i][f]=v;
         this._save();
         // Re-render so pills / counts / totals refresh.
-        if (f==='assignedTo' || f==='qty' || f==='weight') this._render();
+        if (f==='qty' || f==='weight') this._render();
       });
     });
     // Enter on the name input commits + moves focus off (so it feels like a
@@ -1009,7 +1078,7 @@ registerPanel('loot',{
     b.querySelector('#loot-roll')?.addEventListener('click',()=>this._openTreasureRoller());
 
     // Divvy
-    b.querySelector('#loot-divvy').addEventListener('click',()=>{
+    b.querySelector('#loot-divvy')?.addEventListener('click',()=>{
       // The player characters only: a rival or foe kept in the party list
       // isn't owed a share (it was split between everyone in it).
       const pcs = typeof sktPlayerParty === 'function' ? sktPlayerParty() : state.party;

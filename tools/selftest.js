@@ -24487,6 +24487,62 @@ for (const cls of Object.keys(rule)) for (let L = 1; L <= 20; L++) for (const sc
         try { closePanel('encounter'); } catch(e){}
       }
     }
+    // -- Round 445: loot — values written without a space ("10sp", "3pp") count right; taking an item out, a coin edit, a claim and rolled treasure can be undone; coins never below 0; "each" is the same share Divvy up pays; two devices' coin changes both count --
+    if (!PLAYER){
+      const L = panelDefs.loot;
+      let keep = null; const kt = window.showToast, kc = window.showConfirm, km = window.showModal;
+      try {
+        window.showToast = () => {};
+        openPanel('loot'); await sleep(400);
+        keep = JSON.stringify(L._loot); const P0 = state.party;
+        ok('values: "10sp" is 1 gp, "3pp" 30, "25GP" 25 (no space; 10sp read as 10 gp)', L._parseGp('10sp') === 1 && L._parseGp('3pp') === 30 && L._parseGp('25GP') === 25 && L._parseGp('10 sp') === 1 && L._parseGp('184 gp 7 sp') === 184.7);
+        L._loot = { cp: 0, sp: 0, ep: 0, gp: 100, pp: 0, items: [{ id: 'r445a', name: 'r445 Rope', qty: 1, value: '1 gp', assignedTo: null }, { id: 'r445b', name: 'r445 Lantern', qty: 2, value: '5gp', assignedTo: null }], tabGroups: [] };
+        L._save(); L._render(); await sleep(20);
+        const q = s => L._body.querySelector(s);
+        q('[data-lact="del"][data-li="0"]').click(); await sleep(20);
+        ok('× takes the rope out…', L._loot.items.length === 1 && L._loot.items[0].name === 'r445 Lantern');
+        sktUndo(); await sleep(40);
+        ok('…and Undo puts it back (there was no way back)', L._loot.items.length === 2 && L._loot.items[0].name === 'r445 Rope' && [...L._body.querySelectorAll('.loot-name-input')].some(i => i.value === 'r445 Rope'));
+        const gp = q('#loot-gp'); gp.value = '-50'; gp.dispatchEvent(new Event('change')); await sleep(20);
+        ok('a coin typed as −50 is 0 (it kept −50)', L._loot.gp === 0);
+        sktUndo(); await sleep(40);
+        ok('…a coin edit can be undone', L._loot.gp === 100);
+        // claim, undo
+        const pc = (state.party || [])[0];
+        if (pc){
+          const sel = q('.loot-assign[data-li="1"]'); sel.value = pc.id; sel.dispatchEvent(new Event('change')); await sleep(20);
+          ok('a claim: the lantern is ' + pc.name + '’s…', L._loot.items[1].assignedTo === pc.id);
+          sktUndo(); await sleep(40);
+          ok('…undone: the party’s again', !L._loot.items[1].assignedTo);
+        }
+        // treasure, undo
+        L._lootTables = L._lootTables || null;
+        const T = await L._ensureLootTables();
+        if (T){
+          window.showModal = async () => ({ kind: 'hoard', band: '5', edition: 'DMG' });
+          window.showConfirm = async () => true;
+          const n0 = L._loot.items.length, g0 = L._loot.gp;
+          L._openTreasureRoller(); await sleep(300);
+          const added = L._loot.items.length !== n0 || L._loot.gp !== g0;
+          sktUndo(); await sleep(40);
+          ok('rolled treasure added, then Undo: the loot as it was', added && L._loot.items.length === n0 && L._loot.gp === g0, n0 + '/' + L._loot.items.length);
+        }
+        // each = Divvy's share (the player characters, not a rival)
+        state.party = (P0 || []).slice(0, 3).concat([{ id: 'r445rival', name: 'r445 Rival', foe: true }]);
+        L._loot.gp = 300; L._render(); await sleep(20);
+        const each = (L._body.querySelector('.loot-sumbar').textContent.match(/·\s*([\d,.]+)\s*each/) || [])[1];
+        ok('“each”: shared among the player characters, as Divvy up pays (a rival kept in the list isn’t owed)', each === '100', each + ' among ' + L._sharers().length);
+        state.party = P0;
+        // two devices
+        const m = JSON.parse(_mergeJsonStr(JSON.stringify({ gp: 100, items: [] }), JSON.stringify({ gp: 150, items: [] }), JSON.stringify({ gp: 90, items: [] }), 'skt-loot-v1'));
+        ok('the DM adds 50 gp while a player spends 10: 140 (one of the two was lost)', m.gp === 140, m.gp);
+      } catch(e){ ok('round 445 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
+      finally {
+        window.showToast = kt; window.showConfirm = kc; window.showModal = km;
+        if (keep){ L._loot = JSON.parse(keep); L._save(); }
+        try { closePanel('loot'); } catch(e){}
+      }
+    }
     // -- Class features: represented, not just text ------------------------
     {
       try {
@@ -28433,6 +28489,48 @@ for (const cls of Object.keys(rule)) for (let L = 1; L <= 20; L++) for (const sc
         try { B._tokCardOff(); } catch(e){}
         if (keep){ B._tokens = keep.t; state.combatants = keep.c; state.combatRound = keep.r; state.activeCombatantId = keep.a; B._fog = keep.f; B._drawings = keep.d; B._gridType = keep.g; }
         try { B._render(); } catch(e){}
+        paTab = keepTab; try { paRender(); } catch(e){}
+      }
+    }
+    // -- Round 446: loot on a player's phone — the party's coins and unclaimed loot are everyone's, and they can claim from it or give their own back; another character's things are theirs (shown, not changeable), and rolling treasure and paying out are the DM's --
+    if (PLAYER){
+      const keepTab = paTab, L = panelDefs.loot;
+      let keep = null, keepShared = null;
+      try {
+        if (paMyIdx() < 0) paSetPc('zoey');
+        const me = paPc(), other = (state.party || []).find(p => p.id !== me.id);
+        keepShared = (state.sharedPanels || []).slice(); state.sharedPanels = keepShared.concat(['loot']);
+        paTab = 'loot'; paRender(); await sleep(600);
+        keep = L._loot ? JSON.stringify(L._loot) : localStorage.getItem('skt-loot-v1');
+        L._loot = { cp: 0, sp: 0, ep: 0, gp: 100, pp: 0, items: [
+          { id: 'r446a', name: 'r446 Rope', qty: 1, value: '1 gp', assignedTo: null },
+          { id: 'r446b', name: 'r446 Locket', qty: 1, value: '25 gp', assignedTo: me.id },
+          { id: 'r446c', name: 'r446 Half Plate', qty: 1, value: '750 gp', assignedTo: other ? other.id : 'nobody' } ], tabGroups: [] };
+        L._save(); L._render(); await sleep(30);
+        const scr = document.getElementById('pa-screen'), row = id => scr.querySelector('.loot-item[data-i="' + L._loot.items.findIndex(x => x.id === id) + '"]');
+        ok('phone: no Roll treasure, no Divvy up (paying out writes into every sheet)', !scr.querySelector('#loot-roll') && !scr.querySelector('#loot-divvy'));
+        ok('…the party’s rope: theirs to change, delete or claim', !!row('r446a').querySelector('[data-lact="del"]') && !!row('r446a').querySelector('.loot-name-input'));
+        const opts = [...row('r446a').querySelectorAll('.loot-assign option')].map(o => o.value);
+        ok('…and the only one they can give it to is themselves', opts.length === 2 && opts[0] === '' && opts[1] === me.id, JSON.stringify(opts));
+        ok('their own locket: theirs to change', !!row('r446b').querySelector('[data-lact="del"]'));
+        const hp = row('r446c');
+        ok('another character’s half plate: shown, nothing to change (no ×, no rename, no reassigning)', !!hp && hp.classList.contains('locked') && !hp.querySelector('[data-lact="del"]') && !hp.querySelector('input,select') && hp.textContent.includes(other ? other.name : ''), hp && hp.outerHTML.slice(0, 160));
+        // claim the rope
+        const sel = row('r446a').querySelector('.loot-assign'); sel.value = me.id; sel.dispatchEvent(new Event('change')); await sleep(30);
+        ok('claiming the rope: it’s theirs', L._loot.items.find(x => x.id === 'r446a').assignedTo === me.id);
+        // a stale control can't take another's
+        const keepCan = L._canEdit; L._canEdit = () => true; L._render(); L._canEdit = keepCan; await sleep(20);
+        const stale = scr.querySelector('.loot-item[data-i="2"] .loot-assign');
+        if (stale){ const o = document.createElement('option'); o.value = me.id; stale.appendChild(o); stale.value = me.id; stale.dispatchEvent(new Event('change')); await sleep(20); }
+        ok('…and a control left over from before can’t take another character’s', L._loot.items.find(x => x.id === 'r446c').assignedTo !== me.id);
+        // coins: everyone's
+        L._render(); await sleep(20);
+        const gp = scr.querySelector('#loot-gp'); gp.value = '90'; gp.dispatchEvent(new Event('change')); await sleep(20);
+        ok('the party’s coins: a player can spend from them', L._loot.gp === 90);
+      } catch(e){ ok('round 446 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
+      finally {
+        if (keep != null){ L._loot = JSON.parse(keep); L._save(); }
+        if (keepShared) state.sharedPanels = keepShared;
         paTab = keepTab; try { paRender(); } catch(e){}
       }
     }

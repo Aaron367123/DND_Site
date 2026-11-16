@@ -953,7 +953,7 @@ function _pushWholeKey(k, val){
     // Null on the first pass is the SDK's empty cache, not the server: write
     // ours, and Firebase re-runs this with the real value if it differs.
     if (cur == null || cur === val || cur === base) return val;
-    return _mergeJsonStr(base, val, cur);
+    return _mergeJsonStr(base, val, cur, k);
   }, null, false).then(r => {
     if (!r || !r.committed) throw new Error('transaction not committed');
     const v = r.snapshot ? r.snapshot.val() : val;
@@ -1271,13 +1271,17 @@ function _mergeRecordStr(baseStr, mineStr, theirsStr, opts){
 // String wrapper. Any parse failure falls back to the remote value: the server
 // copy is the one every other client already has, so converging on it beats
 // keeping unparseable local bytes.
-function _mergeJsonStr(baseStr, mineStr, theirsStr){
+// Whole keys whose fields are counters: both sides' changes are applied, as
+// a combatant's hit points are. The party's coins: the DM adds 50 gp while a
+// player spends 10, and one of the two was lost (100 → 90, not 140).
+const _WHOLE_MERGE = { 'skt-loot-v1': { delta: new Set(['cp', 'sp', 'ep', 'gp', 'pp']) } };
+function _mergeJsonStr(baseStr, mineStr, theirsStr, key){
   let mine, theirs, base;
   try { mine = JSON.parse(mineStr); theirs = JSON.parse(theirsStr); }
   catch(e){ return theirsStr; }
   let baseKnown = false;
   try { if (baseStr != null){ base = JSON.parse(baseStr); baseKnown = true; } } catch(e){ baseKnown = false; }
-  try { return JSON.stringify(_merge3(base, mine, theirs, baseKnown)); }
+  try { return JSON.stringify(_merge3(base, mine, theirs, baseKnown, key ? _WHOLE_MERGE[key] : undefined)); }
   catch(e){ return theirsStr; }
 }
 
@@ -1333,7 +1337,7 @@ function _applyRemoteKey(key, fbVal) {
   if (_dirtyKeys.has(key) && key !== 'skt-battlemap-v1' && !_ATOMIC_KEYS.has(key)){
     const localVal = localStorage.getItem(key);
     if (localVal != null && localVal !== fbVal){
-      applyVal = _mergeJsonStr(_lastServer[key], localVal, fbVal);
+      applyVal = _mergeJsonStr(_lastServer[key], localVal, fbVal, key);
       mergedOurs = (applyVal !== fbVal);
     }
   }

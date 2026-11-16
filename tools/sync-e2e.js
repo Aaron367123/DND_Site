@@ -567,6 +567,23 @@ const window = {};
       await pl.offline(false);
       return lat(await W(dm, 'return ' + hpOf('zoey') + ' === 11', 45000));
     });
+    await step('loot coins: the phone spends 10 gp offline while the DM adds 50 → both count, everywhere', async () => {
+      // the same starting purse on both
+      await dm.ev("openPanel('loot'); await new Promise(r=>setTimeout(r,400)); const L = panelDefs.loot; L._loot.gp = 100; L._save(); L._render(); return 1");
+      const same = await W(pl, "return JSON.parse(localStorage.getItem('skt-loot-v1') || '{}').gp === 100 ? 1 : 0", 10000);
+      if (same == null) return { ok: false, why: 'the phone never had the 100 gp' };
+      await pl.offline(true); await sleep(1000);
+      // the phone: 10 gp spent (as its Loot tab does it)
+      await pl.ev("const L = panelDefs.loot; if (!L._loot){ L._loot = JSON.parse(localStorage.getItem('skt-loot-v1')); } L._loot.gp = (+L._loot.gp || 0) - 10; L._save(); return 1");
+      await dm.ev("const L = panelDefs.loot; L._loot.gp = (+L._loot.gp || 0) + 50; L._save(); L._render(); return 1");
+      await sleep(2500);
+      await pl.offline(false);
+      const t = await W(dm, "return JSON.parse(localStorage.getItem('skt-loot-v1') || '{}').gp === 140 ? 1 : 0", 45000);
+      if (t == null) return { ok: false, why: 'the DM ended at ' + await dm.ev("return JSON.parse(localStorage.getItem('skt-loot-v1') || '{}').gp") + ' gp, not 140' };
+      const p = await W(pl, "return JSON.parse(localStorage.getItem('skt-loot-v1') || '{}').gp === 140 ? 1 : 0", 20000);
+      if (p == null) return { ok: false, why: 'the phone ended at ' + await pl.ev("return JSON.parse(localStorage.getItem('skt-loot-v1') || '{}').gp") + ' gp, not 140' };
+      return lat(t);
+    });
     await step('DM long rest → phone back to full', async () => {
       await dm.ev("panelDefs.party._applyLongRest(); return 1");
       const want = await dm.ev('return ' + hpOf('zoey'));
