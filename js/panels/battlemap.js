@@ -2652,7 +2652,8 @@ registerPanel('battlemap',{
   _joinFight(list){
     const C = (typeof panelDefs !== 'undefined') && panelDefs.combat;
     if (!C || !Array.isArray(list) || !list.length) return 0;
-    const before = new Map((this._tokens || []).map(k => [k.id, { label: k.label, baseName: k.baseName, cid: k.cid }]));
+    const KEEP = ['label', 'baseName', 'cid', 'portrait', 'icon', 'size', 'color'];
+    const before = new Map((this._tokens || []).map(k => [k.id, Object.fromEntries(KEEP.map(f => [f, k[f]]))]));
     let added = 0;
     // The fighter just added is THIS token: whatever the tracker's own
     // placing did with it (took another marker of that name, or put down a
@@ -2664,11 +2665,11 @@ registerPanel('battlemap',{
         if (!k || k === t || k.cid !== c.id) continue;
         const w = before.get(k.id);
         if (!w){ this._tokens.splice(i, 1); continue; }
-        if (w.cid != null) k.cid = w.cid; else delete k.cid;
-        k.label = w.label; if (w.baseName) k.baseName = w.baseName; else delete k.baseName;
+        KEEP.forEach(f => { if (w[f] != null) k[f] = w[f]; else delete k[f]; });
       }
       t.cid = c.id; t.label = c.name;
       if (c.baseName) t.baseName = c.baseName; else delete t.baseName;
+      sktDressToken(t, c);
       added++;
     };
     const one = (t, d) => {
@@ -8702,6 +8703,20 @@ function _sktCombatantSize(c){
     return (raw && raw.size) || '';
   } catch(e){ return ''; }
 }
+// A marker the DM put down by hand, joining the fight as creature `c`: it
+// takes what a token the tracker places would have — the stat block's
+// picture, its size (an ogre is Large), its side's colour — where the DM
+// hasn't chosen one: a picture of their own, a size they changed, a colour
+// other than the plain grey + NPC gives. An ogre marker stayed one square,
+// grey and faceless in the fight. Not a character's (theirs is the sheet's).
+function sktDressToken(t, c){
+  if (!t || !c || c.isPC || t.isPC) return;
+  const f = _sktTokenForNewCombatant(c, 0, 0);
+  if (!t.picOwn && !t.portrait && f.portrait) t.portrait = f.portrait;
+  if (!t.icon && f.icon) t.icon = f.icon;
+  if ((t.size == null || +t.size === 1) && f.size) t.size = f.size;
+  if (!t.color || t.color === '#696969') t.color = f.color;
+}
 function _sktTokenForNewCombatant(c, x, y){
   const isPC = !!c.isPC;
   const glyph = (typeof CLASS_ICONS !== 'undefined'
@@ -8787,7 +8802,7 @@ function sktReconcileTokens(tokens, combatants, cols, rows, cs, centre, opts){
     let t = sktTokenForCombatant(tokens, c);
     if (t && c.id != null && t.cid !== c.id){
       if (othersOf(t, c)) t = tokens.find(k => k && k.x != null && !othersOf(k, c) && !k.dead && named(k, c)) || null;
-      if (t){ t.cid = c.id; renamed++; }
+      if (t){ t.cid = c.id; sktDressToken(t, c); renamed++; }
     }
     if (t){
       // A linked token follows its combatant's name — the tracker is the

@@ -23935,6 +23935,43 @@ for (const cls of Object.keys(rule)) for (let L = 1; L <= 20; L++) for (const sc
         closePanel('battlemap');
       }
     }
+    // -- Round 431: a marker joining the fight takes its stat block's look — the picture, the size (an ogre is Large), the enemy's colour — unless the DM chose them; Add to the fight leaves another marker the tracker took as it was --
+    if (!PLAYER){
+      const B = panelDefs.battlemap, C = panelDefs.combat;
+      let keepT = null, keepC = null, keepR, keepA, saved = false;
+      try {
+        openPanel('battlemap'); await sleep(700);
+        for (let i = 0; i < 40 && !(typeof _5eData !== 'undefined' && _5eData.length); i++) await sleep(250);
+        keepT = B._tokens.slice(); keepC = (state.combatants || []).slice(); keepR = state.combatRound; keepA = state.activeCombatantId; saved = true;
+        const cs = B._csScreen();
+        const ogre = sktMonsterPool('encounter').find(d => d.name === 'Ogre' && d._raw && /large/i.test(String(d._raw.size)));
+        state.combatants = []; state.combatRound = 0; state.activeCombatantId = null; save();
+        const mine = 'data:image/png;base64,' + btoa('r431-own');
+        B._tokens = [{ id: 't431a', label: 'Ogre', x: 5 * cs, y: 5 * cs, size: 1, color: '#696969' },
+                     { id: 't431b', label: 'Ogre', x: 9 * cs, y: 5 * cs, size: 3, color: '#2255aa', portrait: mine, picOwn: true }];
+        B._renderTokens(); B._saveMap(); await sleep(40);
+        C.addMonster(ogre); await sleep(250); C.addMonster(ogre); await sleep(250);
+        const a = B._tokens.find(t => t.id === 't431a'), b = B._tokens.find(t => t.id === 't431b'), c1 = B._combatantFor(a);
+        ok('an ogre marker joining the fight: the ogre’s picture, Large, the enemy’s red', !!c1 && a.portrait === c1.portrait && /Ogre/.test(a.portrait) && +a.size === 2 && a.color === '#993333', JSON.stringify([a.portrait, a.size, a.color]));
+        ok('…one the DM gave a picture, a size and a colour of their own keeps them', b.portrait === mine && +b.size === 3 && b.color === '#2255aa' && !!B._combatantFor(b));
+        // Add to the fight: the tracker takes the first ogre marker; the one clicked is the one that joins; the other is as it was
+        state.combatants = []; save();
+        B._tokens = [{ id: 't431c', label: 'Ogre', x: 4 * cs, y: 8 * cs, size: 1, color: '#696969' }, { id: 't431d', label: 'Ogre', x: 8 * cs, y: 8 * cs, size: 1, color: '#696969' }];
+        B._renderTokens(); B._saveMap(); await sleep(40);
+        B._joinFight([B._tokens[1]]); await sleep(300);
+        document.getElementById('mp-back') && [...document.querySelectorAll('#mp-back .mp-row')].find(r => r.querySelector('.mp-row-name').firstChild.textContent.trim() === 'Ogre')?.click();
+        document.querySelector('#mp-back [data-mp="add"]')?.click(); await sleep(300);
+        const cc = B._tokens.find(t => t.id === 't431c'), dd = B._tokens.find(t => t.id === 't431d');
+        ok('Add to the fight on the second ogre marker: that one joins, dressed; the first is left as it was, grey, one square, no link', !!dd.cid && +dd.size === 2 && !!dd.portrait && !cc.cid && +cc.size === 1 && !cc.portrait && cc.color === '#696969' && B._tokens.length === 2,
+          JSON.stringify(B._tokens.map(t => [t.id, t.cid || '', t.size, t.portrait || '', t.color])));
+      } catch(e){ ok('round 431 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
+      finally {
+        document.getElementById('mp-back')?.remove();
+        if (saved){ B._tokens = keepT; state.combatants = keepC; state.combatRound = keepR; state.activeCombatantId = keepA; try { save(); B._saveMap(); } catch(e){} }
+        try { B._closePanel(); B._render(); } catch(e){}
+        closePanel('battlemap');
+      }
+    }
     // -- Class features: represented, not just text ------------------------
     {
       try {
