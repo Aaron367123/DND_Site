@@ -34,7 +34,7 @@
  */
 'use strict';
 
-const BUILD = 'abc3bf9e9d';
+const BUILD = '52b5f3bb7c';
 const PRECACHE = [
   'skt-workspace.html',
   'styles/main.css?v=c823a7dff3',
@@ -46,14 +46,14 @@ const PRECACHE = [
   'js/generated/token-index.js?v=2840810fc7',
   'js/generated/species-portraits.js?v=56581792b0',
   'js/core/campaign.js?v=171a617f55',
-  'js/core/utils.js?v=30b9be43d5',
+  'js/core/utils.js?v=a03e2ba359',
   'js/ui/dice-fx.js?v=1acff2694d',
   'js/core/state.js?v=8030e53453',
   'js/core/undo.js?v=63ed223198',
   'js/features/roll-requests.js?v=2218dcc003',
   'js/features/monster-picker.js?v=7030540ec7',
   'js/core/window-manager.js?v=e2aed9109b',
-  'js/panels/combat.js?v=abf75dc9ea',
+  'js/panels/combat.js?v=20828f6dd7',
   'js/panels/attacks.js?v=99097afcf2',
   'js/generated/reactions.js?v=0e74ab8786',
   'js/generated/rules.js?v=8efb8beae9',
@@ -70,7 +70,7 @@ const PRECACHE = [
   'js/panels/quests.js?v=36e3261d56',
   'js/panels/factions.js?v=39b868d6d9',
   'js/panels/homebrew.js?v=3e3c4f0d84',
-  'js/panels/battlemap.js?v=82d34103a3',
+  'js/panels/battlemap.js?v=a1b40e68f5',
   'js/panels/npc-library.js?v=84a549ccbc',
   'js/panels/bestiary.js?v=55d56a8c0d',
   'js/panels/content-panel.js?v=1a060dfd0b',

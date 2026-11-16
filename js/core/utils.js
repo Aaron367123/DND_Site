@@ -277,6 +277,17 @@ function bestiaryPortraitPath(p) {
 // or null when it has none (TOKEN_NAME_MISSES) or the index hasn't loaded.
 // Preferred over the token derived from its art, which is often a group's
 // picture shared by several monsters (tools/make-token-index.js).
+// A monster's round picture: its own token (a Berserker Commander's, not
+// the Berserkers' group art), else the head-shot crop of its art — the full
+// art for the ~10% with no crop, so a stored path never 404s. Relative
+// 'img/…' on purpose: it's stored and synced, and renderIcon() runs it
+// through assetUrl(). One rule for the tracker and the map's markers.
+function sktMonsterPortrait(m){
+  if (!m) return null;
+  const own = typeof bestiaryOwnToken === 'function' ? bestiaryOwnToken(m.name, m._source) : null;
+  if (own) return 'img/' + own;
+  return m._img ? 'img/' + bestiaryPortraitPath(m._img) : null;
+}
 function bestiaryOwnToken(name, source) {
   const misses = window.TOKEN_NAME_MISSES;
   if (!misses || !name || !source) return null;

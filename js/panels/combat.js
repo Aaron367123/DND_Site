@@ -3711,19 +3711,8 @@ registerPanel('combat',{
     const displayName = already ? `${m.name} ${this._nextGroupSuffix(m.name)}` : m.name;
     // Its own token first (a Berserker Commander, not the Berserkers' group
     // picture its art is); then the token derived from its art.
-    const own = typeof bestiaryOwnToken === 'function' ? bestiaryOwnToken(m.name, m._source) : null;
-    let portrait = own ? 'img/' + own : null;
-    if (!portrait && m._img){
-      // Prefer the head-shot token over the full creature art for the small
-      // round portrait. Tokens live alongside the fluff at
-      // img/bestiary/tokens/<source>/<name>.webp.
-      // bestiaryPortraitPath falls back to the full art for the ~10% of
-      // monsters that have no token crop, so we never persist a path that
-      // 404s. Stays a RELATIVE 'img/…' value on purpose — it's stored on the
-      // combatant and synced. renderIcon() runs it through assetUrl() when
-      // drawing, so it resolves to the CDN without persisting a host.
-      portrait = 'img/' + bestiaryPortraitPath(m._img);
-    }
+    // (see sktMonsterPortrait)
+    const portrait = sktMonsterPortrait(m);
     // Auto-detect legendary actions from the 5etools entry. 5etools data
     // exposes them at m._raw.legendary_actions (array). Default count is 3
     // per 5e baseline; if the stat block declares more in its description

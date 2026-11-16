@@ -23972,6 +23972,46 @@ for (const cls of Object.keys(rule)) for (let L = 1; L <= 20; L++) for (const sc
         closePanel('battlemap');
       }
     }
+    // -- Round 432: + NPC named for a monster in the books looks like one from the start (its picture, its size, the enemy's colour; Large on a grid corner); a name that isn't one stays the plain grey marker; the tracker's monsters still get the same picture --
+    if (!PLAYER){
+      const B = panelDefs.battlemap;
+      let keepT = null, keepSnap, keepModal = window.showModal, saved = false;
+      try {
+        openPanel('battlemap'); await sleep(700);
+        for (let i = 0; i < 40 && !(typeof _5eData !== 'undefined' && _5eData.length); i++) await sleep(250);
+        keepT = B._tokens.slice(); keepSnap = B._snapToGrid; saved = true;
+        B._tokens = []; B._snapToGrid = true; B._tool = 'add-npc'; B._render(); await sleep(100);
+        const cs = B._csScreen(), o = B._gridOffPx();
+        const place = async (label, cx, cy) => {
+          window.showModal = async () => ({ label, hid: false });
+          const cv = B._body.querySelector('#map-canvas'), st = B._body.querySelector('#map-stage').getBoundingClientRect(), z = B._screenScale();
+          B._body.querySelector('#map-scroll').scrollTo(0, 0); await sleep(30);
+          const r = B._body.querySelector('#map-stage').getBoundingClientRect();
+          cv.dispatchEvent(new MouseEvent('click', { clientX: Math.round(r.left + cx * z), clientY: Math.round(r.top + cy * z), bubbles: true }));
+          await sleep(80);
+          return B._tokens[B._tokens.length - 1];
+        };
+        const og = await place('Ogre', 5.3 * cs + o.x, 4.4 * cs + o.y);
+        const ogM = sktMonsterPool('encounter').find(d => d.name === 'Ogre');
+        const f = v => ((((v) / cs) % 1) + 1) % 1;
+        ok('+ NPC named “Ogre”: the ogre’s picture, Large, red — before any fight', !!og && og.label === 'Ogre' && og.portrait === sktMonsterPortrait(ogM) && +og.size === 2 && og.color === '#993333' && !og.cid, JSON.stringify(og));
+        ok('…Large, so set on a grid corner', !!og && Math.min(f(og.x - o.x), 1 - f(og.x - o.x)) < 0.01 && Math.min(f(og.y - o.y), 1 - f(og.y - o.y)) < 0.01, og && [og.x / cs, og.y / cs].join(','));
+        const g3 = await place('Goblin 3', 9.5 * cs + o.x, 4.5 * cs + o.y);
+        ok('…“Goblin 3”: a goblin, one square, in the middle of it', !!g3 && /Goblin/.test(g3.portrait || '') && +g3.size === 1 && Math.abs(f(g3.x - o.x) - 0.5) < 0.01);
+        const x = await place('Mysterious Stranger', 12.5 * cs + o.x, 4.5 * cs + o.y);
+        ok('…a name that isn’t a monster: the plain grey marker', !!x && !x.portrait && x.color === '#696969' && +x.size === 1);
+        { const d = sktMonsterPool('encounter').find(d => d._img && bestiaryOwnToken(d.name, d._source) && ('img/' + bestiaryOwnToken(d.name, d._source)) !== ('img/' + bestiaryPortraitPath(d._img)));
+          ok('a monster with a token of its own (not its group art): that token, on the marker and in the tracker', !d || sktMonsterPortrait(d) === 'img/' + bestiaryOwnToken(d.name, d._source), d && d.name); }
+        ok('the tracker’s picture for a monster is the same one (one rule)', (() => { const keep = state.combatants.slice(); panelDefs.combat.addMonster(ogM, { quiet: true }); const c = state.combatants[state.combatants.length - 1]; const same = c.portrait === sktMonsterPortrait(ogM) && !!c.portrait; state.combatants = keep; save(); return same; })());
+      } catch(e){ ok('round 432 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
+      finally {
+        window.showModal = keepModal;
+        if (saved){ B._tokens = keepT; B._snapToGrid = keepSnap; try { B._saveMap(); } catch(e){} }
+        B._tool = '';
+        try { B._closePanel(); B._render(); } catch(e){}
+        closePanel('battlemap');
+      }
+    }
     // -- Class features: represented, not just text ------------------------
     {
       try {

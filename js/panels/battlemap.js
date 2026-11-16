@@ -6201,6 +6201,18 @@ registerPanel('battlemap',{
         if(!r2||!r2.label)return;
         const tk = {id:uid(),label:r2.label,x:cx,y:cy,isPC,color:'#696969',size:1,dead:false};
         if (r2.hid) tk.hidden = true;
+        // Named for a monster in the books ("Goblin", "Ogre 2"): it looks like
+        // one from the start — its picture, its size, the enemy's colour —
+        // not a grey disc until it joins the fight. Large is set on a grid
+        // corner, as a dragged one is.
+        if (!isPC && typeof sktMonsterPool === 'function'){
+          const nm = String(r2.label).trim().replace(/\s+\d+$/, '').toLowerCase();
+          const m = sktMonsterPool('encounter').find(d => String(d.name).toLowerCase() === nm);
+          if (m){
+            sktDressToken(tk, { name: m.name, isPC: false, cls: 'enemy', portrait: sktMonsterPortrait(m), size: m._raw && m._raw.size ? String(m._raw.size) : undefined });
+            if (wantSnap && +tk.size !== 1){ const sp = this._snapPt(tk.x, tk.y, tk.size); tk.x = sp.x; tk.y = sp.y; }
+          }
+        }
         this._tokens.push(tk);
         this._renderTokens();this._saveMap();
       });
