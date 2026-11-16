@@ -918,6 +918,14 @@ const _MAX_RETRIES = 4;
 // and until now no whole key was both DM-authored and mounted in the player
 // view, so there was nothing to express it against.
 const _DM_ONLY_KEYS = new Set(['skt-time-v1', 'skt-weather-v2', 'skt-handouts-v1', 'skt-quests-v1', 'skt-factions-v1', 'skt-homebrew-v1']);
+// Keys a player's device never needs and must not hold: the DM's own plans.
+// Every device listened to every key, so the encounters being built — and
+// their notes ("the kraken priest stays in the water") — sat in each
+// player's phone's storage (measured: both phones had them within 6 s).
+// No phone panel shows them. A phone neither listens for these nor sends
+// them; a second DM screen still gets them.
+const _DM_PRIVATE_KEYS = new Set(['skt-enc-v1']);
+function _notForThisDevice(k){ return _DM_PRIVATE_KEYS.has(k) && _isPlayerMode(); }
 
 // Push one whole key; resolves to the value the server ended up holding.
 //
@@ -967,6 +975,7 @@ function _flushDirtyKeys() {
     // clock. The panels are read-only over there, but a stale local copy
     // does not need a click to be pushed.
     if (_DM_ONLY_KEYS.has(k) && _isPlayerMode()) return Promise.resolve(true);
+    if (_notForThisDevice(k)) return Promise.resolve(true);
     const val = localStorage.getItem(k);
     // Remember exactly what we pushed so the listener can drop the one echo
     // that comes back to us. (Don't use a `localStorage===fbVal` check for
@@ -1667,6 +1676,7 @@ function _startRealtime() {
   // during play, when most edits touch a single key (HP, token positions, etc).
   SKT_SYNC_KEYS.forEach(k => {
     if (_ENTITY_KEYS[k]) return; // handled by the subtree listeners below
+    if (_notForThisDevice(k)) return; // the DM's plans: not on a phone
     _attachKeyListener(k);
   });
 
@@ -1799,6 +1809,7 @@ function _refreshAll(force, db){
       }).catch(()=>{});
       return;
     }
+    if (_notForThisDevice(k)) return;
     db.ref(_wholePath(k)).once('value').then(snap => {
       if (!snap.exists()) return;
       let v = snap.val();

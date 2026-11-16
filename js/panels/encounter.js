@@ -43,6 +43,18 @@ registerPanel('encounter',{
     this._loaded = true;
     try{const r=localStorage.getItem('skt-enc-v1');if(r){const d=JSON.parse(r);this._monsters=d.monsters||[];this._partyLevel=d.partyLevel||6;this._partySize=d.partySize||state.party.length||5;this._saved=Array.isArray(d.saved)?d.saved:[];if(d.system==='2014'||d.system==='2024')this._system=d.system;this._out=Array.isArray(d.out)?d.out:[];this._cur=d.cur||null;this._notes=typeof d.notes==='string'?d.notes:'';if(['avg','roll','mine'].includes(d.hpMode))this._hpMode=d.hpMode;}}catch(e){}
   },
+  // UNDO. Taking a monster out, Clear, deleting a saved encounter and Scale
+  // to had none (Ctrl+Z or the toast's Undo): a stray × lost the row. The
+  // change is made, saved and drawn, and goes into the app's undo history.
+  _undoable(label, fn){
+    const snap = () => JSON.stringify({ m: this._monsters, s: this._saved, c: this._cur, n: this._notes });
+    const before = snap(); fn(); const after = snap();
+    this._save(); if (this._body) this._render();
+    if (before === after) return;
+    const put = j => { const o = JSON.parse(j); if (!this._loaded) this._load(); this._monsters = o.m; this._saved = o.s; this._cur = o.c; this._notes = o.n; this._save(); if (this._body) this._render(); };
+    if (typeof sktUndoRecordCustom === 'function') sktUndoRecordCustom(label, () => put(before), () => put(after));
+    else if (typeof showToast === 'function') showToast(label);
+  },
   // From a stat block anywhere (search, the Bestiary): into the encounter
   // being built, open or not. The same name and book adds to its row.
   addEntry(d, n){
@@ -107,7 +119,9 @@ registerPanel('encounter',{
     // one of a name: another with this name is replaced
     this._saved = this._saved.filter(s => s.id !== rec.id && (s.name||'').toLowerCase() !== lc);
     this._saved.unshift(rec);
-    if (this._saved.length > 30) this._saved.length = 30;
+    // No cap. There was one of 30, and the 31st save threw the oldest away
+    // without a word; a saved encounter is a few hundred characters and the
+    // whole key may be 2,000,000.
     this._cur = rec.id;
     this._save(); this._render();
     if (typeof showToast==='function') showToast('Saved “' + name + '”');
@@ -119,7 +133,10 @@ registerPanel('encounter',{
   // characters (not rivals), each at their level, ticked in or out of this
   // fight. With no party, the typed level and size as before.
   _members(){ return ((typeof state !== 'undefined' && state.party) || []).filter(p => p && !p.foe); },
-  _lvlOf(p){ const n = parseInt(p && (p.level || (p.sheet && p.sheet.level)), 10); return n >= 1 ? Math.min(20, n) : Math.min(Math.max(this._partyLevel, 1), 20); },
+  _lvlOf(p){ const n = this._ownLvl(p); return n || Math.min(Math.max(this._partyLevel, 1), 20); },
+  // Their own level, or 0 when their sheet has none: they were counted at
+  // the builder's 6 without a word.
+  _ownLvl(p){ const n = parseInt(p && (p.level || (p.sheet && p.sheet.level)), 10); return n >= 1 ? Math.min(20, n) : 0; },
   // The levels of everyone in this fight, one per character.
   _levels(){
     const m = this._members();
@@ -193,7 +210,8 @@ registerPanel('encounter',{
   // The shared search (monster-picker.js), shaped as this panel's rows.
   _searchPool(q){
     if (typeof sktMonsterPool !== 'function') return [];
-    return sktMonsterPool('encounter').filter(d => sktMonsterMatches(d, q)).slice(0, 30)
+    return sktMonsterPool('encounter').map((d, i) => [d, sktMonsterRank(d, q), i]).filter(x => x[1] < Infinity)
+      .sort((a, b) => a[1] - b[1] || a[2] - b[2]).map(x => x[0]).slice(0, 30)
       .map(d => ({ name:d.name, cr:d._cr ?? d._raw?.challenge_rating ?? '?', hp:d.hp||10, ac:d.ac||10, dex:d.dex||d._raw?.dexterity||10, _img:d._img, _source:d._source }));
   },
   // Monsters come from the shared picker. Same name AND book adds to the row
@@ -201,7 +219,7 @@ registerPanel('encounter',{
   _openPicker(){
     if (typeof sktPickMonster !== 'function') return;
     sktPickMonster({
-      title: 'Add monsters to the encounter', action: 'Add to encounter', scope: 'encounter', count: true,
+      title: 'Add monsters to the encounter', action: 'Add to encounter', scope: 'encounter', count: true, xp: true,
       onPick: (d, n) => {
         const _source = d._source || null;
         const existing = this._monsters.find(m => m.name === d.name && (m._source || null) === _source);
@@ -218,7 +236,8 @@ registerPanel('encounter',{
     const b=this._body;if(!b)return;
     const xp=this._calcXP();
     const system=this._systemMode();
-    const diff=system==='2024' ? this._difficulty2024(xp.raw) : this._difficulty(xp.adjusted);
+    // Nobody ticked: no budget at all, which read as Deadly.
+    const diff=!this._count() ? {label:'—',cls:'easy'} : system==='2024' ? this._difficulty2024(xp.raw) : this._difficulty(xp.adjusted);
     // .enc-root is there to be measured: the two columns stack when the
     // window is narrow (a container query in main.css).
     b.innerHTML=`<div class="enc-root"><div class="enc-panel">
@@ -227,8 +246,9 @@ registerPanel('encounter',{
           <h3>Party</h3>
           ${this._members().length ? `<div class="enc-party-list">${this._members().map(p => `<label class="enc-pc" title="${this._out.includes(p.id) ? 'Not in this fight' : 'In this fight'}">
               <input type="checkbox" data-epc="${esc(p.id)}" ${this._out.includes(p.id) ? '' : 'checked'}>
-              <span class="enc-pc-n">${esc(p.name)}</span><span class="enc-pc-l">Lv ${this._lvlOf(p)}</span></label>`).join('')}</div>
-            <div class="enc-party-sum">${(() => { const L = this._levels(); if (!L.length) return 'Nobody ticked'; const lo = Math.min(...L), hi = Math.max(...L);
+              <span class="enc-pc-n">${esc(p.name)}</span><span class="enc-pc-l"${this._ownLvl(p) ? '' : ' title="No level on their sheet: counted at the level below"'}>Lv ${this._ownLvl(p) || '?'}</span></label>`).join('')}</div>
+            ${this._members().some(p => !this._ownLvl(p)) ? `<label class="enc-nolvl">No level set — count as level <input type="number" id="enc-level" aria-label="Level for those with none" value="${this._partyLevel}" min="1" max="20"></label>` : ''}
+            <div class="enc-party-sum">${(() => { const L = this._levels(); if (!L.length) return 'Nobody in this fight — tick who is'; const lo = Math.min(...L), hi = Math.max(...L);
               return L.length + ' character' + (L.length === 1 ? '' : 's') + ' · level ' + (lo === hi ? lo : lo + '–' + hi); })()}</div>`
           : `<div class="enc-party-adj">
             <label>Level</label>
@@ -249,7 +269,7 @@ registerPanel('encounter',{
                 // under it; the name opens the stat block.
                 const each = CR_XP[m.cr];
                 return `<div class="enc-monster-row">
-                  <input type="number" value="${m.count||1}" min="1" max="99" data-ei="${i}" aria-label="How many ${esc(m.name)}" style="width:38px;font-size:var(--fs-sm);padding:2px 4px">
+                  <input type="number" value="${m.count||1}" min="1" max="200" data-ei="${i}" aria-label="How many ${esc(m.name)}" style="width:38px;font-size:var(--fs-sm);padding:2px 4px">
                   <span class="enc-name"><button class="enc-nm" data-eact="stat" data-ei="${i}" title="${esc(m.name)}: the stat block">${esc(m.name)}</button>
                     <span class="enc-meta">CR ${esc(String(m.cr))} · ${each != null ? (each * (m.count||1)).toLocaleString() + ' XP' : 'no XP'}${srcDisplay ? ' · ' + esc(srcDisplay) : ''}</span></span>
                   <button class="btn icon-btn danger" data-eact="del" data-ei="${i}" title="Take ${esc(m.name)} out" style="padding:2px 5px;font-size:var(--fs-sm)">×</button>
@@ -323,13 +343,14 @@ registerPanel('encounter',{
       this._save(); this._render();
     }));
     // Monster list
-    b.querySelectorAll('[data-eact="del"]').forEach(btn=>btn.addEventListener('click',()=>{this._monsters.splice(+btn.dataset.ei,1);this._save();this._render();}));
+    b.querySelectorAll('[data-eact="del"]').forEach(btn=>btn.addEventListener('click',()=>{ const m = this._monsters[+btn.dataset.ei];
+      this._undoable('Removed ' + (m ? m.name : 'a monster'), () => { this._monsters.splice(+btn.dataset.ei,1); }); }));
     b.querySelectorAll('[data-eact="stat"]').forEach(btn => btn.addEventListener('click', () => {
       const m = this._monsters[+btn.dataset.ei], d = m && this._entryOf(m);
       if (d && typeof popOutDetail === 'function') popOutDetail(d);
       else if (typeof showToast === 'function') showToast('No stat block for ' + (m ? m.name : 'that') + ' in the books in use');
     }));
-    b.querySelectorAll('#enc-monster-list input[type="number"]').forEach(inp=>inp.addEventListener('change',e=>{this._monsters[+e.target.dataset.ei].count=parseInt(e.target.value)||1;this._save();this._render();}));
+    b.querySelectorAll('#enc-monster-list input[type="number"]').forEach(inp=>inp.addEventListener('change',e=>{this._monsters[+e.target.dataset.ei].count=Math.min(200,Math.max(1,parseInt(e.target.value)||1));this._save();this._render();}));
     b.querySelector('#enc-add').addEventListener('click', () => this._openPicker());
     b.querySelector('#enc-hp')?.addEventListener('change', e => { this._hpMode = e.target.value; this._save(); });
     // Push to combat — flash the button to confirm the action, open the
@@ -429,9 +450,8 @@ registerPanel('encounter',{
         showToast('It’s already ' + target);
         e.target.value=''; return;
       }
-      this._monsters.forEach(m => { m.count = Math.max(1, Math.round((m.count||1) * factor)); });
-      this._save(); this._render();
-      showToast(target + ': ' + was + ' monster' + (was === 1 ? '' : 's') + ' → ' + this._calcXP().count);
+      this._undoable('Scaled to ' + target + ': ' + was + ' monster' + (was === 1 ? '' : 's') + ' → ' + this._monsters.reduce((n, m) => n + Math.max(1, Math.round((m.count||1) * factor)), 0),
+        () => { this._monsters.forEach(m => { m.count = Math.max(1, Math.round((m.count||1) * factor)); }); });
     });
     // 2014 ⇄ 2024 system toggle.
     b.querySelectorAll('[data-eact="sys"]').forEach(btn=>btn.addEventListener('click',()=>{
@@ -441,7 +461,7 @@ registerPanel('encounter',{
     b.querySelector('#enc-clear').addEventListener('click',()=>{
       showConfirm('Clear all monsters from this encounter?', {title:'Clear encounter', confirmLabel:'Clear', danger:true}).then(ok=>{
         if(!ok) return;
-        this._monsters=[]; this._notes=''; this._cur=null; this._save(); this._render();
+        this._undoable('Cleared the encounter', () => { this._monsters=[]; this._notes=''; this._cur=null; });
       });
     });
     b.querySelector('#enc-notes')?.addEventListener('input', e => {
@@ -461,7 +481,11 @@ registerPanel('encounter',{
         if (!r) return;
         const name = (r.name||'').trim();
         if (!name){ if (typeof showToast==='function') showToast('Name required'); return; }
-        this._storeAs(name);
+        // Another encounter has this name: replacing it is asked, not done.
+        const other = this._saved.find(x => (x.name || '').toLowerCase() === name.toLowerCase());
+        if (!other) return this._storeAs(name);
+        showConfirm('There is already an encounter called “' + other.name + '”. Replace it with this one?', { title:'Replace encounter', confirmLabel:'Replace', danger:true })
+          .then(ok => { if (ok) this._storeAs(name); });
       });
     });
     // Load a saved encounter — replaces current monsters in place
@@ -484,9 +508,7 @@ registerPanel('encounter',{
       showConfirm('Delete saved encounter "' + s.name + '"?',
         {title:'Delete encounter', confirmLabel:'Delete', danger:true}).then(ok => {
           if (!ok) return;
-          this._saved = this._saved.filter(x => x.id !== s.id);
-          if (this._cur === s.id) this._cur = null;
-          this._save(); this._render();
+          this._undoable('Deleted “' + s.name + '”', () => { this._saved = this._saved.filter(x => x.id !== s.id); if (this._cur === s.id) this._cur = null; });
         });
     }));
   },
@@ -600,7 +622,7 @@ registerPanel('encounter',{
   // null: no count of these monsters gives it.
   _verdictFor(mons){
     const keep = this._monsters; this._monsters = mons;
-    try { const xp = this._calcXP(); return (this._systemMode() === '2024' ? this._difficulty2024(xp.raw) : this._difficulty(xp.adjusted)).label; }
+    try { if (!this._count()) return '—'; const xp = this._calcXP(); return (this._systemMode() === '2024' ? this._difficulty2024(xp.raw) : this._difficulty(xp.adjusted)).label; }
     finally { this._monsters = keep; }
   },
   _findScaleFactor(target){

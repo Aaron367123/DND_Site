@@ -3518,6 +3518,8 @@ body.player-mode .loot-sumbar > span[style*="flex:1"]{display:none}
 .enc-pc-l{color:var(--text-muted);font-size:var(--fs-xs);white-space:nowrap}
 .enc-pc:has(input:not(:checked)) .enc-pc-n{color:var(--text-dim);text-decoration:line-through}
 .enc-party-sum{font-size:var(--fs-xs);color:var(--text-muted)}
+.enc-nolvl{display:flex;align-items:center;gap:6px;font-size:var(--fs-xs);color:var(--text-muted);margin:2px 0 6px}
+.enc-nolvl input{width:48px;font-size:var(--fs-sm);padding:2px 4px}
 .enc-cur{font-weight:400;text-transform:none;letter-spacing:0;color:var(--text)}
 .enc-dirty{color:var(--text-muted);font-size:var(--fs-xs)}
 .enc-notes{width:100%;margin-top:8px;resize:vertical;min-height:52px;font-size:var(--fs-sm);box-sizing:border-box}

@@ -42,14 +42,36 @@ function sktMonsterPool(scope){
 
 // One search rule for every picker: each word must appear in the name, the
 // size/type/CR line, or the book (by code or by name).
-function sktMonsterMatches(d, q){
+// Each word must be in the name, or begin a word of the size/type/CR line
+// or the book. Anywhere in those, "orc" found Agathe Silverspoon (a
+// sorcerer) and "goblin" every goblinoid.
+function _sktMpWords(s){ return String(s || '').toLowerCase().split(/[^a-z0-9'/]+/).filter(Boolean); }
+function sktMonsterMatches(d, q){ return sktMonsterRank(d, q) < Infinity; }
+// How well a monster answers the search, best first: the name itself, a name
+// that starts with it, a word of the name that does, the name holding it,
+// then the type line or the book. The list was A–Z whatever was typed, so
+// "goblin" put the Goblin 16th, after Bol'bara and Booyahg Caster, and
+// "wolf" the Wolf 13th. Infinity: no match.
+function sktMonsterRank(d, q){
   const toks = String(q || '').toLowerCase().split(/\s+/).filter(Boolean);
-  if (!toks.length) return true;
-  const hay = (d.name + ' ' + (d.meta || '') + ' ' + (d._source || '') + ' '
-    + (typeof _formatSource === 'function' ? (_formatSource(d._source) || '') : '')).toLowerCase();
-  return toks.every(t => hay.includes(t));
+  if (!toks.length) return 0;
+  const name = String(d.name || '').toLowerCase(), nw = _sktMpWords(name);
+  const other = _sktMpWords((d.meta || '') + ' ' + (d._source || '') + ' ' + (typeof _formatSource === 'function' ? (_formatSource(d._source) || '') : ''));
+  if (!toks.every(t => name.includes(t) || other.some(w => w.startsWith(t)))) return Infinity;
+  const whole = toks.join(' ');
+  if (name === whole) return 0;
+  if (name.startsWith(whole)) return 1;
+  if (toks.every(t => nw.some(w => w.startsWith(t)))) return 2;
+  if (toks.every(t => name.includes(t))) return 3;
+  return 4;
 }
 
+// " · 450 XP" for a row, when the picker is building an encounter.
+function _sktMpXp(d){
+  const t = (typeof window !== 'undefined' && window.SKT_RULES && window.SKT_RULES.crXp) || {};
+  const x = t[_sktMpCr(d)];
+  return x != null ? ' · ' + Number(x).toLocaleString() + ' XP' : '';
+}
 function sktPickMonster(o){
   o = o || {};
   if (typeof _5eData === 'undefined' || typeof _5eLoaded === 'undefined' || !_5eLoaded){
@@ -105,12 +127,14 @@ function sktPickMonster(o){
   };
   const paint = () => {
     const q = $('#mp-q').value, cr = $('#mp-cr').value, ty = $('#mp-type').value;
-    const matches = all.filter(d => (!cr || _sktMpCr(d) === cr) && (!ty || _sktMpType(d) === ty) && sktMonsterMatches(d, q));
+    // best answers first; A–Z (the pool's order) within each
+    const matches = all.map((d, i) => [d, (!cr || _sktMpCr(d) === cr) && (!ty || _sktMpType(d) === ty) ? sktMonsterRank(d, q) : Infinity, i])
+      .filter(x => x[1] < Infinity).sort((a, b) => a[1] - b[1] || a[2] - b[2]).map(x => x[0]);
     pool = matches.slice(0, SKT_MP_LIMIT);
     list.innerHTML = pool.map((d, k) => '<div class="mp-row" role="option" data-i="' + k + '">'
       + '<span class="mp-row-name">' + esc(d.name)
       +   (d._source ? ' <span class="detail-source-badge">' + esc(typeof _formatSource === 'function' ? _formatSource(d._source) : d._source) + '</span>' : '') + '</span>'
-      + '<span class="mp-row-cr">CR ' + esc(_sktMpCr(d)) + '</span></div>').join('')
+      + '<span class="mp-row-cr">CR ' + esc(_sktMpCr(d)) + (o.xp ? _sktMpXp(d) : '') + '</span></div>').join('')
       || '<div class="mp-hint">No matches</div>';
     // Say when the list is cut off, or an absent monster looks like a missing one.
     countEl.textContent = matches.length > SKT_MP_LIMIT

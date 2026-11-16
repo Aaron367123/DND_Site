@@ -24321,6 +24321,107 @@ for (const cls of Object.keys(rule)) for (let L = 1; L <= 20; L++) for (const sc
         try { closePanel('encounter'); } catch(e){}
       }
     }
+    // -- Round 442: the encounter builder doesn't lose work — no cap on saved encounters (the 31st threw the oldest away), a name already used is asked about, and taking a monster out, Clear, deleting a saved one and Scale to can be undone; counts stay 1–200; a character with no level says so and the level they're taken at can be set; nobody ticked is no verdict --
+    if (!PLAYER){
+      const E = panelDefs.encounter;
+      const keep = { s: JSON.stringify(E._saved || []), m: JSON.stringify(E._monsters || []), c: E._cur, n: E._notes, sy: E._system, p: state.party, o: (E._out || []).slice(), l: E._partyLevel };
+      const kc = window.showConfirm, km = window.showModal, kt = window.showToast;
+      try {
+        let answer = true, asked = 0, modalName = '';
+        window.showConfirm = async () => { asked++; return answer; };
+        window.showModal = async (t, f) => ({ name: modalName || f[0].value });
+        window.showToast = () => {};
+        openPanel('encounter'); await sleep(400);
+        const q = s => E._body.querySelector(s);
+        // no cap
+        E._saved = []; E._cur = null; E._notes = '';
+        for (let i = 1; i <= 35; i++){ E._monsters = [{ name: 'Goblin', cr: '1/4', count: i, _source: 'MM' }]; E._cur = null; E._render(); modalName = 'r442 enc ' + i; q('#enc-save-current').click(); await sleep(15); }
+        ok('thirty-five encounters saved: all thirty-five kept (the 31st threw the first away)', E._saved.length === 35 && E._saved.some(s => s.name === 'r442 enc 1'), E._saved.length);
+        // a name already used
+        E._cur = null; E._monsters = [{ name: 'Ogre', cr: '2', count: 1, _source: 'MM' }]; E._render(); modalName = 'r442 enc 3'; answer = false; asked = 0;
+        q('#enc-save-current').click(); await sleep(40);
+        ok('saving under a name another encounter has: asked; No keeps that one as it was', asked === 1 && E._saved.find(s => s.name === 'r442 enc 3').monsters[0].name === 'Goblin');
+        modalName = '';
+        // undo: take one out
+        E._monsters = [{ name: 'Goblin', cr: '1/4', count: 4, _source: 'MM' }, { name: 'Ogre', cr: '2', count: 1, _source: 'MM' }]; E._render(); await sleep(10);
+        q('[data-eact="del"][data-ei="1"]').click(); await sleep(20);
+        ok('× takes the ogre out…', E._monsters.length === 1);
+        sktUndo(); await sleep(30);
+        ok('…and Undo puts it back', E._monsters.length === 2 && E._monsters[1].name === 'Ogre' && /Ogre/.test(E._body.textContent));
+        answer = true; q('#enc-clear').click(); await sleep(40);
+        ok('Clear, then Undo: the encounter is back', !E._monsters.length && (sktUndo(), E._monsters.length === 2));
+        const s0 = E._saved.length; q('[data-eact="del-enc"]').click(); await sleep(40);
+        ok('a saved encounter deleted, then Undo: it is back', E._saved.length === s0 - 1 && (sktUndo(), E._saved.length === s0));
+        E._render(); await sleep(10);
+        const sel = q('#enc-scale-target'); sel.value = sel.options[sel.options.length - 1].value; const c0 = E._calcXP().count; sel.dispatchEvent(new Event('change')); await sleep(30);
+        ok('Scale to, then Undo: the counts as they were', E._calcXP().count !== c0 && (sktUndo(), E._calcXP().count === c0), c0 + ' → ' + E._calcXP().count);
+        // counts
+        E._render(); await sleep(10);
+        const inp = q('#enc-monster-list input[type="number"]'); inp.value = '-3'; inp.dispatchEvent(new Event('change')); await sleep(10);
+        const neg = E._monsters[0].count;
+        const inp2 = q('#enc-monster-list input[type="number"]'); inp2.value = '900'; inp2.dispatchEvent(new Event('change')); await sleep(10);
+        ok('a count of −3 is 1 (it was −3 goblins, −150 XP), 900 is 200', neg === 1 && E._monsters[0].count === 200 && E._calcXP().raw > 0, neg + ' / ' + E._monsters[0].count);
+        // no level
+        state.party = [{ id: 'r442a', name: 'r442 Lvl5', level: 5 }, { id: 'r442b', name: 'r442 Nolevel' }]; E._out = []; E._partyLevel = 6; E._render(); await sleep(10);
+        const lvls = [...E._body.querySelectorAll('.enc-pc-l')].map(x => x.textContent);
+        ok('a character with no level shows “Lv ?”, and the level they’re counted at can be set', lvls.join(',') === 'Lv 5,Lv ?' && !!q('.enc-nolvl #enc-level') && E._levels().join(',') === '5,6', lvls.join(','));
+        const li = q('#enc-level'); li.value = '2'; li.dispatchEvent(new Event('change')); await sleep(10);
+        ok('…set to 2: counted at 2', E._levels().join(',') === '5,2');
+        // nobody
+        E._out = ['r442a', 'r442b']; E._render(); await sleep(10);
+        ok('nobody ticked: no verdict (it read Deadly), and it says to tick who is in it', q('.enc-stat-box .v.deadly') == null && /Nobody in this fight/.test(q('.enc-party-sum').textContent));
+      } catch(e){ ok('round 442 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
+      finally {
+        window.showConfirm = kc; window.showModal = km; window.showToast = kt;
+        E._saved = JSON.parse(keep.s); E._monsters = JSON.parse(keep.m); E._cur = keep.c; E._notes = keep.n || ''; E._system = keep.sy; state.party = keep.p; E._out = keep.o; E._partyLevel = keep.l;
+        try { E._save(); } catch(e){}
+        try { closePanel('encounter'); } catch(e){}
+      }
+    }
+    // -- Round 443: the monster picker puts the monster asked for first ("goblin": the Goblin, not Bol'bara; "orc": the Orc, and no sorcerers), with XP beside CR when building an encounter; a homebrew monster goes all the way — found, its XP, its stat block, pushed with its own hit dice rolled, Large on the map --
+    if (!PLAYER){
+      const E = panelDefs.encounter;
+      const keep = { m: JSON.stringify(E._monsters || []), h: E._hpMode, c: JSON.stringify(state.combatants || []), r: state.combatRound, a: state.activeCombatantId, hb: localStorage.getItem('skt-homebrew-v1') };
+      const kt = window.showToast;
+      try {
+        for (let i = 0; i < 40 && !(typeof _5eLoaded !== 'undefined' && _5eLoaded); i++) await sleep(250);
+        window.showToast = () => {};
+        openPanel('encounter'); await sleep(400);
+        E._openPicker(); await sleep(150);
+        const q = document.querySelector('#mp-back #mp-q');
+        const first = async term => { q.value = term; q.dispatchEvent(new Event('input')); await sleep(200); return [...document.querySelectorAll('#mp-back .mp-row .mp-row-name')].map(r => r.firstChild.textContent.trim()); };
+        const res = [];
+        for (const t of ['goblin', 'ogre', 'orc', 'wolf', 'cultist']){ const n = await first(t); res.push(t + ':' + n[0]); }
+        ok('the picker: the monster asked for comes first', res.every(r => { const [t, n] = r.split(':'); return n.toLowerCase() === t; }), res.join(' | '));
+        const orcs = await first('orc');
+        ok('…“orc” no longer finds sorcerers (Aloysia Telfan, an elf sorcerer, matched inside “sorcerer”); an orc by type is still found, after the Orcs', !orcs.includes('Aloysia Telfan') && orcs.includes('Agathe Silverspoon') && orcs.indexOf('Agathe Silverspoon') > orcs.indexOf('Orc'), orcs.length + ': ' + orcs.slice(0, 8).join(', '));
+        await first('ogre');
+        const cr = document.querySelector('#mp-back .mp-row .mp-row-cr').textContent;
+        ok('…building an encounter, each row has its XP by its CR', /CR 2 · 450 XP/.test(cr), cr);
+        document.getElementById('mp-back').remove();
+        // homebrew
+        const m = sktHomebrewSave('monster', { name: 'r443 Skullbiter', cr: '3', hp: 45, hitDice: '6d10+12', size: 'Large', type: 'monstrosity', ac: 13, ab: { con: 14 } });
+        sktHomebrewApply(); await sleep(60);
+        const row = sktMonsterPool('encounter').find(d => d.name === 'r443 Skullbiter');
+        ok('a homebrew monster is in the builder’s monsters, first for its name', !!row && sktMonsterRank(row, 'r443 skullbiter') === 0);
+        E._monsters = []; E._hpMode = 'roll'; E._render(); E.addEntry(row, 2); await sleep(30);
+        ok('…in the encounter at its CR’s XP (CR 3: 700 each)', E._calcXP().raw === 1400 && /Homebrew/.test(E._body.querySelector('.enc-meta').textContent));
+        let popped = null; const kp = window.popOutDetail; window.popOutDetail = d => { popped = d; };
+        try { E._body.querySelector('[data-eact="stat"]').click(); } finally { window.popOutDetail = kp; }
+        ok('…its stat block opens', !!popped && popped.name === 'r443 Skullbiter');
+        state.combatants = []; E._render(); E._body.querySelector('#enc-push-combat').click(); await sleep(200);
+        const cs = state.combatants.filter(c => /r443 Skullbiter/.test(c.name));
+        ok('…pushed: two, each its own 6d10+12 (18 to 72), Large', cs.length === 2 && cs.every(c => c.hp >= 18 && c.hp <= 72 && c.hpMax === c.hp && /large/i.test(String(c.size))), cs.map(c => c.hp + '/' + c.size).join(', '));
+      } catch(e){ ok('round 443 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
+      finally {
+        window.showToast = kt; document.getElementById('mp-back')?.remove();
+        if (keep.hb != null) localStorage.setItem('skt-homebrew-v1', keep.hb); else localStorage.removeItem('skt-homebrew-v1');
+        try { sktHomebrewApply(); } catch(e){}
+        E._monsters = JSON.parse(keep.m); E._hpMode = keep.h; state.combatants = JSON.parse(keep.c); state.combatRound = keep.r; state.activeCombatantId = keep.a;
+        try { save(); E._save(); } catch(e){}
+        try { closePanel('encounter'); closePanel('combat'); } catch(e){}
+      }
+    }
     // -- Class features: represented, not just text ------------------------
     {
       try {

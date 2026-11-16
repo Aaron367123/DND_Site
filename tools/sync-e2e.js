@@ -196,6 +196,19 @@ const window = {};
       if (back == null) return { ok: false, why: 'the DM: ' + await dm.ev("const B = panelDefs.battlemap, T = panelDefs.turnview, z = state.combatants.find(c => c.id === state.activeCombatantId), t = sktTokenForCombatant(B._tokens, z); return JSON.stringify({ x0: " + x0 + ", x: t && t.x, mv: t && t.mv, pending: T._pending && T._pending.kind })") };
       return lat(asked);
     });
+    await step('DM saves an encounter with notes → it never reaches a phone (the DM’s plans)', async () => {
+      const mark = 'e2e-plan-' + Date.now();
+      await dm.ev("openPanel('encounter'); await new Promise(r=>setTimeout(r,400)); const E = panelDefs.encounter; E._monsters = [{ name: 'Goblin', cr: '1/4', count: 3, _source: 'MM' }]; E._notes = " + JSON.stringify(mark) + "; E._save(); E._render(); return 1");
+      // the DM's own copy reaches the server (where a second DM screen gets it)…
+      const up = await W(dm, "return (_lastServer['skt-enc-v1'] || '').includes(" + JSON.stringify(mark) + ") ? 1 : 0", 10000);
+      if (up == null) return { ok: false, why: 'the DM’s encounter never reached the server (a second DM screen would not get it)' };
+      // …and after a good while, neither phone has it
+      await sleep(6000);
+      const seen = await Promise.all([pl, p2].map(d => d.ev("return (localStorage.getItem('skt-enc-v1') || '').includes(" + JSON.stringify(mark) + ") ? 1 : 0")));
+      await dm.ev("const E = panelDefs.encounter; E._notes = ''; E._save(); return 1");
+      if (seen.some(Boolean)) return { ok: false, why: 'a phone has the DM’s encounter and its notes: ' + JSON.stringify(seen) };
+      return { ok: true, lat: 6000 };
+    });
     await step('DM hides a goblin on the map → it leaves the phone’s turn strip; revealed → back by name', async () => {
       const id = await dm.ev("const c = state.combatants.filter(c => !c.isPC).pop(); if (!c) return ''; c.e2eName = c.name; c.name = 'e2e Sneak'; save(); openPanel('battlemap'); await new Promise(r=>setTimeout(r,300)); const B = panelDefs.battlemap; B._tokens = B._tokens.filter(t => t.id !== 'e2e-sneak'); B._tokens.push({ id: 'e2e-sneak', cid: c.id, label: 'e2e Sneak', x: 400, y: 300, size: 1, hidden: true }); B._saveMap(); B._render(); return c.id");
       if (!id) return { ok: false, why: 'no monster in the fight' };

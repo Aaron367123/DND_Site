@@ -34,10 +34,10 @@
  */
 'use strict';
 
-const BUILD = '97b41db3ce';
+const BUILD = 'd1b5ce0449';
 const PRECACHE = [
   'skt-workspace.html',
-  'styles/main.css?v=ccffa371cf',
+  'styles/main.css?v=274bdeb2f0',
   'styles/theme.css?v=490a0ae264',
   'js/core/errors.js?v=67c70f2e1d',
   'js/core/data.js?v=183a16905e',
@@ -51,7 +51,7 @@ const PRECACHE = [
   'js/core/state.js?v=8030e53453',
   'js/core/undo.js?v=63ed223198',
   'js/features/roll-requests.js?v=2218dcc003',
-  'js/features/monster-picker.js?v=7030540ec7',
+  'js/features/monster-picker.js?v=a87d648d4d',
   'js/core/window-manager.js?v=e2aed9109b',
   'js/panels/combat.js?v=20828f6dd7',
   'js/panels/attacks.js?v=99097afcf2',
@@ -79,7 +79,7 @@ const PRECACHE = [
   'js/panels/library.js?v=d41e1e85e4',
   'js/panels/npc-generator.js?v=ef379c47ad',
   'js/panels/loot.js?v=038e688fd3',
-  'js/panels/encounter.js?v=2b4028bf11',
+  'js/panels/encounter.js?v=6ff23e95e0',
   'js/panels/soundboard.js?v=0381935289',
   'js/panels/weather.js?v=be4fc599ab',
   'js/panels/timetracker.js?v=a4bf06c348',
@@ -102,7 +102,7 @@ const PRECACHE = [
   'js/features/pdf-import.js?v=95d9f5740f',
   'js/player/player-app.js?v=b75cc82951',
   'js/ui/player-view.js?v=2481f28c78',
-  'js/sync/realtime.js?v=342982c633',
+  'js/sync/realtime.js?v=2154fc2796',
   'js/sync/presence.js?v=50e9bead2e',
   'js/ui/tutorial.js?v=7427317caa',
   'js/ui/onboarding.js?v=af17803033',
