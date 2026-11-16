@@ -3351,6 +3351,14 @@ body.player-mode .loot-sumbar > span[style*="flex:1"]{display:none}
 .loot-item .loot-wt{-moz-appearance:textfield}
 /* Encumbrance toggle pill in the totals row. */
 .loot-item.locked{opacity:.8}
+.modal.loot-tp{width:440px;max-width:94vw}
+.loot-tp-roll{display:flex;flex-wrap:wrap;align-items:center;gap:6px;margin:4px 0 10px;font-size:var(--fs-sm);color:var(--text-muted)}
+.loot-tp-roll input{width:64px;margin-left:4px}
+.loot-tp-coins{display:grid;grid-template-columns:repeat(5,1fr);gap:6px;margin-bottom:10px}
+.loot-tp-coins label{display:flex;flex-direction:column;gap:2px;font-size:var(--fs-xs);color:var(--text-muted);text-transform:uppercase}
+.loot-tp-coins input{width:100%;box-sizing:border-box}
+.loot-tp-items{display:flex;flex-direction:column;gap:4px;max-height:40vh;overflow:auto;margin-bottom:6px;font-size:var(--fs-sm)}
+.loot-tp-items label{display:flex;align-items:center;gap:6px}
 .loot-item.locked .loot-paid-btn,.loot-item.locked .loot-drag-handle{visibility:hidden}
 .loot-item.locked .loot-name-text{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-weight:600;padding:2px 4px}
 .loot-item .loot-ro{color:var(--text-muted);font-size:var(--fs-sm);padding:2px 4px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}

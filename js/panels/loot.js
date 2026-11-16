@@ -147,8 +147,9 @@ registerPanel('loot',{
   },
 
   // d100 against a [{min,max,...}] table. Returns the matching row.
-  _rollOnTable(table){
-    const roll = sktD(100);
+  _rollOnTable(table, forced){
+    const roll = forced >= 1 && forced <= 100 ? Math.round(forced) : sktD(100);
+    this._lastD100 = roll;
     return (table || []).find(r => roll >= (r.min ?? 1) && roll <= (r.max ?? r.min ?? 100)) || null;
   },
 
@@ -194,7 +195,7 @@ registerPanel('loot',{
 
   // Roll one treasure result. Returns {coins:{cp,sp,...}, items:[{name,qty,value}]}
   // without touching panel state — the caller decides whether to keep it.
-  _rollTreasure(kind, crBand, edition){
+  _rollTreasure(kind, crBand, edition, d100){
     const T = this._lootTables; if (!T) return null;
     const coins = {};
     const bucket = new Map();   // name → {name, qty, value}
@@ -222,7 +223,8 @@ registerPanel('loot',{
 
     if (kind === 'hoard'){
       addCoins(band.coins);                      // hoard coins are unconditional
-      const row = this._rollOnTable(band.table);
+      const row = this._rollOnTable(band.table, d100);
+      var rolled = this._lastD100;
       if (row){
         if (row.gems){
           const list = this._lootListByType(T.gems, row.gems.type, EDITION);
@@ -260,12 +262,62 @@ registerPanel('loot',{
       // row and no band-level coins. Both are covered by rolling and reading
       // the row, with the band-level coins added when a table defines them.
       addCoins(band.coins);
-      const row = this._rollOnTable(band.table);
+      const row = this._rollOnTable(band.table, d100);
+      var rolled = this._lastD100;
       if (row) addCoins(row.coins);
     }
-    return { coins, items: [...bucket.values()] };
+    return { coins, items: [...bucket.values()], d100: rolled };
   },
 
+  // THE ROLL, BEFORE IT'S KEPT. It was a line of text to take or leave. Now:
+  // the coins can be typed (what was rolled at the table — everything that
+  // rolls takes a physical roll), the d100 that picked the table row can be
+  // set ("Use this roll" re-reads the row; a hoard keeps the coins already
+  // there), an item can be left out, and "Roll again" rolls it all afresh.
+  _treasurePreview(res, kind, band, edition){
+    document.getElementById('loot-tp')?.remove();
+    const back = document.createElement('div');
+    back.className = 'modal-backdrop'; back.id = 'loot-tp';
+    const COINS = ['cp','sp','ep','gp','pp'];
+    let cur = res;
+    const paint = () => {
+      back.innerHTML = '<div class="modal loot-tp" role="dialog" aria-modal="true" aria-label="Treasure">'
+        + '<h3>' + (kind === 'hoard' ? 'Hoard' : 'Individual') + ' — ' + esc(band.label) + '</h3>'
+        + '<div class="loot-tp-roll"><label>Table roll (d100) <input type="number" id="loot-tp-d100" min="1" max="100" inputmode="numeric" value="' + (cur.d100 || '') + '"></label>'
+        +   '<button class="btn small" data-tp="use">Use this roll</button><button class="btn small" data-tp="again">' + ICO('i-dice') + ' Roll again</button></div>'
+        + '<div class="loot-tp-coins">' + COINS.map(c => '<label>' + c + ' <input type="number" min="0" inputmode="numeric" data-tpc="' + c + '" value="' + (cur.coins[c] || 0) + '"></label>').join('') + '</div>'
+        + (cur.items.length ? '<div class="loot-tp-items">' + cur.items.map((it, k) => '<label><input type="checkbox" data-tpi="' + k + '" checked> ' + (it.qty > 1 ? it.qty + '× ' : '') + esc(it.name) + (it.value ? ' <span class="cb-dim">(' + esc(it.value) + ')</span>' : '') + '</label>').join('') + '</div>'
+                            : '<div class="cb-dim" style="margin:6px 0">No items on this roll.</div>')
+        + '<div class="modal-actions"><button class="btn" data-tp="cancel">Cancel</button><button class="btn primary" data-tp="add">Add to loot</button></div></div>';
+    };
+    const coinsNow = () => Object.fromEntries(COINS.map(c => [c, Math.max(0, parseInt((back.querySelector('[data-tpc="' + c + '"]') || {}).value) || 0)]));
+    paint();
+    document.body.appendChild(back);
+    const close = () => back.remove();
+    back.addEventListener('click', e => {
+      const a = e.target.closest('[data-tp]'); if (!a) return;
+      if (a.dataset.tp === 'cancel') return close();
+      if (a.dataset.tp === 'again'){ const n = this._rollTreasure(kind, band, edition); if (n){ cur = n; paint(); } return; }
+      if (a.dataset.tp === 'use'){
+        const d = parseInt(back.querySelector('#loot-tp-d100').value, 10);
+        if (!(d >= 1 && d <= 100)){ if (typeof showToast === 'function') showToast('A d100 is 1 to 100', { alert: true }); return; }
+        const keep = coinsNow(), n = this._rollTreasure(kind, band, edition, d);
+        if (n){ cur = kind === 'hoard' ? Object.assign(n, { coins: keep }) : n; paint(); }
+        return;
+      }
+      if (a.dataset.tp === 'add'){
+        const coins = coinsNow(), items = cur.items.filter((it, k) => { const cb = back.querySelector('[data-tpi="' + k + '"]'); return !cb || cb.checked; });
+        close();
+        if (!COINS.some(c => coins[c]) && !items.length) return;
+        this._undoable('Treasure added to the loot', () => {
+          COINS.forEach(c => { if (coins[c]) this._loot[c] = (this._loot[c] || 0) + coins[c]; });
+          items.forEach(i => this._loot.items.push({ id: uid(), name: i.name, qty: i.qty, value: i.value, assignedTo: null }));
+        });
+      }
+    });
+    back.addEventListener('mousedown', e => { if (e.target === back) close(); });
+    back.addEventListener('keydown', e => { if (e.key === 'Escape') close(); });
+  },
   _describeTreasure(res){
     const coinStr = ['pp','gp','ep','sp','cp']
       .filter(c => res.coins[c]).map(c => res.coins[c] + ' ' + c).join(', ');
@@ -305,18 +357,7 @@ registerPanel('loot',{
         if (!res) { if (typeof showToast === 'function') showToast('No table for that combination'); return; }
         // Show the result BEFORE committing — a roll you can't preview is a
         // roll you end up undoing by hand.
-        return showConfirm(this._describeTreasure(res),
-          { title: (r.kind === 'hoard' ? 'Hoard' : 'Individual') + ' — ' + band.label,
-            confirmLabel: 'Add to loot' }).then(ok => {
-          if (!ok) return;
-          this._undoable('Treasure added to the loot', () => {
-            ['cp','sp','ep','gp','pp'].forEach(c => {
-              if (res.coins[c]) this._loot[c] = (this._loot[c] || 0) + res.coins[c];
-            });
-            res.items.forEach(i => this._loot.items.push({
-              id: uid(), name: i.name, qty: i.qty, value: i.value, assignedTo: null }));
-          });
-        });
+        this._treasurePreview(res, r.kind, band, r.edition);
       });
     });
   },
@@ -685,7 +726,7 @@ registerPanel('loot',{
     const weightInp = showWeight
       ? `<input type="number" step="0.1" min="0" class="loot-wt" value="${item.weight!=null?esc(String(item.weight)):''}" data-lfield="weight" data-li="${i}" placeholder="lb" title="Weight per item (lbs)">`
       : '';
-    return `<div class="loot-item ${item.assignedTo?'assigned':''} ${paid?'paid':''}" data-i="${i}" draggable="true">
+    return `<div class="loot-item ${item.assignedTo?'assigned':''} ${paid?'paid':''}" data-i="${i}" draggable="true" title="Right-click (or hold) to sell it">
       <span class="loot-drag-handle" title="Drag to reorder">⋮⋮</span>
       <button class="loot-paid-btn ${paid?'on':''}" data-lact="paid" data-li="${i}" title="${esc(paidTitle)}">${paid?ICO('i-check'):'<span class="loot-unpaid">○</span>'}</button>
       <div class="loot-name">
@@ -700,6 +741,40 @@ registerPanel('loot',{
     </div>`;
   },
 
+  // ─── Selling ────────────────────────────────────────────────────────────────
+  // Loot sold in town turns into coins in the purse: half its value as the
+  // rules have it for selling found treasure, or the full value (a gem, art
+  // that sells at its worth). Right-click a row, or hold it. Undoable.
+  // Coins as handed over: whole gold, then silver, then copper.
+  _toCoins(gp){
+    let cp = Math.round(gp * 100);
+    const g = Math.floor(cp / 100); cp -= g * 100;
+    const s = Math.floor(cp / 10); cp -= s * 10;
+    return { gp: g, sp: s, cp };
+  },
+  _fmtCoins(c){ return ['gp','sp','cp'].filter(k => c[k]).map(k => c[k].toLocaleString() + ' ' + k).join(' ') || '0 gp'; },
+  _sell(i, share, one){
+    const it = this._loot.items[i]; if (!it || !this._canEdit(it)) return;
+    const each = this._parseGp(it.value); if (!(each > 0)) return;
+    const n = one ? 1 : Math.max(1, parseInt(it.qty) || 1);
+    const c = this._toCoins(each * n * share);
+    this._undoable('Sold ' + (n > 1 ? n + ' × ' : '') + it.name + ' for ' + this._fmtCoins(c), () => {
+      ['gp','sp','cp'].forEach(k => { if (c[k]) this._loot[k] = (+this._loot[k] || 0) + c[k]; });
+      if (one && (parseInt(it.qty) || 1) > 1) it.qty = (parseInt(it.qty) || 1) - 1;
+      else this._loot.items.splice(this._loot.items.indexOf(it), 1);
+    });
+  },
+  _rowMenu(i, x, y){
+    const it = this._loot.items[i]; if (!it || !this._canEdit(it) || typeof showContextMenu !== 'function') return;
+    const each = this._parseGp(it.value), n = Math.max(1, parseInt(it.qty) || 1);
+    if (!(each > 0)){ showContextMenu(x, y, [{ label: 'No value to sell it for — type one in', disabled: true, onClick: () => {} }]); return; }
+    const items = [
+      { label: 'Sell' + (n > 1 ? ' all ' + n : '') + ' for half — ' + this._fmtCoins(this._toCoins(each * n / 2)), onClick: () => this._sell(i, 0.5, false) },
+      { label: 'Sell' + (n > 1 ? ' all ' + n : '') + ' for full value — ' + this._fmtCoins(this._toCoins(each * n)), onClick: () => this._sell(i, 1, false) },
+    ];
+    if (n > 1) items.push({ label: 'Sell one for half — ' + this._fmtCoins(this._toCoins(each / 2)), onClick: () => this._sell(i, 0.5, true) });
+    showContextMenu(x, y, items);
+  },
   // Another character's, on a player's phone: to look at, not to change.
   _lockedRow(item, i){
     const who = this._memberName(item.assignedTo) || 'someone';
@@ -876,7 +951,7 @@ registerPanel('loot',{
         ${this._isPlayer() ? '' : `<button class="btn small" id="loot-roll" title="Roll random treasure on the DMG tables">${ICO('i-dice')} Roll treasure</button>
         <button class="btn small" id="loot-divvy">Divvy up</button>`}
       </div>
-      <div class="loot-add-row"${this._canAdd() ? '' : ' hidden'}>
+      <div class="loot-add-row"${this._canAdd() ? '' : ' style="display:none"'}>
         <div class="loot-search-wrap">
           <input type="text" id="loot-new-name" placeholder="Item name or search 5e items..." autocomplete="off" value="${esc(this._searchQ)}">
           <div class="loot-search-dropdown" id="loot-search-results"></div>
@@ -1129,6 +1204,12 @@ registerPanel('loot',{
 
     // Drag-to-reorder on every item row.
     this._wireRowDrag();
+    // Right-click (or hold) a row: sell it.
+    b.querySelectorAll('.loot-item:not(.locked)').forEach(row => {
+      const open = (x, y) => this._rowMenu(+row.dataset.i, x, y);
+      row.addEventListener('contextmenu', e => { if (e.target.closest('input,select,textarea')) return; e.preventDefault(); open(e.clientX, e.clientY); });
+      if (typeof addLongPress === 'function') addLongPress(row, (x, y) => open(x, y));
+    });
 
     // Restore the items-list scroll position after the new DOM is wired up,
     // so re-renders (qty / assignment change) feel in-place.

@@ -24543,6 +24543,67 @@ for (const cls of Object.keys(rule)) for (let L = 1; L <= 20; L++) for (const sc
         try { closePanel('loot'); } catch(e){}
       }
     }
+    // -- Round 447: loot — selling (half, full, one of a stack, into the purse as gold/silver/copper, undoable; no value: says so); rolled treasure is a preview that takes what was rolled at the table — the coins typed, the d100 that picks the row, an item left out, or roll again --
+    if (!PLAYER){
+      const L = panelDefs.loot;
+      let keep = null; const kt = window.showToast, km = window.showModal, kcm = window.showContextMenu;
+      try {
+        window.showToast = () => {};
+        openPanel('loot'); await sleep(400);
+        keep = JSON.stringify(L._loot);
+        L._loot = { cp: 0, sp: 0, ep: 0, gp: 10, pp: 0, items: [
+          { id: 'r447a', name: 'r447 Potion', qty: 3, value: '50 gp', assignedTo: null },
+          { id: 'r447b', name: 'r447 Gem', qty: 1, value: '25sp', assignedTo: null },
+          { id: 'r447c', name: 'r447 Odd Thing', qty: 1, value: '', assignedTo: null } ], tabGroups: [] };
+        L._save(); L._render(); await sleep(20);
+        // the menu
+        let menu = null; window.showContextMenu = (x, y, items) => { menu = items; };
+        const row = id => L._body.querySelector('.loot-item[data-i="' + L._loot.items.findIndex(x => x.id === id) + '"]');
+        row('r447a').dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true, clientX: 50, clientY: 50 }));
+        ok('right-click a row: sell all for half, for full value, or one for half — with what it brings', !!menu && menu.length === 3 && /75 gp/.test(menu[0].label) && /150 gp/.test(menu[1].label) && /25 gp/.test(menu[2].label), menu && menu.map(m => m.label).join(' | '));
+        menu[2].onClick(); await sleep(20);
+        ok('sell one potion for half: 25 gp in the purse, two left', L._loot.gp === 35 && L._loot.items.find(x => x.id === 'r447a').qty === 2);
+        sktUndo(); await sleep(40);
+        ok('…undone: 10 gp and three potions', L._loot.gp === 10 && L._loot.items.find(x => x.id === 'r447a').qty === 3);
+        L._sell(L._loot.items.findIndex(x => x.id === 'r447b'), 0.5, false);
+        ok('a gem worth 25 sp sold for half: 1 gp 2 sp 5 cp, as coins are handed over', L._loot.gp === 11 && L._loot.sp === 2 && L._loot.cp === 5 && !L._loot.items.some(x => x.id === 'r447b'), JSON.stringify([L._loot.gp, L._loot.sp, L._loot.cp]));
+        menu = null; row('r447c').dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true, clientX: 50, clientY: 50 }));
+        ok('…something with no value: says so, nothing to click', !!menu && menu.length === 1 && menu[0].disabled && /No value/.test(menu[0].label));
+        window.showContextMenu = kcm;
+        // the treasure preview
+        const T = await L._ensureLootTables();
+        if (T){
+          window.showModal = async () => ({ kind: 'hoard', band: '0', edition: 'DMG' });
+          L._openTreasureRoller(); await sleep(300);
+          const tp = () => document.getElementById('loot-tp');
+          ok('rolled treasure opens as a preview, coins in boxes', !!tp() && tp().querySelectorAll('[data-tpc]').length === 5 && +tp().querySelector('#loot-tp-d100').value >= 1);
+          const gpBox = () => tp().querySelector('[data-tpc="gp"]');
+          gpBox().value = '123'; tp().querySelector('#loot-tp-d100').value = '100';
+          tp().querySelector('[data-tp="use"]').click(); await sleep(30);
+          ok('the d100 rolled at the table picks the row (100); a hoard’s coins typed in stay', +tp().querySelector('#loot-tp-d100').value === 100 && gpBox().value === '123');
+          const boxes = [...tp().querySelectorAll('[data-tpi]')];
+          if (boxes.length) boxes[0].checked = false;
+          const n0 = L._loot.items.length, g0 = L._loot.gp;
+          tp().querySelector('[data-tp="add"]').click(); await sleep(40);
+          ok('Add: the typed coins and the items left ticked go into the loot', !tp() && L._loot.gp === g0 + 123 && L._loot.items.length === n0 + Math.max(0, boxes.length - 1), [L._loot.gp, g0, L._loot.items.length, n0, boxes.length].join(','));
+          sktUndo(); await sleep(40);
+          ok('…and that can be undone', L._loot.gp === g0 && L._loot.items.length === n0);
+          L._openTreasureRoller(); await sleep(300);
+          const d1 = tp().querySelector('#loot-tp-d100').value;
+          let changed = false;
+          for (let k = 0; k < 6 && !changed; k++){ tp().querySelector('[data-tp="again"]').click(); await sleep(20); changed = tp().querySelector('#loot-tp-d100').value !== d1 || gpBox().value !== '0'; }
+          ok('Roll again rolls it afresh', changed);
+          tp().querySelector('[data-tp="cancel"]').click(); await sleep(20);
+          ok('Cancel: nothing added', !tp() && L._loot.gp === g0);
+        }
+      } catch(e){ ok('round 447 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
+      finally {
+        window.showToast = kt; window.showModal = km; window.showContextMenu = kcm;
+        document.getElementById('loot-tp')?.remove();
+        if (keep){ L._loot = JSON.parse(keep); L._save(); }
+        try { closePanel('loot'); } catch(e){}
+      }
+    }
     // -- Class features: represented, not just text ------------------------
     {
       try {
@@ -27083,11 +27144,11 @@ for (const cls of Object.keys(rule)) for (let L = 1; L <= 20; L++) for (const sc
       save();
     }
 
-    // Loot is a full player-facing tab, unrestricted by choice: the party's
-    // haul is the party's business, so claiming, splitting and adding are all
-    // theirs. That is why loot.js needs no player-mode branches — but it also
-    // means a regression here hands players a panel that does not work rather
-    // than one that is merely read-only, so it is worth pinning.
+    // Loot is a player-facing tab: the party's haul is the party's business,
+    // so its coins, adding and claiming are theirs. Another character's things
+    // are theirs, and rolling treasure and paying out are the DM's (Aaron's
+    // call, 2026-11-16: as on D&D Beyond). A phone with no character picked
+    // changes nothing, as the TV doesn't.
     {
       const SH = JSON.stringify(state.sharedPanels || []);
       ok('loot is offered as shareable', typeof PA_SHAREABLE !== 'undefined'
@@ -27102,12 +27163,14 @@ for (const cls of Object.keys(rule)) for (let L = 1; L <= 20; L++) for (const sc
         ok('the loot panel mounts for a player', !!(L && L._body && L._body.children.length));
         if (L && L._body){
           ok('a player can see the coin totals', !!L._body.querySelector('.loot-summary'));
-          ok('a player gets the full controls',
-             !!L._body.querySelector('#loot-roll') && !!L._body.querySelector('#loot-divvy')
-             && !!L._body.querySelector('#loot-add-item'),
-             'missing one of roll/divvy/add');
-          ok('a player can claim items',
-             L._body.querySelectorAll('[data-lact="paid"]').length > 0);
+          const meL = typeof paPc === 'function' ? paPc() : null;
+          const addOn = !!(L._body.querySelector('#loot-add-item') || {}).offsetParent;
+          ok('a player can add (with a character), but rolling treasure and paying out are the DM’s',
+             !L._body.querySelector('#loot-roll') && !L._body.querySelector('#loot-divvy') && addOn === !!meL,
+             JSON.stringify([!!L._body.querySelector('#loot-roll'), !!L._body.querySelector('#loot-divvy'), addOn, !!meL]));
+          ok('a player can claim the party’s loot for themselves (with no character picked, nothing changes)',
+             meL ? [...L._body.querySelectorAll('.loot-assign option')].some(o => o.value === meL.id)
+                 : L._body.querySelectorAll('.loot-item.locked').length > 0 && !L._body.querySelector('[data-lact="del"]'));
           ok('the loot panel does not overflow the screen',
              document.documentElement.scrollWidth <= window.innerWidth + 1,
              document.documentElement.scrollWidth + ' > ' + window.innerWidth);
