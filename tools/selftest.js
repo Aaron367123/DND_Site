@@ -23835,6 +23835,47 @@ for (const cls of Object.keys(rule)) for (let L = 1; L <= 20; L++) for (const sc
         closePanel('battlemap');
       }
     }
+    // -- Round 429: markers the DM put down by hand, then added in the tracker — each goblin takes its own (where it was put, still hidden), not all the first; one marker for two: the second gets a new token; a marker of something else is left alone --
+    if (!PLAYER){
+      const B = panelDefs.battlemap, C = panelDefs.combat;
+      let keepT = null, keepC = null, keepR, keepA, saved = false;
+      try {
+        openPanel('battlemap'); await sleep(700);
+        for (let i = 0; i < 40 && !(typeof _5eData !== 'undefined' && _5eData.length); i++) await sleep(250);
+        const gob = _5eData.find(r => r.cat === 'monster' && r.name === 'Goblin');
+        keepT = B._tokens.slice(); keepC = (state.combatants || []).slice(); keepR = state.combatRound; keepA = state.activeCombatantId; saved = true;
+        const cs = B._csScreen();
+        state.combatants = []; state.combatRound = 0; state.activeCombatantId = null; save();
+        B._tokens = [{ id: 't429a', label: 'Goblin', x: 4.5 * cs, y: 4.5 * cs, size: 1, hidden: true }, { id: 't429b', label: 'Goblin', x: 8.5 * cs, y: 4.5 * cs, size: 1, hidden: true },
+                     { id: 't429x', label: 'Barrel', x: 6.5 * cs, y: 7.5 * cs, size: 1 }];
+        B._renderTokens(); B._saveMap(); await sleep(80);
+        C.addMonster(gob); await sleep(200); C.addMonster(gob); await sleep(200);
+        const [g1, g2] = state.combatants;
+        const tok = id => B._tokens.find(t => t.id === id);
+        ok('two goblins added in the tracker, two goblin markers on the map: each takes its own', B._tokens.length === 3 && sktTokenForCombatant(B._tokens, g1) === tok('t429a') && sktTokenForCombatant(B._tokens, g2) === tok('t429b')
+          && B._combatantFor(tok('t429a')) === g1 && B._combatantFor(tok('t429b')) === g2, B._tokens.map(t => t.id + ':' + t.label + ':' + (t.cid || '')).join(' '));
+        ok('…where the DM put them, still hidden, named as the tracker names them', tok('t429a').x === 4.5 * cs && tok('t429b').x === 8.5 * cs && tok('t429a').hidden && tok('t429b').hidden && tok('t429a').label === g1.name && tok('t429b').label === g2.name);
+        ok('…the barrel is left alone', !tok('t429x').cid && tok('t429x').label === 'Barrel');
+        state.combatRound = 1; state.activeCombatantId = g2.id; save(); await sleep(150);
+        ok('…Goblin 2’s turn: the ring is on its marker', !!B._body.querySelector('.map-token.turn[data-tid="t429b"]') && !B._body.querySelector('.map-token.turn[data-tid="t429a"]'));
+        // one marker, two goblins
+        state.combatants = []; state.combatRound = 0; state.activeCombatantId = null; save();
+        B._tokens = [{ id: 't429c', label: 'Goblin', x: 5.5 * cs, y: 5.5 * cs, size: 1 }]; B._renderTokens(); B._saveMap(); await sleep(60);
+        C.addMonster(gob); await sleep(200); C.addMonster(gob); await sleep(200);
+        const [h1, h2] = state.combatants, t1 = sktTokenForCombatant(B._tokens, h1), t2 = sktTokenForCombatant(B._tokens, h2);
+        ok('one goblin marker, two goblins: the first takes it, the second gets a token of its own', B._tokens.length === 2 && t1 && t1.id === 't429c' && t2 && t2.id !== 't429c' && t2.cid === h2.id, B._tokens.map(t => t.id + ':' + t.label + ':' + (t.cid || '')).join(' '));
+        // two of the same name, in one pass
+        { const toks = [{ id: 'm1', label: 'Bandit', x: 1, y: 1 }, { id: 'm2', label: 'Bandit', x: 2, y: 2 }];
+          const fighters = [{ id: 'b1', name: 'Bandit', hp: 11, hpMax: 11 }, { id: 'b2', name: 'Bandit', hp: 11, hpMax: 11 }];
+          sktReconcileTokens(toks, fighters, 20, 20, 50, { x: 500, y: 500 }, {});
+          ok('two bandits both called “Bandit”, two markers: one each, nothing new placed', toks.length === 2 && toks[0].cid === 'b1' && toks[1].cid === 'b2', JSON.stringify(toks.map(t => [t.id, t.cid]))); }
+      } catch(e){ ok('round 429 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
+      finally {
+        if (saved){ B._tokens = keepT; state.combatants = keepC; state.combatRound = keepR; state.activeCombatantId = keepA; try { save(); B._saveMap(); } catch(e){} }
+        try { B._closePanel(); B._render(); } catch(e){}
+        closePanel('battlemap');
+      }
+    }
     // -- Class features: represented, not just text ------------------------
     {
       try {

@@ -8686,8 +8686,25 @@ function sktReconcileTokens(tokens, combatants, cols, rows, cs, centre, opts){
     tokens.splice(i, 1); removed++;
   }
 
+  // A creature without a token of its own (by cid) takes one the DM put down
+  // by hand under its name — the four goblins placed hidden for an ambush,
+  // then added to the tracker. Each takes its own: the name match alone gave
+  // every "Goblin n" the first goblin on the map, so Goblin 2 had no token
+  // (no ring on its turn, no hit points on its panel, moves counted to the
+  // wrong one) and neither marker knew which goblin it was. A token another
+  // fighter has (its cid) is not to be had — two bandits both called
+  // "Bandit" take one each; with none left, a new one is placed as before.
+  // (Its label follows the tracker below, as a linked token's does.)
+  const nm = s => sktNormName(s);
+  const named = (k, c) => k.label === c.name || nm(k.label) === nm(c.name)
+    || (c.baseName && nm(k.label) === nm(c.baseName)) || (k.baseName && nm(k.baseName) === nm(c.name));
+  const othersOf = (k, c) => k.cid != null && k.cid !== c.id && list.some(o => o && o.id === k.cid);
   list.forEach(c => {
-    const t = sktTokenForCombatant(tokens, c);
+    let t = sktTokenForCombatant(tokens, c);
+    if (t && c.id != null && t.cid !== c.id){
+      if (othersOf(t, c)) t = tokens.find(k => k && k.x != null && !othersOf(k, c) && !k.dead && named(k, c)) || null;
+      if (t){ t.cid = c.id; renamed++; }
+    }
     if (t){
       // A linked token follows its combatant's name — the tracker is the
       // roster. Renaming IN PLACE is the point: culling and re-placing would
