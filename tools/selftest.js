@@ -24254,6 +24254,39 @@ for (const cls of Object.keys(rule)) for (let L = 1; L <= 20; L++) for (const sc
         try { closePanel('encounter'); closePanel('combat'); closePanel('battlemap'); } catch(e){}
       }
     }
+    // -- Round 440: a monster's stat block (search, the Bestiary) has Add to encounter: into the encounter being built, the same one again adds to its row; with the builder never opened it keeps the saved encounters (doesn't write an empty builder over them) --
+    if (!PLAYER){
+      const E = panelDefs.encounter;
+      const K = localStorage.getItem('skt-enc-v1'), keep = { m: JSON.stringify(E._monsters || []), s: JSON.stringify(E._saved || []), l: E._loaded };
+      const kt = window.showToast;
+      try {
+        for (let i = 0; i < 40 && !(typeof _5eLoaded !== 'undefined' && _5eLoaded); i++) await sleep(250);
+        window.showToast = () => {};
+        try { closePanel('encounter'); } catch(e){}
+        // the builder as a fresh page has it: never opened, stored with a saved encounter in it
+        localStorage.setItem('skt-enc-v1', JSON.stringify({ monsters: [{ name: 'Wolf', cr: '1/4', count: 2, _source: 'MM' }], saved: [{ id: 'enc_r440', name: 'r440 Wolves', monsters: [] }] }));
+        E._loaded = false; E._monsters = []; E._saved = [];
+        const ogre = _5eData.find(d => d.cat === 'monster' && d.name === 'Ogre' && d._source === 'MM');
+        const card = document.createElement('div'); card.innerHTML = buildDetailCard(ogre, '-r440'); document.body.appendChild(card);
+        wireDetailActions(ogre, card, '-r440', null);
+        const btn = card.querySelector('#det-add-enc-r440');
+        ok('an ogre’s stat block: Add to encounter, beside Add to combat', !!btn && !!card.querySelector('#det-add-monster-r440'));
+        btn.click(); await sleep(30);
+        const st = JSON.parse(localStorage.getItem('skt-enc-v1'));
+        ok('…the builder never opened: the ogre joins the wolves already there, and the saved encounter is still saved', st.monsters.length === 2 && st.monsters.some(m => m.name === 'Wolf' && m.count === 2) && st.monsters.some(m => m.name === 'Ogre' && m._source === 'MM' && m.count === 1) && st.saved.length === 1 && st.saved[0].name === 'r440 Wolves', JSON.stringify(st).slice(0, 200));
+        btn.click(); await sleep(30);
+        ok('…again: the same row, two ogres', JSON.parse(localStorage.getItem('skt-enc-v1')).monsters.find(m => m.name === 'Ogre').count === 2);
+        card.remove();
+        openPanel('encounter'); await sleep(400);
+        ok('…and the builder shows them', /Ogre/.test(E._body.textContent) && /Wolf/.test(E._body.textContent));
+      } catch(e){ ok('round 440 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
+      finally {
+        window.showToast = kt;
+        if (K != null) localStorage.setItem('skt-enc-v1', K); else localStorage.removeItem('skt-enc-v1');
+        E._monsters = JSON.parse(keep.m); E._saved = JSON.parse(keep.s); E._loaded = keep.l;
+        try { closePanel('encounter'); } catch(e){}
+      }
+    }
     // -- Class features: represented, not just text ------------------------
     {
       try {

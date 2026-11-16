@@ -32,8 +32,32 @@ registerPanel('encounter',{
   _hpMode:'avg',
   mount(body){
     this._body=body;
-    try{const r=localStorage.getItem('skt-enc-v1');if(r){const d=JSON.parse(r);this._monsters=d.monsters||[];this._partyLevel=d.partyLevel||6;this._partySize=d.partySize||state.party.length||5;this._saved=Array.isArray(d.saved)?d.saved:[];if(d.system==='2014'||d.system==='2024')this._system=d.system;this._out=Array.isArray(d.out)?d.out:[];this._cur=d.cur||null;this._notes=typeof d.notes==='string'?d.notes:'';if(['avg','roll','mine'].includes(d.hpMode))this._hpMode=d.hpMode;}}catch(e){}
+    this._load();
     this._render();
+  },
+  // What's stored. Also before adding from a stat block with the window
+  // never opened this session: saving then would otherwise write an empty
+  // builder over the saved encounters.
+  _loaded:false,
+  _load(){
+    this._loaded = true;
+    try{const r=localStorage.getItem('skt-enc-v1');if(r){const d=JSON.parse(r);this._monsters=d.monsters||[];this._partyLevel=d.partyLevel||6;this._partySize=d.partySize||state.party.length||5;this._saved=Array.isArray(d.saved)?d.saved:[];if(d.system==='2014'||d.system==='2024')this._system=d.system;this._out=Array.isArray(d.out)?d.out:[];this._cur=d.cur||null;this._notes=typeof d.notes==='string'?d.notes:'';if(['avg','roll','mine'].includes(d.hpMode))this._hpMode=d.hpMode;}}catch(e){}
+  },
+  // From a stat block anywhere (search, the Bestiary): into the encounter
+  // being built, open or not. The same name and book adds to its row.
+  addEntry(d, n){
+    if (!d || d.cat !== 'monster') return;
+    if (!this._loaded) this._load();
+    n = Math.max(1, n | 0 || 1);
+    const _source = d._source || null;
+    const had = this._monsters.find(m => m.name === d.name && (m._source || null) === _source);
+    if (had) had.count = (had.count || 1) + n;
+    else this._monsters.push({ name: d.name, cr: d._cr ?? d._raw?.challenge_rating ?? '?', hp: d.hp || 10, ac: d.ac || 10, dex: d.dex || 10, _source, count: n });
+    this._save();
+    if (this._body) this._render();
+    const total = this._monsters.reduce((s, m) => s + (m.count || 1), 0);
+    if (typeof showToast === 'function') showToast(d.name + ' added to the encounter (' + total + ' monster' + (total === 1 ? '' : 's') + ')',
+      this._body ? {} : { action: { label: 'Open', run: () => openPanel('encounter') } });
   },
   unmount(){
     this._body=null;

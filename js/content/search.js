@@ -1312,6 +1312,7 @@ function buildDetailCard(d, idSuffix) {
   if (!isParty) {
     actionsHtml = '<div class="detail-actions">';
     if(isMonster) actionsHtml+=`<button class="btn small primary" id="det-add-monster${idSuffix}">+ Add to combat</button>`;
+    if(isMonster && !document.body.classList.contains('player-mode')) actionsHtml+=`<button class="btn small" id="det-add-enc${idSuffix}" title="Into the encounter being built in the Encounter Builder">+ Add to encounter</button>`;
     if(isCond)    actionsHtml+=`<button class="btn small primary" id="det-apply-cond${idSuffix}">+ Apply to active combatant</button>`;
     actionsHtml += '</div>';
   }
@@ -1341,6 +1342,12 @@ function _sourceFootHtml(d) {
 function wireDetailActions(d, root, idSuffix, onAfterAction) {
   root.querySelector('#det-add-monster'+idSuffix)?.addEventListener('click',()=>{
     panelDefs.combat.addMonster(d);
+    onAfterAction?.();
+  });
+  // (the search closes as after Add to combat; a popped-out stat block stays,
+  // to add another)
+  root.querySelector('#det-add-enc'+idSuffix)?.addEventListener('click',()=>{
+    if (panelDefs.encounter && typeof panelDefs.encounter.addEntry === 'function') panelDefs.encounter.addEntry(d, 1);
     onAfterAction?.();
   });
   root.querySelector('#det-apply-cond'+idSuffix)?.addEventListener('click',()=>{
@@ -1385,6 +1392,7 @@ function renderSearchDetail(){
     ${d.cat==='party' ? '' : (function(){
       let h='<div class="detail-actions">';
       if(d.cat==='monster')   h+=`<button class="btn small primary" id="det-add-monster${suffix}">+ Add to combat</button>`;
+      if(d.cat==='monster' && !document.body.classList.contains('player-mode')) h+=`<button class="btn small" id="det-add-enc${suffix}" title="Into the encounter being built in the Encounter Builder">+ Add to encounter</button>`;
       if(d.cat==='condition') h+=`<button class="btn small primary" id="det-apply-cond${suffix}">+ Apply to active combatant</button>`;
       return h+'</div>';
     })()}
