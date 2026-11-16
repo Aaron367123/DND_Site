@@ -286,7 +286,13 @@ function sktMonsterPortrait(m){
   if (!m) return null;
   const own = typeof bestiaryOwnToken === 'function' ? bestiaryOwnToken(m.name, m._source) : null;
   if (own) return 'img/' + own;
-  return m._img ? 'img/' + bestiaryPortraitPath(m._img) : null;
+  if (!m._img) return null;
+  // A picture that is already whole — an NPC Library avatar (a data: URL), a
+  // link — is the picture. Prefixed with img/ it became "img/data:image/…",
+  // a file on the CDN that doesn't exist: Add to combat from the NPC Library
+  // gave a broken picture in the tracker.
+  if (/^(data:|blob:|https?:)/i.test(String(m._img))) return String(m._img);
+  return 'img/' + bestiaryPortraitPath(m._img);
 }
 function bestiaryOwnToken(name, source) {
   const misses = window.TOKEN_NAME_MISSES;

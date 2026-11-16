@@ -42,7 +42,12 @@ registerPanel('encounter',{
   _load(){
     this._loaded = true;
     try{const r=localStorage.getItem('skt-enc-v1');if(r){const d=JSON.parse(r);this._monsters=d.monsters||[];this._partyLevel=d.partyLevel||6;this._partySize=d.partySize||state.party.length||5;this._saved=Array.isArray(d.saved)?d.saved:[];if(d.system==='2014'||d.system==='2024')this._system=d.system;this._out=Array.isArray(d.out)?d.out:[];this._cur=d.cur||null;this._notes=typeof d.notes==='string'?d.notes:'';if(['avg','roll','mine'].includes(d.hpMode))this._hpMode=d.hpMode;}}catch(e){}
+    this._monsters.forEach(m => { if (m && !m.id) m.id = this._rowId(); });
   },
+  // Each monster row has an id. Two DM screens changing the encounter at
+  // once merged it as one list, so one screen's whole list won and the
+  // other's added monster was gone; with ids the sync merges row by row.
+  _rowId(){ return 'em_' + (typeof uid === 'function' ? uid() : Math.random().toString(36).slice(2)); },
   // UNDO. Taking a monster out, Clear, deleting a saved encounter and Scale
   // to had none (Ctrl+Z or the toast's Undo): a stray × lost the row. The
   // change is made, saved and drawn, and goes into the app's undo history.
@@ -64,7 +69,7 @@ registerPanel('encounter',{
     const _source = d._source || null;
     const had = this._monsters.find(m => m.name === d.name && (m._source || null) === _source);
     if (had) had.count = (had.count || 1) + n;
-    else this._monsters.push({ name: d.name, cr: d._cr ?? d._raw?.challenge_rating ?? '?', hp: d.hp || 10, ac: d.ac || 10, dex: d.dex || 10, _source, count: n });
+    else this._monsters.push({ id: this._rowId(), name: d.name, cr: d._cr ?? d._raw?.challenge_rating ?? '?', hp: d.hp || 10, ac: d.ac || 10, dex: d.dex || 10, _source, count: n });
     this._save();
     if (this._body) this._render();
     const total = this._monsters.reduce((s, m) => s + (m.count || 1), 0);
@@ -106,6 +111,14 @@ registerPanel('encounter',{
   // builder now knows which one it is working on: Save puts the changes back
   // in it, Save as new… makes another; loading over unsaved work asks first.
   _curSaved(){ return this._cur ? this._saved.find(s => s.id === this._cur) || null : null; },
+  // The saved list, as filtered: every word in the name, a monster's name or
+  // the notes. (No cap any more, so the list can grow long.)
+  _savedQ:'',
+  _savedShown(){
+    const w = String(this._savedQ || '').toLowerCase().split(/\s+/).filter(Boolean);
+    if (!w.length) return this._saved;
+    return this._saved.filter(s => { const hay = (s.name + ' ' + (s.monsters || []).map(m => m.name).join(' ') + ' ' + (s.notes || '')).toLowerCase(); return w.every(x => hay.includes(x)); });
+  },
   _sameMons(a, b){ const k = l => JSON.stringify((l || []).map(m => [m.name, m._source || null, m.count || 1]).sort()); return k(a) === k(b); },
   // Unsaved: a loaded one changed, or a new one with something in it.
   _dirty(){
@@ -223,7 +236,7 @@ registerPanel('encounter',{
         const _source = d._source || null;
         const existing = this._monsters.find(m => m.name === d.name && (m._source || null) === _source);
         if (existing) existing.count = (existing.count || 1) + n;
-        else this._monsters.push({ name: d.name, cr: d._cr ?? d._raw?.challenge_rating ?? '?', hp: d.hp || 10, ac: d.ac || 10,
+        else this._monsters.push({ id: this._rowId(), name: d.name, cr: d._cr ?? d._raw?.challenge_rating ?? '?', hp: d.hp || 10, ac: d.ac || 10,
                                    dex: d.dex || 10, _source, count: n });
         this._save(); this._render();
         return 'Added ' + (n > 1 ? n + ' × ' : '') + d.name + ' to the encounter';
@@ -317,18 +330,20 @@ registerPanel('encounter',{
                  <button class="btn small" id="enc-save-current" ${!this._monsters.length?'disabled title="Add monsters first"':''}>Save as new…</button>`
               : `<button class="btn small" id="enc-save-current" ${!this._monsters.length?'disabled title="Add monsters first"':''}>${ICO('i-save')} Save current…</button>`}
           </div>
+          ${this._saved.length > 6 ? `<input type="search" id="enc-saved-q" class="enc-saved-q" placeholder="Find a saved encounter — name, monster, notes" value="${esc(this._savedQ || '')}" aria-label="Find a saved encounter">` : ''}
           <div id="enc-saved-list" style="display:flex;flex-direction:column;gap:4px">
             ${!this._saved.length
               ? '<div style="font-size:var(--fs-sm);color:var(--text-dim)">No saved encounters yet.</div>'
-              : this._saved.map(s => {
+              : this._savedShown().map(s => {
                   const count = (s.monsters||[]).reduce((n,m)=>n+(m.count||1),0);
                   // How hard it is for the party as it stands now, in this edition.
                   const v = this._verdictFor(s.monsters || []);
                   return `<div class="enc-saved-row${s.id === this._cur ? ' on' : ''}" style="display:flex;align-items:center;gap:6px;background:var(--panel-2);border:1px solid var(--border);border-radius:4px;padding:4px 6px">
                     <button class="btn small" data-eact="load-enc" data-eid="${esc(s.id)}" style="flex:1;text-align:left;justify-content:flex-start" title="${s.id === this._cur ? 'Open now' : 'Open this encounter'}${s.notes ? ' — ' + esc(String(s.notes).slice(0, 120)) : ''}">${esc(s.name)} <span style="color:var(--text-dim);font-size:var(--fs-xs)">· ${count} monster${count === 1 ? '' : 's'} · <span class="enc-sv-d">${esc(v)}</span></span></button>
+                    <button class="btn icon-btn" data-eact="ren-enc" data-eid="${esc(s.id)}" title="Rename “${esc(s.name)}”" aria-label="Rename" style="padding:2px 5px;font-size:var(--fs-sm)">✎</button>
                     <button class="btn icon-btn danger" data-eact="del-enc" data-eid="${esc(s.id)}" title="Delete saved encounter" style="padding:2px 5px;font-size:var(--fs-sm)">×</button>
                   </div>`;
-                }).join('')}
+                }).join('') + (this._saved.length && !this._savedShown().length ? '<div style="font-size:var(--fs-sm);color:var(--text-dim)">None match.</div>' : '')}
           </div>
         </div>
       </div>
@@ -492,13 +507,28 @@ registerPanel('encounter',{
       const s = this._saved.find(x => x.id === btn.dataset.eid);
       if (!s || (s.id === this._cur && !this._dirty())) return;
       const go = () => {
-        this._monsters = JSON.parse(JSON.stringify(s.monsters||[])); this._notes = s.notes || ''; this._cur = s.id;
+        this._monsters = JSON.parse(JSON.stringify(s.monsters||[])); this._monsters.forEach(m => { if (!m.id) m.id = this._rowId(); }); this._notes = s.notes || ''; this._cur = s.id;
         this._save(); this._render();
         if (typeof showToast==='function') showToast('Opened “' + s.name + '”');
       };
       if (!this._dirty()) return go();
       const what = this._curSaved() ? 'The changes to “' + this._curSaved().name + '” aren’t saved.' : 'The encounter you’re building isn’t saved.';
       showConfirm(what + ' Open “' + s.name + '” anyway?', { title:'Open encounter', confirmLabel:'Open' }).then(ok => { if (ok) go(); });
+    }));
+    // Find one (typing keeps the box; only the list redraws)
+    b.querySelector('#enc-saved-q')?.addEventListener('input', e => {
+      this._savedQ = e.target.value;
+      const pos = e.target.selectionStart; this._render();
+      const q2 = this._body && this._body.querySelector('#enc-saved-q'); if (q2){ q2.focus(); try { q2.setSelectionRange(pos, pos); } catch(x){} }
+    });
+    // Rename one
+    b.querySelectorAll('[data-eact="ren-enc"]').forEach(btn => btn.addEventListener('click', () => {
+      const s = this._saved.find(x => x.id === btn.dataset.eid); if (!s) return;
+      showModal('Rename encounter', [{ id:'name', label:'Name', type:'text', value: s.name }], 'Rename').then(r => {
+        const name = r && String(r.name || '').trim(); if (!name || name === s.name) return;
+        if (this._saved.some(x => x.id !== s.id && (x.name || '').toLowerCase() === name.toLowerCase())){ if (typeof showToast === 'function') showToast('Another encounter is called “' + name + '”', { alert: true }); return; }
+        this._undoable('Renamed “' + s.name + '” to “' + name + '”', () => { s.name = name; });
+      });
     }));
     // Delete a saved encounter
     b.querySelectorAll('[data-eact="del-enc"]').forEach(btn => btn.addEventListener('click', () => {

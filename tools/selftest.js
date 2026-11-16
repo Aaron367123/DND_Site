@@ -24422,6 +24422,71 @@ for (const cls of Object.keys(rule)) for (let L = 1; L <= 20; L++) for (const sc
         try { closePanel('encounter'); closePanel('combat'); } catch(e){}
       }
     }
+    // -- Round 444: every monster row has an id, so two DM screens adding at once both keep theirs (the sync merges row by row); a long saved list can be filtered by name, monster or notes; a saved encounter can be renamed (and the rename undone) --
+    if (!PLAYER){
+      const E = panelDefs.encounter;
+      const keep = { s: JSON.stringify(E._saved || []), m: JSON.stringify(E._monsters || []), c: E._cur, q: E._savedQ };
+      const km = window.showModal, kt = window.showToast;
+      try {
+        for (let i = 0; i < 40 && !(typeof _5eLoaded !== 'undefined' && _5eLoaded); i++) await sleep(250);
+        window.showToast = () => {};
+        openPanel('encounter'); await sleep(400);
+        // ids
+        E._monsters = [{ name: 'Old Row', cr: '1', count: 1 }]; E._load && 0;
+        localStorage.setItem('skt-enc-v1', JSON.stringify(Object.assign(JSON.parse(localStorage.getItem('skt-enc-v1') || '{}'), { monsters: [{ name: 'Wolf', cr: '1/4', count: 2, _source: 'MM' }] })));
+        E._load();
+        ok('a row saved before rows had ids gets one when read', E._monsters.length === 1 && /^em_/.test(E._monsters[0].id || ''));
+        const ogre = _5eData.find(d => d.cat === 'monster' && d.name === 'Ogre' && d._source === 'MM'), gob = _5eData.find(d => d.cat === 'monster' && d.name === 'Goblin' && d._source === 'MM');
+        E.addEntry(ogre, 1);
+        ok('…and a row added has one of its own', /^em_/.test(E._monsters[1].id || '') && E._monsters[1].id !== E._monsters[0].id);
+        // two screens at once: the sync's merge
+        const base = JSON.parse(JSON.stringify(E._monsters));
+        const mine = base.concat([{ id: 'em_r444a', name: 'Goblin', cr: '1/4', count: 3, _source: 'MM' }]);
+        const theirs = base.map(m => m.name === 'Wolf' ? Object.assign({}, m, { count: 5 }) : m).concat([{ id: 'em_r444b', name: 'Orc', cr: '1/2', count: 2, _source: 'MM' }]);
+        const merged = JSON.parse(_mergeJsonStr(JSON.stringify({ monsters: base }), JSON.stringify({ monsters: mine }), JSON.stringify({ monsters: theirs }))).monsters;
+        ok('two DM screens at once — one adds goblins, the other orcs and makes it five wolves: all of it kept', merged.length === 4 && merged.some(m => m.name === 'Goblin') && merged.some(m => m.name === 'Orc') && merged.find(m => m.name === 'Wolf').count === 5, JSON.stringify(merged.map(m => m.name + m.count)));
+        // the filter
+        E._saved = []; E._cur = null;
+        for (let i = 1; i <= 8; i++) E._saved.push({ id: 'enc_r444_' + i, name: 'r444 Fight ' + i, monsters: [{ name: i === 5 ? 'Owlbear' : 'Goblin', cr: '1', count: 1 }], notes: i === 7 ? 'at the old mill' : '' });
+        E._savedQ = ''; E._render(); await sleep(20);
+        const box = E._body.querySelector('#enc-saved-q');
+        ok('more than six saved: a box to find one', !!box);
+        const shown = () => [...E._body.querySelectorAll('[data-eact="load-enc"]')].map(b => b.dataset.eid);
+        box.value = 'owlbear'; box.dispatchEvent(new Event('input')); await sleep(20);
+        ok('…by a monster in it', shown().join() === 'enc_r444_5' && document.activeElement && document.activeElement.id === 'enc-saved-q', shown().join());
+        const b2 = E._body.querySelector('#enc-saved-q'); b2.value = 'mill'; b2.dispatchEvent(new Event('input')); await sleep(20);
+        ok('…by its notes', shown().join() === 'enc_r444_7');
+        const b3 = E._body.querySelector('#enc-saved-q'); b3.value = 'zzz'; b3.dispatchEvent(new Event('input')); await sleep(20);
+        ok('…nothing: says so', !shown().length && /None match/.test(E._body.textContent));
+        const b4 = E._body.querySelector('#enc-saved-q'); b4.value = ''; b4.dispatchEvent(new Event('input')); await sleep(20);
+        // rename
+        window.showModal = async () => ({ name: 'r444 The Mill' });
+        E._body.querySelector('[data-eact="ren-enc"][data-eid="enc_r444_7"]').click(); await sleep(40);
+        ok('rename: the saved encounter has its new name', E._saved.find(s => s.id === 'enc_r444_7').name === 'r444 The Mill' && /r444 The Mill/.test(E._body.textContent));
+        sktUndo(); await sleep(20);
+        ok('…and Undo gives it its old one back', E._saved.find(s => s.id === 'enc_r444_7').name === 'r444 Fight 7');
+        window.showModal = async () => ({ name: 'r444 fight 3' });
+        E._body.querySelector('[data-eact="ren-enc"][data-eid="enc_r444_7"]').click(); await sleep(40);
+        ok('…a name another one has: refused, nothing renamed', E._saved.find(s => s.id === 'enc_r444_7').name === 'r444 Fight 7');
+        // an NPC Library character's picture, into the tracker
+        { const K = JSON.stringify(state.combatants || []);
+          try {
+            const cv = document.createElement('canvas'); cv.width = cv.height = 8; const g = cv.getContext('2d'); g.fillStyle = '#c33'; g.fillRect(0, 0, 8, 8);
+            const pic = cv.toDataURL('image/png');
+            state.combatants = []; panelDefs.combat.addMonster({ name: 'r444 Harshnag', hp: 120, hpMax: 120, ac: 15, dex: 10, _img: pic }, { quiet: true });
+            openPanel('combat'); await sleep(300);
+            const c = state.combatants[0], img = [...panelDefs.combat._body.querySelectorAll('img')].find(i => (i.getAttribute('src') || '').startsWith('data:'));
+            if (img && !img.complete) await new Promise(r => { img.onload = img.onerror = r; setTimeout(r, 800); });
+            ok('an NPC Library character added to the fight keeps its picture (it was “img/data:…”, a broken image)', c.portrait === pic && !!img && img.naturalWidth > 0, String(c.portrait).slice(0, 30));
+          } finally { state.combatants = JSON.parse(K); save(); try { closePanel('combat'); } catch(e){} } }
+      } catch(e){ ok('round 444 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
+      finally {
+        window.showModal = km; window.showToast = kt;
+        E._saved = JSON.parse(keep.s); E._monsters = JSON.parse(keep.m); E._cur = keep.c; E._savedQ = keep.q || '';
+        try { E._save(); } catch(e){}
+        try { closePanel('encounter'); } catch(e){}
+      }
+    }
     // -- Class features: represented, not just text ------------------------
     {
       try {

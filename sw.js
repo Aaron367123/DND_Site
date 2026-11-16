@@ -34,10 +34,10 @@
  */
 'use strict';
 
-const BUILD = '25d81f652a';
+const BUILD = 'afdffc4f5b';
 const PRECACHE = [
   'skt-workspace.html',
-  'styles/main.css?v=274bdeb2f0',
+  'styles/main.css?v=ad2b094537',
   'styles/theme.css?v=490a0ae264',
   'js/core/errors.js?v=67c70f2e1d',
   'js/core/data.js?v=183a16905e',
@@ -46,7 +46,7 @@ const PRECACHE = [
   'js/generated/token-index.js?v=2840810fc7',
   'js/generated/species-portraits.js?v=56581792b0',
   'js/core/campaign.js?v=171a617f55',
-  'js/core/utils.js?v=a03e2ba359',
+  'js/core/utils.js?v=d8d669e443',
   'js/ui/dice-fx.js?v=1acff2694d',
   'js/core/state.js?v=8030e53453',
   'js/core/undo.js?v=63ed223198',
@@ -79,7 +79,7 @@ const PRECACHE = [
   'js/panels/library.js?v=d41e1e85e4',
   'js/panels/npc-generator.js?v=ef379c47ad',
   'js/panels/loot.js?v=038e688fd3',
-  'js/panels/encounter.js?v=a4bfb1984b',
+  'js/panels/encounter.js?v=8235f7461d',
   'js/panels/soundboard.js?v=0381935289',
   'js/panels/weather.js?v=be4fc599ab',
   'js/panels/timetracker.js?v=a4bf06c348',
