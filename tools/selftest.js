@@ -27916,6 +27916,51 @@ for (const cls of Object.keys(rule)) for (let L = 1; L <= 20; L++) for (const sc
         paTab = keepTab; try { paRender(); } catch(e){}
       }
     }
+    // -- Round 433: on a phone, a tap on someone else's token shows a card: its name, what players may see of its health, its conditions, how far it is from you (edge to edge); a drag (a pan) or a hold (a ping) doesn't; the next touch puts it away --
+    if (PLAYER && typeof Touch === 'function'){
+      const keepTab = paTab, B = panelDefs.battlemap;
+      let keep = null;
+      try {
+        if (paMyIdx() < 0) paSetPc('zoey');
+        paTab = 'map'; paRender(); await sleep(900);
+        keep = { t: B._tokens.slice(), c: (state.combatants || []).slice(), r: state.combatRound, a: state.activeCombatantId, f: B._fog, d: B._drawings, g: B._gridType };
+        B._fog = null; B._drawings = []; B._gridType = 'square';
+        const cs = B._csScreen(), me = paPc();
+        state.combatants = [{ id: me.id, name: me.name, isPC: true, hp: 20, hpMax: 30, initiative: 18 }, { id: 'r433o', name: 'r433 Ogre', hp: 20, hpMax: 59, initiative: 10, conditions: ['Prone'], size: 'Large' }];
+        state.combatRound = 1; state.activeCombatantId = me.id;
+        B._tokens = [{ id: 't433z', cid: me.id, label: me.name, isPC: true, x: 3.5 * cs, y: 3.5 * cs, size: 1 }, { id: 't433o', cid: 'r433o', label: 'r433 Ogre', x: 7 * cs, y: 4 * cs, size: 2 }];
+        B._render(); await sleep(250);
+        const el = () => document.querySelector('#pa-screen .map-token[data-tid="t433o"]');
+        el().scrollIntoView({ block: 'center', inline: 'center' }); await sleep(120);
+        const card = () => document.querySelector('#pa-screen .bm-tok-card');
+        const tap = async (dx, ms) => {
+          const r = el().getBoundingClientRect(), x = Math.round(r.left + r.width / 2), y = Math.round(r.top + r.height / 2), e = el();
+          const tch = (cx, cy) => new Touch({ identifier: 9, target: e, clientX: cx, clientY: cy });
+          e.dispatchEvent(new TouchEvent('touchstart', { bubbles: true, cancelable: true, touches: [tch(x, y)], targetTouches: [tch(x, y)], changedTouches: [tch(x, y)] }));
+          await sleep(ms);
+          document.dispatchEvent(new TouchEvent('touchend', { bubbles: true, cancelable: true, touches: [], changedTouches: [tch(x + dx, y)] }));
+          await sleep(60);
+        };
+        await tap(0, 60);
+        const c = card(), txt = c ? c.textContent : '';
+        // Zoey in square 3, the ogre's 2×2 in squares 6–7: two empty squares between, so 15 ft (counted into its square)
+        ok('a tap on the ogre: a card with its name, its health as players see it, Prone, and 15 ft from you', !!c && /r433 Ogre/.test(txt) && /Prone/.test(txt) && /15 ft from you/.test(txt) && txt.includes(B._tokenTitle(B._tokens[1]).split(' — ')[1] || '?'), txt);
+        const cr = c && c.getBoundingClientRect(), sr = document.getElementById('pa-screen').getBoundingClientRect();
+        ok('…on the screen', !!cr && cr.left >= sr.left && cr.right <= sr.right && cr.top >= sr.top, cr && JSON.stringify([cr.left, cr.top, cr.right]));
+        document.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, clientX: 5, clientY: 300 })); await sleep(30);
+        ok('…the next touch puts it away', !card());
+        await tap(40, 60);
+        ok('a drag across it (panning the map): no card', !card());
+        await tap(0, 700);
+        ok('a hold (a ping): no card', !card());
+      } catch(e){ ok('round 433 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
+      finally {
+        try { B._tokCardOff(); } catch(e){}
+        if (keep){ B._tokens = keep.t; state.combatants = keep.c; state.combatRound = keep.r; state.activeCombatantId = keep.a; B._fog = keep.f; B._drawings = keep.d; B._gridType = keep.g; }
+        try { B._render(); } catch(e){}
+        paTab = keepTab; try { paRender(); } catch(e){}
+      }
+    }
   }
 
   // ══════════════════════════════════════════════════════════ mobile / phone

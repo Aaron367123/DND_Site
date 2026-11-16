@@ -2793,6 +2793,62 @@ registerPanel('battlemap',{
       else if (typeof T._checkProvoke === 'function') T._checkProvoke(t, { x: was.x, y: was.y, elev: was.elev });
     } catch(e){}
   },
+  // ─── What a player can see of a creature ──────────────────────────────────
+  // A tap on someone else's token on a phone did nothing: its name and how
+  // hurt it looks were in a tooltip, which a finger never shows. A short tap
+  // (not a drag, not a hold — that pings) shows a card over it: the name,
+  // what the DM lets players see of its hit points (the tracker's setting),
+  // its conditions, and how far it is from your own creature, edge to edge
+  // as an attack's reach is counted. Gone at the next touch, or in 6 s.
+  _tapCard(t, x0, y0, endEv){
+    const t0 = Date.now();
+    const end = ev => {
+      document.removeEventListener(endEv, end, true);
+      const p = (ev.changedTouches && ev.changedTouches[0]) || ev;
+      if (p && p.clientX != null && Math.hypot(p.clientX - x0, p.clientY - y0) < 10 && Date.now() - t0 < 500) this._tokCard(t);
+    };
+    document.addEventListener(endEv, end, true);
+  },
+  _tokCard(t){
+    const b = this._body; if (!b || !t) return null;
+    this._tokCardOff();
+    const el = b.querySelector('#map-stage .map-token[data-tid="' + CSS.escape(String(t.id)) + '"]'), host = b.querySelector('.bm-main');
+    if (!el || !host) return null;
+    const title = this._tokenTitle(t), cut = title.indexOf(' — ');
+    const name = cut >= 0 ? title.slice(0, cut) : title, health = cut >= 0 ? title.slice(cut + 3) : '';
+    const c = this._combatantFor(t);
+    const conds = ((c && c.conditions) || t.conds || []).filter(Boolean);
+    let dist = '';
+    const me = typeof paPc === 'function' ? paPc() : null;
+    const mt = me && ((this._tokens || []).find(k => k && k.cid != null && k.cid === me.id) || (this._tokens || []).find(k => k && k.isPC && k.label === me.name));
+    const T = (typeof panelDefs !== 'undefined') && panelDefs.turnview;
+    if (mt && mt !== t && mt.x != null && T && typeof T._edgeFeet === 'function'){
+      T._mapCache = null;
+      try { const ft = T._edgeFeet(mt, t); if (ft != null) dist = ft + ' ft from you'; } catch(e){}
+    }
+    const card = document.createElement('div');
+    card.className = 'bm-tok-card';
+    card.innerHTML = '<b>' + esc(name) + '</b>' + [health, conds.join(', '), dist].filter(Boolean).map(s => '<span>' + esc(s) + '</span>').join('');
+    host.appendChild(card);
+    const hr = host.getBoundingClientRect(), r = el.getBoundingClientRect(), w = card.offsetWidth, h = card.offsetHeight;
+    let left = r.left + r.width / 2 - hr.left - w / 2, top = r.top - hr.top - h - 8;
+    if (top < 4) top = r.bottom - hr.top + 8;
+    left = Math.max(4, Math.min(hr.width - w - 4, left));
+    card.style.left = Math.round(left) + 'px'; card.style.top = Math.round(top) + 'px';
+    this._tokCardT = setTimeout(() => this._tokCardOff(), 6000);
+    // the next touch anywhere puts it away (after this one has finished)
+    setTimeout(() => {
+      if (!card.isConnected) return;
+      this._tokCardAway = () => this._tokCardOff();
+      document.addEventListener('pointerdown', this._tokCardAway, true);
+    }, 0);
+    return card;
+  },
+  _tokCardOff(){
+    clearTimeout(this._tokCardT);
+    if (this._tokCardAway){ document.removeEventListener('pointerdown', this._tokCardAway, true); this._tokCardAway = null; }
+    this._body && this._body.querySelectorAll('.bm-tok-card').forEach(x => x.remove());
+  },
   // Whose turn it is, in a fight that's under way: their token wears a ring.
   _isTurn(t){
     if (!t || typeof state === 'undefined' || !(+state.combatRound > 0) || state.activeCombatantId == null) return false;
@@ -8169,8 +8225,9 @@ registerPanel('battlemap',{
         // Shift+click (the DM's, no tool up): this token into the group, or out.
         if (!isPlayer && e.shiftKey && !this._tool){ this._groupToggle(t.id); return; }
         if (this._group && this._group.size && !this._group.has(t.id)) this._groupClear();
-        // A player moves (or rubs out) only what is theirs.
-        if (isPlayer && !sktPlayerMayMoveToken(t)) return;
+        // A player moves (or rubs out) only what is theirs. Someone else's:
+        // a click shows what they can see of it (see _tokCard).
+        if (isPlayer && !sktPlayerMayMoveToken(t)){ this._tapCard(t, e.clientX, e.clientY, 'mouseup'); return; }
 
         if(this._tool==='erase'){
           const i=this._tokens.findIndex(x=>x.id===t.id);
@@ -8286,7 +8343,7 @@ registerPanel('battlemap',{
 
         if (this._tool === 'ruler'){ this._rulerDrag(t.x, t.y, true, t); return; }
         if (this._tool === 'area'){ const p = this._stagePoint(touch.clientX, touch.clientY, stage); this._areaPointerDown(p.x, p.y, touch.clientX, touch.clientY, true, t); return; }
-        if (isPlayer && !sktPlayerMayMoveToken(t)) return;
+        if (isPlayer && !sktPlayerMayMoveToken(t)){ this._tapCard(t, touch.clientX, touch.clientY, 'touchend'); return; }
 
         if(this._tool==='erase'){
           const i=this._tokens.findIndex(x=>x.id===t.id);
