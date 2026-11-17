@@ -368,6 +368,8 @@ html:has(body.player-app), body.player-app, #cs-root .cs-body { overscroll-behav
 .glog-dice { display: flex; flex-wrap: wrap; gap: 4px; align-items: center; }
 .glog-die { padding: 3px 6px; border: 1px solid var(--border); border-radius: var(--r-sm); background: var(--panel-2); color: var(--text); font: inherit; font-size: var(--fs-sm); cursor: pointer; }
 .glog-die:hover { border-color: var(--accent); }
+/* A finger: d4…d100 were 28 by 24 px. */
+@media (pointer: coarse){ .glog-dice { gap: 6px; } .glog-die { min-width: 44px; min-height: 38px; padding: 6px 10px; } }
 .glog-hidden { margin-left: auto; display: inline-flex; gap: 4px; align-items: center; font-size: var(--fs-xs); color: var(--text-muted); cursor: pointer; }
 .glog-list { flex: 1; min-height: 0; overflow-y: auto; display: flex; flex-direction: column; gap: 2px; }
 .glog-empty { padding: 18px 8px; color: var(--text-muted); font-size: var(--fs-sm); text-align: center; }

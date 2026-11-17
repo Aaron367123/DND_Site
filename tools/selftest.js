@@ -29592,6 +29592,17 @@ for (const cls of Object.keys(rule)) for (let L = 1; L <= 20; L++) for (const sc
       } catch(e){ ok('round 472 threw', false, e.message); }
       finally { if (dr && !was) dr.classList.remove('open'); }
     }
+    // -- Round 473 (player): the game log's quick dice are big enough for a finger (28 by 24 px on a phone) --
+    if (PLAYER){
+      try {
+        paTab = 'more'; paMoreSub = 'log'; paRender(); await sleep(200);
+        const d = [...document.querySelectorAll('#pa-screen .glog-die')];
+        const coarse = matchMedia('(pointer: coarse)').matches;
+        const small = d.filter(b => { const r = b.getBoundingClientRect(); return r.width < 44 || r.height < 36; });
+        ok('the quick dice: 44 by 38 px for a finger', d.length >= 6 && (!coarse || !small.length), coarse + ' ' + small.map(b => b.textContent + ' ' + Math.round(b.getBoundingClientRect().width) + 'x' + Math.round(b.getBoundingClientRect().height)).join(','));
+      } catch(e){ ok('round 473 threw', false, e.message); }
+      finally { paMoreSub = null; paTab = 'you'; paRender(); }
+    }
   }
 
   // ══════════════════════════════════════════════════════════ mobile / phone
