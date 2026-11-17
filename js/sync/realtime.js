@@ -961,6 +961,13 @@ function _pushWholeKey(k, val){
   });
 }
 
+// One write at a time per whole key. A second change sent while the first was
+// still on its way took as its base what the server held BEFORE the first, so
+// the merge counted the first change again: on a slow connection, 100 gp,
+// spend 10, then two coppers came out 70 gp 3 cp (measured, Firebase, 0.7 s
+// answers). The next waits for the answer, and starts from what it says. The
+// split keys don't need this: their base moves the moment they push.
+const _wholeInFlight = new Set();
 function _flushDirtyKeys() {
   if (!_fbDb || _dirtyKeys.size === 0) return Promise.resolve([]);
   const keys = Array.from(_dirtyKeys);
@@ -976,7 +983,9 @@ function _flushDirtyKeys() {
     // does not need a click to be pushed.
     if (_DM_ONLY_KEYS.has(k) && _isPlayerMode()) return Promise.resolve(true);
     if (_notForThisDevice(k)) return Promise.resolve(true);
+    if (_wholeInFlight.has(k)){ _dirtyKeys.add(k); return Promise.resolve(true); }
     const val = localStorage.getItem(k);
+    _wholeInFlight.add(k);
     // Remember exactly what we pushed so the listener can drop the one echo
     // that comes back to us. (Don't use a `localStorage===fbVal` check for
     // this — same-browser tabs share localStorage, which would falsely
@@ -1045,6 +1054,10 @@ function _flushDirtyKeys() {
         if (typeof showToast === 'function') showToast('Live sync failed — your last change may not have reached other players');
       }
       return false;
+    }).finally(() => {
+      _wholeInFlight.delete(k);
+      // what changed meanwhile goes now, from the base the answer gave
+      if (_dirtyKeys.has(k)){ clearTimeout(_pushTimer); _pushTimer = setTimeout(_flushDirtyKeys, 30); }
     });
   }));
 }
@@ -1117,6 +1130,17 @@ function _isPlainObj(v){ return v !== null && typeof v === 'object' && !Array.is
 // An array we can merge element-wise: every entry is a record with a stable
 // identity. Mixed or anonymous arrays (settings.healthTiers) fail this and
 // fall back to whole-value resolution, which is the honest answer for them.
+// The same record on both sides, a counter moved the same way on each: two
+// changes, not one seen twice — each player claimed one of five potions, and
+// three are left, not four. As the coins already were: both spend 10, 20 is
+// gone. (The whole value is never merged with itself: both write paths stop
+// first when the two sides are the same, so only a record inside a list that
+// otherwise differs gets here.)
+function _bothCounted(base, mine, baseKnown, opts){
+  if (!baseKnown || !opts || !opts.delta || !_isPlainObj(base) || !_isPlainObj(mine)) return false;
+  for (const k of opts.delta) if (typeof base[k] === 'number' && typeof mine[k] === 'number' && base[k] !== mine[k]) return true;
+  return false;
+}
 function _keyedArray(a){
   if (!Array.isArray(a) || !a.length) return null;
   const ids = a.map(_idOf);
@@ -1146,7 +1170,7 @@ const _eq = (a, b) => JSON.stringify(a === undefined ? null : a) === JSON.string
 // `opts` carries the RECORD rules (see _mergeRecordStr) down the recursion;
 // whole-key merges pass nothing and behave exactly as before.
 function _merge3(base, mine, theirs, baseKnown, opts){
-  if (_eq(mine, theirs)) return theirs;
+  if (_eq(mine, theirs) && !_bothCounted(base, mine, baseKnown, opts)) return theirs;
   if (baseKnown){
     if (_eq(base, mine))   return theirs;   // we didn't touch it
     if (_eq(base, theirs)) return mine;     // they didn't touch it

@@ -498,7 +498,7 @@ const window = {};
 
     // ── Shared windows, loot, notes, time, weather, settings, books ─────────
     await step('DM shares Loot, adds an item → phone has the tab and the item', async () => {
-      await dm.ev("if (!state.sharedPanels.includes('loot')) state.sharedPanels.push('loot'); saveSharedPanels(); const L = JSON.parse(localStorage.getItem('skt-loot-v1')||'{}'); const items = Array.isArray(L) ? L : (L.items || []); const it = { id: 'loot_stress', name: 'Stress Gem', qty: 1, value: 50 }; if (Array.isArray(L)) { L.push(it); localStorage.setItem('skt-loot-v1', JSON.stringify(L)); } else { L.items = items.concat([it]); localStorage.setItem('skt-loot-v1', JSON.stringify(L)); } return 1");
+      await dm.ev("if (!state.sharedPanels.includes('loot')) state.sharedPanels.push('loot'); saveSharedPanels(); const L = JSON.parse(localStorage.getItem('skt-loot-v1')||'{}'); const items = Array.isArray(L) ? L : (L.items || []); const it = { id: 'loot_stress', name: 'Stress Gem', qty: 1, value: 50 }; if (Array.isArray(L)) { if (!L.some(x => x.id === 'loot_stress')) L.push(it); localStorage.setItem('skt-loot-v1', JSON.stringify(L)); } else { L.items = items.filter(x => x.id !== 'loot_stress').concat([it]); localStorage.setItem('skt-loot-v1', JSON.stringify(L)); } return 1");
       return lat(await W(pl, "return paVisibleTabs().some(t=>t.id==='loot') && (localStorage.getItem('skt-loot-v1')||'').includes('Stress Gem')"));
     });
     await step('DM puts a note in players’ Notes → phone sees it', async () => {
@@ -582,6 +582,42 @@ const window = {};
       if (t == null) return { ok: false, why: 'the DM ended at ' + await dm.ev("return JSON.parse(localStorage.getItem('skt-loot-v1') || '{}').gp") + ' gp, not 140' };
       const p = await W(pl, "return JSON.parse(localStorage.getItem('skt-loot-v1') || '{}').gp === 140 ? 1 : 0", 20000);
       if (p == null) return { ok: false, why: 'the phone ended at ' + await pl.ev("return JSON.parse(localStorage.getItem('skt-loot-v1') || '{}').gp") + ' gp, not 140' };
+      return lat(t);
+    });
+    await step('loot: two quick changes on one device count once (100 gp, spend 10, then a copper: 90, not 80)', async () => {
+      await dm.ev("openPanel('loot'); await new Promise(r=>setTimeout(r,400)); const L = panelDefs.loot; L._loot.gp = 100; L._loot.cp = 0; L._save(); L._render(); return 1");
+      const same = await W(pl, "return JSON.parse(localStorage.getItem('skt-loot-v1') || '{}').gp === 100 ? 1 : 0", 10000);
+      if (same == null) return { ok: false, why: 'the phone never had the 100 gp' };
+      await sleep(1500);
+      // A slow connection: the server's answer to each write takes 0.7 s to
+      // come back, so the second change is made while the first is on its way.
+      await dm.ev("window.__slowP = _pushWholeKey; _pushWholeKey = function(){ return __slowP.apply(this, arguments).then(r => new Promise(res => setTimeout(() => res(r), 700))); }; return 1");
+      await dm.ev("const L = panelDefs.loot; L._loot.gp -= 10; L._save(); await new Promise(r => setTimeout(r, 330)); L._loot.cp += 1; L._save(); await new Promise(r => setTimeout(r, 330)); L._loot.cp += 1; L._save(); return 1");
+      await sleep(3000);
+      await dm.ev("_pushWholeKey = window.__slowP; return 1");
+      const good = "const L = JSON.parse(localStorage.getItem('skt-loot-v1') || '{}'); return L.gp === 90 && L.cp === 2 ? 1 : 0";
+      const show = "const L = JSON.parse(localStorage.getItem('skt-loot-v1') || '{}'); return L.gp + ' gp ' + L.cp + ' cp'";
+      await sleep(4000);
+      const t = await W(dm, good, 15000), p = await W(pl, good, 15000);
+      if (t == null || p == null) return { ok: false, why: 'the DM has ' + await dm.ev(show) + ', the phone ' + await pl.ev(show) + ' (want 90 gp 2 cp)' };
+      return lat(t);
+    });
+    await step('loot stack: the phone claims one of five offline while the DM splits one off → three left, both new rows kept', async () => {
+      await dm.ev("openPanel('loot'); await new Promise(r=>setTimeout(r,400)); const L = panelDefs.loot; L._loot.items = (L._loot.items || []).filter(x => x.name !== 'E2E Potion').concat([{ id: 'e2e_pot', name: 'E2E Potion', qty: 5, value: '50 gp', assignedTo: null }]); L._save(); L._render(); return 1");
+      const same = await W(pl, "return (JSON.parse(localStorage.getItem('skt-loot-v1') || '{}').items || []).some(x => x.id === 'e2e_pot' && +x.qty === 5) ? 1 : 0", 10000);
+      if (same == null) return { ok: false, why: 'the phone never had the five' };
+      await pl.offline(true); await sleep(1000);
+      await pl.ev("const L = JSON.parse(localStorage.getItem('skt-loot-v1')); sktLootSplit(L, 'e2e_pot', 'zoey'); saveJson('skt-loot-v1', L, 'loot'); if (panelDefs.loot) panelDefs.loot._loot = null; return 1");
+      await dm.ev("const L = panelDefs.loot; sktLootSplit(L._loot, 'e2e_pot', null); L._save(); L._render(); return 1");
+      await sleep(2500);
+      await pl.offline(false);
+      const good = "const a = (JSON.parse(localStorage.getItem('skt-loot-v1') || '{}').items || []).filter(x => x.name === 'E2E Potion'); return a.length === 3 && +a.find(x => x.id === 'e2e_pot').qty === 3 && a.some(x => x.assignedTo === 'zoey' && +x.qty === 1) && a.filter(x => !x.assignedTo).length === 2 ? 1 : 0";
+      const show = "return JSON.stringify((JSON.parse(localStorage.getItem('skt-loot-v1') || '{}').items || []).filter(x => x.name === 'E2E Potion').map(x => x.qty + ':' + (x.assignedTo || 'party')))";
+      const t = await W(dm, good, 45000);
+      if (t == null) return { ok: false, why: 'the DM ended with ' + await dm.ev(show) + ', the phone with ' + await pl.ev(show) };
+      const p = await W(pl, good, 20000);
+      if (p == null) return { ok: false, why: 'the phone ended with ' + await pl.ev(show) };
+      await dm.ev("const L = panelDefs.loot; L._loot.items = L._loot.items.filter(x => x.name !== 'E2E Potion'); L._save(); L._render(); return 1");
       return lat(t);
     });
     await step('DM long rest → phone back to full', async () => {

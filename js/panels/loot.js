@@ -34,10 +34,17 @@ registerPanel('loot',{
     if(!Array.isArray(this._loot.tabGroups))this._loot.tabGroups=[];
     // Migrate items to current shape: `claimed` → `assignedTo`. Drop the old
     // `group` text-tag field that no longer exists in the UI.
+    // Two rows with one id, and the sync could no longer tell rows apart: a
+    // change on two devices kept only one side's whole list (a claimed potion
+    // vanished). Each gets its own; saved only when one was mended.
+    const seen = new Set(); let mended = false;
     this._loot.items.forEach(it => {
       if (it.assignedTo === undefined) it.assignedTo = null;
       if ('group' in it) delete it.group;
-    });}
+      if (!it.id || seen.has(it.id)){ it.id = uid(); mended = true; }
+      seen.add(it.id);
+    });
+    if (mended && this._canAdd()) this._save();}
     this._render();
     if (keep) this._putEdit(keep);
     // Refresh the dropdown once 5e data finishes loading so suggestions appear

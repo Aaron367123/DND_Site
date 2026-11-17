@@ -24843,6 +24843,49 @@ for (const cls of Object.keys(rule)) for (let L = 1; L <= 20; L++) for (const sc
         try { closePanel('loot'); } catch(e){}
       }
     }
+    // -- Round 453: loot sync — one write at a time per key (a second change sent while the first was on its way counted the first again: 70 gp 3 cp for 90 gp 2 cp); one potion claimed on each device from five leaves three (it left four); two rows sharing an id are mended (the sync then kept one side's whole list) --
+    if (!PLAYER){
+      const K = 'skt-loot-v1';
+      const it = (id, qty, to) => ({ id, name: 'P', qty, value: '50 gp', assignedTo: to });
+      const base = JSON.stringify({ gp: 0, items: [it('p', 5, null)] });
+      const r1 = JSON.parse(_mergeJsonStr(base, JSON.stringify({ gp: 0, items: [it('p', 4, null), it('z', 1, 'zoey')] }), JSON.stringify({ gp: 0, items: [it('p', 4, null), it('x', 1, null)] }), K));
+      ok('sync: each device takes one of five, the same change on each — three left, both new rows kept (it was four)', r1.items.find(x => x.id === 'p').qty === 3 && r1.items.length === 3, JSON.stringify(r1.items.map(x => x.id + x.qty)));
+      const r2 = JSON.parse(_mergeJsonStr(base, JSON.stringify({ gp: 0, items: [it('p', 5, null), it('z', 1, null)] }), JSON.stringify({ gp: 0, items: [it('p', 5, null), it('x', 1, null)] }), K));
+      ok('…a stack neither touched stays as it was', r2.items.find(x => x.id === 'p').qty === 5);
+      const r3 = JSON.parse(_mergeJsonStr(base, JSON.stringify({ gp: 0, items: [Object.assign(it('p', 5, null), { notes: 'a' })] }), JSON.stringify({ gp: 0, items: [Object.assign(it('p', 5, null), { notes: 'a' })] }), K));
+      ok('…the same note written on both is one note, not a count', r3.items[0].notes === 'a' && r3.items[0].qty === 5);
+      // one write at a time
+      const db0 = _fbDb, push0 = _pushWholeKey, ls0 = _lastServer[K], dirty0 = new Set(_dirtyKeys), jw0 = _justWrote[K];
+      const calls = []; let release = null;
+      try {
+        _dirtyKeys.clear(); clearTimeout(_pushTimer);
+        _fbDb = {};
+        _pushWholeKey = (k, v) => { calls.push([k, _lastServer[k]]); return new Promise(res => { release = () => res(v); }); };
+        const keep = localStorage.getItem(K);
+        _dirtyKeys.add(K); _flushDirtyKeys();
+        _dirtyKeys.add(K); _flushDirtyKeys(); await sleep(10);
+        ok('sync: a second change waits while the first is on its way', calls.length === 1 && _dirtyKeys.has(K), calls.length + ' ' + _dirtyKeys.has(K));
+        release(); await sleep(120);
+        ok('…and goes once the answer is back, from what the answer said', calls.length === 2 && calls[1][1] === keep, calls.length);
+        release(); await sleep(60);
+      } catch(e){ ok('round 453 (one at a time) threw', false, e.message); }
+      finally {
+        _pushWholeKey = push0; _fbDb = db0; _dirtyKeys.clear(); dirty0.forEach(k => _dirtyKeys.add(k)); clearTimeout(_pushTimer);
+        if (ls0 === undefined) delete _lastServer[K]; else _lastServer[K] = ls0;
+        if (jw0 === undefined) delete _justWrote[K]; else _justWrote[K] = jw0;
+        _wholeInFlight.delete(K);
+      }
+      // two rows, one id
+      const L = panelDefs.loot, keepLs = localStorage.getItem(K);
+      try {
+        localStorage.setItem(K, JSON.stringify({ cp: 0, sp: 0, ep: 0, gp: 0, pp: 0, tabGroups: [], items: [
+          { id: 'r453d', name: 'r453 Gem', qty: 1, value: '', assignedTo: null }, { id: 'r453d', name: 'r453 Gem', qty: 1, value: '', assignedTo: null }, { name: 'r453 No id', qty: 1, value: '', assignedTo: null }] }));
+        L._loot = null; closePanel('loot'); openPanel('loot'); await sleep(300);
+        const ids = JSON.parse(localStorage.getItem(K)).items.map(x => x.id);
+        ok('loot: two rows with one id, and one with none, each get their own — and it is saved', ids.length === 3 && new Set(ids).size === 3 && ids.every(Boolean) && ids[0] === 'r453d', JSON.stringify(ids));
+      } catch(e){ ok('round 453 (ids) threw', false, e.message); }
+      finally { localStorage.setItem(K, keepLs); L._loot = null; try { closePanel('loot'); } catch(e){} }
+    }
     // -- Class features: represented, not just text ------------------------
     {
       try {
