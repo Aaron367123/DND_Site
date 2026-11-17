@@ -1282,12 +1282,12 @@ function csCreatureChecksHtml(x, i){
     + '</div>'
     + (c.skills.length ? '<div class="cs-cr-skills">' + c.skills.map(s => '<button class="btn small" data-cs-crsk="' + i + ':' + csE(s.name) + '" title="Roll its ' + csE(s.name) + '">' + csE(s.name) + ' ' + csSigned(s.mod) + '</button>').join('') + '</div>' : '');
 }
-function csCreatureD20(label, mod, ev){
+function csCreatureD20(label, mod, ev, after){
   const mode = ev && ev.shiftKey ? 'adv' : ev && ev.altKey ? 'dis' : (CS.mode || 'normal');
   const a = csD(20), b = mode === 'normal' ? null : csD(20);
   const nat = b == null ? a : mode === 'adv' ? Math.max(a, b) : Math.min(a, b);
   const r = { kind: 'd20', label, mod, rolls: b == null ? [a] : [a, b], natural: nat, total: nat + mod, mode, crit: nat === 20, fumble: nat === 1, why: '', kindTag: null };
-  csLog(r);
+  csLog(r, after);
   return r;
 }
 CS_TAB_RENDER.extras = pc => {
@@ -1400,12 +1400,13 @@ function csOnClick(e){
     const key = String(d.csCratk != null ? d.csCratk : d.csCrdmg), [i, k] = key.split(':').map(Number);
     const x = (pc.extras || [])[i], a = x ? csCreatureAttacks(x)[k] : null; if (!a) return;
     if (d.csCratk != null){
-      const r = csCreatureD20(x.name + ' · ' + a.name, parseInt(String(a.toHit).replace(/[^\d+-]/g, ''), 10) || 0, e);
-      CS.lastCrCrit = { key, crit: r.crit };
+      // (the crit once the d20 is in: with My dice, the typed one)
+      csCreatureD20(x.name + ' · ' + a.name, parseInt(String(a.toHit).replace(/[^\d+-]/g, ''), 10) || 0, e, r => { CS.lastCrCrit = { key, crit: r.crit }; });
     } else {
       const crit = !!(CS.lastCrCrit && CS.lastCrCrit.key === key && CS.lastCrCrit.crit);
       const rs = a.parts.map(p => sktDamageRoll(p.dice + (p.type ? ' ' + p.type : ''), crit));
-      csLog({ kind: 'dmg', label: x.name + ' · ' + a.name + ' damage', total: rs.reduce((t, r) => t + r.total, 0),
+      // (its dice too: with My dice a companion's damage was the app's roll)
+      csLog({ kind: 'dmg', label: x.name + ' · ' + a.name + ' damage', total: rs.reduce((t, r) => t + r.total, 0), dice: rs.reduce((t, r) => t + (r.dice || 0), 0),
         detail: rs.map(r => r.detail + (rs.length > 1 && r.type ? ' ' + r.type : '')).join(' + '), type: [...new Set(rs.map(r => r.type).filter(Boolean))].join(' + '), crit });
       CS.lastCrCrit = null;
     }

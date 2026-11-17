@@ -29487,6 +29487,40 @@ for (const cls of Object.keys(rule)) for (let L = 1; L <= 20; L++) for (const sc
         ok('…the sheet’s header is the ⋯ menu, as on a phone held upright', has('.cs-head .cs-headbtns', 'display: none') && has('.cs-headmore', 'display: inline-flex'));
       } catch(e){ ok('round 468 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
     }
+    // -- Round 469 (player): My dice and a companion (Extras) — its attack asks, a typed 20 is a crit that carries to its damage, and its damage asks for the dice (it was always the app's) --
+    if (PLAYER){
+      const P0 = JSON.stringify(state.party), k0 = localStorage.getItem('skt-own-dice-v1'); const kt = window.showToast;
+      try {
+        window.showToast = () => {};
+        for (let n = 0; n < 40 && !(typeof _5eLoaded !== 'undefined' && _5eLoaded); n++) await sleep(250);
+        const i = paMyIdx();
+        state.party[i] = Object.assign({}, state.party[i], { extras: [{ name: 'Wolf', hp: 11, hpMax: 11, ac: 13 }] }); save();
+        localStorage.setItem('skt-own-dice-v1', '1');
+        paTab = 'you'; paRender(); await sleep(300);
+        for (let n = 0; n < 60 && !(typeof CS !== 'undefined' && CS && CS.R); n++) await sleep(100);
+        csRender(); await sleep(40);
+        const tb = document.querySelector('#pa-screen [data-cs-tab="extras"]'); if (tb){ tb.click(); await sleep(300); }
+        const atk = document.querySelector('#pa-screen [data-cs-cratk]'), dmgB = () => document.querySelector('#pa-screen [data-cs-crdmg="' + (atk && atk.dataset.csCratk) + '"]');
+        const card = () => document.getElementById('pa-roll');
+        if (!atk) ok('the Wolf on the Extras tab has an attack to roll', false, 'none');
+        else {
+          atk.click(); await sleep(60);
+          ok('My dice, the Wolf’s attack: the card asks for the d20', !!card().querySelector('[data-cs-owndie]'));
+          card().querySelector('[data-cs-owndie]').value = '20'; card().querySelector('[data-cs="owndie"]').click(); await sleep(80);
+          dmgB().click(); await sleep(60);
+          ok('…its damage asks for the dice too (it was the app’s roll)', !!card().querySelector('[data-cs-owndie]') && /the dice/.test(card().textContent));
+          const r = CS.pending && CS.pending.r, flat = r ? r.total - r.dice : 0;
+          card().querySelector('[data-cs-owndie]').value = '9'; card().querySelector('[data-cs="owndie"]').click(); await sleep(80);
+          const last = CS.log[0];
+          ok('…9 typed: ' + (9 + flat) + ', a crit from the typed 20', !!last && last.total === 9 + flat && last.crit === true && /rolled at the table/.test(last.detail), last && JSON.stringify([last.total, last.crit, last.detail]));
+        }
+      } catch(e){ ok('round 469 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
+      finally {
+        window.showToast = kt; if (typeof CS !== 'undefined' && CS) CS.pending = null;
+        if (k0 == null) localStorage.removeItem('skt-own-dice-v1'); else localStorage.setItem('skt-own-dice-v1', k0);
+        state.party = JSON.parse(P0); save();
+      }
+    }
   }
 
   // ══════════════════════════════════════════════════════════ mobile / phone
