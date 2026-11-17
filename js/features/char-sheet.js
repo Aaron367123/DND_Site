@@ -3411,7 +3411,10 @@ function csPartyLootHtml(pc){
         + '<button class="cs-itemn" data-cs-open="' + csE(k) + '"><b>' + csE(it.name) + '</b></button>'
         + '<span class="cs-qty">×' + q + '</span>'
         + '<span class="cb-dim cs-wt">' + csE([it.value || '', wt ? Math.round(wt * q * 10) / 10 + ' lb' : ''].filter(Boolean).join(' · ')) + '</span>'
-        + (ro ? '' : '<button class="btn small" data-cs-lootclaim="' + csE(it.id) + '" title="Make it ' + csE(pc.name) + '\u2019s">Claim</button>')
+        // A stack: one of it, or the lot. Five potions were one Claim, all five.
+        + (ro ? '' : '<span class="cs-claim">'
+          + (q < 2 ? '' : '<button class="btn small" data-cs-lootclaimone="' + csE(it.id) + '" title="Take one of the ' + q + ' for ' + csE(pc.name) + '; the rest stay the party\u2019s">Claim 1</button>')
+          + '<button class="btn small" data-cs-lootclaim="' + csE(it.id) + '" title="Make ' + (q > 1 ? 'all ' + q : 'it') + ' ' + csE(pc.name) + '\u2019s">' + (q > 1 ? 'All' : 'Claim') + '</button></span>')
         + '</div>' + (CS.open[k] ? '<div class="cs-feat-t cs-itemt">' + csItemText(csLootAsItem(it)) + '</div>' : '');
     }).join('') + '</div>';
 }
@@ -3449,6 +3452,13 @@ function csLootClick(d, pc){
     const id = d.csLootclaim, it = csPartyLoot().find(x => x.id === id); if (!it) return true;
     const run = () => { const L = csLootRead(); const x = L.items.find(y => y.id === id); if (x){ x.assignedTo = pc.id; csLootWrite(L); } csRender(); };
     if (typeof sktUndoable === 'function') sktUndoable(pc.name + ' claimed ' + it.name, run, { keys: [CS_LOOT_KEY] }); else run();
+    return true;
+  }
+  if (d.csLootclaimone != null){
+    if (CS.readOnly || typeof sktLootSplit !== 'function') return true;
+    const id = d.csLootclaimone, it = csPartyLoot().find(x => x.id === id); if (!it) return true;
+    const run = () => { const L = csLootRead(); if (sktLootSplit(L, id, pc.id)) csLootWrite(L); csRender(); };
+    if (typeof sktUndoable === 'function') sktUndoable(pc.name + ' claimed one ' + it.name, run, { keys: [CS_LOOT_KEY] }); else run();
     return true;
   }
   if (d.csLootdel != null){

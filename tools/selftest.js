@@ -24665,6 +24665,79 @@ for (const cls of Object.keys(rule)) for (let L = 1; L <= 20; L++) for (const sc
       const r2 = JSON.parse(_mergeJsonStr(base, JSON.stringify({ gp: 0, items: [it('r449a', 'Potion', 3), it('r449b', 'Rope', 1)] }), JSON.stringify({ gp: 0, items: [it('r449a', 'Potion', 3), it('r449c', 'Lantern', 1)] }), 'skt-loot-v1'));
       ok('…each adds an item: both are kept', r2.items.length === 3 && r2.items.some(x => x.name === 'Rope') && r2.items.some(x => x.name === 'Lantern'));
     }
+    // -- Round 450: loot — what's being typed survives a change from another device (the add row's price, a row's new value: both were wiped, and the cursor taken); one from a stack: Split off one, Claim one, Give one back (claiming five potions gave all five) --
+    if (!PLAYER){
+      const L = panelDefs.loot;
+      let keep = null, keepLs = null; const kt = window.showToast, kcm = window.showContextMenu;
+      try {
+        window.showToast = () => {};
+        openPanel('loot'); await sleep(300);
+        keep = JSON.stringify(L._loot); keepLs = localStorage.getItem('skt-loot-v1');
+        const pcs = state.party.filter(p => !p.foe), A = pcs[0];
+        L._loot = { cp: 0, sp: 0, ep: 0, gp: 10, pp: 0, items: [
+          { id: 'r450p', name: 'r450 Potion', qty: 5, value: '50 gp', assignedTo: null },
+          { id: 'r450r', name: 'r450 Rope', qty: 1, value: '1 gp', assignedTo: null }], tabGroups: [] };
+        L._save(); L._render(); await sleep(20);
+        const remote = mut => { const c = JSON.parse(localStorage.getItem('skt-loot-v1')); mut(c); localStorage.setItem('skt-loot-v1', JSON.stringify(c)); _reloadPanel('loot'); };
+        // the add row
+        let v = L._body.querySelector('#loot-new-val'); v.focus(); v.value = '25 g'; v.setSelectionRange(4, 4);
+        L._body.querySelector('#loot-new-qty').value = '3';
+        remote(c => { c.gp = 15; }); await sleep(30);
+        v = L._body.querySelector('#loot-new-val');
+        ok('a change from another device keeps the price being typed, the cursor in it, and the count', v.value === '25 g' && document.activeElement === v && v.selectionStart === 4 && L._body.querySelector('#loot-new-qty').value === '3' && L._loot.gp === 15,
+           JSON.stringify([v.value, document.activeElement === v, v.selectionStart, L._body.querySelector('#loot-new-qty').value, L._loot.gp]));
+        v.blur();
+        // a row's value, half typed, when a row above it is added remotely
+        const rv = () => L._body.querySelector('.loot-item[data-id="r450r"] [data-lfield="value"]');
+        rv().focus(); rv().value = '3 gp';
+        remote(c => { c.items.unshift({ id: 'r450n', name: 'r450 New', qty: 1, value: '', assignedTo: null }); }); await sleep(30);
+        ok('…a row’s new value, half typed, stays in its row (which moved down one), cursor and all', rv().value === '3 gp' && document.activeElement === rv() && L._loot.items[2].id === 'r450r', JSON.stringify([rv().value, document.activeElement === rv()]));
+        { const e = rv(); e.blur(); if (!document.hasFocus()) e.dispatchEvent(new FocusEvent('blur')); }   // (a headless page has no focus to lose, so no blur)
+        await sleep(20);
+        ok('…and leaving the box saves it, as it would have', L._loot.items.find(x => x.id === 'r450r').value === '3 gp' && JSON.parse(localStorage.getItem('skt-loot-v1')).items.find(x => x.id === 'r450r').value === '3 gp');
+        // the cursor somewhere else isn't pulled in
+        document.body.focus(); remote(c => { c.gp = 16; }); await sleep(30);
+        ok('…with nothing being typed, nothing is focused', !L._body.contains(document.activeElement));
+        // one from a stack
+        let menu = null; window.showContextMenu = (x, y, items) => { menu = items; };
+        const rowOf = id => L._body.querySelector('.loot-item[data-id="' + id + '"]');
+        const open = id => { menu = null; rowOf(id).dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true, clientX: 40, clientY: 40 })); return menu || []; };
+        const m1 = open('r450p');
+        ok('a stack of five: Split off one (the DM); the party’s, so no Give back; a single item offers neither', m1.some(m => m.label === 'Split off one') && !m1.some(m => /Give one back/.test(m.label)) && !open('r450r').some(m => /one$|one back/.test(m.label)));
+        m1.find(m => m.label === 'Split off one').onClick(); await sleep(20);
+        const pot = () => L._loot.items.filter(x => x.name === 'r450 Potion');
+        ok('…Split off one: four and one, the one just below, its own row', pot().length === 2 && pot()[0].qty === 4 && pot()[1].qty === 1 && pot()[1].id !== 'r450p' && L._loot.items.indexOf(pot()[1]) === L._loot.items.indexOf(pot()[0]) + 1 && pot()[1].value === '50 gp',
+           JSON.stringify(pot()));
+        sktUndo(); await sleep(40);
+        ok('…and it can be undone', pot().length === 1 && pot()[0].qty === 5);
+        // given to a character: one back to the party
+        L._loot.items.find(x => x.id === 'r450p').assignedTo = A.id; L._save(); L._render(); await sleep(20);
+        const m2 = open('r450p');
+        m2.find(m => m.label === 'Give one back to the party loot').onClick(); await sleep(20);
+        ok('a character’s five: Give one back — four theirs, one the party’s', pot()[0].qty === 4 && pot()[0].assignedTo === A.id && pot()[1].qty === 1 && pot()[1].assignedTo === null);
+        sktUndo(); await sleep(40);
+        L._loot.items.find(x => x.id === 'r450p').assignedTo = null; L._save();
+        // the sheet: Claim one
+        openCharSheet(A.id, { tab: 'inventory' }); await sleep(250);
+        for (let i = 0; i < 60 && !(CS.gear && CS.R); i++){ await sleep(100); }
+        csRender(); await sleep(30);
+        const q = s => document.querySelector('#cs-root ' + s);
+        const one = q('[data-cs-lootclaimone="r450p"]');
+        ok('the sheet’s party loot: a stack has Claim 1 and All; a single item just Claim', !!one && q('[data-cs-lootclaim="r450p"]').textContent.trim() === 'All' && !q('[data-cs-lootclaimone="r450r"]') && q('[data-cs-lootclaim="r450r"]').textContent.trim() === 'Claim');
+        if (one) one.click(); await sleep(40);
+        const ls = () => JSON.parse(localStorage.getItem('skt-loot-v1')).items.filter(x => x.name === 'r450 Potion');
+        ok('…Claim one: one is theirs, four stay the party’s', ls().length === 2 && ls().find(x => x.assignedTo === A.id && x.qty === 1) && ls().find(x => x.id === 'r450p' && x.qty === 4 && !x.assignedTo), JSON.stringify(ls()));
+        sktUndo(); await sleep(40);
+        ok('…undone: five, the party’s', ls().length === 1 && ls()[0].qty === 5);
+      } catch(e){ ok('round 450 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
+      finally {
+        window.showToast = kt; window.showContextMenu = kcm;
+        try { if (typeof csClose === 'function' && CS) csClose(); } catch(e){}
+        if (keepLs != null) localStorage.setItem('skt-loot-v1', keepLs);
+        if (keep){ L._loot = JSON.parse(keep); L._save(); }
+        try { closePanel('loot'); } catch(e){}
+      }
+    }
     // -- Class features: represented, not just text ------------------------
     {
       try {
@@ -28657,6 +28730,33 @@ for (const cls of Object.keys(rule)) for (let L = 1; L <= 20; L++) for (const sc
         if (keep != null){ L._loot = JSON.parse(keep); L._save(); }
         if (keepShared) state.sharedPanels = keepShared;
         paTab = keepTab; try { paRender(); } catch(e){}
+      }
+    }
+    // -- Round 450b (player): Claim one from the party's stack; Split off one is the DM's --
+    if (PLAYER){
+      const L = panelDefs.loot;
+      let keep = null, SH = null; const kt = window.showToast, kcm = window.showContextMenu;
+      try {
+        window.showToast = () => {};
+        keep = localStorage.getItem('skt-loot-v1'); SH = JSON.stringify(state.sharedPanels || []);
+        state.sharedPanels = ['loot']; save(); paRender(); await sleep(600);
+        const tab = [...document.querySelectorAll('.pa-tab')].find(t => /loot/i.test(t.textContent));
+        if (tab){ tab.click(); await sleep(900); }
+        const me = typeof paPc === 'function' ? paPc() : null;
+        if (me && L._body){
+          L._loot = { cp: 0, sp: 0, ep: 0, gp: 0, pp: 0, items: [{ id: 'r450q', name: 'r450 Potion', qty: 3, value: '50 gp', assignedTo: null }], tabGroups: [] };
+          L._save(); L._render(); await sleep(20);
+          let menu = null; window.showContextMenu = (x, y, items) => { menu = items; };
+          L._body.querySelector('.loot-item[data-id="r450q"]').dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true, clientX: 40, clientY: 40 }));
+          ok('player: the party’s stack offers Claim one, not Split off one', !!menu && menu.some(m => m.label === 'Claim one') && !menu.some(m => m.label === 'Split off one'));
+          menu.find(m => m.label === 'Claim one').onClick(); await sleep(20);
+          ok('…Claim one: one is mine, two the party’s', L._loot.items.length === 2 && L._loot.items[0].qty === 2 && !L._loot.items[0].assignedTo && L._loot.items[1].qty === 1 && L._loot.items[1].assignedTo === me.id);
+        } else ok('player: a character to claim with', false, 'no paPc');
+      } catch(e){ ok('round 450b threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
+      finally {
+        window.showToast = kt; window.showContextMenu = kcm;
+        if (keep != null){ localStorage.setItem('skt-loot-v1', keep); L._loot = null; }
+        if (SH != null){ state.sharedPanels = JSON.parse(SH); save(); try { paRender(); } catch(e){} }
       }
     }
   }

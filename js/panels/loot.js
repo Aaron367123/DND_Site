@@ -1,6 +1,20 @@
 // ============================================================
 // LOOT TRACKER PANEL
 // ============================================================
+// Take one off a stack as a row of its own, just below it, given to `to`
+// (a character's id, a group's, or null for the party loot). The Loot window
+// and the sheet's "Claim one" share it. A new row and a smaller count: two
+// devices doing it at once both count.
+function sktLootSplit(L, id, to){
+  const a = L && L.items, i = a ? a.findIndex(x => x.id === id) : -1;
+  if (i < 0) return null;
+  const x = a[i], n = parseInt(x.qty) || 1; if (n < 2) return null;
+  x.qty = n - 1;
+  const one = Object.assign({}, x, { id: uid(), qty: 1, assignedTo: to || null });
+  delete one.paid; delete one.paidTs;
+  a.splice(i + 1, 0, one);
+  return one;
+}
 registerPanel('loot',{
   title:'Loot Tracker',icon:'💰',
   _loot:null,
@@ -8,6 +22,10 @@ registerPanel('loot',{
   _searchQ:'',          // current text in the name/search input
   _searchOpen:false,    // dropdown visibility
   mount(body){
+    // Mounted again over itself: a change from another device, or an undo.
+    // It wiped whatever was being typed — the price half-typed in the add
+    // row, a row's new value before Enter — and took the cursor away.
+    const keep = body && body === this._body ? this._grabEdit() : null;
     this._body=body;
     if(!this._loot){try{const r=localStorage.getItem('skt-loot-v1');this._loot=r?JSON.parse(r):{cp:0,sp:0,ep:0,gp:0,pp:0,items:[],tabGroups:[]};}catch(e){this._loot={cp:0,sp:0,ep:0,gp:0,pp:0,items:[],tabGroups:[]}}
     if(!this._loot.items)this._loot.items=[];
@@ -19,12 +37,47 @@ registerPanel('loot',{
       if ('group' in it) delete it.group;
     });}
     this._render();
+    if (keep) this._putEdit(keep);
     // Refresh the dropdown once 5e data finishes loading so suggestions appear
     // even if the user opened the panel before the load completed.
     if (typeof on5eLoaded === 'function') on5eLoaded(() => { if (this._body) this._renderSearchDropdown(); });
     if (typeof load5eData === 'function') load5eData();
   },
   unmount(){this._body=null;},
+  _grabEdit(){
+    const b = this._body; if (!b) return null;
+    const v = s => { const el = b.querySelector(s); return el ? el.value : null; };
+    const k = { qty: v('#loot-new-qty'), val: v('#loot-new-val'), focus: null };
+    const a = document.activeElement;
+    if (a && b.contains(a) && /^(INPUT|SELECT|TEXTAREA)$/.test(a.tagName)){
+      const row = a.closest('.loot-item');
+      let s = null, e = null; try { s = a.selectionStart; e = a.selectionEnd; } catch(err){}
+      k.focus = { id: a.id || null, rowId: row ? row.dataset.id : null, field: a.dataset.lfield || null,
+                  value: a.value, typed: a.tagName !== 'SELECT' && a.value !== a.defaultValue, s, e };
+    }
+    return k;
+  },
+  _putEdit(k){
+    const b = this._body; if (!b) return;
+    const set = (s, val) => { const el = b.querySelector(s); if (el && val != null && el.value !== val) el.value = val; };
+    set('#loot-new-qty', k.qty); set('#loot-new-val', k.val);
+    const f = k.focus; if (!f) return;
+    const el = f.id ? b.querySelector('#' + CSS.escape(f.id))
+      : f.rowId && f.field ? b.querySelector('.loot-item[data-id="' + CSS.escape(f.rowId) + '"] [data-lfield="' + CSS.escape(f.field) + '"]') : null;
+    if (!el || el.readOnly || el.disabled) return;
+    if (f.typed && el.value !== f.value){
+      el.value = f.value;
+      // Leaving the box saves it, as it would have: setting the text by hand
+      // means the browser no longer counts it as typed.
+      if (el.dataset.lfield){
+        let done = false;
+        el.addEventListener('change', () => { done = true; }, { once: true });
+        el.addEventListener('blur', () => { if (!done && el.isConnected && el.value !== el.defaultValue) el.dispatchEvent(new Event('change', { bubbles: true })); }, { once: true });
+      }
+    }
+    try { el.focus({ preventScroll: true }); } catch(err){ el.focus(); }
+    try { if (f.s != null) el.setSelectionRange(f.s, f.e); } catch(err){}
+  },
   _save(){saveJson('skt-loot-v1', this._loot, 'loot');},
   // A change the DM (or a player) can take back: made, saved, drawn, and in
   // the undo history (Ctrl+Z, or the toast's Undo). Deleting an item had no
@@ -745,7 +798,7 @@ registerPanel('loot',{
     const weightInp = showWeight
       ? `<input type="number" step="0.1" min="0" class="loot-wt" value="${item.weight!=null?esc(String(item.weight)):''}" data-lfield="weight" data-li="${i}" placeholder="lb" title="Weight per item (lbs)">`
       : '';
-    return `<div class="loot-item ${item.assignedTo?'assigned':''}" data-i="${i}" draggable="true" title="Right-click (or hold) to sell or move it">
+    return `<div class="loot-item ${item.assignedTo?'assigned':''}" data-i="${i}" data-id="${esc(item.id||'')}" draggable="true" title="Right-click (or hold) to sell, split or move it">
       <span class="loot-drag-handle" title="Drag to reorder">⋮⋮</span>
       <div class="loot-name">
         <button class="loot-info-btn" data-lact="info" data-li="${i}" title="View item details">${ICO('i-book-open')}</button>
@@ -785,13 +838,26 @@ registerPanel('loot',{
   _rowMenu(i, x, y){
     const it = this._loot.items[i]; if (!it || !this._canEdit(it) || typeof showContextMenu !== 'function') return;
     const each = this._parseGp(it.value), n = Math.max(1, parseInt(it.qty) || 1);
-    if (!(each > 0)){ showContextMenu(x, y, [{ label: 'No value to sell it for — type one in', disabled: true, onClick: () => {} }].concat(this._moveItems(i))); return; }
+    if (!(each > 0)){ showContextMenu(x, y, [{ label: 'No value to sell it for — type one in', disabled: true, onClick: () => {} }].concat(this._splitItems(i), this._moveItems(i))); return; }
     const items = [
       { label: 'Sell' + (n > 1 ? ' all ' + n : '') + ' for half — ' + this._fmtCoins(this._toCoins(each * n / 2)), onClick: () => this._sell(i, 0.5, false) },
       { label: 'Sell' + (n > 1 ? ' all ' + n : '') + ' for full value — ' + this._fmtCoins(this._toCoins(each * n)), onClick: () => this._sell(i, 1, false) },
     ];
     if (n > 1) items.push({ label: 'Sell one for half — ' + this._fmtCoins(this._toCoins(each / 2)), onClick: () => this._sell(i, 0.5, true) });
-    showContextMenu(x, y, items.concat(this._moveItems(i)));
+    showContextMenu(x, y, items.concat(this._splitItems(i), this._moveItems(i)));
+  },
+  // One from a stack. Five potions of healing were one row, and claiming it
+  // gave a character all five: there was no handing out one each.
+  _splitItems(i){
+    const it = this._loot.items[i]; if (!it || (parseInt(it.qty) || 1) < 2) return [];
+    const one = (label, to) => ({ label, onClick: () => {
+      this._undoable(label.replace(/ one\b/, ' one ' + it.name), () => { sktLootSplit(this._loot, it.id, to === undefined ? it.assignedTo : to); });
+    } });
+    const out = [{ label: '─────' }], me = this._me(), party = !this._isAssignedTo(it.assignedTo);
+    if (me && party) out.push(one('Claim one', me.id));
+    if (!party) out.push(one('Give one back to the party loot', null));
+    if (!this._isPlayer()) out.push(one('Split off one'));
+    return out;
   },
   // Up and down the list, for a finger (dragging a row needs a mouse).
   _moveItems(i){
