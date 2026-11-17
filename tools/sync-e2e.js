@@ -640,6 +640,23 @@ const window = {};
       await dm.ev("const L = panelDefs.loot; L._loot.items = L._loot.items.filter(x => !/^E2E (Lantern|Rations)/.test(x.name)); L._save(); L._render(); return 1");
       return lat(t);
     });
+    await step('phone messages the DM → the DM has it; the DM answers → the phone has it', async () => {
+      const tag = 'e2e ' + Date.now().toString(36);
+      await pl.ev("sktMsgSend('dm', " + JSON.stringify(tag + ' from Zoey') + "); return 1");
+      const t = await W(dm, "return sktMsgThread('zoey').some(m => m.text === " + JSON.stringify(tag + ' from Zoey') + ") ? 1 : 0", 15000);
+      if (t == null) return { ok: false, why: 'the DM never got the message' };
+      await dm.ev("sktMsgSend('zoey', " + JSON.stringify(tag + ' from the DM') + "); return 1");
+      const p = await W(pl, "return sktMsgThread('zoey').some(m => m.text === " + JSON.stringify(tag + ' from the DM') + " && m.from === 'dm') ? 1 : 0", 15000);
+      if (p == null) return { ok: false, why: 'the phone never got the answer' };
+      return lat(t);
+    });
+    await step('phone rolls with My dice (its own d20 typed in) → the DM’s game log has the total, rolled at the table', async () => {
+      const r = await pl.ev("localStorage.setItem('skt-own-dice-v1', '1'); paTab = 'you'; paRender(); await new Promise(r => setTimeout(r, 300)); const t = document.querySelector('#pa-screen [data-cs-tab=\"abilities\"]'); if (t){ t.click(); await new Promise(r => setTimeout(r, 200)); } const b = document.querySelector('#pa-screen [data-cs-roll=\"init\"]'); if (!b) return 'no initiative box'; b.click(); await new Promise(r => setTimeout(r, 150)); const box = document.getElementById('pa-roll'); const inp = box && box.querySelector('[data-cs-owndie]'); if (!inp) return 'not asked'; inp.value = '13'; box.querySelector('[data-cs=\"owndie\"]').click(); await new Promise(r => setTimeout(r, 150)); localStorage.removeItem('skt-own-dice-v1'); const last = (paPc().rolls || [])[0]; return last ? last.total : 'nothing kept'");
+      if (typeof r !== 'number') return { ok: false, why: 'on the phone: ' + r };
+      const t = await W(dm, "return sktLogEntries().some(e => e.pcId === 'zoey' && e.total === " + r + " && /rolled at the table/.test(e.text || '')) ? 1 : 0", 15000);
+      if (t == null) return { ok: false, why: 'the DM’s log never showed Zoey’s ' + r };
+      return lat(t);
+    });
     await step('DM long rest → phone back to full', async () => {
       await dm.ev("panelDefs.party._applyLongRest(); return 1");
       const want = await dm.ev('return ' + hpOf('zoey'));

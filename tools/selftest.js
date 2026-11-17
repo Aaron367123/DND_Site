@@ -29411,6 +29411,31 @@ for (const cls of Object.keys(rule)) for (let L = 1; L <= 20; L++) for (const sc
         paRender();
       }
     }
+    // -- Round 466 (player): a friend opened on the Party tab shows their whole purse (it showed the gold field alone: "0 gp" for 3 pp 12 sp) --
+    if (PLAYER){
+      const P0 = JSON.stringify(state.party), O0 = typeof paOpenMates !== 'undefined' ? new Set(paOpenMates) : null;
+      try {
+        const me = paPc(), mate = sktPlayerParty().find(p => p.id !== (me && me.id));
+        state.party = state.party.map(p => p.id === mate.id ? Object.assign({}, p, { gold: 0, coins: { pp: 3, sp: 12, cp: 0, ep: 0 } }) : p); save();
+        paTab = 'party'; paRender(); await sleep(100);
+        if (!paOpenMates.has(mate.id)) document.querySelector('#pa-screen [data-pa-mate="' + mate.id + '"]').click();
+        await sleep(100);
+        const card = [...document.querySelectorAll('#pa-screen .pa-mate.open')].find(m => m.querySelector('.pa-mate-n').textContent.startsWith(mate.name));
+        const t = card ? card.textContent : '';
+        ok('Party tab, ' + mate.name + ' opened: 3 pp 12 sp (it said 0 gp)', /3 pp 12 sp/.test(t) && !/0 gp/.test(t), t.slice(0, 200));
+        // their whole sheet, read-only: only the effects that are on
+        state.party = state.party.map(p => p.id === mate.id ? Object.assign({}, p, { sheet: Object.assign({}, p.sheet, { states: [
+          { key: 'r466 Rage', label: 'r466 Rage', on: false, desc: 'x' }, { key: 'r466 Bless', label: 'r466 Bless', on: true, desc: 'y' }] }) }) : p); save();
+        paRender(); await sleep(60);
+        const card2 = [...document.querySelectorAll('#pa-screen .pa-mate.open')].find(m => m.querySelector('.pa-mate-n').textContent.startsWith(mate.name));
+        const whole = card2 && [...card2.querySelectorAll('button, a')].find(b => /Open the whole sheet/.test(b.textContent));
+        if (whole){ whole.click(); await sleep(400); }
+        const fx = [...document.querySelectorAll('#cs-root .cs-states .cs-stbtn')].map(b => b.textContent.trim());
+        ok('…their whole sheet (read-only): Active effects shows r466 Bless, not r466 Rage that’s off', CS && CS.readOnly && fx.includes('r466 Bless') && !fx.includes('r466 Rage'), JSON.stringify([CS && CS.readOnly, fx]));
+        try { csClose(); } catch(e){}
+      } catch(e){ ok('round 466 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
+      finally { state.party = JSON.parse(P0); save(); if (O0){ paOpenMates.clear(); O0.forEach(x => paOpenMates.add(x)); } paRender(); }
+    }
   }
 
   // ══════════════════════════════════════════════════════════ mobile / phone

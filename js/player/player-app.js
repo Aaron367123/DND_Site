@@ -1756,7 +1756,10 @@ function paSheetDetail(p){
   if (p.hitDice) bits.push(`Hit dice ${p.hitDice.current}/${p.hitDice.max}${p.hitDice.dieType || ''}`);
   if (sh.size && sh.size !== 'Medium') bits.push(sh.size);
   if (sh.details && sh.details.alignment) bits.push(sh.details.alignment);
-  if (typeof p.gold === 'number') bits.push(`${p.gold} gp`);
+  // The purse as the sheet keeps it: gold, and the rest (silver, platinum)
+  // that "0 gp" left out.
+  { const c = Object.assign({ pp: 0, ep: 0, sp: 0, cp: 0 }, p.coins || {}, { gp: +p.gold || 0 });
+    bits.push(['pp', 'gp', 'ep', 'sp', 'cp'].filter(k => +c[k]).map(k => (+c[k]).toLocaleString() + ' ' + k).join(' ') || '0 gp'); }
 
   const abils = PA_ABIL.filter(([k]) => typeof ab[k] === 'number').map(([k, l]) =>
     `<div class="pa-ab"><span class="pa-ab-l">${l}</span><span class="pa-ab-v">${ab[k]}</span>

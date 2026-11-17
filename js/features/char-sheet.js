@@ -473,7 +473,10 @@ function csStatesHtml(pc){
   const st = (pc.sheet || {}).states || []; if (!st.length) return '';
   const ro = CS.readOnly;
   const on = st.filter(s => s.on);
-  return '<div class="cs-states"><span class="cb-dim">Active effects</span>' + st.map(s => {
+  // Someone else's sheet: only what's on. Every toggle, off ones included,
+  // under "Active effects" said Ulrick was raging when he wasn't.
+  const show = ro ? on : st; if (!show.length) return '';
+  return '<div class="cs-states"><span class="cb-dim">Active effects</span>' + show.map(s => {
     const res = s.resource ? (pc.resources || []).find(r => r.name === s.resource) : null;
     const tip = s.desc + (s.conc ? ' Concentration.' : '') + (res && !s.on ? ' Uses one ' + s.resource + ' (' + (res.current || 0) + ' left).' : '');
     return '<button class="cs-stbtn' + (s.on ? ' on' : '') + '" data-cs-state="' + csE(s.key) + '" aria-pressed="' + s.on + '" title="' + csE(tip) + '"' + (ro ? ' disabled' : '') + '>'
