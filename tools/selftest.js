@@ -25178,6 +25178,24 @@ for (const cls of Object.keys(rule)) for (let L = 1; L <= 20; L++) for (const sc
       } catch(e){ ok('round 471 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
       finally { state.party = JSON.parse(P0); state.searchState = JSON.parse(S0); }
     }
+    // -- Round 472: settings in the player view are the player's — no restoring a backup or a snapshot over the campaign, no campaign search setting, no DM windows or toolbar; the DM keeps all of it --
+    if (!PLAYER){
+      const dr = document.getElementById('settings-drawer');
+      const was = dr && dr.classList.contains('open');
+      try {
+        if (dr){ dr.classList.add('open'); dr.querySelectorAll('details').forEach(d => d.open = true); }
+        await sleep(100);
+        const vis = id => { const e = document.getElementById(id); return !!e && e.getClientRects().length > 0; };
+        const dmOnly = ['import-btn', 'snapshot-now-btn', 'reprint-group', 'show-zoom-controls', 'snap-windows', 'show-window-focus'];
+        if (PLAYER){
+          ok('player settings: no Import, snapshots, search reprints or window and toolbar options', dmOnly.every(id => !vis(id)), dmOnly.filter(vis).join(','));
+          ok('…and still their own: name, sync now', vis('me-name') && vis('sync-now-btn'));
+        } else {
+          ok('DM settings: Import, snapshots, search reprints and the window options are all there', dmOnly.every(vis), dmOnly.filter(id => !vis(id)).join(','));
+        }
+      } catch(e){ ok('round 472 threw', false, e.message); }
+      finally { if (dr && !was) dr.classList.remove('open'); }
+    }
     // -- Class features: represented, not just text ------------------------
     {
       try {
@@ -29555,6 +29573,24 @@ for (const cls of Object.keys(rule)) for (let L = 1; L <= 20; L++) for (const sc
         ok('…a typed 15 records a success', ds.success === 1 && !ds.fail, JSON.stringify(ds));
       } catch(e){ ok('round 470 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
       finally { state.party = JSON.parse(P0); state.combatants = JSON.parse(K0); save(); paRender(); }
+    }
+    // -- Round 472 (player): settings in the player view are the player's — no restoring a backup or a snapshot over the campaign, no campaign search setting, no DM windows or toolbar; the DM keeps all of it --
+    if (PLAYER){
+      const dr = document.getElementById('settings-drawer');
+      const was = dr && dr.classList.contains('open');
+      try {
+        if (dr){ dr.classList.add('open'); dr.querySelectorAll('details').forEach(d => d.open = true); }
+        await sleep(100);
+        const vis = id => { const e = document.getElementById(id); return !!e && e.getClientRects().length > 0; };
+        const dmOnly = ['import-btn', 'snapshot-now-btn', 'reprint-group', 'show-zoom-controls', 'snap-windows', 'show-window-focus'];
+        if (PLAYER){
+          ok('player settings: no Import, snapshots, search reprints or window and toolbar options', dmOnly.every(id => !vis(id)), dmOnly.filter(vis).join(','));
+          ok('…and still their own: name, sync now', vis('me-name') && vis('sync-now-btn'));
+        } else {
+          ok('DM settings: Import, snapshots, search reprints and the window options are all there', dmOnly.every(vis), dmOnly.filter(id => !vis(id)).join(','));
+        }
+      } catch(e){ ok('round 472 threw', false, e.message); }
+      finally { if (dr && !was) dr.classList.remove('open'); }
     }
   }
 
