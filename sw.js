@@ -34,10 +34,10 @@
  */
 'use strict';
 
-const BUILD = 'bec87a03d9';
+const BUILD = '9f83dbce6f';
 const PRECACHE = [
   'skt-workspace.html',
-  'styles/main.css?v=9eb9989828',
+  'styles/main.css?v=0d152c8d46',
   'styles/theme.css?v=33be98af77',
   'js/core/errors.js?v=67c70f2e1d',
   'js/core/data.js?v=183a16905e',
@@ -85,7 +85,7 @@ const PRECACHE = [
   'js/panels/timetracker.js?v=a4bf06c348',
   'js/panels/world.js?v=3363ff2d50',
   'js/content/data-loader.js?v=9a662fd8f7',
-  'js/content/search.js?v=705e667b4d',
+  'js/content/search.js?v=3f434975de',
   'js/features/backup.js?v=544e2b6d21',
   'js/ui/qr.js?v=b696ff33f3',
   'js/ui/settings.js?v=1f1f5ed5ec',
@@ -93,7 +93,7 @@ const PRECACHE = [
   'js/ui/context-menu.js?v=738247f1b2',
   'js/ui/zoom-pan.js?v=31a2882b02',
   'js/ui/workspaces.js?v=07664d648a',
-  'js/ui/command-palette.js?v=8aded06220',
+  'js/ui/command-palette.js?v=fd1d3547c2',
   'js/features/char-rules.js?v=f871c6770d',
   'js/features/char-effects.js?v=6b739e6eda',
   'js/features/char-sheet.js?v=19d211b435',

@@ -159,8 +159,10 @@ function _cpContent(q){
     hits.push(r);
     if (hits.length > 200) break;
   }
+  // (of two printings, the party's edition: it's the one kept below)
+  const edRank = typeof sktEditionRank === 'function' ? sktEditionRank() : () => 0;
   hits.sort((a, b) => ((a._n || '').startsWith(n) ? 0 : 1) - ((b._n || '').startsWith(n) ? 0 : 1)
-                   || a.name.length - b.name.length || a.name.localeCompare(b.name));
+                   || a.name.length - b.name.length || a.name.localeCompare(b.name) || edRank(a) - edRank(b));
   // One row per name: the same Goblin in six books is one answer here. The
   // / search lists every printing when the book matters.
   const seen = new Set(), uniq = [];

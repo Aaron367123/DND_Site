@@ -902,6 +902,15 @@ function _buildPool(){
   return [...party, ...base];
 }
 
+// Two of the same name (Fireball, 2014 and 2024): the party's edition first
+// — most of the party built on 2024 rules, the 2024 printing (as the Shop
+// prices by). A 2024 party's players looked up Fireball and read 2014's text.
+// Returns rank(r): 0 for the party's edition, 1 for the other.
+function sktEditionRank(){
+  const eds = (state.party || []).filter(p => p && p.build).map(p => p.build.edition || '2024');
+  const ed2024 = !eds.length || eds.filter(e => e === '2024').length * 2 >= eds.length;
+  return r => (typeof _isLegacyEntry === 'function' && _isLegacyEntry(r)) === ed2024 ? 1 : 0;
+}
 function getSearchPool(){
   const sig = _poolSig();
   if (_poolCache && _poolCache.sig === sig) return _poolCache.arr;
@@ -1000,10 +1009,11 @@ function doSearch(){
       for (let i = 0; i < nTok; i++) if (hay.indexOf(tokens[i]) === -1) return false;
       return true;
     });
+    const edRank = sktEditionRank();
     pool.sort((a,b) => {
       const aStarts = (a._n || '').startsWith(q) ? 0 : 1;
       const bStarts = (b._n || '').startsWith(q) ? 0 : 1;
-      return aStarts - bStarts || a.name.localeCompare(b.name);
+      return aStarts - bStarts || a.name.localeCompare(b.name) || edRank(a) - edRank(b);
     });
     // Fuzzy fallback — only kicks in for single-token queries of 3+ chars
     // when strict results are thin. Compares the query against each word

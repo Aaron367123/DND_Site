@@ -25161,6 +25161,23 @@ for (const cls of Object.keys(rule)) for (let L = 1; L <= 20; L++) for (const sc
       } catch(e){ ok('round 467 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
       finally { document.getElementById('cb-root')?.remove(); state.party = JSON.parse(P0); save(); }
     }
+    // -- Round 471: search — of two printings with one name (Fireball, 2014 and 2024), the party's edition first, in search and in Ctrl+K (a 2024 party's players read 2014's Fireball) --
+    if (!PLAYER){
+      const P0 = JSON.stringify(state.party), S0 = JSON.stringify(state.searchState || {});
+      try {
+        for (let n = 0; n < 40 && !(typeof _5eLoaded !== 'undefined' && _5eLoaded); n++) await sleep(250);
+        const withEd = ed => { state.party = JSON.parse(P0).map((p, i) => i < 3 && !p.foe ? Object.assign({}, p, { build: Object.assign({ edition: ed }, p.build || {}, { edition: ed }) }) : p); };
+        const first = () => { state.searchState = Object.assign({}, state.searchState, { query: 'fireball', category: 'spell' }); const r = doSearch().filter(x => x.name === 'Fireball'); return r.map(x => x._source).join(','); };
+        const cp = () => { const r = _cpContent('fireball').find(x => x.label === 'Fireball'); return r && r.hint; };
+        withEd('2024');
+        const s24 = first(), c24 = cp();
+        withEd('2014');
+        const s14 = first(), c14 = cp();
+        ok('a 2024 party: search lists the 2024 Fireball first, Ctrl+K gives it', /^XPHB,PHB$/.test(s24) && /24PHB/.test(c24 || ''), s24 + ' / ' + c24);
+        ok('…a 2014 party: the 2014 one', /^PHB,XPHB$/.test(s14) && /14PHB/.test(c14 || ''), s14 + ' / ' + c14);
+      } catch(e){ ok('round 471 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
+      finally { state.party = JSON.parse(P0); state.searchState = JSON.parse(S0); }
+    }
     // -- Class features: represented, not just text ------------------------
     {
       try {
@@ -29520,6 +29537,24 @@ for (const cls of Object.keys(rule)) for (let L = 1; L <= 20; L++) for (const sc
         if (k0 == null) localStorage.removeItem('skt-own-dice-v1'); else localStorage.setItem('skt-own-dice-v1', k0);
         state.party = JSON.parse(P0); save();
       }
+    }
+    // -- Round 470 (player): at 0 HP the death save's "or the d20 rolled" box is wide enough to type in (an 18 px sliver on a phone), and a typed 15 records a success --
+    if (PLAYER){
+      const P0 = JSON.stringify(state.party), K0 = JSON.stringify(state.combatants || []);
+      try {
+        const i = paMyIdx();
+        state.combatants = (state.combatants || []).filter(c => !(c.isPC && c.id === state.party[i].id));
+        state.party[i] = Object.assign({}, state.party[i], { hp: 0, deathSaves: { success: 0, fail: 0 }, stable: false, dead: false }); save();
+        paTab = 'you'; paRender(); await sleep(300);
+        for (let n = 0; n < 60 && !(typeof CS !== 'undefined' && CS && CS.R); n++) await sleep(100);
+        csRender(); await sleep(40);
+        const inp = document.querySelector('#pa-screen [data-cs-deathval]');
+        ok('0 HP: the box for the d20 rolled is wide enough to type in (it was 18 px)', !!inp && inp.getBoundingClientRect().width >= 50, inp && Math.round(inp.getBoundingClientRect().width));
+        inp.value = '15'; document.querySelector('#pa-screen [data-cs="deathset"]').click(); await sleep(80);
+        const ds = state.party[i].deathSaves || {};
+        ok('…a typed 15 records a success', ds.success === 1 && !ds.fail, JSON.stringify(ds));
+      } catch(e){ ok('round 470 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
+      finally { state.party = JSON.parse(P0); state.combatants = JSON.parse(K0); save(); paRender(); }
     }
   }
 

@@ -5583,6 +5583,13 @@ button.cs-ab:hover, button.cs-box:hover, .cs-row:hover { border-color:var(--acce
 .cs-death i { width:12px; height:12px; border-radius:50%; border:1px solid var(--text-muted); }
 .cs-death .ok i.on { background:var(--success, #4caf50); }
 .cs-death .no i.on { background:var(--danger, #c33); }
+/* "or the d20 rolled": its box was squeezed to an 18 px sliver on a phone,
+   the words on four lines beside it — no typing a death save in. The row
+   wraps; the box keeps its width and its words stay on one line. */
+.cs-death { flex-wrap:wrap; row-gap:8px; }
+.cs-physical { display:inline-flex; align-items:center; gap:6px; flex:0 0 auto; }
+.cs-physical .cb-dim { white-space:nowrap; }
+.cs-physical input { width:4.5em; min-width:4.5em; }
 .cs-rollbar { display:flex; flex-wrap:wrap; align-items:center; gap:10px; }
 .cs-last { flex:1; min-width:200px; font-size:var(--fs-sm); }
 .cs-last-n { font-size:20px; margin-right:4px; }
