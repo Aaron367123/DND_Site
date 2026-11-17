@@ -331,6 +331,11 @@ function sktPortraitFocus(imgPath) {
 function sktPcIcon(pc) {
   const ic = pc && pc.icon ? String(pc.icon) : '';
   if (/^(data:image\/|img\/|https?:\/\/)/.test(ic) || (ic && !SKT_DEFAULT_ICONS.has(ic))) return ic;
+  // The build's own picture when the record has none: Zoey's uploaded
+  // portrait was in her build, her record's icon was empty, and everywhere
+  // but the builder showed the species face instead.
+  const bi = pc && pc.build && pc.build.icon ? String(pc.build.icon) : '';
+  if (/^(data:image\/|img\/|https?:\/\/)/.test(bi)) return bi;
   const face = sktSpeciesPortrait((pc && pc.build && pc.build.species) || (pc && pc.race));
   return face ? 'img/' + face : (ic || '⚔');
 }

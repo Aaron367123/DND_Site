@@ -5238,6 +5238,8 @@ select.cb-sel{padding-right:28px}
 .cb-atk i{color:var(--accent);font-style:normal;font-size:var(--fs-xs)}
 .cb-review{display:grid;grid-template-columns:1fr 1fr;gap:16px}
 .cb-sheet-name{font-size:var(--fs-lg);font-weight:700}
+.cb-sheet-ico{display:inline-flex;width:32px;height:32px;border-radius:50%;overflow:hidden;vertical-align:middle;margin-right:4px}
+.cb-sheet-ico img{width:100%;height:100%;object-fit:cover}
 .cb-sheet-sub{color:var(--text-muted);font-size:var(--fs-sm);margin-bottom:10px}
 .cb-big{display:grid;grid-template-columns:repeat(5,1fr);gap:4px;margin-bottom:10px}
 .cb-big div{background:var(--panel-2);border-radius:var(--r-sm);padding:6px 2px;text-align:center;display:flex;flex-direction:column}
@@ -5937,6 +5939,8 @@ button.cs-avatar:hover { box-shadow:0 0 0 2px var(--accent); }
 #cb-root .cb-checks { grid-template-columns:repeat(auto-fill,minmax(200px,1fr)); gap:6px 12px; }
 #cb-root .cb-check { padding:7px 8px; }
 #cb-root .cb-check input[type="checkbox"], #cb-root .cb-check input[type="radio"] { width:16px; height:16px; }
+/* A finger: 16px boxes (skills, languages, masteries) were hard to hit. */
+@media (pointer: coarse){ #cb-root .cb-check input[type="checkbox"], #cb-root .cb-check input[type="radio"] { width:22px; height:22px; } }
 #cb-root .cb-spi { width:20px; height:20px; font-size:12px; line-height:18px; }
 /* A proficient skill's tinted row keeps its ability label readable. */
 .cb-sk.prof1 i, .cb-sk.prof2 i { color:var(--text-muted); }

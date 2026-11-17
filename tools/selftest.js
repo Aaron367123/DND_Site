@@ -25141,6 +25141,26 @@ for (const cls of Object.keys(rule)) for (let L = 1; L <= 20; L++) for (const sc
       } catch(e){ ok('round 462 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
       finally { try { if (typeof csClose === 'function' && CS) csClose(); } catch(e){} state.party = JSON.parse(P0); save(); }
     }
+    // -- Round 467: a character's own picture — the build's portrait when the record's is empty (Zoey showed the species face everywhere but the builder); the builder's header shows a picture, not its data as text --
+    if (!PLAYER){
+      const pic = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==';
+      ok('picture: the build’s portrait when the record has none', sktPcIcon({ icon: '', race: 'Human', build: { icon: pic, species: 'Human' } }) === pic);
+      ok('…and over a default class emoji', sktPcIcon({ icon: '🗡', race: 'Human', build: { icon: pic, species: 'Human' } }) === pic || SKT_DEFAULT_ICONS.has('🗡') === false);
+      ok('…the record’s own picture still comes first', sktPcIcon({ icon: 'img/x.png', build: { icon: pic } }) === 'img/x.png');
+      ok('…no picture anywhere: the species face, as before', /^img\//.test(sktPcIcon({ icon: '', race: 'Human', build: { icon: '', species: 'Human' } })));
+      const P0 = JSON.stringify(state.party);
+      try {
+        {
+          openCharBuilder({}); await sleep(1500);
+          cbSet(b => { b.icon = pic; b.name = 'r467'; }); await sleep(200);
+          const nm = document.querySelector('#cb-root .cb-sheet-name');
+          ok('the builder’s header: the portrait as a picture, not “data:image…” as text', !!nm && !!nm.querySelector('img') && !/data:image/.test(nm.textContent), nm && nm.textContent.slice(0, 60));
+          try { document.querySelector('#cb-root [data-cb="close"], #cb-root .cb-x')?.click(); } catch(e){}
+          if (typeof cbClose === 'function') try { cbClose(); } catch(e){}
+        }
+      } catch(e){ ok('round 467 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
+      finally { document.getElementById('cb-root')?.remove(); state.party = JSON.parse(P0); save(); }
+    }
     // -- Class features: represented, not just text ------------------------
     {
       try {
@@ -29435,6 +29455,19 @@ for (const cls of Object.keys(rule)) for (let L = 1; L <= 20; L++) for (const sc
         try { csClose(); } catch(e){}
       } catch(e){ ok('round 466 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
       finally { state.party = JSON.parse(P0); save(); if (O0){ paOpenMates.clear(); O0.forEach(x => paOpenMates.add(x)); } paRender(); }
+    }
+    // -- Round 467 (player): the character builder's checkboxes are big enough for a finger on a phone (16 px), and stay 16 with a mouse --
+    if (PLAYER){
+      try {
+        openCharBuilder({}); await sleep(1500);
+        cbSet(b => { b.cls = 'fighter'; }); await sleep(300);
+        const steps = [...document.querySelectorAll('#cb-root .cb-step')];
+        const sk = steps.find(s => /Skills/.test(s.textContent)); if (sk){ sk.click(); await sleep(400); }
+        const box = [...document.querySelectorAll('#cb-root .cb-check input[type="checkbox"]')].find(e => e.getBoundingClientRect().width > 0);
+        const coarse = matchMedia('(pointer: coarse)').matches, w = box ? Math.round(box.getBoundingClientRect().width) : 0;
+        ok('the builder’s checkboxes: 22 px for a finger, 16 with a mouse', !!box && (coarse ? w >= 22 : w === 16), coarse + ' ' + w);
+      } catch(e){ ok('round 467 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
+      finally { try { if (typeof cbClose === 'function') cbClose(); } catch(e){} document.getElementById('cb-root')?.remove(); }
     }
   }
 

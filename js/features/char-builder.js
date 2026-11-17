@@ -676,7 +676,8 @@ function cbSide(rec){
   const abil = SKT_ABS.map(k => '<div class="cb-ab"><span>' + k.toUpperCase() + '</span><b>' + ab[k] + '</b><i>' + sktSigned(sktMod(ab[k])) + '</i></div>').join('');
   const todo = cbTodo(), rules = todo.filter(t => t.rule), left = todo.filter(t => !t.rule);
   return '<div class="cb-sheet">'
-    + '<div class="cb-sheet-name">' + cbEsc(rec.icon) + ' ' + cbEsc(b.name || 'Unnamed') + '</div>'
+    // (a picture as a picture: an uploaded portrait printed its data as text)
+    + '<div class="cb-sheet-name">' + (/^data:image|^img\/|^https?:/.test(String(rec.icon || '')) && typeof renderIcon === 'function' ? '<span class="cb-sheet-ico">' + renderIcon(rec.icon, b.name) + '</span>' : cbEsc(rec.icon)) + ' ' + cbEsc(b.name || 'Unnamed') + '</div>'
     + '<div class="cb-sheet-sub">' + cbEsc([rec.race, cbClassLabel(rec), rec.subclass].filter(Boolean).join(' · ') || 'Choose a species and a class') + '</div>'
     + '<div class="cb-big"><div><span>AC</span><b>' + rec.ac + '</b></div><div><span>HP</span><b>' + rec.hpMax + '</b></div>'
     + '<div><span>Init</span><b>' + sktSigned(rec.init) + '</b></div><div><span>Speed</span><b>' + rec.spd + '</b></div>'
