@@ -29360,6 +29360,57 @@ for (const cls of Object.keys(rule)) for (let L = 1; L <= 20; L++) for (const sc
       } catch(e){ ok('round 463 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
       finally { state.combatants = JSON.parse(K0); state.activeCombatantId = A0; state.sharedPanels = JSON.parse(SH); save(); paRender(); }
     }
+    // -- Round 464 (player): My dice and Bardic Inspiration — a tap asks for the die (it was always the app's), ✕ keeps the die, a typed 6 spends it --
+    if (PLAYER){
+      const P0 = JSON.stringify(state.party), k0 = localStorage.getItem('skt-own-dice-v1'); const kt = window.showToast;
+      try {
+        window.showToast = () => {};
+        const i = paMyIdx();
+        if (i < 0){ ok('player: a character for bardic inspiration', false, 'none'); }
+        else {
+          state.party[i] = Object.assign({}, state.party[i], { bardicInspiration: 'd8', bardicFrom: 'r464 Bard' }); save();
+          localStorage.setItem('skt-own-dice-v1', '1');
+          paTab = 'you'; paRender(); await sleep(300);
+          for (let k = 0; k < 60 && !(typeof CS !== 'undefined' && CS && CS.R); k++) await sleep(100);
+          csRender(); await sleep(40);
+          const card = () => document.getElementById('pa-roll');
+          document.querySelector('#pa-screen [data-cs="bardic"]').click(); await sleep(60);
+          ok('My dice, Bardic Inspiration: the card asks for the d8, and the die isn’t spent yet', !!card().querySelector('[data-cs-owndie]') && /1d8/.test(card().textContent) && state.party[i].bardicInspiration === 'd8');
+          card().querySelector('[data-cs="owndiex"]').click(); await sleep(60);
+          ok('…✕: still holding the d8', state.party[i].bardicInspiration === 'd8');
+          document.querySelector('#pa-screen [data-cs="bardic"]').click(); await sleep(60);
+          card().querySelector('[data-cs-owndie]').value = '6';
+          card().querySelector('[data-cs="owndie"]').click(); await sleep(80);
+          const last = (state.party[i].rolls || [])[0];
+          ok('…6 typed: +6, logged, and the die is spent', !state.party[i].bardicInspiration && !!last && last.label === 'Bardic Inspiration' && last.total === 6, JSON.stringify([state.party[i].bardicInspiration, last && [last.label, last.total]]));
+        }
+      } catch(e){ ok('round 464 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
+      finally {
+        window.showToast = kt; if (typeof CS !== 'undefined' && CS) CS.pending = null;
+        if (k0 == null) localStorage.removeItem('skt-own-dice-v1'); else localStorage.setItem('skt-own-dice-v1', k0);
+        state.party = JSON.parse(P0); save();
+      }
+    }
+    // -- Round 465 (player): the tab this device was on comes back after a reload (a TV on the map went back to "Which one are you?"), once the shared tab has arrived; a tap is remembered --
+    if (PLAYER){
+      const SH = JSON.stringify(state.sharedPanels || []), T0 = paTab, K0 = localStorage.getItem('skt-pa-tab-v1');
+      try {
+        state.sharedPanels = (state.sharedPanels || []).filter(x => x !== 'party'); save();
+        paTab = 'you'; paWantTab = 'party'; paRender(); await sleep(60);
+        ok('a remembered Party tab, not shared yet: it waits on You', paTab === 'you' && paWantTab === 'party');
+        state.sharedPanels = [...new Set((state.sharedPanels || []).concat(['party']))]; save();
+        paRender(); await sleep(60);
+        ok('…shared (the sync arrives): it goes to Party', paTab === 'party' && paWantTab === null);
+        const notes = document.querySelector('#pa-tabs [data-pa-tab="notes"]');
+        notes.click(); await sleep(60);
+        ok('a tap on Notes is remembered on this device', paTab === 'notes' && localStorage.getItem('skt-pa-tab-v1') === 'notes');
+      } catch(e){ ok('round 465 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
+      finally {
+        state.sharedPanels = JSON.parse(SH); save(); paWantTab = null; paTab = T0;
+        if (K0 == null) localStorage.removeItem('skt-pa-tab-v1'); else localStorage.setItem('skt-pa-tab-v1', K0);
+        paRender();
+      }
+    }
   }
 
   // ══════════════════════════════════════════════════════════ mobile / phone

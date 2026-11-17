@@ -1508,7 +1508,14 @@ function csOnClick(e){
       return csEdit('Bardic Inspiration ' + d0, p => { p.bardicInspiration = d0; p.bardicFrom = b0 ? b0.name : null; });
     }
     const sides = parseInt(die.replace(/\D/g, ''), 10) || 6, n = csD(sides), from = pc.bardicFrom;
-    csEdit('Used Bardic Inspiration', p => { p.bardicInspiration = false; p.bardicFrom = null; });
+    const spend = () => csEdit('Used Bardic Inspiration', p => { p.bardicInspiration = false; p.bardicFrom = null; });
+    // Rolling your own dice: asked like any other roll, and spent once the
+    // number is in (✕ keeps it). It was always the app's roll.
+    if (!CS.readOnly && csOwnDice()){
+      csLog({ kind: 'dmg', label: 'Bardic Inspiration', total: n, dice: n, type: '', detail: '1' + die + (from ? ' from ' + from : '') + ' — add it to the roll' }, () => spend());
+      return csRender();
+    }
+    spend();
     const r = { kind: 'dmg', label: 'Bardic Inspiration', total: n, type: '', detail: die + (from ? ' from ' + from : '') + ' — add it to the roll', rolls: [n] };
     CS.log.unshift(r); CS.log = CS.log.slice(0, 8);
     if (CS.embed && typeof paShowRoll === 'function') paShowRoll('<div class="pa-roll-in crit"><span class="pa-roll-l">Bardic Inspiration</span><span class="pa-roll-hit">+' + n + '</span><span class="pa-roll-d">' + csE(r.detail) + '</span></div>');

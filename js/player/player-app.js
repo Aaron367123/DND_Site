@@ -118,6 +118,14 @@ const PA_TABS = [
 const PA_PHONE_Q = '(max-width: 768px) and (pointer: coarse)';
 function paIsPhone(){ try { return matchMedia(PA_PHONE_Q).matches; } catch(e){ return false; } }
 let paTab = 'you';
+// The tab this device was on, back after a reload — a TV on the map went
+// back to "Which one are you?" every time the page reloaded (a new version,
+// a dropped connection). Restored once it's there: the shared tabs arrive
+// with the sync, a moment after the page loads.
+const PA_TAB_KEY = 'skt-pa-tab-v1';
+let paWantTab = null;
+try { paWantTab = localStorage.getItem(PA_TAB_KEY); } catch(e){}
+function paKeepTab(){ paWantTab = null; try { localStorage.setItem(PA_TAB_KEY, paTab); } catch(e){} }
 
 // What the player view can actually surface, kept next to the tab list so the
 // two cannot drift. The DM's per-window "Share with player view" menu reads
@@ -422,9 +430,9 @@ function paBackStep(){
   if (paTab === 'more' && paMoreSub){ paMoreSub = null; paRenderScreen(); return true; }
   while (paTabTrail.length){
     const t = paTabTrail.pop();
-    if (t !== paTab && paVisibleTabs().some(x => x.id === t)){ paTab = t; paRender(); return true; }
+    if (t !== paTab && paVisibleTabs().some(x => x.id === t)){ paTab = t; paKeepTab(); paRender(); return true; }
   }
-  if (paTab !== 'you'){ paTab = 'you'; paRender(); return true; }
+  if (paTab !== 'you'){ paTab = 'you'; paKeepTab(); paRender(); return true; }
   return false;
 }
 function paStartSearch(){
@@ -604,6 +612,7 @@ function paWireMore(el){
 function paRender(){
   if (!document.body.classList.contains('player-app')) return;
   const tabs = paVisibleTabs();
+  if (paWantTab && tabs.some(t => t.id === paWantTab)){ paTab = paWantTab; paWantTab = null; }
   if (!tabs.some(t => t.id === paTab)) paTab = 'you';
   paRenderTurn();
   paRenderPrompt();
@@ -2357,7 +2366,7 @@ function paOnClick(e){
   const ho = e.target.closest('[data-pa-ho]');
   if (ho){ paShowHandout(ho.dataset.paHo, false); return; }
   const tab = e.target.closest('[data-pa-tab]');
-  if (tab){ if (tab.dataset.paTab !== paTab){ paTabTrail.push(paTab); paTabTrail = paTabTrail.slice(-12); } paTab = tab.dataset.paTab; paMoreSub = null; paRender(); return; }
+  if (tab){ if (tab.dataset.paTab !== paTab){ paTabTrail.push(paTab); paTabTrail = paTabTrail.slice(-12); } paTab = tab.dataset.paTab; paKeepTab(); paMoreSub = null; paRender(); return; }
   const pick = e.target.closest('[data-pa-pick]');
   if (pick){ paSetPc(pick.dataset.paPick); paRender(); return; }
   // The picker lives on the You tab: from More (or anywhere) go there, or
