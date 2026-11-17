@@ -3383,6 +3383,8 @@ function csLootAsItem(it){
   m.qty = Math.max(1, +it.qty || 1);
   if (it.weight != null && it.weight !== '' && !isNaN(+it.weight)) m.weight = +it.weight;
   if (it.value) m.value = it.value;
+  // The DM's notes on it (the Loot window's): taken along into the inventory.
+  if (it.notes) m.notes = String(it.notes).slice(0, 1000);
   return m;
 }
 // A loot item's weight: as typed, else the catalog's. The DM types "Half Plate
@@ -3415,7 +3417,7 @@ function csPartyLootHtml(pc){
         + (ro ? '' : '<span class="cs-claim">'
           + (q < 2 ? '' : '<button class="btn small" data-cs-lootclaimone="' + csE(it.id) + '" title="Take one of the ' + q + ' for ' + csE(pc.name) + '; the rest stay the party\u2019s">Claim 1</button>')
           + '<button class="btn small" data-cs-lootclaim="' + csE(it.id) + '" title="Make ' + (q > 1 ? 'all ' + q : 'it') + ' ' + csE(pc.name) + '\u2019s">' + (q > 1 ? 'All' : 'Claim') + '</button></span>')
-        + '</div>' + (CS.open[k] ? '<div class="cs-feat-t cs-itemt">' + csItemText(csLootAsItem(it)) + '</div>' : '');
+        + '</div>' + (CS.open[k] ? '<div class="cs-feat-t cs-itemt">' + csItemText(csLootAsItem(it)) + csLootNotes(it) + '</div>' : '');
     }).join('') + '</div>';
 }
 // A weapon, armour or a shield: something the sheet equips.
@@ -3443,9 +3445,10 @@ function csLootRows(pc){
       + (!ro && mine && CS.magic && csPotionHeal(csLootAsItem(it), csItemInfo(csLootAsItem(it))) ? '<button class="btn small cs-heal" data-cs-lootdrink="' + csE(it.id) + '" title="Drink one: roll the healing here, or type what you rolled">Drink · ' + csE(csPotionHeal(csLootAsItem(it), csItemInfo(csLootAsItem(it)))) + '</button>' : '')
       + (ro ? '' : '<button class="btn small" data-cs-lootback="' + csE(it.id) + '" title="Give it to the party loot (nobody\u2019s)">↩ To party loot</button>'
         + '<button class="btn small" data-cs-lootdel="' + csE(it.id) + '" aria-label="Remove ' + csE(it.name) + '" title="Used up, sold or lost: remove it">✕</button>')
-      + '</div>' + (CS.drink === 'l:' + it.id ? csDrinkHtml('l:' + it.id, csPotionHeal(csLootAsItem(it), csItemInfo(csLootAsItem(it)))) : '') + (CS.open[k] ? '<div class="cs-feat-t cs-itemt">' + csItemText(csLootAsItem(it)) + '</div>' : '');
+      + '</div>' + (CS.drink === 'l:' + it.id ? csDrinkHtml('l:' + it.id, csPotionHeal(csLootAsItem(it), csItemInfo(csLootAsItem(it)))) : '') + (CS.open[k] ? '<div class="cs-feat-t cs-itemt">' + csItemText(csLootAsItem(it)) + csLootNotes(it) + '</div>' : '');
   }).join('');
 }
+const csLootNotes = it => it.notes ? '<div class="cs-itemnotes">' + csE(String(it.notes)).replace(/\n/g, '<br>') + '</div>' : '';
 function csLootClick(d, pc){
   if (d.csLootclaim != null){
     if (CS.readOnly) return true;

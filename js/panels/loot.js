@@ -774,13 +774,47 @@ registerPanel('loot',{
   _openItemDetail(idx){
     const item = this._loot.items[idx]; if (!item) return;
     const match = this._findFiveItem(item.name);
-    if (match && typeof popOutDetail === 'function'){
+    if (match && !item.notes && typeof popOutDetail === 'function'){
       popOutDetail(match);
       return;
     }
-    if (typeof showToast === 'function'){
-      showToast(`No 5e entry for "${item.name}" — custom item.`);
-    }
+    this._openNotes(idx);
+  },
+  // What an item is, in the DM's words. Half the party's haul is their own —
+  // a locket, a crown with fifteen gems, a certificate — and there was nowhere
+  // to say what any of it was: the book button said "custom item". The notes
+  // show on the character's sheet too. Its owner (or the DM) can change them.
+  _openNotes(idx){
+    const item = this._loot.items[idx]; if (!item) return;
+    const can = this._canEdit(item), match = this._findFiveItem(item.name);
+    document.getElementById('loot-notes')?.remove();
+    const bd = document.createElement('div');
+    bd.className = 'modal-backdrop'; bd.id = 'loot-notes';
+    bd.innerHTML = `<div class="modal" role="dialog" aria-modal="true" aria-label="${esc(item.name)}" style="width:420px;max-width:92vw">
+      <h3>${esc(item.name)}</h3>
+      <p class="loot-notes-sub">${esc([(item.qty || 1) > 1 ? '×' + item.qty : '', item.value || '', this._memberName(item.assignedTo) || 'Party loot'].filter(Boolean).join(' · '))}${match ? '' : ' · your own item'}</p>
+      ${can ? `<textarea id="loot-notes-t" rows="5" maxlength="1000" placeholder="What it is, what it does, where it came from…">${esc(item.notes || '')}</textarea>`
+            : `<div class="loot-notes-ro">${item.notes ? esc(item.notes).replace(/\n/g, '<br>') : '<i>No notes.</i>'}</div>`}
+      <div class="modal-actions" style="display:flex;gap:6px;justify-content:flex-end;margin-top:12px">
+        ${match ? '<button class="btn" id="loot-notes-book" style="margin-right:auto">The book’s entry</button>' : ''}
+        <button class="btn" id="loot-notes-x">${can ? 'Cancel' : 'Close'}</button>
+        ${can ? '<button class="btn primary" id="loot-notes-ok">Save</button>' : ''}
+      </div>
+    </div>`;
+    document.body.appendChild(bd);
+    const close = () => bd.remove();
+    bd.querySelector('#loot-notes-x').addEventListener('click', close);
+    bd.querySelector('#loot-notes-book')?.addEventListener('click', () => { close(); if (typeof popOutDetail === 'function') popOutDetail(match); });
+    bd.querySelector('#loot-notes-ok')?.addEventListener('click', () => {
+      const v = bd.querySelector('#loot-notes-t').value.trim().slice(0, 1000);
+      close();
+      const it = this._loot.items.find(x => x.id === item.id) || item;
+      if (v === (it.notes || '')) return;
+      this._undoable((v ? 'Notes on ' : 'Cleared the notes on ') + it.name, () => { if (v) it.notes = v; else delete it.notes; });
+    });
+    bd.addEventListener('mousedown', e => { if (e.target === bd) close(); });
+    bd.addEventListener('keydown', e => { if (e.key === 'Escape') close(); });
+    setTimeout(() => (bd.querySelector('#loot-notes-t') || bd.querySelector('#loot-notes-x'))?.focus(), 30);
   },
 
   _itemRow(item, i){
@@ -801,7 +835,7 @@ registerPanel('loot',{
     return `<div class="loot-item ${item.assignedTo?'assigned':''}" data-i="${i}" data-id="${esc(item.id||'')}" draggable="true" title="Right-click (or hold) to sell, split or move it">
       <span class="loot-drag-handle" title="Drag to reorder">⋮⋮</span>
       <div class="loot-name">
-        <button class="loot-info-btn" data-lact="info" data-li="${i}" title="View item details">${ICO('i-book-open')}</button>
+        <button class="loot-info-btn${item.notes ? ' has-notes' : ''}" data-lact="info" data-li="${i}" title="${item.notes ? esc(item.notes.slice(0, 200)) : 'What it is: the book’s entry, or your notes'}">${ICO('i-book-open')}</button>
         <input class="loot-name-input" type="text" value="${esc(item.name)}" data-lfield="name" data-li="${i}" title="${esc(item.name)}${assignedName ? ' → ' + esc(assignedName) : ''} — click to rename" spellcheck="false">
       </div>
       <input type="number" class="loot-qty" value="${item.qty||1}" min="1" data-lfield="qty" data-li="${i}" title="Quantity">
@@ -838,14 +872,15 @@ registerPanel('loot',{
   _rowMenu(i, x, y){
     const it = this._loot.items[i]; if (!it || !this._canEdit(it) || typeof showContextMenu !== 'function') return;
     const each = this._parseGp(it.value), n = Math.max(1, parseInt(it.qty) || 1);
-    if (!(each > 0)){ showContextMenu(x, y, [{ label: 'No value to sell it for — type one in', disabled: true, onClick: () => {} }].concat(this._splitItems(i), this._moveItems(i))); return; }
+    if (!(each > 0)){ showContextMenu(x, y, [{ label: 'No value to sell it for — type one in', disabled: true, onClick: () => {} }].concat(this._notesItem(i), this._splitItems(i), this._moveItems(i))); return; }
     const items = [
       { label: 'Sell' + (n > 1 ? ' all ' + n : '') + ' for half — ' + this._fmtCoins(this._toCoins(each * n / 2)), onClick: () => this._sell(i, 0.5, false) },
       { label: 'Sell' + (n > 1 ? ' all ' + n : '') + ' for full value — ' + this._fmtCoins(this._toCoins(each * n)), onClick: () => this._sell(i, 1, false) },
     ];
     if (n > 1) items.push({ label: 'Sell one for half — ' + this._fmtCoins(this._toCoins(each / 2)), onClick: () => this._sell(i, 0.5, true) });
-    showContextMenu(x, y, items.concat(this._splitItems(i), this._moveItems(i)));
+    showContextMenu(x, y, items.concat(this._notesItem(i), this._splitItems(i), this._moveItems(i)));
   },
+  _notesItem(i){ const it = this._loot.items[i]; return [{ label: '─────' }, { label: it && it.notes ? 'Notes…' : 'Add notes…', onClick: () => this._openNotes(i) }]; },
   // One from a stack. Five potions of healing were one row, and claiming it
   // gave a character all five: there was no handing out one each.
   _splitItems(i){
@@ -876,7 +911,7 @@ registerPanel('loot',{
     return `<div class="loot-item assigned locked" data-i="${i}" title="${esc(who)}’s — only they or the DM can change it">
       <span class="loot-drag-handle" aria-hidden="true"></span>
       <div class="loot-name">
-        <button class="loot-info-btn" data-lact="info" data-li="${i}" title="View item details">${ICO('i-book-open')}</button>
+        <button class="loot-info-btn${item.notes ? ' has-notes' : ''}" data-lact="info" data-li="${i}" title="${item.notes ? esc(item.notes.slice(0, 200)) : 'What it is'}">${ICO('i-book-open')}</button>
         <span class="loot-name-text">${esc(item.name)}</span>
       </div>
       <span class="loot-qty loot-ro">${item.qty||1}</span>

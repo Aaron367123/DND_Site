@@ -3335,6 +3335,11 @@ body.player-mode .loot-sumbar > span[style*="flex:1"]{display:none}
 .loot-item .loot-name-input:focus{outline:none;border-color:var(--accent);background:var(--panel)}
 .loot-item .loot-info-btn{flex-shrink:0;background:transparent;border:none;color:var(--text-muted);font-size:var(--fs-lg);padding:2px 5px;cursor:pointer;border-radius:var(--r-sm);line-height:1;opacity:.5;transition:opacity .12s,background .12s}
 .loot-item .loot-info-btn:hover{opacity:1;background:var(--panel-3);color:var(--accent)}
+/* Notes on it: the book is lit. */
+.loot-item .loot-info-btn.has-notes{opacity:1;color:var(--accent)}
+.loot-notes-sub{margin:-4px 0 10px;color:var(--text-muted);font-size:var(--fs-sm)}
+#loot-notes textarea{width:100%;box-sizing:border-box;resize:vertical;min-height:96px;font:inherit}
+.loot-notes-ro{white-space:normal;line-height:1.45;max-height:50vh;overflow:auto}
 .loot-drag-handle{flex-shrink:0;color:var(--text-dim);font-size:var(--fs-xl);line-height:1;cursor:grab;user-select:none;letter-spacing:-1px;padding:0 2px;transition:opacity .12s,color .12s}
 .loot-item:hover .loot-drag-handle{opacity:1}
 .loot-drag-handle:active{cursor:grabbing}

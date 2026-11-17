@@ -24738,6 +24738,69 @@ for (const cls of Object.keys(rule)) for (let L = 1; L <= 20; L++) for (const sc
         try { closePanel('loot'); } catch(e){}
       }
     }
+    // -- Round 451: loot notes — a custom item's book button opens notes (it said "custom item"), the DM writes what it is, the book lights, the sheet shows them, and a catalog item with notes still reaches its book entry --
+    if (!PLAYER){
+      const L = panelDefs.loot;
+      let keepLs = null; const kt = window.showToast, kcm = window.showContextMenu, kpd = window.popOutDetail;
+      try {
+        for (let i = 0; i < 40 && !(typeof _5eLoaded !== 'undefined' && _5eLoaded); i++) await sleep(250);
+        let toast = null, popped = null; window.showToast = m => { toast = m; }; window.popOutDetail = d => { popped = d; };
+        openPanel('loot'); await sleep(300);
+        keepLs = localStorage.getItem('skt-loot-v1');
+        const A = state.party.filter(p => !p.foe)[0];
+        L._loot = { cp: 0, sp: 0, ep: 0, gp: 0, pp: 0, items: [
+          { id: 'r451c', name: 'r451 Drufi Crown', qty: 1, value: '750 gp', assignedTo: null },
+          { id: 'r451r', name: 'Rope', qty: 1, value: '1 gp', assignedTo: null },
+          { id: 'r451m', name: 'r451 Locket', qty: 1, value: '', assignedTo: A.id }], tabGroups: [] };
+        L._save(); L._render(); await sleep(20);
+        const book = id => L._body.querySelector('.loot-item[data-id="' + id + '"] .loot-info-btn');
+        const dlg = () => document.getElementById('loot-notes');
+        book('r451c').click(); await sleep(60);
+        ok('a custom item’s book button opens its notes (it only said “custom item”)', !!dlg() && !!dlg().querySelector('#loot-notes-t') && !toast && /your own item/.test(dlg().textContent) && !dlg().querySelector('#loot-notes-book'));
+        dlg().querySelector('#loot-notes-t').value = 'Fifteen gems.\nThe drufi want it back.';
+        dlg().querySelector('#loot-notes-ok').click(); await sleep(40);
+        const c = () => L._loot.items.find(x => x.id === 'r451c');
+        ok('…Save keeps them on the item, and the book is lit, its tooltip the notes', c().notes === 'Fifteen gems.\nThe drufi want it back.' && !dlg() && book('r451c').classList.contains('has-notes') && /Fifteen gems/.test(book('r451c').title) && !book('r451r').classList.contains('has-notes'));
+        sktUndo(); await sleep(40);
+        ok('…and can be undone', !L._loot.items.find(x => x.id === 'r451c').notes);
+        if (typeof sktRedo === 'function') sktRedo(); await sleep(40);
+        if (!c().notes){ c().notes = 'Fifteen gems.\nThe drufi want it back.'; L._save(); L._render(); }
+        // a catalog item: its book entry, until it has notes
+        popped = null; book('r451r').click(); await sleep(40);
+        ok('a catalog item with no notes: the book button opens its book entry, as before', !!popped && !dlg());
+        let menu = null; window.showContextMenu = (x, y, items) => { menu = items; };
+        L._body.querySelector('.loot-item[data-id="r451r"]').dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true, clientX: 40, clientY: 40 }));
+        const add = menu && menu.find(m => m.label === 'Add notes…');
+        ok('…the row menu has Add notes…', !!add);
+        add.onClick(); await sleep(40);
+        dlg().querySelector('#loot-notes-t').value = 'Knotted every foot'; dlg().querySelector('#loot-notes-ok').click(); await sleep(40);
+        popped = null; book('r451r').click(); await sleep(40);
+        ok('…with notes, the book opens them, with a button to the book’s entry', !!dlg() && !popped && !!dlg().querySelector('#loot-notes-book'));
+        dlg().querySelector('#loot-notes-book').click(); await sleep(40);
+        ok('…which opens it', !!popped && !dlg());
+        // clearing
+        book('r451r').click(); await sleep(40);
+        dlg().querySelector('#loot-notes-t').value = '  '; dlg().querySelector('#loot-notes-ok').click(); await sleep(40);
+        ok('emptying the notes clears them', !('notes' in L._loot.items.find(x => x.id === 'r451r')));
+        // the sheet
+        L._loot.items.find(x => x.id === 'r451m').notes = 'From Larlow, to his sister'; L._save();
+        openCharSheet(A.id, { tab: 'inventory' }); await sleep(250);
+        for (let i = 0; i < 60 && !(CS.gear && CS.R); i++){ await sleep(100); }
+        CS.open = Object.assign({}, CS.open, { 'lt:r451m': true, 'pl:r451c': true }); csRender(); await sleep(30);
+        const txt = s => (document.querySelector('#cs-root ' + s) || {}).textContent || '';
+        const mineRow = document.querySelector('#cs-root .cs-lootitem[data-loot="r451m"]');
+        ok('the sheet: a claimed item, opened, shows the DM’s notes', !!mineRow && /From Larlow, to his sister/.test(mineRow.nextElementSibling ? mineRow.nextElementSibling.textContent : ''));
+        ok('…and a party-loot item too', /The drufi want it back/.test(txt('.cs-partyloot')));
+        ok('…taken into the inventory, the notes go with it', csLootAsItem(L._loot.items.find(x => x.id === 'r451m')).notes === 'From Larlow, to his sister');
+      } catch(e){ ok('round 451 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
+      finally {
+        window.showToast = kt; window.showContextMenu = kcm; window.popOutDetail = kpd;
+        document.getElementById('loot-notes')?.remove();
+        try { if (typeof csClose === 'function' && CS) csClose(); } catch(e){}
+        if (keepLs != null){ localStorage.setItem('skt-loot-v1', keepLs); L._loot = null; }
+        try { closePanel('loot'); } catch(e){}
+      }
+    }
     // -- Class features: represented, not just text ------------------------
     {
       try {
@@ -28755,6 +28818,42 @@ for (const cls of Object.keys(rule)) for (let L = 1; L <= 20; L++) for (const sc
       } catch(e){ ok('round 450b threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
       finally {
         window.showToast = kt; window.showContextMenu = kcm;
+        if (keep != null){ localStorage.setItem('skt-loot-v1', keep); L._loot = null; }
+        if (SH != null){ state.sharedPanels = JSON.parse(SH); save(); try { paRender(); } catch(e){} }
+      }
+    }
+    // -- Round 451b (player): another character's item's notes can be read, not changed; the party's can be written --
+    if (PLAYER){
+      const L = panelDefs.loot;
+      let keep = null, SH = null; const kt = window.showToast;
+      try {
+        window.showToast = () => {};
+        keep = localStorage.getItem('skt-loot-v1'); SH = JSON.stringify(state.sharedPanels || []);
+        state.sharedPanels = ['loot']; save(); paRender(); await sleep(600);
+        const tab = [...document.querySelectorAll('.pa-tab')].find(t => /loot/i.test(t.textContent));
+        if (tab){ tab.click(); await sleep(900); }
+        const me = typeof paPc === 'function' ? paPc() : null, other = state.party.find(p => !p.foe && me && p.id !== me.id);
+        if (me && other && L._body){
+          L._loot = { cp: 0, sp: 0, ep: 0, gp: 0, pp: 0, items: [
+            { id: 'r451o', name: 'r451 Their Locket', qty: 1, value: '', assignedTo: other.id, notes: 'A portrait inside' },
+            { id: 'r451q', name: 'r451 Odd Horn', qty: 1, value: '', assignedTo: null }], tabGroups: [] };
+          L._save(); L._render(); await sleep(20);
+          const book = id => L._body.querySelector('.loot-item[data-id="' + id + '"] .loot-info-btn, .loot-item.locked .loot-info-btn');
+          const dlg = () => document.getElementById('loot-notes');
+          const lockedBook = [...L._body.querySelectorAll('.loot-item.locked .loot-info-btn')][0];
+          ok('player: another character’s item shows its book lit', !!lockedBook && lockedBook.classList.contains('has-notes'));
+          lockedBook.click(); await sleep(60);
+          ok('…its notes can be read, not changed', !!dlg() && /A portrait inside/.test(dlg().textContent) && !dlg().querySelector('#loot-notes-t') && !dlg().querySelector('#loot-notes-ok'));
+          dlg().querySelector('#loot-notes-x').click(); await sleep(20);
+          L._body.querySelector('.loot-item[data-id="r451q"] .loot-info-btn').click(); await sleep(60);
+          ok('…the party’s item: they can write some', !!dlg() && !!dlg().querySelector('#loot-notes-t'));
+          dlg().querySelector('#loot-notes-t').value = 'Smells of the sea'; dlg().querySelector('#loot-notes-ok').click(); await sleep(40);
+          ok('…and they’re kept', L._loot.items.find(x => x.id === 'r451q').notes === 'Smells of the sea');
+        } else ok('player: a character and another to test with', false, !!me + ' ' + !!other);
+      } catch(e){ ok('round 451b threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
+      finally {
+        window.showToast = kt;
+        document.getElementById('loot-notes')?.remove();
         if (keep != null){ localStorage.setItem('skt-loot-v1', keep); L._loot = null; }
         if (SH != null){ state.sharedPanels = JSON.parse(SH); save(); try { paRender(); } catch(e){} }
       }
