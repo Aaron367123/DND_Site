@@ -23,6 +23,7 @@ registerPanel('loot',{
   _view:'all',          // 'all' | 'party' | 'unassigned' | 'tabgroup:<id>'
   _searchQ:'',          // current text in the name/search input
   _searchOpen:false,    // dropdown visibility
+  _filter:'',           // the list's filter box
   mount(body){
     // Mounted again over itself: a change from another device, or an undo.
     // It wiped whatever was being typed — the price half-typed in the add
@@ -855,6 +856,53 @@ registerPanel('loot',{
     </div>`;
   },
 
+  // ─── Filtering the list ────────────────────────────────────────────────────
+  // 33 items and room for six: a word finds one. Matches the name, the notes,
+  // the value and who has it, in whatever tab is showing.
+  _applyFilter(){
+    const b = this._body; if (!b) return;
+    const list = b.querySelector('.loot-items'); if (!list) return;
+    const words = String(this._filter || '').toLowerCase().split(/\s+/).filter(Boolean);
+    let shown = 0, total = 0;
+    list.querySelectorAll('.loot-item').forEach(row => {
+      const it = this._loot.items[+row.dataset.i]; if (!it) return;
+      total++;
+      const hay = [it.name, it.notes, it.value, this._memberName(it.assignedTo) || 'party loot'].join(' ').toLowerCase();
+      const hit = words.every(w => hay.includes(w));
+      row.style.display = hit ? '' : 'none';
+      if (hit) shown++;
+    });
+    list.querySelectorAll('.loot-group').forEach(g => { g.style.display = g.querySelector('.loot-item:not([style*="none"])') ? '' : 'none'; });
+    list.querySelector('.loot-filter-none')?.remove();
+    if (words.length && total && !shown){
+      const d = document.createElement('div');
+      d.className = 'empty-state loot-filter-none';
+      d.textContent = 'Nothing here matches “' + this._filter.trim() + '”.';
+      list.appendChild(d);
+    }
+    const fl = b.querySelector('#loot-filter');
+    if (fl) fl.classList.toggle('on', !!words.length);
+  },
+  // ─── Changing coins up ─────────────────────────────────────────────────────
+  // The purse as gold where it can be: ten copper a silver, ten silver a gold,
+  // two electrum a gold. Platinum is left as it is. Null when there's nothing
+  // to change (the party carried 1,729 silver — some 35 lb of coin).
+  _changeUp(){
+    const c = k => Math.max(0, parseInt(this._loot[k]) || 0);
+    let cp = c('cp'), sp = c('sp'), ep = c('ep'), gp = c('gp');
+    sp += Math.floor(cp / 10); cp %= 10;
+    gp += Math.floor(sp / 10); sp %= 10;
+    gp += Math.floor(ep / 2); ep %= 2;
+    if (cp === c('cp') && sp === c('sp') && ep === c('ep')) return null;
+    return { cp, sp, ep, gp };
+  },
+  _changeUpText(){
+    const to = this._changeUp(); if (!to) return '';
+    const f = o => ['gp', 'ep', 'sp', 'cp'].filter(k => o[k]).map(k => (+o[k]).toLocaleString() + ' ' + k).join(' ') || 'nothing';
+    const from = {}; ['cp', 'sp', 'ep'].forEach(k => { if ((parseInt(this._loot[k]) || 0) !== to[k]) from[k] = parseInt(this._loot[k]) || 0; });
+    const into = { gp: to.gp - (parseInt(this._loot.gp) || 0) }; ['ep', 'sp', 'cp'].forEach(k => { if (k in from && to[k]) into[k] = to[k]; });
+    return f(from) + ' → ' + f(into);
+  },
   // ─── Selling ────────────────────────────────────────────────────────────────
   // Loot sold in town turns into coins in the purse: half its value as the
   // rules have it for selling found treasure, or the full value (a gem, art
@@ -1081,6 +1129,7 @@ registerPanel('loot',{
       <div class="loot-sumbar">
         <span title="Everything converted to gold, and an even share for each party member">Total <strong style="color:var(--warning)">${(+totalGp).toLocaleString(undefined, { maximumFractionDigits: 2 })} gp</strong>
           · <strong style="color:var(--warning)">${(+(this._sharers().length ? totalGp / this._sharers().length : totalGp)).toLocaleString(undefined, { maximumFractionDigits: 2 })}</strong> each</span>
+        ${this._canAdd() && this._changeUp() ? `<button class="btn small" id="loot-changeup" title="Trade copper, silver and electrum up into gold, the same value: ${esc(this._changeUpText())}">Change up</button>` : ''}
         ${this._isPlayer() ? '' : `<label class="loot-encumbrance-toggle" title="Show a weight column on items and per-member encumbrance subtotals (5e: STR×15 = lbs)">
           <input type="checkbox" id="loot-encumbrance-toggle" ${state.settings?.lootEncumbrance?'checked':''}>
           <span>${ICO('i-scale')} Weight</span>
@@ -1121,6 +1170,7 @@ registerPanel('loot',{
           const cnt = this._loot.items.filter(it => !this._isAssignedTo(it.assignedTo)).length;
           return `<button class="loot-view-tab ${view==='unassigned'?'active':''}" data-view="unassigned" title="Nobody has claimed it — the party's"><span class="loot-tab-icon">${ICO('i-chest')}</span><span class="loot-tab-name">Party loot</span>${cnt?`<span class="loot-tab-count">${cnt}</span>`:''}</button>`;
         })()}
+        ${this._loot.items.length > 6 || this._filter ? `<input type="search" id="loot-filter" class="loot-filter" placeholder="Filter" value="${esc(this._filter || '')}" autocomplete="off" spellcheck="false" title="Show only what matches: a name, a note, a value or who has it" aria-label="Filter the loot">` : ''}
       </div>
       <div class="loot-items">
         ${(() => {
@@ -1340,6 +1390,19 @@ registerPanel('loot',{
 
     // Drag-to-reorder on every item row.
     this._wireRowDrag();
+    // The filter: rows hide as you type, nothing re-drawn (the box keeps the
+    // cursor). Escape clears it.
+    const fl = b.querySelector('#loot-filter');
+    if (fl){
+      fl.addEventListener('input', () => { this._filter = fl.value; this._applyFilter(); });
+      fl.addEventListener('keydown', e => { if (e.key === 'Escape' && fl.value){ e.stopPropagation(); fl.value = ''; this._filter = ''; this._applyFilter(); } });
+    }
+    this._applyFilter();
+    b.querySelector('#loot-changeup')?.addEventListener('click', () => {
+      const to = this._changeUp(); if (!to) return;
+      const was = this._changeUpText();
+      this._undoable('Changed up: ' + was, () => { Object.assign(this._loot, to); });
+    });
     // Right-click (or hold) a row: sell it.
     b.querySelectorAll('.loot-item:not(.locked)').forEach(row => {
       const open = (x, y) => this._rowMenu(+row.dataset.i, x, y);

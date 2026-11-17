@@ -24886,6 +24886,58 @@ for (const cls of Object.keys(rule)) for (let L = 1; L <= 20; L++) for (const sc
       } catch(e){ ok('round 453 (ids) threw', false, e.message); }
       finally { localStorage.setItem(K, keepLs); L._loot = null; try { closePanel('loot'); } catch(e){} }
     }
+    // -- Round 454: loot — a filter box finds an item in a long list (name, notes, value, who has it), in any tab, and stays through a redraw; Change up trades copper, silver and electrum into gold at the same value (1,729 sp sat in the purse) --
+    if (!PLAYER){
+      const L = panelDefs.loot;
+      let keepLs = null; const kt = window.showToast;
+      try {
+        window.showToast = () => {};
+        openPanel('loot'); await sleep(300);
+        keepLs = localStorage.getItem('skt-loot-v1');
+        const A = state.party.filter(p => !p.foe)[0];
+        const mk = (id, name, extra) => Object.assign({ id, name, qty: 1, value: '', assignedTo: null }, extra || {});
+        L._loot = { cp: 96, sp: 1729, ep: 3, gp: 1846, pp: 2, tabGroups: [], items: [
+          mk('r454a', 'r454 Potion of Healing', { qty: 5, value: '50 gp' }), mk('r454b', 'r454 Rope'), mk('r454c', 'r454 Locket', { assignedTo: A.id, notes: 'a portrait of his sister' }),
+          mk('r454d', 'r454 Torch'), mk('r454e', 'r454 Diamond', { value: '5000 gp', assignedTo: A.id }), mk('r454f', 'r454 Net'), mk('r454g', 'r454 Potion of Longevity')] };
+        L._filter = ''; L._view = 'all'; L._save(); L._render(); await sleep(20);
+        const fl = () => L._body.querySelector('#loot-filter');
+        const vis = () => [...L._body.querySelectorAll('.loot-item')].filter(r => r.style.display !== 'none').map(r => r.dataset.id.slice(-1)).join('');
+        const type = v => { fl().value = v; fl().dispatchEvent(new Event('input', { bubbles: true })); };
+        ok('seven items: a filter box', !!fl());
+        type('potion');
+        ok('“potion”: the two potions', vis() === 'ag', vis());
+        type('sister');
+        ok('…a word in the notes finds the locket', vis() === 'c', vis());
+        type(A.name.split(' ')[0].toLowerCase() + ' 5000');
+        ok('…who has it and its value, together: the diamond', vis() === 'e', vis());
+        type('zzzz');
+        ok('…nothing matching says so', vis() === '' && /Nothing here matches/.test(L._body.querySelector('.loot-items').textContent));
+        type('potion'); L._view = 'party'; L._render(); await sleep(20);
+        ok('the Claimed tab, filtered: no potion claimed, so no section shows', [...L._body.querySelectorAll('.loot-group')].every(g => g.style.display === 'none') && fl().value === 'potion');
+        L._view = 'all'; L._render(); await sleep(20);
+        ok('…back in All, the filter still holds after the redraw', vis() === 'ag' && fl().classList.contains('on'));
+        fl().dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+        ok('Escape clears it: all seven', vis().length === 7 && fl().value === '' && L._filter === '');
+        // change up
+        const worth = () => (+L._loot.cp) / 100 + (+L._loot.sp) / 10 + (+L._loot.ep) / 2 + (+L._loot.gp) + (+L._loot.pp) * 10;
+        const w0 = worth(), cu = L._body.querySelector('#loot-changeup');
+        ok('Change up says what it will do', !!cu && /3 ep 1,729 sp 96 cp → 174 gp 1 ep 8 sp 6 cp/.test(cu.title), cu && cu.title);
+        cu.click(); await sleep(30);
+        ok('…6 cp, 8 sp, 1 ep, 2,020 gp, the platinum left alone — the same worth', L._loot.cp === 6 && L._loot.sp === 8 && L._loot.ep === 1 && L._loot.gp === 2020 && L._loot.pp === 2 && Math.abs(worth() - w0) < 0.001,
+           JSON.stringify([L._loot.cp, L._loot.sp, L._loot.ep, L._loot.gp, L._loot.pp]));
+        ok('…and with nothing left to change, the button goes', !L._body.querySelector('#loot-changeup'));
+        sktUndo(); await sleep(40);
+        ok('…Undo puts the coins back', +L._loot.sp === 1729 && +L._loot.cp === 96 && +L._loot.gp === 1846);
+        // a short list has no filter box
+        L._loot.items = L._loot.items.slice(0, 3); L._save(); L._render(); await sleep(20);
+        ok('three items: no filter box', !fl());
+      } catch(e){ ok('round 454 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
+      finally {
+        window.showToast = kt; L._filter = ''; L._view = 'all';
+        if (keepLs != null){ localStorage.setItem('skt-loot-v1', keepLs); L._loot = null; }
+        try { closePanel('loot'); } catch(e){}
+      }
+    }
     // -- Class features: represented, not just text ------------------------
     {
       try {

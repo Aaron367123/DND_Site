@@ -3409,6 +3409,8 @@ body.player-mode .loot-sumbar > span[style*="flex:1"]{display:none}
 .loot-view-tab.tabgroup{border-style:dashed}
 .loot-view-tab.tabgroup.active{border-style:solid}
 .loot-view-tab.loot-tab-add{color:var(--text-dim);border-style:dashed}
+.loot-filter{margin-left:auto;flex:1 1 120px;max-width:220px;min-width:80px;height:24px;padding:2px 8px;font-size:var(--fs-sm);background:var(--panel);border:1px solid var(--border);border-radius:var(--r-sm);color:var(--text)}
+.loot-filter.on{border-color:var(--accent)}
 .loot-view-tab.loot-tab-add:hover{color:var(--accent);border-color:rgba(212,165,116,.4)}
 .loot-tab-edit{display:none;font-size:var(--fs-xs);color:var(--text-dim);padding:0 2px;cursor:pointer;border-radius:var(--r-sm);line-height:14px}
 .loot-view-tab.tabgroup:hover .loot-tab-edit{display:inline-flex;align-items:center}
