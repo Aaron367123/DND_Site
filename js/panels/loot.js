@@ -88,7 +88,11 @@ registerPanel('loot',{
     try { el.focus({ preventScroll: true }); } catch(err){ el.focus(); }
     try { if (f.s != null) el.setSelectionRange(f.s, f.e); } catch(err){}
   },
-  _save(){saveJson('skt-loot-v1', this._loot, 'loot');},
+  _save(){saveJson('skt-loot-v1', this._loot, 'loot'); this._tellSheet();},
+  // A character sheet open on this screen lists their share of the loot: a
+  // potion claimed here didn't appear on Zoey's open sheet until something
+  // else redrew it (another device's change already did).
+  _tellSheet(){ if (typeof csRender === 'function' && document.getElementById('cs-root')){ try { csRender(); } catch(e){} } },
   // A change the DM (or a player) can take back: made, saved, drawn, and in
   // the undo history (Ctrl+Z, or the toast's Undo). Deleting an item had no
   // way back at all — one stray × and it was gone. `party`: it touches the
@@ -478,6 +482,19 @@ registerPanel('loot',{
     if (row) return row.value;
     return this._magicValue(lvl <= 1 ? 'common' : lvl <= 3 ? 'uncommon' : lvl <= 5 ? 'rare' : lvl <= 8 ? 'very rare' : 'legendary', { type: 'SC' });
   },
+  // One item's weight: as typed, else the book's (a magic variant weighs what
+  // its base does). The same rule the character sheet uses.
+  _itemWt(it){
+    const w = parseFloat(it && it.weight); if (!isNaN(w)) return w;
+    const n = String(it && it.name || '').trim().toLowerCase();
+    if (!n || typeof _5eData === 'undefined' || !Array.isArray(_5eData)) return 0;
+    for (const d of _5eData){
+      if (d.cat !== 'item') continue;
+      if (d.name.toLowerCase() === n && d._weight != null) return +d._weight || 0;
+      if (d._variants && d._weight != null && d._variants.some(v => v.name && v.name.toLowerCase() === n)) return +d._weight || 0;
+    }
+    return 0;
+  },
   _isMagicRarity(r){ r = String(r || '').toLowerCase(); return !!r && r !== 'none' && r !== 'unknown' && r !== 'varies'; },
   // ── 5e item search ───────────────────────────────────────────────────────────
   _searchItems(q){
@@ -856,7 +873,7 @@ registerPanel('loot',{
     // existing flex layout stays clean.
     const showWeight = !!(state.settings && state.settings.lootEncumbrance);
     const weightInp = showWeight
-      ? `<input type="number" step="0.1" min="0" class="loot-wt" value="${item.weight!=null?esc(String(item.weight)):''}" data-lfield="weight" data-li="${i}" placeholder="lb" title="Weight per item (lbs)">`
+      ? `<input type="number" step="0.1" min="0" class="loot-wt" value="${item.weight!=null?esc(String(item.weight)):''}" data-lfield="weight" data-li="${i}" placeholder="${this._itemWt(item) ? esc(String(this._itemWt(item))) : 'lb'}" title="Weight per item (lb)${item.weight == null && this._itemWt(item) ? ' — the book’s, until you type one' : ''}">`
       : '';
     return `<div class="loot-item ${item.assignedTo?'assigned':''}" data-i="${i}" data-id="${esc(item.id||'')}" draggable="true" title="Right-click (or hold) to sell, split or move it">
       <span class="loot-drag-handle" title="Drag to reorder">⋮⋮</span>
@@ -1073,24 +1090,15 @@ registerPanel('loot',{
     // Capacity follows the 5e variant rule: STR × 15 = lbs carrying capacity.
     // When the section is for a custom group or the "Group (shared loot)"
     // bucket, capacity is omitted (no single STR to use).
+    // What the claimed loot weighs, by the sheet's own rule (as typed, else
+    // the book's). It said "6.0 / 240 lb" for Ulrick, whose sheet carries
+    // 107: only typed weights counted (his half plate, nothing) and it read as
+    // everything he carries. His sheet adds his own gear and coins to this.
     let weightHtml = '';
     if (showWeight){
-      const totalWt = matched.reduce((sum, {item}) => {
-        const q = parseInt(item.qty)||1;
-        const w = parseFloat(item.weight);
-        return sum + (isNaN(w) ? 0 : w * q);
-      }, 0);
-      const str = member.abilities?.str;
-      const capacity = (typeof str === 'number') ? str * 15 : null;
-      const over = capacity != null && totalWt > capacity;
-      const enc = capacity != null && totalWt > str * 5;
-      const enc2 = capacity != null && totalWt > str * 10;
-      const wtCls = over ? 'over' : enc2 ? 'heavy' : enc ? 'enc' : '';
-      const tooltip = capacity != null
-        ? `STR ${str} · normal ≤${str*5} lb · encumbered ${str*5+1}–${str*10} lb · heavily ${str*10+1}–${capacity} lb · max ${capacity} lb`
-        : 'No STR score available for capacity calc';
-      const capPart = capacity != null ? ` / ${capacity} lb` : ' lb';
-      weightHtml = ` · <span class="loot-weight-meta ${wtCls}" title="${esc(tooltip)}">${totalWt.toFixed(1)}${capPart}</span>`;
+      const totalWt = Math.round(matched.reduce((sum, {item}) => sum + this._itemWt(item) * (parseInt(item.qty) || 1), 0) * 10) / 10;
+      const tip = member.id ? 'What ' + member.name + ' has claimed here weighs ' + totalWt + ' lb; their sheet adds what else they carry' : 'What it weighs, as typed or from the book';
+      weightHtml = ` · <span class="loot-weight-meta" title="${esc(tip)}">${totalWt.toLocaleString()} lb${member.id ? ' claimed' : ''}</span>`;
     }
     return `<div class="loot-group">
       <div class="loot-group-head">

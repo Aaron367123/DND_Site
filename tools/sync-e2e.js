@@ -620,6 +620,26 @@ const window = {};
       await dm.ev("const L = panelDefs.loot; L._loot.items = L._loot.items.filter(x => x.name !== 'E2E Potion'); L._save(); L._render(); return 1");
       return lat(t);
     });
+    await step('loot ↔ the player’s own sheet: claimed in the Loot window → on the phone’s open inventory; its count; ↩ on the phone → the party’s; Claim 1 on the phone → one theirs', async () => {
+      const inv = "paTab='you'; if (!document.querySelector('#pa-screen .cs-inv')){ paRender(); await new Promise(r=>setTimeout(r,150)); const tb = document.querySelector('#pa-screen [data-cs-tab=\"inventory\"]'); if (tb){ tb.click(); await new Promise(r=>setTimeout(r,200)); } } ";
+      const mine = "[...document.querySelectorAll('#pa-screen .cs-lootitem')].find(r => r.textContent.includes('E2E Lantern'))";
+      const pile = "[...document.querySelectorAll('#pa-screen .cs-partylootitem')].find(r => r.textContent.includes('E2E Rations'))";
+      await dm.ev("openPanel('loot'); await new Promise(r=>setTimeout(r,400)); const L = panelDefs.loot; L._loot.items = (L._loot.items || []).filter(x => !/^E2E (Lantern|Rations)/.test(x.name)).concat([{ id: 'e2e_lan', name: 'E2E Lantern', qty: 1, value: '5 gp', assignedTo: null }, { id: 'e2e_rat', name: 'E2E Rations', qty: 4, value: '5 sp', assignedTo: null }]); L._view = 'all'; L._save(); L._render(); return 1");
+      await pl.ev(inv + "return 1");
+      if (await W(pl, inv + "return " + pile + " ? 1 : 0", 15000) == null) return { ok: false, why: 'the phone’s sheet never listed the party’s new rations' };
+      // the DM gives the lantern to Zoey, from the Loot window's dropdown
+      await dm.ev("const L = panelDefs.loot; const s = L._body.querySelector('.loot-item[data-id=\"e2e_lan\"] [data-lfield=\"assignedTo\"]'); s.value = 'zoey'; s.dispatchEvent(new Event('change', { bubbles: true })); return 1");
+      const t = await W(pl, inv + "return " + mine + " ? 1 : 0", 15000);
+      if (t == null) return { ok: false, why: 'the lantern never showed in Zoey’s inventory on the phone' };
+      await dm.ev("const L = panelDefs.loot; const q = L._body.querySelector('.loot-item[data-id=\"e2e_lan\"] [data-lfield=\"qty\"]'); q.value = '2'; q.dispatchEvent(new Event('change', { bubbles: true })); return 1");
+      if (await W(pl, inv + "const r = " + mine + "; return r && /×2/.test(r.querySelector('.cs-qty').textContent) ? 1 : 0", 15000) == null) return { ok: false, why: 'the count of 2 never reached the phone’s sheet' };
+      // the phone gives it back, and claims one ration
+      await pl.ev(inv + "document.querySelector('#pa-screen [data-cs-lootback=\"e2e_lan\"]').click(); await new Promise(r=>setTimeout(r,300)); document.querySelector('#pa-screen [data-cs-lootclaimone=\"e2e_rat\"]').click(); return 1");
+      const back = await W(dm, "const L = panelDefs.loot; const a = L._loot.items; const lan = a.find(x => x.id === 'e2e_lan'), r = a.filter(x => x.name === 'E2E Rations'); return lan && !lan.assignedTo && r.length === 2 && r.some(x => x.assignedTo === 'zoey' && +x.qty === 1) && +r.find(x => x.id === 'e2e_rat').qty === 3 && L._body.querySelector('.loot-item[data-id=\"e2e_lan\"] [data-lfield=\"assignedTo\"]').value === '' ? 1 : 0", 20000);
+      if (back == null) return { ok: false, why: 'the DM’s Loot window ended with ' + await dm.ev("return JSON.stringify(panelDefs.loot._loot.items.filter(x => /^E2E/.test(x.name)).map(x => x.name + ' ' + x.qty + ':' + (x.assignedTo || 'party')))") };
+      await dm.ev("const L = panelDefs.loot; L._loot.items = L._loot.items.filter(x => !/^E2E (Lantern|Rations)/.test(x.name)); L._save(); L._render(); return 1");
+      return lat(t);
+    });
     await step('DM long rest → phone back to full', async () => {
       await dm.ev("panelDefs.party._applyLongRest(); return 1");
       const want = await dm.ev('return ' + hpOf('zoey'));

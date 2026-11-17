@@ -5644,6 +5644,7 @@ button.cs-ab:hover, button.cs-box:hover, .cs-row:hover { border-color:var(--acce
 .cs-qty { display:inline-flex; align-items:center; gap:4px; }
 .cs-wt { min-width:48px; text-align:right; }
 .cs-claim { display:inline-flex; gap:4px; flex:0 0 auto; }
+.cs-lootacts { display:inline-flex; gap:4px; flex:0 0 auto; margin-left:auto; }
 /* A narrow sheet (a phone): the name gets the row, the controls go under it. */
 .cs-inv { container-type:inline-size; }
 @container (max-width: 440px){

@@ -3443,8 +3443,9 @@ function csLootRows(pc){
       + (ro ? '' : '<button class="btn small" data-cs-lootqty="' + csE(it.id) + ':1" aria-label="One more">+</button>') + '</span>'
       + '<span class="cb-dim cs-wt">' + csE([it.value || '', wt ? Math.round(wt * q * 10) / 10 + ' lb' : ''].filter(Boolean).join(' · ')) + '</span>'
       + (!ro && mine && CS.magic && csPotionHeal(csLootAsItem(it), csItemInfo(csLootAsItem(it))) ? '<button class="btn small cs-heal" data-cs-lootdrink="' + csE(it.id) + '" title="Drink one: roll the healing here, or type what you rolled">Drink · ' + csE(csPotionHeal(csLootAsItem(it), csItemInfo(csLootAsItem(it)))) + '</button>' : '')
-      + (ro ? '' : '<button class="btn small" data-cs-lootback="' + csE(it.id) + '" title="Give it to the party loot (nobody\u2019s)">↩ To party loot</button>'
-        + '<button class="btn small" data-cs-lootdel="' + csE(it.id) + '" aria-label="Remove ' + csE(it.name) + '" title="Used up, sold or lost: remove it">✕</button>')
+      // (the two together: on a phone ✕ wrapped to a line of its own on some rows)
+      + (ro ? '' : '<span class="cs-lootacts"><button class="btn small" data-cs-lootback="' + csE(it.id) + '" title="Give it to the party loot (nobody\u2019s)">↩ To party loot</button>'
+        + '<button class="btn small" data-cs-lootdel="' + csE(it.id) + '" aria-label="Remove ' + csE(it.name) + '" title="Used up, sold or lost: remove it">✕</button></span>')
       + '</div>' + (CS.drink === 'l:' + it.id ? csDrinkHtml('l:' + it.id, csPotionHeal(csLootAsItem(it), csItemInfo(csLootAsItem(it)))) : '') + (CS.open[k] ? '<div class="cs-feat-t cs-itemt">' + csItemText(csLootAsItem(it)) + csLootNotes(it) + '</div>' : '');
   }).join('');
 }

@@ -24997,6 +24997,48 @@ for (const cls of Object.keys(rule)) for (let L = 1; L <= 20; L++) for (const sc
         try { closePanel('loot'); } catch(e){}
       }
     }
+    // -- Round 457: loot ↔ the character's sheet — what the Loot window gives a character shows on their open sheet at once (it waited for another redraw), with its count, and an undo takes it off; the claimed loot weighs the same in both (the window counted only typed weights: Ulrick's half plate weighed nothing) --
+    if (!PLAYER){
+      const L = panelDefs.loot;
+      let keepLs = null; const kt = window.showToast, kw = !!(state.settings && state.settings.lootEncumbrance);
+      try {
+        for (let i = 0; i < 40 && !(typeof _5eLoaded !== 'undefined' && _5eLoaded); i++) await sleep(250);
+        window.showToast = () => {};
+        openPanel('loot'); await sleep(300);
+        keepLs = localStorage.getItem('skt-loot-v1');
+        const A = state.party.filter(p => !p.foe)[0];
+        L._loot = { cp: 0, sp: 0, ep: 0, gp: 0, pp: 0, tabGroups: [], items: [
+          { id: 'r457h', name: 'Half Plate Armor', qty: 1, value: '750 gp', assignedTo: A.id },
+          { id: 'r457x', name: 'Handaxe', qty: 3, value: '5 gp', assignedTo: A.id },
+          { id: 'r457t', name: 'r457 Teddy', qty: 1, value: '', assignedTo: A.id, weight: 0.5 },
+          { id: 'r457p', name: 'r457 Potion', qty: 3, value: '50 gp', assignedTo: null }] };
+        state.settings.lootEncumbrance = true; L._view = 'party'; L._save(); L._render(); await sleep(20);
+        ok('weights: as typed, else the book’s; a +1 longsword weighs a longsword', L._itemWt(L._loot.items[0]) === 40 && L._itemWt(L._loot.items[1]) === 2 && L._itemWt(L._loot.items[2]) === 0.5 && L._itemWt({ name: '+1 Longsword' }) === 3 && L._itemWt({ name: 'r457 nothing' }) === 0);
+        const meta = () => [...L._body.querySelectorAll('.loot-group')].map(g => g.textContent.replace(/\s+/g, ' ')).join(' / ');
+        ok('the Claimed section: 46.5 lb claimed (it was 0.5 / capacity)', /46\.5 lb claimed/.test(meta()) && !/\/ \d+ lb/.test(meta()), meta());
+        openCharSheet(A.id, { tab: 'inventory' }); await sleep(250);
+        for (let i = 0; i < 60 && !(CS.gear && CS.R); i++){ await sleep(100); }
+        csRender(); await sleep(30);
+        ok('…the sheet counts the same 46.5 lb for it', Math.abs(csLootLb(csLootFor(A)) - 46.5) < 0.01, csLootLb(csLootFor(A)));
+        const onSheet = () => [...document.querySelectorAll('#cs-root .cs-lootitem')].find(r => r.dataset.loot === 'r457p');
+        L._view = 'all'; L._render(); await sleep(20);
+        const sel = L._body.querySelector('.loot-item[data-id="r457p"] [data-lfield="assignedTo"]');
+        sel.value = A.id; sel.dispatchEvent(new Event('change', { bubbles: true })); await sleep(40);
+        ok('given to them in the Loot window: on their open sheet at once', !!onSheet());
+        const q = L._body.querySelector('.loot-item[data-id="r457p"] [data-lfield="qty"]'); q.value = '2'; q.dispatchEvent(new Event('change', { bubbles: true })); await sleep(40);
+        ok('…its count changed there: ×2 on the sheet', !!onSheet() && /×2/.test(onSheet().querySelector('.cs-qty').textContent));
+        sktUndo(); await sleep(60); sktUndo(); await sleep(60);
+        ok('…undone in the Loot window: off the sheet, back in its party loot', !onSheet() && [...document.querySelectorAll('#cs-root .cs-partylootitem')].some(r => /r457 Potion/.test(r.textContent)));
+        const acts = document.querySelector('#cs-root .cs-lootitem[data-loot="r457h"] .cs-lootacts');
+        ok('the sheet’s ↩ and ✕ go together (✕ wrapped alone on a phone)', !!acts && !!acts.querySelector('[data-cs-lootback]') && !!acts.querySelector('[data-cs-lootdel]'));
+      } catch(e){ ok('round 457 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
+      finally {
+        window.showToast = kt; state.settings.lootEncumbrance = kw; L._view = 'all';
+        try { if (typeof csClose === 'function' && CS) csClose(); } catch(e){}
+        if (keepLs != null){ localStorage.setItem('skt-loot-v1', keepLs); L._loot = null; }
+        try { closePanel('loot'); } catch(e){}
+      }
+    }
     // -- Class features: represented, not just text ------------------------
     {
       try {
