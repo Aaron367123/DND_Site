@@ -1758,7 +1758,7 @@ function paSheetDetail(p){
   if (sh.details && sh.details.alignment) bits.push(sh.details.alignment);
   // The purse as the sheet keeps it: gold, and the rest (silver, platinum)
   // that "0 gp" left out.
-  { const c = Object.assign({ pp: 0, ep: 0, sp: 0, cp: 0 }, p.coins || {}, { gp: +p.gold || 0 });
+  if (typeof p.gold === 'number' || p.coins){ const c = Object.assign({ pp: 0, ep: 0, sp: 0, cp: 0 }, p.coins || {}, { gp: +p.gold || 0 });
     bits.push(['pp', 'gp', 'ep', 'sp', 'cp'].filter(k => +c[k]).map(k => (+c[k]).toLocaleString() + ' ' + k).join(' ') || '0 gp'); }
 
   const abils = PA_ABIL.filter(([k]) => typeof ab[k] === 'number').map(([k, l]) =>
