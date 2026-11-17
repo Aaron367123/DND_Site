@@ -867,6 +867,13 @@ input[type="checkbox"], input[type="radio"] { accent-color: var(--accent); }
   .pa-draw-b { padding: 8px 11px; }
   .pa-draw-b span { display: none; }
 }
+/* A phone on its side: the bar across all 844 px with a gap between each
+   icon, over a map with 250 px of height. Icons, as wide as they need. */
+@media (max-height: 500px) and (orientation: landscape) and (pointer: coarse){
+  .pa-draw { left: 50%; right: auto; transform: translateX(-50%); bottom: calc(28px + env(safe-area-inset-bottom, 0px)); }
+  .pa-draw-b { flex: 0 0 auto; padding: 7px 14px; }
+  .pa-draw-b span { display: none; }
+}
 
 /* ── 39. Toasts let taps through ─────────────────────────── */
 /* A toast caught every tap on its patch of screen — over the phone's map

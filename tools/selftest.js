@@ -29469,6 +29469,24 @@ for (const cls of Object.keys(rule)) for (let L = 1; L <= 20; L++) for (const sc
       } catch(e){ ok('round 467 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
       finally { try { if (typeof cbClose === 'function') cbClose(); } catch(e){} document.getElementById('cb-root')?.remove(); }
     }
+    // -- Round 468 (player): a phone on its side — the turn bar on one line, icon tabs, compact map tools and the sheet's ⋯ menu, for a short touch screen (the bars took 142 of 390 px; the map got 248, a quarter of it under its tools) --
+    if (PLAYER){
+      try {
+        const rules = [];
+        for (const sh of document.styleSheets){
+          let list; try { list = sh.cssRules; } catch(e){ continue; }
+          for (const r of list){
+            const cond = r.conditionText || (r.media && r.media.mediaText) || '';
+            if (/max-height:\s*500px/.test(cond) && /landscape/.test(cond) && /coarse/.test(cond)) [...(r.cssRules || [])].forEach(x => rules.push(x.cssText));
+          }
+        }
+        const has = (sel, prop) => rules.some(t => t.indexOf(sel) === 0 && t.includes(prop));
+        ok('sideways: the turn bar is one row', has('.pa-turn {', 'flex-direction: row'), rules.length);
+        ok('…the tabs are icons (their words hidden)', has('.pa-tab > span', 'display: none'));
+        ok('…the map tools are icons, as wide as they need, centred', has('.pa-draw {', 'translateX(-50%)') && has('.pa-draw-b span', 'display: none'));
+        ok('…the sheet’s header is the ⋯ menu, as on a phone held upright', has('.cs-head .cs-headbtns', 'display: none') && has('.cs-headmore', 'display: inline-flex'));
+      } catch(e){ ok('round 468 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
+    }
   }
 
   // ══════════════════════════════════════════════════════════ mobile / phone

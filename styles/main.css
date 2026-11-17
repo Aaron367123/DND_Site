@@ -4843,6 +4843,24 @@ body.player-app .panel-dock, body.player-app .zoom-controls, body.player-app .pv
 .pa-tab:hover{color:var(--text-muted)}
 .pa-tab.on{color:var(--accent); border-top-color:var(--accent)}
 
+/* A phone on its side: 390 px of height, and the turn bar and the tabs took
+   142 of it — the map got 248, a quarter of that under its tools. Whose turn
+   and the order on one line, the tabs as icons, a slimmer tool bar. */
+@media (max-height: 500px) and (orientation: landscape) and (pointer: coarse){
+  .pa-turn{flex-direction:row; align-items:center; gap:10px; padding:4px 10px;
+    padding-right:calc(var(--pv-topright, 0px) + 10px)}
+  .pa-turn-head{flex:0 0 auto; flex-wrap:nowrap; min-height:0; padding-right:0}
+  .pa-now{font-size:var(--fs-md)}
+  .pa-until{font-size:var(--fs-sm)}
+  .pa-strip{flex:1 1 auto}
+  .pa-pip{padding:2px 8px}
+  .pa-tab{padding:5px 4px; gap:0}
+  .pa-tab > span{display:none}
+  /* (the map tools: theme.css, which sizes them) The footer keeps the scale. */
+  .pa-mount .map-foot .bt-l, .pa-mount .map-foot-hint{display:none}
+  .pa-mount .map-foot .map-foot-touch{display:inline}
+}
+
 /* Roomier on a desktop, where the player view is a second monitor rather than
    a phone: the character column stops stretching to 1400px. */
 @media (min-width: 900px){
@@ -5703,11 +5721,12 @@ button.cs-ab:hover, button.cs-box:hover, .cs-row:hover { border-color:var(--acce
   .cs-tabs { top:0; }
 }
 /* The header's buttons: a row on a wide screen, one ⋯ menu on a phone (the
-   row wrapped to three lines of big buttons above the sheet). */
+   row wrapped to three lines of big buttons above the sheet) — and on a phone
+   on its side, where the row stood over a third of the 324 px left. */
 .cs-headbtns { display:contents; }
 .cs-headmore { display:none; }
 .cs-headmenu { display:none; }
-@media (max-width: 768px){
+@media (max-width: 768px), (max-height: 500px) and (orientation: landscape) and (pointer: coarse){
   .cs .cs-head { flex-wrap:nowrap; position:relative; padding:8px 10px; gap:8px; }
   .cs-head .cs-headbtns { display:none; }
   .cs-head .cs-avatar { width:34px; height:34px; flex:0 0 auto; }
