@@ -25117,6 +25117,30 @@ for (const cls of Object.keys(rule)) for (let L = 1; L <= 20; L++) for (const sc
         state.combatants = JSON.parse(K0); state.party = JSON.parse(P0); save();
       }
     }
+    // -- Round 462: a spell-attack cantrip (Fire Bolt) has its roll to hit on the Spells tab, by its own attack, so a crit carries to its damage; a save cantrip has none --
+    if (!PLAYER){
+      const P0 = JSON.stringify(state.party);
+      try {
+        const A = state.party.filter(p => !p.foe)[0];
+        state.party = state.party.map(p => p.id === A.id ? Object.assign({}, p, { build: undefined, sheet: Object.assign({}, p.sheet, { spells: ['Fire Bolt', 'Vicious Mockery'], spellAtkBonus: '+5', spellSaveDc: 13,
+          attacks: [{ name: 'Fire Bolt', atkBonus: '+5', damage: '1d10 fire', spell: true }, { name: 'Vicious Mockery', atkBonus: '', damage: '1d6 psychic', spell: true }] }) }) : p);
+        save();
+        openCharSheet(A.id, { tab: 'spells' }); await sleep(250);
+        for (let i = 0; i < 60 && !(CS.gear && CS.R); i++){ await sleep(100); }
+        csRender(); await sleep(40);
+        const row = n => [...document.querySelectorAll('#cs-root .cs-spell')].find(r => r.querySelector('.cs-spell-n b').textContent === n);
+        const fb = row('Fire Bolt'), vm = row('Vicious Mockery');
+        const atk = fb && fb.querySelector('[data-cs-atk]');
+        ok('Fire Bolt on the Spells tab: Attack +5 beside its damage (it had damage only)', !!atk && /Attack \+5/.test(atk.textContent) && !!fb.querySelector('[data-cs-dmg]'), fb && fb.textContent.replace(/\s+/g, ' '));
+        ok('…Vicious Mockery, a save: no attack button', !!vm && !vm.querySelector('[data-cs-atk], [data-cs-spatk]'));
+        const d0 = window.csD; window.csD = s => s === 20 ? 20 : 1;
+        atk.click(); await sleep(30);
+        row('Fire Bolt').querySelector('[data-cs-dmg]').click(); await sleep(30);
+        window.csD = d0;
+        ok('…a natural 20 to hit, then its damage is a crit (two d10s)', CS.log[1] && CS.log[1].label === 'Fire Bolt attack' && CS.log[1].crit && CS.log[0].crit && /2d10/.test(CS.log[0].detail), JSON.stringify(CS.log.slice(0, 2).map(r => [r.label, r.crit, r.detail])));
+      } catch(e){ ok('round 462 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
+      finally { try { if (typeof csClose === 'function' && CS) csClose(); } catch(e){} state.party = JSON.parse(P0); save(); }
+    }
     // -- Class features: represented, not just text ------------------------
     {
       try {
@@ -29289,6 +29313,30 @@ for (const cls of Object.keys(rule)) for (let L = 1; L <= 20; L++) for (const sc
         state.party = JSON.parse(P0); state.combatants = JSON.parse(K0); save();
         if (RR0 == null) localStorage.removeItem(SKT_RR_KEY); else localStorage.setItem(SKT_RR_KEY, RR0);
       }
+    }
+    // -- Round 462 (player): the short rest screen takes a hit die rolled at the table (it was the app's roll only) --
+    if (PLAYER){
+      const P0 = JSON.stringify(state.party);
+      try {
+        const i = paMyIdx();
+        if (i < 0){ ok('player: a character for the short rest', false, 'none'); }
+        else {
+          const pc0 = state.party[i], die = (pc0.hitDice && pc0.hitDice.dieType) || 'd8';
+          state.party[i] = Object.assign({}, pc0, { hp: Math.max(1, (pc0.hpMax || 20) - 15), hitDice: Object.assign({ dieType: die, max: 3 }, pc0.hitDice, { current: 2 }) });
+          save();
+          paOpenShortRest(null); await sleep(60);
+          const ov = () => document.getElementById('pa-rest');
+          ok('the short rest screen has a box for a die rolled at the table', !!ov() && !!ov().querySelector('[data-rest-val]'));
+          const hp0 = state.party[i].hp, con = Math.floor(((state.party[i].abilities || {}).con - 10) / 2) || 0;
+          ov().querySelector('[data-rest-val]').value = '5';
+          ov().querySelector('[data-rest="spend"]').click(); await sleep(60);
+          ok('…5 typed, then Spend: ' + (5 + con) + ' HP back, one die gone, and it says so', state.party[i].hp === Math.min(state.party[i].hpMax, hp0 + Math.max(1, 5 + con)) && state.party[i].hitDice.current === 1 && /\(5\)/.test(ov().querySelector('.pa-rest-log').textContent),
+             JSON.stringify([hp0, state.party[i].hp, state.party[i].hitDice.current, ov().textContent.slice(0, 120)]));
+          ok('…and the box is empty again for the next', ov().querySelector('[data-rest-val]').value === '');
+          ov().querySelector('[data-rest="cancel"]').click(); await sleep(20);
+        }
+      } catch(e){ ok('round 462 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
+      finally { document.getElementById('pa-rest')?.remove(); state.party = JSON.parse(P0); save(); }
     }
   }
 

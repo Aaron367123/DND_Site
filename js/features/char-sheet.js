@@ -2012,9 +2012,14 @@ function csSpellsHtml(pc){
           + (arcLv[n] ? '<button class="btn small" data-cs-cast="' + csE(n) + ':arcanum"' + (((pc.resources || []).find(r => r.name === 'Mystic Arcanum (' + arcLv[n] + 'th)') || {}).current > 0 ? '' : ' disabled') + ' title="Mystic Arcanum: once per long rest">Arcanum</button>' : '')
           + (s && s.ritual ? '<button class="btn small" data-cs-cast="' + csE(n) + ':ritual" title="As a ritual: 10 minutes longer, no slot">Ritual</button>' : '');
       const sv = s && (s.savingThrow || [])[0] ? String(s.savingThrow[0]).slice(0, 3).toUpperCase() + ' save DC ' + (sh.spellSaveDc || '?') : '';
-      const atk = l && s && (s.spellAttack || []).length ? '<button class="btn small" data-cs-spatk="1">Attack ' + csE(csAtkText(sh.spellAtkBonus)) + '</button>' : '';
-      const dmg = l && csSpellDamage(s, l) ? '<button class="btn small" data-cs-spdmg="' + csE(n) + '" title="At the slot level chosen beside Cast">' + csDmgHtml(csSpellDamage(s, at)) + '</button>' : '';
       const cantripAtk = !l ? (sh.attacks || []).find(a => a.name === n) : null;
+      // A cantrip that's a spell attack (Starry Wisp, Fire Bolt) had its
+      // damage here and no roll to hit. Its own attack when it has one, so a
+      // crit carries to the damage beside it.
+      const atk = s && (s.spellAttack || []).length
+        ? (cantripAtk ? '<button class="btn small" data-cs-atk="' + (sh.attacks || []).indexOf(cantripAtk) + '">Attack ' + csE(csAtkText(cantripAtk.atkBonus)) + '</button>'
+                      : '<button class="btn small" data-cs-spatk="1">Attack ' + csE(csAtkText(sh.spellAtkBonus)) + '</button>') : '';
+      const dmg = l && csSpellDamage(s, l) ? '<button class="btn small" data-cs-spdmg="' + csE(n) + '" title="At the slot level chosen beside Cast">' + csDmgHtml(csSpellDamage(s, at)) + '</button>' : '';
       const scMod = (parseInt(sh.spellAtkBonus, 10) || 0) - (sh.profBonus || 0);
       const heal = l && csSpellHeal(s, at, scMod) ? '<button class="btn small cs-heal" data-cs-spheal="' + csE(n) + '">Heal ' + csE(csSpellHeal(s, at, scMod)) + '</button>' : '';
       const info = [sv ? '<span class="cs-save">' + csE(sv) + '</span>' : '', atk, dmg, heal,

@@ -1631,6 +1631,8 @@ function paOpenShortRest(req){
       +   ((P && typeof sktHdPools === 'function' && sktHdPools(pc).length > 1)
             ? sktHdPools(pc).map(p => '<button class="btn primary pa-rest-spend" data-rest="spend" data-die="' + paEsc(p.die) + '"' + (p.current > 0 && pc.hp < pc.hpMax ? '' : ' disabled') + '>🎲 Spend a ' + paEsc(p.die) + ' <span class="pa-dim">(' + p.current + ' left)</span></button>').join('')
             : '<button class="btn primary pa-rest-spend" data-rest="spend"' + ((hd.current || 0) > 0 && pc.hp < pc.hpMax ? '' : ' disabled') + '>🎲 Spend a hit die</button>')
+      // A real die: type what it showed, then Spend (it was the app's roll only).
+      +   ((hd.current || 0) > 0 && pc.hp < pc.hpMax ? '<label class="pa-init-type">Rolled it yourself? Type it, then Spend <input data-rest-val type="number" min="1" inputmode="numeric" placeholder="e.g. 5"></label>' : '')
       +   (log.length ? '<div class="pa-rest-log">' + log.map(l => '<div>' + l + '</div>').join('') + '</div>' : '')
       + '</div>'
       + '<div class="pa-rest-btns"><button class="btn" data-rest="cancel">Not now</button>'
@@ -1640,7 +1642,8 @@ function paOpenShortRest(req){
     const b = e.target.closest('[data-rest]'); if (!b) return;
     const idx = paMyIdx(); if (idx < 0) return ov.remove();
     if (b.dataset.rest === 'spend' && P && typeof P._rollHitDie === 'function'){
-      const r = P._rollHitDie(idx, null, b.dataset.die || null);
+      const typed = parseInt((ov.querySelector('[data-rest-val]') || {}).value, 10);
+      const r = P._rollHitDie(idx, typed >= 1 ? typed : null, b.dataset.die || null);
       if (r) log.push(paEsc('d' + r.sides + ' (' + r.roll + ') ' + (r.conMod >= 0 ? '+' : '') + r.conMod + ' = ' + r.heal + ' HP'));
       paTick(); paint(); paRenderScreen();
     } else if (b.dataset.rest === 'finish'){
