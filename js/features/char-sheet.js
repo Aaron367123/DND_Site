@@ -457,7 +457,9 @@ function csTop(pc){
   // How a click rolls, and what it rolled.
   h += '<div class="cs-rollbar"><span class="cb-seg cs-mode">' + [['normal', 'Normal'], ['adv', 'Advantage'], ['dis', 'Disadvantage']]
       .map(([k, l]) => '<button class="' + (CS.mode === k ? 'on' : '') + '" data-cs-mode="' + k + '">' + l + '</button>').join('') + '</span>'
+    + (ro ? '' : '<button class="btn small cs-owndice' + (csOwnDice() ? ' on' : '') + '" data-cs="owndice" aria-pressed="' + csOwnDice() + '" title="Roll your own dice: a tap asks what the die showed, and the sheet adds the rest">My dice</button>')
     + (!ro && pc.inspiration && CS.log[0] && CS.log[0].kind === 'd20' && !CS.log[0].rerolled ? '<button class="btn small" data-cs="reroll" title="Spend Heroic Inspiration to roll that again">✦ Reroll</button>' : '')
+    + (!ro && CS.pending && !CS.embed ? csAskHtml(CS.pending) : '')
     + (CS.log.length > 1 ? '<button class="btn small" data-cs="log">' + (CS.showLog ? 'Hide log' : 'Log') + '</button>' : '')
     + '<span class="cs-last" aria-live="polite">' + (CS.log[0] ? csRollText(CS.log[0]) : '<span class="cb-dim">' + (window.matchMedia && matchMedia('(pointer: coarse)').matches ? 'Tap' : 'Click') + ' a score, save, skill or attack to roll.<span class="cs-keys"> Shift: advantage · Alt: disadvantage.</span></span>') + '</span></div>'
     + (CS.showLog ? '<div class="cs-log">' + CS.log.map(r => '<div>' + csRollText(r) + '</div>').join('') + '</div>' : '');
@@ -744,19 +746,24 @@ function sktRollD20For(pcNow, label, mod, kind, pick, table){
   if (fromTable) r.table = true;
   return r;
 }
-function csRollD20(label, mod, ev, kind){
+// `after(r)` runs once the roll is final: at once, or — rolling your own
+// dice — when the number is typed in (see csLog).
+function csRollD20(label, mod, ev, kind, after){
   const pick = ev && ev.shiftKey ? 'adv' : ev && ev.altKey ? 'dis' : CS.mode;
   const r = sktRollD20For(csPc(), label, mod, kind, pick);
   const note = csTakeRollNote(); if (note) r.why = r.why ? r.why + '; ' + note : note;
-  const mode = r.mode;
-  // A weapon attack is the Attack action (the player app's turn card).
-  if (CS.embed && /^attack(:str)?$/.test(kind || '') && typeof paMarkEcon === 'function' && paMarkEcon('action')) save();
-  csLog(r);
-  // The party card's own strip shows the DM the same roll.
-  const pc = csPc();
-  try { if (panelDefs.party && panelDefs.party._setLastRoll && !document.body.classList.contains('player-mode'))
-          panelDefs.party._setLastRoll(pc, Object.assign({ kept: r.rolls.length > 1 && (mode === 'adv' ? r.rolls[1] > r.rolls[0] : r.rolls[1] < r.rolls[0]) ? 1 : 0 }, r)); } catch(e){}
-  return r;
+  // The d20 off the table, through the same rules (advantage, Reliable
+  // Talent, Bless's d4, exhaustion).
+  r.redo = v => { const x = sktRollD20For(csPc(), label, mod, kind, pick, v); if (note) x.why = x.why ? x.why + '; ' + note : note; return x; };
+  return csLog(r, x => {
+    // A weapon attack is the Attack action (the player app's turn card).
+    if (CS.embed && /^attack(:str)?$/.test(kind || '') && typeof paMarkEcon === 'function' && paMarkEcon('action')) save();
+    // The party card's own strip shows the DM the same roll.
+    const pc = csPc();
+    try { if (panelDefs.party && panelDefs.party._setLastRoll && !document.body.classList.contains('player-mode'))
+            panelDefs.party._setLastRoll(pc, Object.assign({ kept: x.rolls.length > 1 && (x.mode === 'adv' ? x.rolls[1] > x.rolls[0] : x.rolls[1] < x.rolls[0]) ? 1 : 0 }, x)); } catch(e){}
+    if (after) after(x);
+  });
 }
 // "2d6+1d4+3 slashing", "1d10+4 force ×2 beams": every term, crits double the dice.
 function sktDamageRoll(expr, crit, opts){
@@ -809,7 +816,71 @@ function csRollDamage(label, expr, crit, opts){
   csLog(r);
   return r;
 }
-function csLog(r){
+// ─── Rolling your own dice ──────────────────────────────────────────────────
+// The roll bar's "My dice": a tap asks what the die showed instead of rolling
+// it, and the sheet does the rest (the bonus, a crit, the log, the DM's
+// strip). A d20 goes back through the same rules; damage keeps its flat part
+// (+4, Rage) and takes the dice as typed. Every roll here was the app's own —
+// nowhere to put the d20 in front of you. Per device: whoever holds it rolls.
+const CS_OWN_DICE = 'skt-own-dice-v1';
+function csOwnDice(){ try { return localStorage.getItem(CS_OWN_DICE) === '1'; } catch(e){ return false; } }
+function csAskable(r){ return !r.typed && !r.noAsk && (r.kind === 'd20' ? r.natural != null : r.kind === 'dmg' && r.dice != null); }
+function csAskHtml(p){
+  const r = p.r, d20 = r.kind === 'd20';
+  const flat = d20 ? r.total - r.natural : r.total - r.dice;
+  const what = d20 ? 'd20' + (r.mode === 'adv' ? ' with advantage: the higher' : r.mode === 'dis' ? ' with disadvantage: the lower' : '') + (flat ? ' ' + csSigned(flat) : '')
+    : csE(String(r.detail || '').replace(/ \[[^\]]*\]/g, '')) + (r.type ? ' ' + csE(r.type) : '');
+  return '<div class="pa-roll-in cs-ask"><span class="pa-roll-l">' + csE(r.label) + '</span><span class="pa-roll-d">' + (d20 ? what : 'the dice: ' + what) + '</span>'
+    + '<span class="cs-ask-row"><input type="number" inputmode="numeric" min="' + (d20 ? 1 : 0) + '"' + (d20 ? ' max="20"' : '') + ' data-cs-owndie aria-label="' + (d20 ? 'The d20 rolled' : 'What the dice came to') + '" placeholder="' + (d20 ? 'd20' : 'dice') + '">'
+    + '<button class="btn primary" data-cs="owndie">Use it</button><button class="btn" data-cs="owndieroll">Roll for me</button><button class="btn" data-cs="owndiex" aria-label="Never mind">✕</button></span></div>';
+}
+// The question, where the player is looking: the roll card on a phone, the
+// roll bar on the sheet.
+function csAskShow(){
+  if (!CS || !CS.pending) return;
+  if (CS.embed && typeof paShowRoll === 'function'){
+    paShowRoll(csAskHtml(CS.pending));
+    if (typeof paRollTimer !== 'undefined') clearTimeout(paRollTimer);   // it waits for the answer
+    const box = document.getElementById('pa-roll');
+    if (box){
+      box.querySelectorAll('[data-cs]').forEach(b => b.addEventListener('click', () => csOwnDieAct(b.dataset.cs, box)));
+      const inp = box.querySelector('[data-cs-owndie]');
+      if (inp){ inp.addEventListener('keydown', e => { if (e.key === 'Enter') csOwnDieAct('owndie', box); else if (e.key === 'Escape') csOwnDieAct('owndiex', box); }); setTimeout(() => { try { inp.focus(); } catch(e){} }, 30); }
+    }
+  }
+}
+function csOwnDieAct(act, scope){
+  const p = CS && CS.pending; if (!p) return;
+  if (act === 'owndiex'){ CS.pending = null; if (CS.embed && typeof paHideRoll === 'function') paHideRoll(); csRender(); return; }
+  const r = p.r;
+  let x;
+  if (act === 'owndieroll') x = r;                      // the app's roll after all
+  else {
+    const v = parseInt(((scope || document).querySelector('[data-cs-owndie]') || {}).value, 10);
+    if (r.kind === 'd20'){
+      if (!(v >= 1 && v <= 20)){ if (typeof showToast === 'function') showToast('Type the d20 rolled, 1 to 20'); return; }
+      x = r.redo ? r.redo(v) : Object.assign(r, { rolls: [v], natural: v, total: v + (r.total - r.natural), crit: v === 20, fumble: v === 1 });
+      x.why = [x.why, 'rolled at the table'].filter(Boolean).join('; ');
+    } else {
+      if (!(v >= 0)){ if (typeof showToast === 'function') showToast('Type what the dice came to'); return; }
+      const flat = r.total - r.dice;
+      x = Object.assign(r, { total: Math.max(0, v + flat), dice: v, detail: v + ' rolled at the table' + (flat ? ' ' + csSigned(flat) : '') });
+    }
+  }
+  x.typed = true; delete x.redo; delete r.redo;
+  CS.pending = null;
+  csLog(x, p.fin);
+  csRender();
+}
+// `fin(r)` runs once the roll is final. Rolling your own dice, that waits for
+// the number; csLog returns null meanwhile.
+function csLog(r, fin){
+  if (!CS.readOnly && csOwnDice() && csAskable(r)){
+    CS.pending = { r, fin };
+    csAskShow();
+    return null;
+  }
+  delete r.redo;
   CS.log.unshift(r); CS.log = CS.log.slice(0, 8);
   // On the player's screen a result goes on the roll card above the tab bar.
   if (CS.embed && typeof paShowRoll === 'function') paShowRoll(csRollCard(r));
@@ -817,6 +888,8 @@ function csLog(r){
   else if (!(typeof sktDiceFx === 'function' && sktDiceFx(r)) && typeof showToast === 'function') showToast(csRollPlain(r));
   const pc = csPc();
   if (pc && !CS.readOnly) sktKeepRoll(pc, csRollPlain(r).replace(/^[^:]*: /, ''), r);
+  if (fin) fin(r);
+  return r;
 }
 function sktKeepRoll(pc, text, r){
   const from = document.body.classList.contains('player-mode') ? 'player' : 'dm';
@@ -1297,12 +1370,13 @@ function csOnClick(e){
     return;
   }
   if (d.csMode){ CS.mode = d.csMode; return csRender(); }
+  if (d.cs === 'owndice'){ try { localStorage.setItem(CS_OWN_DICE, csOwnDice() ? '0' : '1'); } catch(err){} if (!csOwnDice() && CS.pending) CS.pending = null; return csRender(); }
+  if (d.cs === 'owndie' || d.cs === 'owndieroll' || d.cs === 'owndiex') return csOwnDieAct(d.cs, document.getElementById('cs-root'));
   if (d.cs === 'log'){ CS.showLog = !CS.showLog; return csRender(); }
   if (d.cs === 'reroll' && !CS.readOnly && pc.inspiration){
     const last = CS.log[0]; if (!last || last.kind !== 'd20') return;
     csEdit('Spent Heroic Inspiration', p => { p.inspiration = false; });
-    const r = csRollD20(last.label + ' (reroll)', last.mod - 0, null, last.kindTag || null);
-    r.rerolled = true;
+    csRollD20(last.label + ' (reroll)', last.mod - 0, null, last.kindTag || null, r => { r.rerolled = true; });
     return csRender();
   }
   if (d.csMastery){
@@ -1337,11 +1411,13 @@ function csOnClick(e){
   if (d.csAtk != null){
     const a = (pc.sheet.attacks || [])[+d.csAtk]; if (!a) return;
     { const ms = typeof sktMasteryOf === 'function' ? sktMasteryOf(pc, a) : ''; CS.rollNote = ms ? ms + ': ' + sktMasteryText(pc, a, ms) : null; }
-    const r = csRollD20(a.name + ' attack', parseInt(a.atkBonus, 10) || 0, e, a.spell ? 'attack:spell' : a.str ? 'attack:str' : 'attack');
-    // A Champion crits on a 19 (or 18).
-    if (!a.spell && r.natural >= ((pc.sheet || {}).critRange || 20) && !r.crit){ r.crit = true; r.why = [r.why, 'critical on ' + pc.sheet.critRange + '+'].filter(Boolean).join('; '); }
+    const ai = +d.csAtk;
+    csRollD20(a.name + ' attack', parseInt(a.atkBonus, 10) || 0, e, a.spell ? 'attack:spell' : a.str ? 'attack:str' : 'attack', r => {
+      // A Champion crits on a 19 (or 18).
+      if (!a.spell && r.natural >= ((pc.sheet || {}).critRange || 20) && !r.crit){ r.crit = true; r.why = [r.why, 'critical on ' + pc.sheet.critRange + '+'].filter(Boolean).join('; '); }
+      CS.lastAtkCrit = { i: ai, crit: r.crit };
+    });
     csSpendAmmo(pc, a);
-    CS.lastAtkCrit = { i: +d.csAtk, crit: r.crit };
     return csRender();
   }
   if (d.csXdmg){
@@ -1445,13 +1521,15 @@ function csOnClick(e){
   if (d.cs === 'concsave'){
     const c = CS.conc; if (!c) return;
     const sh = pc.sheet || {}, mod = (sh.saves && sh.saves.con != null ? sh.saves.con : csMod((pc.abilities || {}).con)) + (+sh.concBonus || 0);
-    const r = csRollD20('Concentration (DC ' + c.dc + ')', mod, e, 'conc');
     CS.conc = null;
-    if (r.total < c.dc || r.autoFail){
-      if (typeof showToast === 'function') showToast(pc.name + ' loses concentration on ' + c.spell);
-      return csEdit('Lost concentration', p => { p.concentration = null; });
-    }
-    if (typeof showToast === 'function') showToast(pc.name + ' keeps concentrating on ' + c.spell);
+    csRollD20('Concentration (DC ' + c.dc + ')', mod, e, 'conc', r => {
+      if (r.total < c.dc || r.autoFail){
+        if (typeof showToast === 'function') showToast(pc.name + ' loses concentration on ' + c.spell);
+        csEdit('Lost concentration', p => { p.concentration = null; });
+        return;
+      }
+      if (typeof showToast === 'function') showToast(pc.name + ' keeps concentrating on ' + c.spell);
+    });
     return csRender();
   }
   if (d.csCondinfo != null){ CS.condOpen = CS.condOpen === d.csCondinfo ? null : d.csCondinfo; return csRender(); }
@@ -1464,7 +1542,7 @@ function csOnClick(e){
     let given = null;
     if (d.cs === 'deathset'){ given = parseInt((document.querySelector('#cs-root [data-cs-deathval]') || {}).value, 10); if (!(given >= 1 && given <= 20)){ if (typeof showToast === 'function') showToast('Type the d20 rolled, 1 to 20'); return; } }
     const r = sktRollDeathSave(pc, given);
-    csLog({ kind: 'd20', label: 'Death save', mod: 0, rolls: [r.nat], natural: r.nat, total: r.nat, mode: 'normal', crit: r.nat === 20, fumble: r.nat === 1 });
+    csLog({ kind: 'd20', label: 'Death save', mod: 0, rolls: [r.nat], natural: r.nat, total: r.nat, mode: 'normal', crit: r.nat === 20, fumble: r.nat === 1, noAsk: true });
     return csCommit();
   }
   if (d.csRes){
@@ -1672,14 +1750,15 @@ function csRollFor(pc, what, e){
   const sh = pc.sheet || {}, ab = pc.abilities || {}, pb = sh.profBonus || 2;
   const [kind, k] = what.split(':');
   if (kind === 'init'){
-    const r = csRollD20('Initiative', pc.init ?? csMod(ab.dex), e, 'init');
-    // In a fight: the combat card takes the roll.
-    const ci = (typeof _findCombatantForPartyMember === 'function') ? _findCombatantForPartyMember(pc) : -1;
-    if (ci >= 0 && !CS.readOnly){
-      state.combatants[ci] = Object.assign({}, state.combatants[ci], { initiative: r.total });
-      save(); try { panelDefs.combat && panelDefs.combat._render && panelDefs.combat._render(); } catch(_){}
-      if (typeof showToast === 'function') showToast(pc.name + "'s initiative is " + r.total + ' on the Combat Tracker');
-    }
+    csRollD20('Initiative', pc.init ?? csMod(ab.dex), e, 'init', r => {
+      // In a fight: the combat card takes the roll.
+      const ci = (typeof _findCombatantForPartyMember === 'function') ? _findCombatantForPartyMember(pc) : -1;
+      if (ci >= 0 && !CS.readOnly){
+        state.combatants[ci] = Object.assign({}, state.combatants[ci], { initiative: r.total });
+        save(); try { panelDefs.combat && panelDefs.combat._render && panelDefs.combat._render(); } catch(_){}
+        if (typeof showToast === 'function') showToast(pc.name + "'s initiative is " + r.total + ' on the Combat Tracker');
+      }
+    });
   }
   else if (kind === 'ab') csRollD20(CS_AB[k] + ' check', csMod(ab[k]) + (+sh.checkBonus || 0), e, 'abcheck:' + k);
   else if (kind === 'save') csRollD20(CS_AB[k] + ' save', sh.saves && sh.saves[k] != null ? sh.saves[k] : csMod(ab[k]) + ((sh.saveProf || []).includes(k) ? pb : 0), e, 'save:' + k);
@@ -2690,7 +2769,7 @@ function csDrink(pc, key, typed){
   const dice = csPotionHeal(m, csItemInfo(m)); if (!dice) return;
   const r = typed != null ? { kind: 'dmg', label: m.name + ' heals', total: typed, detail: typed + ' (rolled at the table)' }
     : Object.assign({ kind: 'dmg', label: m.name + ' heals' }, sktDamageRoll(dice, false));
-  r.type = 'hit points';
+  r.type = 'hit points'; r.noAsk = true;          // (it has its own box for the roll)
   take();
   panelDefs.party._applyHpDelta(csIdx(), r.total, null); csLog(r); csCommit();
 }

@@ -25083,6 +25083,40 @@ for (const cls of Object.keys(rule)) for (let L = 1; L <= 20; L++) for (const sc
         try { closePanel('shop'); closePanel('loot'); } catch(e){}
       }
     }
+    // -- Round 459: My dice on the DM's sheet — initiative typed in goes onto the Combat Tracker; a concentration save typed in is checked against its DC; the question sits in the roll bar --
+    if (!PLAYER){
+      const k0 = localStorage.getItem('skt-own-dice-v1'); const kt = window.showToast;
+      const K0 = JSON.stringify(state.combatants || []), P0 = JSON.stringify(state.party);
+      try {
+        window.showToast = () => {};
+        const A = state.party.filter(p => !p.foe)[0];
+        state.combatants = (state.combatants || []).filter(c => !(c.isPC && (c.id === A.id || c.name === A.name))).concat([{ id: 'r459c', name: A.name, isPC: true, initiative: 0, hp: A.hp, hpMax: A.hpMax }]);
+        save();
+        openCharSheet(A.id); await sleep(250);
+        for (let i = 0; i < 60 && !(CS.gear && CS.R); i++){ await sleep(100); }
+        csRender(); await sleep(30);
+        const q = s => document.querySelector('#cs-root ' + s);
+        q('[data-cs="owndice"]').click(); await sleep(40);
+        q('[data-cs-roll="init"]').click(); await sleep(40);
+        ok('My dice, Initiative: the roll bar asks for the d20; the tracker waits', !!q('.cs-rollbar [data-cs-owndie]') && state.combatants.find(c => c.id === 'r459c').initiative === 0);
+        const mod = A.init ?? Math.floor((((A.abilities || {}).dex) || 10) - 10) / 2;
+        q('[data-cs-owndie]').value = '12'; q('[data-cs="owndie"]').click(); await sleep(60);
+        const init = state.combatants.find(c => c.id === 'r459c').initiative;
+        ok('…12 typed: its initiative on the Combat Tracker is 12 plus the bonus', init === CS.log[0].total && CS.log[0].natural === 12 && !q('[data-cs-owndie]'), init + ' vs ' + JSON.stringify(CS.log[0] && [CS.log[0].natural, CS.log[0].total]));
+        // concentration
+        state.party = state.party.map(p => p.id === A.id ? Object.assign({}, p, { concentration: 'Bless' }) : p); save();
+        CS.conc = { dc: 10, spell: 'Bless' }; csRender(); await sleep(30);
+        q('[data-cs="concsave"]').click(); await sleep(40);
+        q('[data-cs-owndie]').value = '1'; q('[data-cs="owndie"]').click(); await sleep(80);
+        const conMod = CS.log[0].total - 1;
+        ok('a concentration save typed as a 1 (DC 10): ' + (1 + conMod < 10 ? 'concentration lost' : 'kept, the bonus is big'), (1 + conMod < 10) === !state.party.find(p => p.id === A.id).concentration, JSON.stringify([CS.log[0].total, state.party.find(p => p.id === A.id).concentration]));
+      } catch(e){ ok('round 459 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
+      finally {
+        window.showToast = kt; if (k0 == null) localStorage.removeItem('skt-own-dice-v1'); else localStorage.setItem('skt-own-dice-v1', k0);
+        try { if (typeof CS !== 'undefined' && CS){ CS.pending = null; csClose(); } } catch(e){}
+        state.combatants = JSON.parse(K0); state.party = JSON.parse(P0); save();
+      }
+    }
     // -- Class features: represented, not just text ------------------------
     {
       try {
@@ -29139,6 +29173,61 @@ for (const cls of Object.keys(rule)) for (let L = 1; L <= 20; L++) for (const sc
         if (keep != null){ localStorage.setItem('skt-loot-v1', keep); L._loot = null; }
         if (SH != null){ state.sharedPanels = JSON.parse(SH); save(); try { paRender(); } catch(e){} }
       }
+    }
+    // -- Round 459 (player): My dice — a tap asks what the die showed (every roll on the phone was the app's own), adds the bonus, logs it, and a crit carries to the damage; damage keeps its flat part; Roll for me and ✕ --
+    if (PLAYER){
+      const k0 = localStorage.getItem('skt-own-dice-v1'); const kt = window.showToast;
+      const P0 = JSON.stringify(state.party);
+      try {
+        window.showToast = () => {};
+        { const z = paPc(); z.sheet = Object.assign({}, z.sheet, { attacks: [{ name: 'r459 Dagger', atkBonus: '+5', damage: '1d4+3 piercing' }] }); save(); }
+        paTab = 'you'; paRender(); await sleep(400);
+        for (let i = 0; i < 60 && !(typeof CS !== 'undefined' && CS && CS.R); i++) await sleep(100);
+        const q = s => document.querySelector('#pa-screen ' + s);
+        const tab = q('[data-cs-tab="actions"]'); if (tab){ tab.click(); await sleep(300); }
+        const sw = () => q('[data-cs="owndice"]');
+        ok('the roll bar has My dice, off to start', !!sw() && !sw().classList.contains('on'));
+        sw().click(); await sleep(60);
+        ok('…on: it stays on (this device)', sw().classList.contains('on') && localStorage.getItem('skt-own-dice-v1') === '1');
+        const pc = paPc(), atks = (pc.sheet && pc.sheet.attacks) || [];
+        const ai = atks.findIndex(a => a.damage && /d\d/.test(a.damage) && !a.spell);
+        const a = atks[ai], bonus = parseInt(a.atkBonus, 10) || 0;
+        const rolls0 = (pc.rolls || []).length, card = () => document.getElementById('pa-roll');
+        q('[data-cs-atk="' + ai + '"]').click(); await sleep(80);
+        ok('a tap on ' + a.name + ': the card asks for the d20, nothing is rolled or logged yet', !!card().querySelector('[data-cs-owndie]') && /d20/.test(card().textContent) && (paPc().rolls || []).length === rolls0 && !!CS.pending);
+        await sleep(12500);
+        ok('…and it waits (the card used to go after 12 s)', !!card().querySelector('[data-cs-owndie]'));
+        card().querySelector('[data-cs-owndie]').click(); await sleep(30);
+        ok('…tapping its box to type leaves the question there (a tap on the card put it away)', !!card().querySelector('[data-cs-owndie]'));
+        card().querySelector('[data-cs-owndie]').value = '20';
+        card().querySelector('[data-cs="owndie"]').click(); await sleep(80);
+        const last = (paPc().rolls || [])[0];
+        ok('…20 typed: ' + (20 + bonus) + ' to hit, a crit, logged as rolled at the table', !!last && last.total === 20 + bonus && /natural 20|crit/i.test(card().textContent + last.text) && /rolled at the table/.test(last.text) && !CS.pending, last && JSON.stringify([last.total, last.text]));
+        q('[data-cs-dmg="' + ai + '"]').click(); await sleep(80);
+        ok('the damage asks for the dice', !!card().querySelector('[data-cs-owndie]') && /the dice/.test(card().textContent));
+        const r = CS.pending.r, flat = r.total - r.dice;
+        card().querySelector('[data-cs-owndie]').value = '7';
+        card().querySelector('[data-cs="owndie"]').click(); await sleep(80);
+        const dm = (paPc().rolls || [])[0];
+        ok('…7 typed: ' + (7 + flat) + ', its flat part kept, a crit', !!dm && dm.total === 7 + flat && dm.kind === 'damage' && dm.crit === true, dm && JSON.stringify([dm.total, dm.text, dm.crit]));
+        // Roll for me, and never mind
+        q('[data-cs-atk="' + ai + '"]').click(); await sleep(60);
+        card().querySelector('[data-cs="owndieroll"]').click(); await sleep(60);
+        ok('Roll for me: the app rolls it after all', !CS.pending && (paPc().rolls || [])[0].label === a.name + ' attack' && !/rolled at the table/.test((paPc().rolls || [])[0].text));
+        const n1 = (paPc().rolls || []).length;
+        q('[data-cs-atk="' + ai + '"]').click(); await sleep(60);
+        card().querySelector('[data-cs="owndiex"]').click(); await sleep(60);
+        ok('✕: no roll, nothing asked', !CS.pending && (paPc().rolls || []).length === n1 && !card().querySelector('[data-cs-owndie]'));
+        q('[data-cs-atk="' + ai + '"]').click(); await sleep(60);
+        card().querySelector('[data-cs-owndie]').value = '25';
+        card().querySelector('[data-cs="owndie"]').click(); await sleep(60);
+        ok('a 25 isn’t a d20: still asking', !!CS.pending);
+        card().querySelector('[data-cs="owndiex"]').click(); await sleep(40);
+        sw().click(); await sleep(60);
+        q('[data-cs-atk="' + ai + '"]').click(); await sleep(60);
+        ok('My dice off: a tap rolls, as before', !CS.pending && !card().querySelector('[data-cs-owndie]'));
+      } catch(e){ ok('round 459 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
+      finally { window.showToast = kt; state.party = JSON.parse(P0); save(); if (k0 == null) localStorage.removeItem('skt-own-dice-v1'); else localStorage.setItem('skt-own-dice-v1', k0); if (typeof CS !== 'undefined' && CS) CS.pending = null; }
     }
   }
 

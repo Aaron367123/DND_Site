@@ -2327,7 +2327,9 @@ function paOnClick(e){
   if (e.target.closest('[data-pa-sktoggle]')){ paSkOpen = !paSkOpen; paRenderScreen(); return; }
   if (e.target.closest('[data-pa-me]')){ paCenterOnMe(true, true); return; }
   if (e.target.closest('[data-pa-undo]')){ if (typeof sktUndo === 'function') sktUndo(); paHideRoll(); paRender(); return; }
-  if (e.target.closest('#pa-roll')){ paHideRoll(); return; }
+  // (a tap on the card puts it away — but not the one asking what the die showed:
+  // tapping its box to type made the question vanish)
+  if (e.target.closest('#pa-roll')){ if (!e.target.closest('.cs-ask')) paHideRoll(); return; }
   const ec = e.target.closest('[data-pa-econ]');
   if (ec){ paToggleEcon(ec.dataset.paEcon); return; }
   const cast = e.target.closest('[data-pa-cast]');
