@@ -1152,6 +1152,11 @@ registerPanel('loot',{
       <div class="loot-sumbar">
         <span title="Everything converted to gold, and an even share for each party member">Total <strong style="color:var(--warning)">${(+totalGp).toLocaleString(undefined, { maximumFractionDigits: 2 })} gp</strong>
           · <strong style="color:var(--warning)">${(+(this._sharers().length ? totalGp / this._sharers().length : totalGp)).toLocaleString(undefined, { maximumFractionDigits: 2 })}</strong> each</span>
+        ${state.settings?.lootEncumbrance ? (() => {
+          // The purse weighs too: fifty coins a pound (3,671 coins, 73 lb).
+          const n = ['cp','sp','ep','gp','pp'].reduce((t, k) => t + Math.max(0, parseInt(this._loot[k]) || 0), 0);
+          return n ? `<span class="loot-coinwt" title="${n.toLocaleString()} coins — fifty weigh a pound">Coins ${(Math.round(n / 50 * 10) / 10).toLocaleString()} lb</span>` : '';
+        })() : ''}
         ${this._canAdd() && this._changeUp() ? `<button class="btn small" id="loot-changeup" title="Trade copper, silver and electrum up into gold, the same value: ${esc(this._changeUpText())}">Change up</button>` : ''}
         ${this._isPlayer() ? '' : `<label class="loot-encumbrance-toggle" title="Show a weight column on items and per-member encumbrance subtotals (5e: STR×15 = lbs)">
           <input type="checkbox" id="loot-encumbrance-toggle" ${state.settings?.lootEncumbrance?'checked':''}>

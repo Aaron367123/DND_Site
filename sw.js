@@ -34,7 +34,7 @@
  */
 'use strict';
 
-const BUILD = '7278f6ffb3';
+const BUILD = 'fecc179abb';
 const PRECACHE = [
   'skt-workspace.html',
   'styles/main.css?v=41e9d33f77',
@@ -78,7 +78,7 @@ const PRECACHE = [
   'js/panels/books.js?v=a1261d751d',
   'js/panels/library.js?v=d41e1e85e4',
   'js/panels/npc-generator.js?v=ef379c47ad',
-  'js/panels/loot.js?v=24db94cf49',
+  'js/panels/loot.js?v=940555f432',
   'js/panels/encounter.js?v=8235f7461d',
   'js/panels/soundboard.js?v=0381935289',
   'js/panels/weather.js?v=be4fc599ab',

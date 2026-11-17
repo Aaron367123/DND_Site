@@ -24974,6 +24974,29 @@ for (const cls of Object.keys(rule)) for (let L = 1; L <= 20; L++) for (const sc
         try { closePanel('loot'); } catch(e){}
       }
     }
+    // -- Round 456: loot — with Weight on, the purse weighs too: fifty coins a pound (3,671 coins, 73.4 lb); Change up lightens it --
+    if (!PLAYER){
+      const L = panelDefs.loot;
+      let keepLs = null; const kt = window.showToast, kw = !!(state.settings && state.settings.lootEncumbrance);
+      try {
+        window.showToast = () => {};
+        openPanel('loot'); await sleep(300);
+        keepLs = localStorage.getItem('skt-loot-v1');
+        L._loot = { cp: 96, sp: 1729, ep: 0, gp: 1846, pp: 0, tabGroups: [], items: [] };
+        state.settings.lootEncumbrance = false; L._save(); L._render(); await sleep(20);
+        const cw = () => (L._body.querySelector('.loot-coinwt') || {}).textContent || '';
+        ok('Weight off: no coin weight', cw() === '');
+        state.settings.lootEncumbrance = true; L._render(); await sleep(20);
+        ok('Weight on: 3,671 coins are 73.4 lb', cw() === 'Coins 73.4 lb' && /3,671 coins/.test(L._body.querySelector('.loot-coinwt').title), cw());
+        L._body.querySelector('#loot-changeup').click(); await sleep(30);
+        ok('…changed up (6 cp, 8 sp, 2,019 gp), 40.7 lb', cw() === 'Coins 40.7 lb', cw());
+      } catch(e){ ok('round 456 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
+      finally {
+        window.showToast = kt; state.settings.lootEncumbrance = kw;
+        if (keepLs != null){ localStorage.setItem('skt-loot-v1', keepLs); L._loot = null; }
+        try { closePanel('loot'); } catch(e){}
+      }
+    }
     // -- Class features: represented, not just text ------------------------
     {
       try {
