@@ -29229,6 +29229,33 @@ for (const cls of Object.keys(rule)) for (let L = 1; L <= 20; L++) for (const sc
       } catch(e){ ok('round 459 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
       finally { window.showToast = kt; state.party = JSON.parse(P0); save(); if (k0 == null) localStorage.removeItem('skt-own-dice-v1'); else localStorage.setItem('skt-own-dice-v1', k0); if (typeof CS !== 'undefined' && CS) CS.pending = null; }
     }
+    // -- Round 460 (player): the Party tab shows a friend's conditions out of a fight and their exhaustion (only a combatant's showed); on a phone the sheet's pips and creature buttons are big enough for a finger, and an action's name isn't squeezed by its controls --
+    if (PLAYER){
+      const P0 = JSON.stringify(state.party), K0 = JSON.stringify(state.combatants || []);
+      try {
+        const me = paPc(), mate = sktPlayerParty().find(p => p.id !== (me && me.id));
+        state.combatants = (state.combatants || []).filter(c => !(c.isPC && c.id === mate.id));
+        state.party = state.party.map(p => p.id === mate.id ? Object.assign({}, p, { conditions: ['Poisoned'], exhaustion: 2 }) : p);
+        save();
+        paTab = 'party'; paRender(); await sleep(200);
+        const card = [...document.querySelectorAll('#pa-screen .pa-mate')].find(m => m.querySelector('.pa-mate-n').textContent.startsWith(mate.name));
+        const chips = card ? [...card.querySelectorAll('.pa-cond')].map(x => x.textContent) : [];
+        ok('Party tab: ' + mate.name + ', out of the fight, shows Poisoned and Exhaustion 2', chips.includes('Poisoned') && chips.includes('Exhaustion 2'), JSON.stringify(chips));
+        // the sheet on a phone
+        paTab = 'you'; paRender(); await sleep(400);
+        for (let i = 0; i < 60 && !(typeof CS !== 'undefined' && CS && CS.R); i++) await sleep(100);
+        const z = paPc();
+        state.party = state.party.map(p => p.id === z.id ? Object.assign({}, p, { resources: (p.resources || []).filter(r => r.name !== 'r460 Pips').concat([{ name: 'r460 Pips', max: 4, current: 4 }]).filter(r => r.name !== 'Sneak Attack').concat([{ name: 'Sneak Attack', die: '3d6', max: 1, current: 1 }]) }) : p); save();
+        csRender(); await sleep(60);
+        const tb = document.querySelector('#pa-screen [data-cs-tab="actions"]'); if (tb){ tb.click(); await sleep(300); }
+        const pip = [...document.querySelectorAll('#pa-screen .cs-pip')].find(b => /r460 Pips/.test(b.getAttribute('aria-label') || ''));
+        ok('a resource’s pips are 28 px on a phone (16)', !!pip && Math.round(pip.getBoundingClientRect().width) >= 28 && Math.round(pip.getBoundingClientRect().height) >= 28, pip && pip.getBoundingClientRect().width);
+        const heads = [...document.querySelectorAll('#pa-screen .cs-act-h')].filter(h => h.querySelector('select, button') && h.querySelector('b'));
+        const thin = heads.filter(h => h.querySelector('b').getBoundingClientRect().width < 90).map(h => h.querySelector('b').textContent);
+        ok('no action’s name is squeezed under 90 px by its controls', !thin.length, JSON.stringify(thin));
+      } catch(e){ ok('round 460 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
+      finally { state.party = JSON.parse(P0); state.combatants = JSON.parse(K0); save(); }
+    }
   }
 
   // ══════════════════════════════════════════════════════════ mobile / phone

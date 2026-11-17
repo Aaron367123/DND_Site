@@ -5576,8 +5576,11 @@ button.cs-ab:hover, button.cs-box:hover, .cs-row:hover { border-color:var(--acce
 .cs-atk-h { background:none; font-size:var(--fs-2xs); text-transform:uppercase; color:var(--text-muted); }
 .cs-atk .btn { justify-self:start; }
 .cs-act { padding:6px 8px; border-radius:6px; background:var(--panel); margin:3px 0; }
-.cs-act-h { display:flex; align-items:center; gap:8px; }
-.cs-act-h b { flex:1; }
+.cs-act-h { display:flex; align-items:center; gap:8px; flex-wrap:wrap; row-gap:4px; }
+/* (wraps: on a phone Sneak Attack's name was squeezed to "Sneak" by its
+   description, the Cunning Strike choice and the dice button) */
+.cs-act-h b { flex:1 1 8em; min-width:0; }
+.cs-act-h .cb-sel { flex:1 1 9em; width:auto; min-width:0; }
 .cs-act-d { font-size:var(--fs-sm); color:var(--text-muted); margin-top:3px; }
 .cs-cun-list { list-style:none; margin:4px 0 0; padding:0; font-size:var(--fs-sm); color:var(--text-muted); }
 .cs-cun-list li { margin:2px 0; }
@@ -5589,6 +5592,8 @@ button.cs-ab:hover, button.cs-box:hover, .cs-row:hover { border-color:var(--acce
 .cs-pip { width:16px; height:16px; border-radius:50%; border:1px solid var(--accent); background:transparent; cursor:pointer; padding:0; }
 .cs-pip.on { background:var(--accent); }
 .cs-pip.slot { border-radius:3px; }
+/* A finger: 16px circles four apart, and the third of six was a guess. */
+@media (pointer: coarse){ .cs-pips { gap:8px; } .cs-pip { width:28px; height:28px; } .cs-creature { min-height:32px; } }
 .cs-std { margin-top:14px; }
 .cs-feat { padding:4px 0; border-bottom:1px solid var(--border); }
 .cs-feat summary { cursor:pointer; }

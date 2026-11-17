@@ -1805,7 +1805,11 @@ function paPartyScreen(){
     const hp = c ? c.hp : p.hp, hpMax = c ? c.hpMax : p.hpMax;
     const pct = hpMax ? Math.max(0, (hp / hpMax) * 100) : 0;
     const col = pct <= 0 ? '#5a3a3a' : pct < 35 ? 'var(--danger)' : pct < 75 ? 'var(--warning)' : 'var(--success)';
-    const conds = (c && c.conditions || []).map(x => `<span class="pa-cond sm">${paEsc(x)}</span>`).join('');
+    // Out of a fight a character's conditions are on the character, not a
+    // combatant: a poisoned friend showed nothing here. Exhaustion too.
+    const cl = [...new Set([...(Array.isArray(p.conditions) ? p.conditions : []), ...(c && Array.isArray(c.conditions) ? c.conditions : [])])];
+    const exh = Math.max(+p.exhaustion || 0, +(c && c.exhaustion) || 0);
+    const conds = cl.map(x => `<span class="pa-cond sm">${paEsc(x)}</span>`).join('') + (exh ? `<span class="pa-cond sm">Exhaustion ${exh}</span>` : '');
     const open = paOpenMates.has(p.id);
     const sub = [paClsName(p.cls), p.subclass, p.level ? 'Level ' + p.level : ''].filter(Boolean).join(' · ');
     return `<div class="pa-mate${p.id === meId ? ' me' : ''}${open ? ' open' : ''}">
