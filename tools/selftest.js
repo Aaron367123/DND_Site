@@ -29249,12 +29249,46 @@ for (const cls of Object.keys(rule)) for (let L = 1; L <= 20; L++) for (const sc
         csRender(); await sleep(60);
         const tb = document.querySelector('#pa-screen [data-cs-tab="actions"]'); if (tb){ tb.click(); await sleep(300); }
         const pip = [...document.querySelectorAll('#pa-screen .cs-pip')].find(b => /r460 Pips/.test(b.getAttribute('aria-label') || ''));
-        ok('a resource’s pips are 28 px on a phone (16)', !!pip && Math.round(pip.getBoundingClientRect().width) >= 28 && Math.round(pip.getBoundingClientRect().height) >= 28, pip && pip.getBoundingClientRect().width);
+        { const coarse = matchMedia('(pointer: coarse)').matches, w = pip ? Math.round(pip.getBoundingClientRect().width) : 0;
+          ok('a resource’s pips are 28 px for a finger (16), and stay 16 with a mouse', !!pip && (coarse ? w >= 28 && Math.round(pip.getBoundingClientRect().height) >= 28 : w === 16), coarse + ' ' + w); }
         const heads = [...document.querySelectorAll('#pa-screen .cs-act-h')].filter(h => h.querySelector('select, button') && h.querySelector('b'));
         const thin = heads.filter(h => h.querySelector('b').getBoundingClientRect().width < 90).map(h => h.querySelector('b').textContent);
         ok('no action’s name is squeezed under 90 px by its controls', !thin.length, JSON.stringify(thin));
       } catch(e){ ok('round 460 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
       finally { state.party = JSON.parse(P0); state.combatants = JSON.parse(K0); save(); }
+    }
+    // -- Round 461 (player): the DM's "Everyone, roll…" — Roll for me goes by the sheet's rules (a Poisoned character's check at disadvantage, exhaustion off the total); it was a bare d20 and the bonus --
+    if (PLAYER){
+      const P0 = JSON.stringify(state.party), K0 = JSON.stringify(state.combatants || []), RR0 = localStorage.getItem(SKT_RR_KEY);
+      const d0 = window.sktD;
+      try {
+        const me = paPc();
+        if (!me){ ok('player: a character for the roll request', false, 'none'); }
+        else {
+          state.combatants = (state.combatants || []).filter(c => !(c.isPC && c.id === me.id));
+          state.party = state.party.map(p => p.id === me.id ? Object.assign({}, p, { conditions: ['Poisoned'], exhaustion: 1 }) : p); save();
+          document.getElementById('pa-roll-req')?.remove();
+          const req = { id: 'r461', kind: 'check', ab: 'DEX', skill: 'stealth', pcs: [me.id], askedAt: Date.now() };
+          localStorage.setItem(SKT_RR_KEY, JSON.stringify(req));
+          paOnRollRequest(); await sleep(60);
+          const ov = document.getElementById('pa-roll-req');
+          ok('the request is up', !!ov);
+          let n = 0; window.sktD = s => (s === 20 ? [14, 6][n++ % 2] : 1);
+          ov.querySelector('[data-pa-rr="roll"]').click(); await sleep(40);
+          window.sktD = d0;
+          const fx = csRollEffects(paPc(), 'check:stealth');
+          const bonus = paRollBonus(req, me.id), want = 6 + bonus + (fx.bonus || 0);
+          const line = ov.querySelector('#pa-rr-dice').textContent;
+          ok('Roll for me, Poisoned: two d20s, the lower kept (14, 6 → 6), and it says why', /2d20 \(14, 6\) keep 6/.test(line) && /disadvantage/i.test(line), line);
+          ok('…exhaustion comes off: ' + want + ' (bonus ' + bonus + ', exhaustion ' + (fx.bonus || 0) + ')', +ov.querySelector('#pa-rr-val').value === want && (fx.bonus || 0) < 0, ov.querySelector('#pa-rr-val').value + ' / ' + line);
+          ov.remove();
+        }
+      } catch(e){ ok('round 461 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
+      finally {
+        window.sktD = d0; document.getElementById('pa-roll-req')?.remove();
+        state.party = JSON.parse(P0); state.combatants = JSON.parse(K0); save();
+        if (RR0 == null) localStorage.removeItem(SKT_RR_KEY); else localStorage.setItem(SKT_RR_KEY, RR0);
+      }
     }
   }
 

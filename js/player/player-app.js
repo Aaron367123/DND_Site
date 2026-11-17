@@ -268,12 +268,17 @@ function paOnRollRequest(){
     const act = b.dataset.paRr;
     if (act === 'roll' || act === 'adv' || act === 'dis'){
       const how = act === 'roll' && surprised ? 'dis' : act;
-      const a = sktD(20), c = how === 'roll' ? null : sktD(20);
-      const d = c == null ? a : (how === 'adv' ? Math.max(a, c) : Math.min(a, c));
-      const total = d + bonus;
+      // By the sheet's own rules, as a tap on the sheet rolls: a condition's
+      // disadvantage (Poisoned on a check), exhaustion, Bless's d4, Lucky,
+      // Reliable Talent. "Roll for me" was a bare d20 and the bonus.
+      const ab3 = String(r.ab || '').slice(0, 3).toLowerCase();
+      const kind = r.kind === 'init' ? 'init' : r.kind === 'save' ? 'save:' + ab3 : r.skill ? 'check:' + r.skill : 'abcheck:' + ab3;
+      const x = paRollD20(paPc() || pc, bonus, kind, how === 'roll' ? 'normal' : how);
+      // (an automatic failure — a paralysed character's Dexterity save — sends a 0)
+      const total = x.autoFail ? 0 : x.total;
       val.value = String(total); send.disabled = false;
-      dice.textContent = (c == null ? 'd20 (' + a + ')' : '2d20 (' + a + ', ' + c + ') keep ' + d)
-        + ' ' + sign(bonus) + ' = ' + total + verdict(total);
+      dice.textContent = (x.b == null ? 'd20 (' + x.a + ')' : '2d20 (' + x.a + ', ' + x.b + ') keep ' + x.nat)
+        + ' ' + sign(x.mod) + ' = ' + total + (x.autoFail ? ' — ' + x.autoFail + ': fails' : '') + (x.why ? ' · ' + x.why : '') + verdict(total);
     } else if (act === 'send' && val.value !== ''){
       paAnswerRoll(parseInt(val.value, 10));
     }
