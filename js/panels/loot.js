@@ -5,6 +5,8 @@
 // (a character's id, a group's, or null for the party loot). The Loot window
 // and the sheet's "Claim one" share it. A new row and a smaller count: two
 // devices doing it at once both count.
+// Gold as it reads elsewhere in the window: "5,000", "12.5" — not "5000.00".
+function sktGp(n){ return (+n || 0).toLocaleString(undefined, { maximumFractionDigits: 2 }); }
 function sktLootSplit(L, id, to){
   const a = L && L.items, i = a ? a.findIndex(x => x.id === id) : -1;
   if (i < 0) return null;
@@ -672,7 +674,7 @@ registerPanel('loot',{
       <div class="loot-group-head">
         <span class="loot-group-icon">👥</span>
         <span class="loot-group-name">${esc(g.name)}</span>
-        <span class="loot-group-meta">${matched.length} item${matched.length===1?'':'s'}${totalVal?` · ${totalVal.toFixed(2)} gp`:''}</span>
+        <span class="loot-group-meta">${matched.length} item${matched.length===1?'':'s'}${totalVal?` · ${sktGp(totalVal)} gp`:''}</span>
       </div>
       ${matched.map(({item, idx}) => this._itemRow(item, idx)).join('')}
     </div>`;
@@ -1016,7 +1018,7 @@ registerPanel('loot',{
       <div class="loot-group-head">
         <span class="loot-group-icon">${iconHtml}</span>
         <span class="loot-group-name">${esc(member.name)}</span>
-        <span class="loot-group-meta">${matched.length} item${matched.length===1?'':'s'}${totalVal?` · ${totalVal.toFixed(2)} gp`:''}${weightHtml}</span>
+        <span class="loot-group-meta">${matched.length} item${matched.length===1?'':'s'}${totalVal?` · ${sktGp(totalVal)} gp`:''}${weightHtml}</span>
       </div>
       ${matched.map(({item, idx}) => this._itemRow(item, idx)).join('')}
     </div>`;
@@ -1252,8 +1254,13 @@ registerPanel('loot',{
           this._undoable(it.name + ' → ' + who, () => { it.assignedTo = v; });
           return;
         }
-        this._loot.items[i][f]=v;
-        this._save();
+        // Undoable (Ctrl+Z), quietly: a name typed over or a wrong count had
+        // no way back, though deleting the item had one.
+        const it = this._loot.items[i], was = it[f];
+        if (String(was ?? '') === String(v)) return;
+        const run = () => { it[f] = v; this._save(); };
+        const label = f === 'name' ? 'Renamed ' + was + ' to ' + v : it.name + ' — ' + (f === 'qty' ? '×' : f === 'weight' ? 'weight ' : '') + v;
+        if (typeof sktUndoable === 'function') sktUndoable(label, run, { keys: ['skt-loot-v1'], quiet: true }); else run();
         // Re-render so pills / counts / totals refresh.
         if (f==='qty' || f==='weight') this._render();
       });
@@ -1280,7 +1287,7 @@ registerPanel('loot',{
       // isn't owed a share (it was split between everyone in it).
       const pcs = typeof sktPlayerParty === 'function' ? sktPlayerParty() : state.party;
       const n=pcs.length;if(!n){showToast('No party members');return;}
-      const each=(parseFloat(totalGp)/n).toFixed(2);
+      const each=sktGp(parseFloat(totalGp)/n);
       // Coin by coin, as it can be handed out: each gets an equal share of
       // every coin, and what doesn't divide evenly stays in the party loot.
       const COINS = ['pp','gp','ep','sp','cp'];
@@ -1295,7 +1302,7 @@ registerPanel('loot',{
       backdrop.innerHTML = `<div class="modal" role="dialog" aria-modal="true" style="min-width:300px">
         <h3>Divvy up loot</h3>
         <p style="color:var(--text-muted);font-size:var(--fs-sm);margin:0 0 10px">
-          <strong style="color:var(--accent)">${totalGp} gp</strong> split between
+          <strong style="color:var(--accent)">${sktGp(+totalGp)} gp</strong> split between
           <strong>${n}</strong> party member${n===1?'':'s'} —
           <strong style="color:var(--accent)">${each} gp</strong> each.
         </p>

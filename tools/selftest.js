@@ -24801,6 +24801,48 @@ for (const cls of Object.keys(rule)) for (let L = 1; L <= 20; L++) for (const sc
         try { closePanel('loot'); } catch(e){}
       }
     }
+    // -- Round 452: loot — a name typed over, a wrong count or value can be undone (only deleting could); the same value again adds nothing to undo --
+    if (!PLAYER){
+      const L = panelDefs.loot;
+      let keepLs = null; const kt = window.showToast;
+      try {
+        window.showToast = () => {};
+        openPanel('loot'); await sleep(300);
+        keepLs = localStorage.getItem('skt-loot-v1');
+        L._loot = { cp: 0, sp: 0, ep: 0, gp: 0, pp: 0, items: [{ id: 'r452a', name: 'r452 Lantern', qty: 2, value: '5 gp', assignedTo: null }], tabGroups: [] };
+        L._save(); L._render(); await sleep(20);
+        const f = k => L._body.querySelector('.loot-item[data-id="r452a"] [data-lfield="' + k + '"]');
+        const set = (k, v) => { const el = f(k); el.value = v; el.dispatchEvent(new Event('change', { bubbles: true })); };
+        const it = () => L._loot.items.find(x => x.id === 'r452a');
+        set('name', 'r452 Hooded Lantern'); await sleep(20);
+        set('qty', '7'); await sleep(20);
+        set('value', '50 gp'); await sleep(20);
+        ok('the changes are made', it().name === 'r452 Hooded Lantern' && +it().qty === 7 && it().value === '50 gp');
+        sktUndo(); await sleep(40);
+        ok('Undo: the value back to 5 gp, the rest kept', it().value === '5 gp' && +it().qty === 7);
+        sktUndo(); await sleep(40);
+        ok('…the count back to 2', +it().qty === 2 && it().name === 'r452 Hooded Lantern');
+        sktUndo(); await sleep(40);
+        ok('…the name back', it().name === 'r452 Lantern' && f('name').value === 'r452 Lantern');
+        const n0 = typeof _sktUndoStack !== 'undefined' ? _sktUndoStack.length : null;
+        let undone = 0; const ku = window.sktUndoable; window.sktUndoable = function(){ undone++; return ku.apply(this, arguments); };
+        set('qty', '2'); await sleep(20);
+        window.sktUndoable = ku;
+        ok('the same count again adds nothing to undo', undone === 0);
+        // gold reads as it does at the top: 5,000 gp, not 5000.00 gp
+        const A = state.party.filter(p => !p.foe)[0];
+        L._loot.items.push({ id: 'r452d', name: 'r452 Diamond', qty: 1, value: '5000 gp', assignedTo: A.id }); L._save();
+        L._view = 'party'; L._render(); await sleep(20);
+        const meta = [...L._body.querySelectorAll('.loot-group-meta')].map(m => m.textContent).join(' / ');
+        ok('a claimed section’s total reads 5,000 gp (it was 5000.00 gp)', /5,000 gp/.test(meta) && !/\.00 gp/.test(meta), meta);
+        L._view = 'all';
+      } catch(e){ ok('round 452 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
+      finally {
+        window.showToast = kt;
+        if (keepLs != null){ localStorage.setItem('skt-loot-v1', keepLs); L._loot = null; }
+        try { closePanel('loot'); } catch(e){}
+      }
+    }
     // -- Class features: represented, not just text ------------------------
     {
       try {
