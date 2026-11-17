@@ -24656,6 +24656,15 @@ for (const cls of Object.keys(rule)) for (let L = 1; L <= 20; L++) for (const sc
         try { closePanel('loot'); } catch(e){}
       }
     }
+    // -- Round 449: loot on two devices at once — the DM sells one of three potions while a player uses two: none left (one side's change was lost); each adds an item: both kept --
+    if (!PLAYER){
+      const it = (id, name, qty) => ({ id, name, qty, value: '50 gp', assignedTo: null });
+      const base = JSON.stringify({ gp: 0, items: [it('r449a', 'Potion', 3)] });
+      const r1 = JSON.parse(_mergeJsonStr(base, JSON.stringify({ gp: 0, items: [it('r449a', 'Potion', 2)] }), JSON.stringify({ gp: 0, items: [it('r449a', 'Potion', 1)] }), 'skt-loot-v1'));
+      ok('two devices: one potion sold here, two used there, from three — none left (it was 1)', r1.items[0].qty === 0, r1.items[0].qty);
+      const r2 = JSON.parse(_mergeJsonStr(base, JSON.stringify({ gp: 0, items: [it('r449a', 'Potion', 3), it('r449b', 'Rope', 1)] }), JSON.stringify({ gp: 0, items: [it('r449a', 'Potion', 3), it('r449c', 'Lantern', 1)] }), 'skt-loot-v1'));
+      ok('…each adds an item: both are kept', r2.items.length === 3 && r2.items.some(x => x.name === 'Rope') && r2.items.some(x => x.name === 'Lantern'));
+    }
     // -- Class features: represented, not just text ------------------------
     {
       try {

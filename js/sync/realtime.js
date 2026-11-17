@@ -1273,8 +1273,10 @@ function _mergeRecordStr(baseStr, mineStr, theirsStr, opts){
 // keeping unparseable local bytes.
 // Whole keys whose fields are counters: both sides' changes are applied, as
 // a combatant's hit points are. The party's coins: the DM adds 50 gp while a
-// player spends 10, and one of the two was lost (100 → 90, not 140).
-const _WHOLE_MERGE = { 'skt-loot-v1': { delta: new Set(['cp', 'sp', 'ep', 'gp', 'pp']) } };
+// player spends 10, and one of the two was lost (100 → 90, not 140). And a
+// loot item's quantity: the DM sells one of three potions while a player
+// uses two — none left, where one side's change used to be lost (1 left).
+const _WHOLE_MERGE = { 'skt-loot-v1': { delta: new Set(['cp', 'sp', 'ep', 'gp', 'pp', 'qty']) } };
 function _mergeJsonStr(baseStr, mineStr, theirsStr, key){
   let mine, theirs, base;
   try { mine = JSON.parse(mineStr); theirs = JSON.parse(theirsStr); }
