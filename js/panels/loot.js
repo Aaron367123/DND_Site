@@ -384,6 +384,22 @@ registerPanel('loot',{
     return !!(g && Array.isArray(g.memberIds) && g.memberIds.includes(memberId));
   },
 
+  // A magic item's value when the book prints none. A table on the 2024 rules
+  // uses the 2024 DMG's price by rarity (half for a potion, a scroll or
+  // ammunition), the Shop's own rule; 2014 gives only a range, so nothing is
+  // made up. A +1 Longsword came in at 15 gp — the plain longsword's price —
+  // and a Bag of Holding at nothing, so it counted for nothing and couldn't
+  // be sold.
+  _magicValue(rarity, raw){
+    const S = typeof panelDefs !== 'undefined' && panelDefs.shop;
+    if (!S || typeof S._priceEdition !== 'function' || S._priceEdition() !== '2024') return '';
+    const key = { common: 'Common', uncommon: 'Uncommon', rare: 'Rare', 'very rare': 'VeryRare', legendary: 'Legendary' }[String(rarity || '').toLowerCase()];
+    if (!key) return '';
+    const t = String(raw && raw.type || '').split('|')[0];
+    const p = S._magicPriceForRarity(key, t === 'P' || t === 'SC' || t === 'A');
+    return p ? p.toLocaleString() + ' gp' : '';
+  },
+  _isMagicRarity(r){ r = String(r || '').toLowerCase(); return !!r && r !== 'none' && r !== 'unknown' && r !== 'varies'; },
   // ── 5e item search ───────────────────────────────────────────────────────────
   _searchItems(q){
     if (!q || typeof _5eLoaded === 'undefined' || !_5eLoaded || !Array.isArray(_5eData)) return [];
@@ -405,14 +421,19 @@ registerPanel('loot',{
       if (isHidden(d._source)) continue;
       // Facets hoisted onto the row by the data loader — avoids walking into
       // _raw for every one of the ~5,800 item rows on each search pass.
-      if (matches(d.name, d.meta)) all.push({name:d.name, meta:d.meta, _source:d._source, value:d._value || '', rarity:d._rarity || null, weight: d._weight ?? null});
+      if (matches(d.name, d.meta)) all.push({name:d.name, meta:d.meta, _source:d._source, value:d._value || (this._isMagicRarity(d._rarity) ? this._magicValue(d._rarity, d._raw) : ''), rarity:d._rarity || null, weight: d._weight ?? null});
       // Items with bonus variants (+1, +2, +3) — include each variant as its
       // own selectable row so the user can drop "+2 Longsword" directly
       // into loot without having to retype the prefix.
       if (d._variants){
         for (const v of d._variants){
           if (isHidden(v._source || d._source)) continue;
-          if (matches(v.name, v.meta)) all.push({name:v.name, meta:v.meta, _source:v._source||d._source, value:v._raw?.value || '', rarity:v._raw?.rarity || d._raw?.rarity || null, weight: v._raw?.weight ?? d._raw?.weight ?? null});
+          if (matches(v.name, v.meta)){
+            // a magic variant is priced as the magic item it is, not as its base
+            const vr = v._raw?.rarity || d._raw?.rarity || null;
+            const val = this._isMagicRarity(vr) ? this._magicValue(vr, v._raw || d._raw) : (v._raw?.value || '');
+            all.push({name:v.name, meta:v.meta, _source:v._source||d._source, value:val, rarity:vr, weight: v._raw?.weight ?? d._raw?.weight ?? null});
+          }
         }
       }
     }
@@ -714,11 +735,9 @@ registerPanel('loot',{
     // Who has it is the dropdown on the right. A "→ Name" pill beside the name
     // said the same thing again and took the name's room: with "→ Ulrick
     // Axeborne" in the row, "Handaxe" got a 12px box.
+    // (A "paid / collected" circle sat beside each name; nothing read it and
+    // nobody knew what it was for. Gone — an item's old mark is left alone.)
     const assignedName = this._memberName(item.assignedTo);
-    const paid = !!item.paid;
-    const paidTitle = paid && item.paidTs
-      ? 'Marked paid · ' + new Date(item.paidTs).toLocaleString()
-      : 'Mark as paid / collected';
     // Weight column only renders when the user has flipped on the
     // encumbrance toggle. When hidden, the field is omitted entirely so
     // existing flex layout stays clean.
@@ -726,9 +745,8 @@ registerPanel('loot',{
     const weightInp = showWeight
       ? `<input type="number" step="0.1" min="0" class="loot-wt" value="${item.weight!=null?esc(String(item.weight)):''}" data-lfield="weight" data-li="${i}" placeholder="lb" title="Weight per item (lbs)">`
       : '';
-    return `<div class="loot-item ${item.assignedTo?'assigned':''} ${paid?'paid':''}" data-i="${i}" draggable="true" title="Right-click (or hold) to sell it">
+    return `<div class="loot-item ${item.assignedTo?'assigned':''}" data-i="${i}" draggable="true" title="Right-click (or hold) to sell or move it">
       <span class="loot-drag-handle" title="Drag to reorder">⋮⋮</span>
-      <button class="loot-paid-btn ${paid?'on':''}" data-lact="paid" data-li="${i}" title="${esc(paidTitle)}">${paid?ICO('i-check'):'<span class="loot-unpaid">○</span>'}</button>
       <div class="loot-name">
         <button class="loot-info-btn" data-lact="info" data-li="${i}" title="View item details">${ICO('i-book-open')}</button>
         <input class="loot-name-input" type="text" value="${esc(item.name)}" data-lfield="name" data-li="${i}" title="${esc(item.name)}${assignedName ? ' → ' + esc(assignedName) : ''} — click to rename" spellcheck="false">
@@ -767,20 +785,30 @@ registerPanel('loot',{
   _rowMenu(i, x, y){
     const it = this._loot.items[i]; if (!it || !this._canEdit(it) || typeof showContextMenu !== 'function') return;
     const each = this._parseGp(it.value), n = Math.max(1, parseInt(it.qty) || 1);
-    if (!(each > 0)){ showContextMenu(x, y, [{ label: 'No value to sell it for — type one in', disabled: true, onClick: () => {} }]); return; }
+    if (!(each > 0)){ showContextMenu(x, y, [{ label: 'No value to sell it for — type one in', disabled: true, onClick: () => {} }].concat(this._moveItems(i))); return; }
     const items = [
       { label: 'Sell' + (n > 1 ? ' all ' + n : '') + ' for half — ' + this._fmtCoins(this._toCoins(each * n / 2)), onClick: () => this._sell(i, 0.5, false) },
       { label: 'Sell' + (n > 1 ? ' all ' + n : '') + ' for full value — ' + this._fmtCoins(this._toCoins(each * n)), onClick: () => this._sell(i, 1, false) },
     ];
     if (n > 1) items.push({ label: 'Sell one for half — ' + this._fmtCoins(this._toCoins(each / 2)), onClick: () => this._sell(i, 0.5, true) });
-    showContextMenu(x, y, items);
+    showContextMenu(x, y, items.concat(this._moveItems(i)));
+  },
+  // Up and down the list, for a finger (dragging a row needs a mouse).
+  _moveItems(i){
+    const n = this._loot.items.length, mv = (to, label) => ({ label, onClick: () => {
+      const it = this._loot.items[i]; if (!it) return;
+      this._undoable('Moved ' + it.name, () => { const a = this._loot.items; a.splice(i, 1); a.splice(to, 0, it); });
+    } });
+    const out = [];
+    if (i > 0) out.push(mv(i - 1, 'Move up'), mv(0, 'Move to the top'));
+    if (i < n - 1) out.push(mv(i + 1, 'Move down'));
+    return out.length ? [{ label: '─────' }].concat(out) : [];
   },
   // Another character's, on a player's phone: to look at, not to change.
   _lockedRow(item, i){
     const who = this._memberName(item.assignedTo) || 'someone';
     return `<div class="loot-item assigned locked" data-i="${i}" title="${esc(who)}’s — only they or the DM can change it">
       <span class="loot-drag-handle" aria-hidden="true"></span>
-      <span class="loot-paid-btn" aria-hidden="true"></span>
       <div class="loot-name">
         <button class="loot-info-btn" data-lact="info" data-li="${i}" title="View item details">${ICO('i-book-open')}</button>
         <span class="loot-name-text">${esc(item.name)}</span>
@@ -1089,13 +1117,6 @@ registerPanel('loot',{
         this._undoable('Removed ' + it.name + (it.qty > 1 ? ' ×' + it.qty : ''), () => { this._loot.items.splice(i,1); });
       } else if (el.dataset.lact==='info'){
         this._openItemDetail(i);
-      } else if (el.dataset.lact==='paid'){
-        // Toggle paid/collected status with a timestamp. Hover the ✓ to see
-        // when it was marked. Toggling off clears the timestamp.
-        const it = this._loot.items[i]; if (!it) return;
-        if (it.paid){ delete it.paid; delete it.paidTs; }
-        else { it.paid = true; it.paidTs = Date.now(); }
-        this._save(); this._render();
       }
     }));
 

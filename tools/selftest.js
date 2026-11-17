@@ -24562,7 +24562,7 @@ for (const cls of Object.keys(rule)) for (let L = 1; L <= 20; L++) for (const sc
         let menu = null; window.showContextMenu = (x, y, items) => { menu = items; };
         const row = id => L._body.querySelector('.loot-item[data-i="' + L._loot.items.findIndex(x => x.id === id) + '"]');
         row('r447a').dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true, clientX: 50, clientY: 50 }));
-        ok('right-click a row: sell all for half, for full value, or one for half — with what it brings', !!menu && menu.length === 3 && /75 gp/.test(menu[0].label) && /150 gp/.test(menu[1].label) && /25 gp/.test(menu[2].label), menu && menu.map(m => m.label).join(' | '));
+        ok('right-click a row: sell all for half, for full value, or one for half — with what it brings', !!menu && menu.filter(m => /^Sell/.test(m.label)).length === 3 && /75 gp/.test(menu[0].label) && /150 gp/.test(menu[1].label) && /25 gp/.test(menu[2].label), menu && menu.map(m => m.label).join(' | '));
         menu[2].onClick(); await sleep(20);
         ok('sell one potion for half: 25 gp in the purse, two left', L._loot.gp === 35 && L._loot.items.find(x => x.id === 'r447a').qty === 2);
         sktUndo(); await sleep(40);
@@ -24570,7 +24570,7 @@ for (const cls of Object.keys(rule)) for (let L = 1; L <= 20; L++) for (const sc
         L._sell(L._loot.items.findIndex(x => x.id === 'r447b'), 0.5, false);
         ok('a gem worth 25 sp sold for half: 1 gp 2 sp 5 cp, as coins are handed over', L._loot.gp === 11 && L._loot.sp === 2 && L._loot.cp === 5 && !L._loot.items.some(x => x.id === 'r447b'), JSON.stringify([L._loot.gp, L._loot.sp, L._loot.cp]));
         menu = null; row('r447c').dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true, clientX: 50, clientY: 50 }));
-        ok('…something with no value: says so, nothing to click', !!menu && menu.length === 1 && menu[0].disabled && /No value/.test(menu[0].label));
+        ok('…something with no value: says so, nothing to click', !!menu && menu[0].disabled && /No value/.test(menu[0].label) && !menu.some(m => /^Sell/.test(m.label)));
         window.showContextMenu = kcm;
         // the treasure preview
         const T = await L._ensureLootTables();
@@ -24609,6 +24609,49 @@ for (const cls of Object.keys(rule)) for (let L = 1; L <= 20; L++) for (const sc
       finally {
         window.showToast = kt; window.showModal = km; window.showContextMenu = kcm;
         document.getElementById('loot-tp')?.remove();
+        if (keep){ L._loot = JSON.parse(keep); L._save(); }
+        try { closePanel('loot'); } catch(e){}
+      }
+    }
+    // -- Round 448: loot — a magic item found in the search has a value at a 2024 table (the DMG's by rarity; a +1 Longsword is 400 gp, not the plain sword's 15; a scroll half) and none at a 2014 one; the paid/collected circle is gone; a row can be moved up and down from its menu (a finger can't drag) --
+    if (!PLAYER){
+      const L = panelDefs.loot, S = panelDefs.shop;
+      let keep = null; const kt = window.showToast, kcm = window.showContextMenu, kpe = S && S._priceEdition;
+      try {
+        for (let i = 0; i < 40 && !(typeof _5eLoaded !== 'undefined' && _5eLoaded); i++) await sleep(250);
+        window.showToast = () => {};
+        openPanel('loot'); await sleep(400);
+        keep = JSON.stringify(L._loot);
+        const val = q => { const r = L._searchItems(q).find(x => x.name.toLowerCase() === q.toLowerCase()); return r ? r.value : null; };
+        S._priceEdition = () => '2024';
+        ok('2024: a Bag of Holding is 400 gp (uncommon), a +1 Longsword 400 gp (not the plain longsword’s 15), a plain Rope still 1 gp', val('Bag of Holding') === '400 gp' && val('+1 Longsword') === '400 gp' && val('Rope') === '1 gp', [val('Bag of Holding'), val('+1 Longsword'), val('Rope')].join(' / '));
+        const sc = L._searchItems('scroll of protection')[0];
+        ok('…a scroll, being used up, half its rarity’s price (rare: 2,000 gp)', !!sc && sc.value === '2,000 gp', sc && sc.value);
+        S._priceEdition = () => '2014';
+        ok('2014: no price is made up for a magic item (the book gives a range)', val('Bag of Holding') === '' && val('Rope') === '1 gp');
+        S._priceEdition = kpe;
+        // the circle
+        L._loot = { cp: 0, sp: 0, ep: 0, gp: 0, pp: 0, items: [{ id: 'r448a', name: 'r448 A', qty: 1, value: '1 gp', assignedTo: null }, { id: 'r448b', name: 'r448 B', qty: 1, value: '', assignedTo: null }, { id: 'r448c', name: 'r448 C', qty: 1, value: '2 gp', assignedTo: null }], tabGroups: [] };
+        L._save(); L._render(); await sleep(20);
+        ok('the paid/collected circle is gone from the rows', !L._body.querySelector('[data-lact="paid"], .loot-paid-btn'));
+        // moving
+        let menu = null; window.showContextMenu = (x, y, items) => { menu = items; };
+        const row = k => L._body.querySelector('.loot-item[data-i="' + k + '"]');
+        row(2).dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true, clientX: 40, clientY: 40 }));
+        const up = menu && menu.find(m => m.label === 'Move up');
+        ok('the last row’s menu: Move up and Move to the top (no Move down)', !!up && menu.some(m => m.label === 'Move to the top') && !menu.some(m => m.label === 'Move down'));
+        up.onClick(); await sleep(20);
+        ok('…Move up: C is second', L._loot.items.map(x => x.name.slice(-1)).join('') === 'ACB');
+        menu = null; row(2).dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true, clientX: 40, clientY: 40 }));
+        menu.find(m => m.label === 'Move to the top').onClick(); await sleep(20);
+        ok('…Move to the top, from the bottom: B first', L._loot.items.map(x => x.name.slice(-1)).join('') === 'BAC');
+        sktUndo(); await sleep(40);
+        ok('…and a move can be undone', L._loot.items.map(x => x.name.slice(-1)).join('') === 'ACB');
+        menu = null; row(2).dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true, clientX: 40, clientY: 40 }));
+        ok('a row with no value can still be moved', !!menu && menu.some(m => m.label === 'Move up'));
+      } catch(e){ ok('round 448 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
+      finally {
+        window.showToast = kt; window.showContextMenu = kcm; if (S && kpe) S._priceEdition = kpe;
         if (keep){ L._loot = JSON.parse(keep); L._save(); }
         try { closePanel('loot'); } catch(e){}
       }
