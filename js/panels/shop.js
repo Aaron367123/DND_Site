@@ -116,17 +116,12 @@ registerPanel('shop',{
       const i = +btn.dataset.idx;
       const inv = state.shop?.inventory; if (!inv || !inv[i]) return;
       if ((inv[i].stock||0) <= 0) return;
-      inv[i].stock = inv[i].stock - 1;
-      save();
-      // Mirror to the Loot tracker if it has been opened at least once this
-      // session (which initialised its localStorage). Writes directly to
-      // localStorage so a closed panel still receives the entry.
-      this._pushToLoot(inv[i]);
+      // Paid from the party's coins in the Loot tracker, into its party loot;
+      // the stock goes down in the same step, so one Undo puts both back.
+      const it = inv[i];
+      const r = this._pushToLoot(it, () => { it.stock = (it.stock || 0) - 1; save(); });
+      if (!r.ok){ if (typeof showToast === 'function') showToast(r.why); return; }
       const sd = b.querySelector('#shop-display'); if (sd){ sd.innerHTML = this._renderDisplay(); this._wireDisplay(); }
-      if (typeof showToast === 'function'){
-        const left = inv[i].stock;
-        showToast('Bought ' + inv[i].name + (left>0 ? ' · ' + left + ' left' : ' · last one'));
-      }
     }));
     b.querySelectorAll('[data-act="show-more-inv"]').forEach(btn => btn.addEventListener('click', () => {
       const all = btn.dataset.mode === 'all';
@@ -200,28 +195,17 @@ registerPanel('shop',{
     document.addEventListener('keydown', onKey);
   },
 
-  // Add a purchased item to the Loot tracker. Reads-merges-writes localStorage
-  // so it works whether the Loot panel is mounted or not, and triggers a
-  // re-render if it is.
-  _pushToLoot(item){
-    try {
-      const cur = JSON.parse(localStorage.getItem('skt-loot-v1') || '{"cp":0,"sp":0,"ep":0,"gp":0,"pp":0,"items":[],"tabGroups":[]}');
-      if (!Array.isArray(cur.items)) cur.items = [];
-      const newId = (typeof uid === 'function' ? uid() : String(Math.random()).slice(2,9));
-      cur.items.push({
-        id: newId,
-        name: item.name,
-        qty: 1,
-        value: this._fmtPrice(item.price),
-        assignedTo: null,
-      });
-      saveJson('skt-loot-v1', cur, 'loot');
-      // If the panel is mounted, refresh it directly from the stored value.
-      if (panelDefs.loot && panelDefs.loot._loot){
-        panelDefs.loot._loot = cur;
-        panelDefs.loot._render?.();
-      }
-    } catch(e){ console.warn('[shop] failed to push to loot', e); }
+  // A purchase: paid from the party's coins, into the Loot tracker's party
+  // loot (see sktLootBuy). `also` is the stock going down, in the same undo.
+  _pushToLoot(item, also){
+    if (typeof sktLootBuy !== 'function') return { ok: false, why: 'The Loot tracker isn’t loaded' };
+    const sym = (state.settings && state.settings.currencySymbol) || 'gp';
+    const r = sktLootBuy(item.name, item.price, { value: sym === 'gp' ? this._fmtPrice(item.price) : undefined, weight: item.weight, also });
+    if (r.ok && typeof showToast === 'function'){
+      const left = item.stock || 0;
+      showToast(r.label + ' from the party’s coins' + (left > 0 ? ' · ' + left + ' left' : ' · the last one'));
+    }
+    return r;
   },
 
   // Pricing settings popover — currency symbol, price jitter, rounding step.
@@ -562,7 +546,7 @@ registerPanel('shop',{
         <td>${this._fmtPrice(item.price)}</td>
         <td>${out ? '<span style="color:var(--text-dim);font-size:var(--fs-sm)">out</span>' : '×'+item.stock}</td>
         <td style="text-align:right;padding-right:14px">
-          <button class="btn small" data-act="buy-item" data-idx="${i}" ${out?'disabled title="Out of stock"':'title="Buy one (decrements stock, adds to Loot tracker)"'} style="padding:1px 8px;font-size:var(--fs-sm)">Buy</button>
+          <button class="btn small" data-act="buy-item" data-idx="${i}" ${out?'disabled title="Out of stock"':'title="Buy one: paid from the party’s coins in the Loot tracker, into its party loot"'} style="padding:1px 8px;font-size:var(--fs-sm)">Buy</button>
         </td>
       </tr>`;
     }).join('');

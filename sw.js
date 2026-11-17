@@ -34,7 +34,7 @@
  */
 'use strict';
 
-const BUILD = '40a11db2ff';
+const BUILD = 'f4e88552e0';
 const PRECACHE = [
   'skt-workspace.html',
   'styles/main.css?v=3272df2491',
@@ -49,7 +49,7 @@ const PRECACHE = [
   'js/core/utils.js?v=d8d669e443',
   'js/ui/dice-fx.js?v=1acff2694d',
   'js/core/state.js?v=8030e53453',
-  'js/core/undo.js?v=63ed223198',
+  'js/core/undo.js?v=97bc094c01',
   'js/features/roll-requests.js?v=2218dcc003',
   'js/features/monster-picker.js?v=c742f66779',
   'js/core/window-manager.js?v=e2aed9109b',
@@ -59,7 +59,7 @@ const PRECACHE = [
   'js/generated/rules.js?v=8efb8beae9',
   'js/panels/turnview.js?v=db58c086d9',
   'js/panels/party.js?v=61af31ece1',
-  'js/panels/shop.js?v=8f95de4cf4',
+  'js/panels/shop.js?v=17d3872e4c',
   'js/sync/notes-sync.js?v=7ee89969f6',
   'js/sync/dropbox-config.js?v=ccf8533d50',
   'js/sync/dropbox-sync.js?v=c4897e8ffa',
@@ -78,7 +78,7 @@ const PRECACHE = [
   'js/panels/books.js?v=a1261d751d',
   'js/panels/library.js?v=d41e1e85e4',
   'js/panels/npc-generator.js?v=ef379c47ad',
-  'js/panels/loot.js?v=cd9dd85048',
+  'js/panels/loot.js?v=f04339ee50',
   'js/panels/encounter.js?v=8235f7461d',
   'js/panels/soundboard.js?v=0381935289',
   'js/panels/weather.js?v=be4fc599ab',

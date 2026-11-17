@@ -121,7 +121,9 @@ function _sktRevertKey(key, target, other){
 
 function _sktUndoRedraw(){
   if (typeof panelDefs !== 'undefined'){
-    ['combat', 'party', 'turnview'].forEach(id => {
+    // (the shop: a purchase undone put its stock back, and the window kept
+    // showing the old count)
+    ['combat', 'party', 'turnview', 'shop'].forEach(id => {
       const d = panelDefs[id];
       if (d && d._body && typeof d._render === 'function'){ try { d._render(); } catch(e){} }
     });

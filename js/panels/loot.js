@@ -5,6 +5,58 @@
 // (a character's id, a group's, or null for the party loot). The Loot window
 // and the sheet's "Claim one" share it. A new row and a smaller count: two
 // devices doing it at once both count.
+// Pay `cost` copper's worth out of a purse: gold first, then silver, copper,
+// electrum, platinum; when nothing smaller is left to make it up, one bigger
+// coin is broken and the change comes back as gold, silver and copper.
+// The new purse, or null when there isn't enough.
+function sktLootPay(purse, cost){
+  const V = { pp: 1000, gp: 100, ep: 50, sp: 10, cp: 1 }, have = {};
+  for (const k in V) have[k] = Math.max(0, parseInt(purse && purse[k]) || 0);
+  cost = Math.max(0, Math.round(+cost || 0));
+  if (Object.keys(V).reduce((t, k) => t + have[k] * V[k], 0) < cost) return null;
+  let rem = cost;
+  for (const k of ['gp', 'sp', 'cp', 'ep', 'pp']){ const n = Math.min(have[k], Math.floor(rem / V[k])); have[k] -= n; rem -= n * V[k]; }
+  if (rem > 0){
+    // every coin left is worth more than what's still owed: break the smallest
+    const k = ['cp', 'sp', 'ep', 'gp', 'pp'].find(c => have[c] > 0);
+    have[k]--; let change = V[k] - rem;
+    for (const c of ['gp', 'sp', 'cp']){ const n = Math.floor(change / V[c]); have[c] += n; change -= n * V[c]; }
+  }
+  return have;
+}
+// Bought in the Shop: paid from the party's coins, into the party loot (one
+// more on the stack when it's already there). The Shop's Buy added the item
+// and took no money at all (Aaron's call, 2026-11-17: the party's coins pay).
+// `also` runs inside the same undo step (the Shop's stock). { ok, why }.
+function sktLootBuy(name, priceGp, opts){
+  opts = opts || {};
+  const P = typeof panelDefs !== 'undefined' && panelDefs.loot;
+  let cur = P && P._loot;
+  if (!cur){ try { cur = JSON.parse(localStorage.getItem('skt-loot-v1') || 'null'); } catch(e){ cur = null; } }
+  if (!cur || typeof cur !== 'object') cur = { cp: 0, sp: 0, ep: 0, gp: 0, pp: 0, items: [], tabGroups: [] };
+  if (!Array.isArray(cur.items)) cur.items = [];
+  const cost = Math.max(0, Math.round((+priceGp || 0) * 100));
+  const paid = sktLootPay(cur, cost);
+  const coins = c => ['pp', 'gp', 'ep', 'sp', 'cp'].filter(k => +c[k]).map(k => (+c[k]).toLocaleString() + ' ' + k).join(' ') || 'nothing';
+  if (!paid) return { ok: false, why: 'The party has ' + coins(cur) + ' — not enough for ' + name + ' (' + (opts.value || sktGp(cost / 100) + ' gp') + ')' };
+  const value = opts.value || (cost ? sktGp(cost / 100) + ' gp' : '');
+  const run = () => {
+    Object.assign(cur, paid);
+    const same = cur.items.find(x => !x.assignedTo && String(x.name).toLowerCase() === String(name).toLowerCase() && String(x.value || '') === value);
+    if (same) same.qty = (parseInt(same.qty) || 1) + 1;
+    else {
+      const it = { id: uid(), name, qty: 1, value, assignedTo: null };
+      if (opts.weight != null && !isNaN(+opts.weight)) it.weight = +opts.weight;
+      cur.items.push(it);
+    }
+    if (typeof opts.also === 'function') opts.also();
+    saveJson('skt-loot-v1', cur, 'loot');
+    if (P){ P._loot = cur; if (P._body) P._render(); P._tellSheet(); }
+  };
+  const label = 'Bought ' + name + (cost ? ' for ' + value : '');
+  if (typeof sktUndoable === 'function') sktUndoable(label, run, { keys: ['skt-loot-v1', 'skt-shop-v1'] }); else run();
+  return { ok: true, label };
+}
 // Gold as it reads elsewhere in the window: "5,000", "12.5" — not "5000.00".
 function sktGp(n){ return (+n || 0).toLocaleString(undefined, { maximumFractionDigits: 2 }); }
 function sktLootSplit(L, id, to){

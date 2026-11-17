@@ -25039,6 +25039,50 @@ for (const cls of Object.keys(rule)) for (let L = 1; L <= 20; L++) for (const sc
         try { closePanel('loot'); } catch(e){}
       }
     }
+    // -- Round 458: the Shop's Buy pays from the party's coins in the Loot tracker (it took no money at all), making change; not enough: it says so and buys nothing; a second one stacks; one Undo puts the coins, the item and the stock back; an open sheet's party loot shows it --
+    if (!PLAYER){
+      ok('pay: 2 gp 5 sp out of 10 gp → 7 gp 5 sp', JSON.stringify(sktLootPay({ gp: 10 }, 250)) === JSON.stringify({ pp: 0, gp: 7, ep: 0, sp: 5, cp: 0 }), JSON.stringify(sktLootPay({ gp: 10 }, 250)));
+      ok('…50 gp out of 1,729 sp → 1,229 sp, the gold untouched when there is none', sktLootPay({ sp: 1729 }, 5000).sp === 1229);
+      ok('…1 gp 5 sp out of one platinum → 8 gp 5 sp change', (r => r.pp === 0 && r.gp === 8 && r.sp === 5)(sktLootPay({ pp: 1 }, 150)));
+      ok('…5 cp can’t pay 1 sp', sktLootPay({ cp: 5 }, 10) === null);
+      const L = panelDefs.loot, S = panelDefs.shop;
+      let keepLs = null, keepShop = null, toast = null; const kt = window.showToast;
+      try {
+        window.showToast = m => { toast = m; };
+        keepLs = localStorage.getItem('skt-loot-v1'); keepShop = JSON.stringify(state.shop || null);
+        localStorage.setItem('skt-loot-v1', JSON.stringify({ cp: 0, sp: 0, ep: 0, gp: 2, pp: 0, tabGroups: [], items: [] })); L._loot = null;
+        state.shop = { name: 'r458 Shop', type: 'General', tone: '', aesthetic: '', keeper: {}, quirks: [], meta: { assortment: 'Standard', economy: 'Normal', price: 'Normal' },
+          inventory: [{ name: 'r458 Rope', category: 'Gear', rarity: 'Common', price: 1.5, stock: 3, weight: 10 }] };
+        save();
+        openPanel('loot'); await sleep(250);
+        const A = state.party.filter(p => !p.foe)[0];
+        openCharSheet(A.id, { tab: 'inventory' }); await sleep(250);
+        for (let i = 0; i < 60 && !(CS.gear && CS.R); i++){ await sleep(100); }
+        closePanel('shop'); openPanel('shop'); await sleep(300);
+        const buy = () => S._body.querySelector('[data-act="buy-item"][data-idx="0"]');
+        buy().click(); await sleep(60);
+        const rope = () => L._loot.items.filter(x => x.name === 'r458 Rope');
+        ok('Buy: 1 gp 5 sp from the party’s 2 gp — 5 sp left, the rope in the party loot at its price and weight, two in stock', L._loot.gp === 0 && L._loot.sp === 5 && rope().length === 1 && rope()[0].value === '1 gp 5 sp' && rope()[0].weight === 10 && !rope()[0].assignedTo && state.shop.inventory[0].stock === 2,
+           JSON.stringify([L._loot.gp, L._loot.sp, rope(), state.shop.inventory[0].stock]));
+        ok('…and on the open sheet’s party loot', [...document.querySelectorAll('#cs-root .cs-partylootitem')].some(r => /r458 Rope/.test(r.textContent)));
+        toast = null; buy().click(); await sleep(60);
+        ok('5 sp can’t buy a second: it says so and nothing changes', /not enough/.test(toast || '') && L._loot.sp === 5 && rope()[0].qty === 1 && state.shop.inventory[0].stock === 2, toast);
+        sktUndo(); await sleep(80);
+        const L2 = JSON.parse(localStorage.getItem('skt-loot-v1'));
+        ok('Undo: the 2 gp back, no rope, three in stock', L2.gp === 2 && !L2.items.some(x => x.name === 'r458 Rope') && state.shop.inventory[0].stock === 3, JSON.stringify([L2.gp, L2.items.length, state.shop.inventory[0].stock]));
+        ok('…and the Shop window shows three again', /×3/.test((S._body.querySelector('#shop-display') || S._body).textContent));
+        L._loot.gp = 10; L._save(); L._render();
+        buy().click(); await sleep(60); buy().click(); await sleep(60);
+        ok('two bought: one row of two (not two rows), 7 gp left', rope().length === 1 && rope()[0].qty === 2 && L._loot.gp === 7, JSON.stringify([rope(), L._loot.gp]));
+      } catch(e){ ok('round 458 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
+      finally {
+        window.showToast = kt;
+        try { if (typeof csClose === 'function' && CS) csClose(); } catch(e){}
+        state.shop = JSON.parse(keepShop); save();
+        if (keepLs != null){ localStorage.setItem('skt-loot-v1', keepLs); L._loot = null; }
+        try { closePanel('shop'); closePanel('loot'); } catch(e){}
+      }
+    }
     // -- Class features: represented, not just text ------------------------
     {
       try {
