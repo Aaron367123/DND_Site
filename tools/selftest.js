@@ -29338,6 +29338,28 @@ for (const cls of Object.keys(rule)) for (let L = 1; L <= 20; L++) for (const sc
       } catch(e){ ok('round 462 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
       finally { document.getElementById('pa-rest')?.remove(); state.party = JSON.parse(P0); save(); }
     }
+    // -- Round 463 (player): "turns until you" passes over a fallen monster, as the tracker does (it counted them) --
+    if (PLAYER){
+      const K0 = JSON.stringify(state.combatants || []), A0 = state.activeCombatantId, SH = JSON.stringify(state.sharedPanels || []);
+      try {
+        const me = paPc();
+        if (!me){ ok('player: a character for the turn strip', false, 'none'); }
+        else {
+          state.sharedPanels = [...new Set((state.sharedPanels || []).concat(['combat']))];
+          state.combatants = [
+            { id: 'r463a', name: 'r463 Ogre', hp: 30, hpMax: 59, initiative: 20 },
+            { id: 'r463b', name: 'r463 Goblin', hp: 0, hpMax: 7, initiative: 18 },
+            { id: 'r463c', name: 'r463 Wolf', hp: 11, hpMax: 11, initiative: 15 },
+            { id: 'r463d', name: 'r463 Orc', hp: 0, hpMax: 15, initiative: 12 },
+            { id: me.id, name: me.name, isPC: true, hp: me.hp, hpMax: me.hpMax, initiative: 10 }];
+          state.activeCombatantId = 'r463a'; save();
+          paRender(); await sleep(60);
+          const u = (document.querySelector('.pa-until') || {}).textContent || '';
+          ok('after the ogre: the wolf, then you — "2 turns until you" (it said 4, counting the fallen goblin and orc)', u === '2 turns until you', u);
+        }
+      } catch(e){ ok('round 463 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
+      finally { state.combatants = JSON.parse(K0); state.activeCombatantId = A0; state.sharedPanels = JSON.parse(SH); save(); paRender(); }
+    }
   }
 
   // ══════════════════════════════════════════════════════════ mobile / phone

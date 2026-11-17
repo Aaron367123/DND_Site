@@ -730,10 +730,14 @@ function paRenderTurn(){
   const mine = !!(meC && cur && cur.id === meC.id);
   // Turns until yours, counting round the order — the number a player is
   // actually computing in their head while they wait (the turns they can see).
+  // (Not the fallen: the tracker passes over a monster at 0 HP, and they were
+  // counted — "9 turns until you" with three of them dead in the order.)
+  const C = typeof panelDefs !== 'undefined' && panelDefs.combat;
+  const noTurn = c => !!(C && typeof C._noTurn === 'function' && C._noTurn(c));
   let until = null;
   if (meC && !mine && i >= 0){
     let n = 0;
-    for (let k = 1; k <= all.length; k++){ const c = all[(i + k) % all.length]; if (c.id === meC.id){ until = n + 1; break; } if (!hid.has(c.id)) n++; }
+    for (let k = 1; k <= all.length; k++){ const c = all[(i + k) % all.length]; if (c.id === meC.id){ until = n + 1; break; } if (!hid.has(c.id) && !noTurn(c)) n++; }
   }
   const pips = list.map(c => {
     const hp = paHpText(c);
