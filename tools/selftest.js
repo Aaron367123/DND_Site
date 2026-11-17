@@ -24938,6 +24938,42 @@ for (const cls of Object.keys(rule)) for (let L = 1; L <= 20; L++) for (const sc
         try { closePanel('loot'); } catch(e){}
       }
     }
+    // -- Round 455: loot — an item with no value can take the book's price from its menu (a Ring of the Ram, added before magic items had one, counted for nothing); a spell scroll is priced by its spell's level --
+    if (!PLAYER){
+      const L = panelDefs.loot, S = panelDefs.shop;
+      let keepLs = null; const kt = window.showToast, kcm = window.showContextMenu, kpe = S && S._priceEdition;
+      try {
+        for (let i = 0; i < 40 && !(typeof _5eLoaded !== 'undefined' && _5eLoaded); i++) await sleep(250);
+        window.showToast = () => {};
+        S._priceEdition = () => '2024';
+        openPanel('loot'); await sleep(300);
+        keepLs = localStorage.getItem('skt-loot-v1');
+        L._loot = { cp: 0, sp: 0, ep: 0, gp: 0, pp: 0, tabGroups: [], items: [
+          { id: 'r455a', name: 'Ring of the Ram', qty: 1, value: '', assignedTo: null },
+          { id: 'r455b', name: 'Spell Scroll (Charm Person)', qty: 2, value: '', assignedTo: null },
+          { id: 'r455c', name: 'r455 Drufi Horn', qty: 1, value: '', assignedTo: null }] };
+        L._save(); L._render(); await sleep(20);
+        let menu = null; window.showContextMenu = (x, y, items) => { menu = items; };
+        const open = id => { menu = null; L._body.querySelector('.loot-item[data-id="' + id + '"]').dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true, clientX: 40, clientY: 40 })); return menu || []; };
+        const m1 = open('r455a');
+        ok('a Ring of the Ram with no value: its menu offers the book’s price, 4,000 gp', m1[0] && m1[0].label === 'Use the book’s price — 4,000 gp' && !m1[0].disabled, m1[0] && m1[0].label);
+        m1[0].onClick(); await sleep(30);
+        ok('…taken: it is worth 4,000 gp, and it can be sold', L._loot.items[0].value === '4,000 gp' && open('r455a').some(m => /^Sell for half — 2,000 gp/.test(m.label)));
+        sktUndo(); await sleep(40);
+        ok('…and Undo takes it back off', L._loot.items[0].value === '');
+        ok('Spell Scroll (Charm Person): a 1st-level scroll, 50 gp', L._bookValue('Spell Scroll (Charm Person)') === '50 gp' && open('r455b')[0].label === 'Use the book’s price — 50 gp', L._bookValue('Spell Scroll (Charm Person)'));
+        ok('…Scroll of Fireball: 3rd level, 200 gp', L._bookValue('Scroll of Fireball') === '200 gp', L._bookValue('Scroll of Fireball'));
+        const m3 = open('r455c');
+        ok('the party’s own item: nothing to take, as before', m3[0] && m3[0].disabled && /No value/.test(m3[0].label));
+        S._priceEdition = () => '2014';
+        ok('a 2014 table: no scroll price made up', L._bookValue('Spell Scroll (Charm Person)') === '');
+      } catch(e){ ok('round 455 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
+      finally {
+        window.showToast = kt; window.showContextMenu = kcm; if (S && kpe) S._priceEdition = kpe;
+        if (keepLs != null){ localStorage.setItem('skt-loot-v1', keepLs); L._loot = null; }
+        try { closePanel('loot'); } catch(e){}
+      }
+    }
     // -- Class features: represented, not just text ------------------------
     {
       try {

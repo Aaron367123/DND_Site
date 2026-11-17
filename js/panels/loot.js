@@ -462,6 +462,22 @@ registerPanel('loot',{
     const p = S._magicPriceForRarity(key, t === 'P' || t === 'SC' || t === 'A');
     return p ? p.toLocaleString() + ' gp' : '';
   },
+  // What the book says it's worth, by its name: the catalogue's price (a
+  // magic item's by rarity), or a spell scroll's by its spell's level —
+  // "Spell Scroll (Charm Person)" is a 1st-level scroll, 50 gp. '' if none.
+  _bookValue(name){
+    const n = String(name || '').trim(), low = n.toLowerCase(); if (!n) return '';
+    const exact = q => this._searchItems(q).find(d => d.name.toLowerCase() === q.toLowerCase() && this._parseGp(d.value) > 0);
+    const hit = exact(n); if (hit) return hit.value;
+    const S = typeof panelDefs !== 'undefined' && panelDefs.shop;
+    const m = /^spell scroll\s*\((.+)\)$/i.exec(n) || /^scroll of (.+)$/i.exec(n);
+    if (!m || !S || typeof S._priceEdition !== 'function' || S._priceEdition() !== '2024' || !Array.isArray(_5eData)) return '';
+    const sp = _5eData.find(d => d.cat === 'spell' && d.name.toLowerCase() === m[1].trim().toLowerCase() && d._raw && d._raw.level != null);
+    if (!sp) return '';
+    const lvl = +sp._raw.level, row = exact(lvl === 0 ? 'Spell Scroll (Cantrip)' : 'Spell Scroll (Level ' + lvl + ')');
+    if (row) return row.value;
+    return this._magicValue(lvl <= 1 ? 'common' : lvl <= 3 ? 'uncommon' : lvl <= 5 ? 'rare' : lvl <= 8 ? 'very rare' : 'legendary', { type: 'SC' });
+  },
   _isMagicRarity(r){ r = String(r || '').toLowerCase(); return !!r && r !== 'none' && r !== 'unknown' && r !== 'varies'; },
   // ── 5e item search ───────────────────────────────────────────────────────────
   _searchItems(q){
@@ -929,7 +945,14 @@ registerPanel('loot',{
   _rowMenu(i, x, y){
     const it = this._loot.items[i]; if (!it || !this._canEdit(it) || typeof showContextMenu !== 'function') return;
     const each = this._parseGp(it.value), n = Math.max(1, parseInt(it.qty) || 1);
-    if (!(each > 0)){ showContextMenu(x, y, [{ label: 'No value to sell it for — type one in', disabled: true, onClick: () => {} }].concat(this._notesItem(i), this._splitItems(i), this._moveItems(i))); return; }
+    if (!(each > 0)){
+      // Added before it had a price (a Ring of the Ram, a Potion of Longevity:
+      // nothing, so they counted for nothing and couldn't be sold) — the book's.
+      const bv = this._bookValue(it.name);
+      const first = bv ? { label: 'Use the book’s price — ' + bv, onClick: () => { const x = this._loot.items.find(y => y.id === it.id) || it; this._undoable(x.name + ' — ' + bv, () => { x.value = bv; }); } }
+                       : { label: 'No value to sell it for — type one in', disabled: true, onClick: () => {} };
+      showContextMenu(x, y, [first].concat(this._notesItem(i), this._splitItems(i), this._moveItems(i))); return;
+    }
     const items = [
       { label: 'Sell' + (n > 1 ? ' all ' + n : '') + ' for half — ' + this._fmtCoins(this._toCoins(each * n / 2)), onClick: () => this._sell(i, 0.5, false) },
       { label: 'Sell' + (n > 1 ? ' all ' + n : '') + ' for full value — ' + this._fmtCoins(this._toCoins(each * n)), onClick: () => this._sell(i, 1, false) },
