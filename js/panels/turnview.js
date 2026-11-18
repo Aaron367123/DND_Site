@@ -2245,6 +2245,12 @@ registerPanel('turnview', {
   //
   // The pool is the tracker's own legendaryUsed/legendaryMax, so spending here
   // empties the same pips the Combat Tracker draws.
+  // "The dragon can't take this action again until the start of its next
+  // turn" — 95 legendary actions say so (most of the 2024 Monster Manual's):
+  // once between its turns, however many actions are left. It could take
+  // Sonic Boom three times running.
+  _legendaryOnce(a){ return /can.t take this action again until the start of (?:its|his|her|their) next turn/i.test(String((a && a.text) || '')); },
+  _legendaryOnceUsed(c, a){ return !!(a && (c.legOnce || []).includes(a.name)); },
   _legendaryRows(){
     const cur = this._turnOf();
     return this._order()
@@ -2406,9 +2412,9 @@ registerPanel('turnview', {
         `<span class="tv-pip-o ${i < r.left ? '' : 'off'}"></span>`).join('');
       const btns = r.acts.map((a, ai) => {
         const cost = this._legendaryCost(a.name);
-        const over = cost > r.left;
+        const once = this._legendaryOnceUsed(r.c, a), over = cost > r.left || once;
         return `<button class="btn ${over ? 'tv-cant' : ''}" data-tv="legend" data-id="${esc(r.c.id)}"
-                        data-ai="${ai}" ${over ? 'disabled' : ''} title="${esc(a.text)}">
+                        data-ai="${ai}" ${over ? 'disabled' : ''} title="${esc((once ? 'Taken — not again until the start of its next turn. ' : '') + a.text)}">
           ${esc(this._legendaryBare(a.name))}${cost > 1 ? ` <span class="tv-react-cost">· ${cost}</span>` : ''}
         </button>`;
       }).join('');
@@ -2426,7 +2432,10 @@ registerPanel('turnview', {
     const cost = this._legendaryCost(a.name);
     const left = (c.legendaryMax || 0) - (c.legendaryUsed || 0);
     if (cost > left) return;
+    if (this._legendaryOnceUsed(c, a)) return;
+    this._snapshot(`${c.name} · ${this._legendaryBare(a.name)}`);
     c.legendaryUsed = (c.legendaryUsed || 0) + cost;
+    if (this._legendaryOnce(a)) c.legOnce = (c.legOnce || []).concat([a.name]);
     const bare = this._legendaryBare(a.name);
     this._log.unshift(`<strong>${esc(c.name)}</strong> legendary — ${esc(bare)} <span style="opacity:.7">· ${c.legendaryMax - c.legendaryUsed}/${c.legendaryMax} left</span>`);
     // What it rolls runs as a queue: a target clicked for each step (a save
@@ -3175,7 +3184,7 @@ registerPanel('turnview', {
         // (a Life Drain's lowered maximum, and a condition's timer)
         hpMax:c.hpMax, hpMaxNormal:c.hpMaxNormal, hpMaxNote:c.hpMaxNote,
         condTimers: c.condTimers ? JSON.parse(JSON.stringify(c.condTimers)) : undefined,
-        distracted:c.distracted ? {...c.distracted} : undefined, marks:c.marks ? JSON.parse(JSON.stringify(c.marks)) : undefined, legendaryUsed:c.legendaryUsed, lrUsed:c.lrUsed, concentration:c.concentration, vex:c.vex ? {...c.vex} : undefined, sapped:c.sapped ? {...c.sapped} : undefined, slowed:c.slowed ? {...c.slowed} : undefined, charmedBy:c.charmedBy ? {...c.charmedBy} : undefined, frightenedBy:c.frightenedBy ? {...c.frightenedBy} : undefined, extraDmgTurn:c.extraDmgTurn, onceTurn:c.onceTurn ? {...c.onceTurn} : undefined,
+        distracted:c.distracted ? {...c.distracted} : undefined, marks:c.marks ? JSON.parse(JSON.stringify(c.marks)) : undefined, legendaryUsed:c.legendaryUsed, legOnce:c.legOnce ? c.legOnce.slice() : undefined, lrUsed:c.lrUsed, concentration:c.concentration, vex:c.vex ? {...c.vex} : undefined, sapped:c.sapped ? {...c.sapped} : undefined, slowed:c.slowed ? {...c.slowed} : undefined, charmedBy:c.charmedBy ? {...c.charmedBy} : undefined, frightenedBy:c.frightenedBy ? {...c.frightenedBy} : undefined, extraDmgTurn:c.extraDmgTurn, onceTurn:c.onceTurn ? {...c.onceTurn} : undefined,
         deathSaves: c.deathSaves ? {...c.deathSaves} : c.deathSaves,
         rechargeSpent: (c.rechargeSpent || []).slice(),
         usesSpent: c.usesSpent ? {...c.usesSpent} : undefined, usesRound: c.usesRound ? {...c.usesRound} : undefined, slotsUsed: c.slotsUsed ? {...c.slotsUsed} : undefined,

@@ -25561,6 +25561,56 @@ for (const cls of Object.keys(rule)) for (let L = 1; L <= 20; L++) for (const sc
       } catch(e){ ok('round 485 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
       finally { BM._tokens = tk0; T._mapCache = null; state.combatants = JSON.parse(K0); state.activeCombatantId = A0; save(); closePanel('turnview'); }
     }
+    // -- Round 486: legendary actions — "can't take this action again until the start of its next turn" (95 of them, most of the 2024 Monster Manual's) is once between its turns: a 2024 blue dragon's Sonic Boom was takeable three times running; back at its turn; using one can be undone --
+    if (!PLAYER){
+      const K0 = JSON.stringify(state.combatants || []), A0 = state.activeCombatantId, R0 = state.combatRound;
+      const T = panelDefs.turnview, C = panelDefs.combat;
+      try {
+        for (let n = 0; n < 40 && !(typeof _5eLoaded !== 'undefined' && _5eLoaded); n++) await sleep(250);
+        const pc = state.combatants.find(c => c.isPC);
+        const d = { id: 'drag486', name: 'Adult Blue Dragon', baseName: 'Adult Blue Dragon', _slug: 'adult-blue-dragon', _source: 'XMM', isPC: false, cls: 'enemy',
+                    hp: 212, hpMax: 212, ac: 19, initiative: 1, conditions: [], legendaryMax: 3, legendaryUsed: 0 };
+        state.combatants = state.combatants.filter(c => c.isPC).map(c => Object.assign({}, c, { initiative: 20 })).concat([d]);
+        state.activeCombatantId = pc.id; state.combatRound = 2; save();
+        openPanel('turnview'); await sleep(400); T._render(); await sleep(150);
+        const btn = n => [...T._body.querySelectorAll('[data-tv="legend"]')].find(b => new RegExp(n).test(b.textContent));
+        const D = () => state.combatants.find(c => c.id === d.id);
+        btn('Sonic').click(); await sleep(150); T._queue = null; T._render(); await sleep(80);
+        ok('Sonic Boom taken: not again until its next turn (it was takeable three times)', btn('Sonic').disabled && D().legendaryUsed === 1 && /not again until the start of its next turn/.test(btn('Sonic').title), btn('Sonic').disabled + ' ' + D().legendaryUsed);
+        T._useLegendary(d.id, +btn('Sonic').dataset.ai); await sleep(80); T._queue = null;
+        ok('…asked for again: nothing spent', D().legendaryUsed === 1, D().legendaryUsed);
+        btn('Tail').click(); await sleep(120); T._queue = null; T._render(); await sleep(80);
+        ok('…Tail Swipe has no such limit: still there after one', !btn('Tail').disabled && D().legendaryUsed === 2);
+        sktUndo(); await sleep(120); T._render(); await sleep(80);
+        ok('…undo takes back the Tail Swipe', D().legendaryUsed === 1, D().legendaryUsed);
+        // The dragon's own turn starts: all of it back.
+        C._nextTurn(); await sleep(150);
+        for (let i = 0; i < 6 && state.activeCombatantId !== d.id; i++){ C._nextTurn(); await sleep(60); }
+        ok('…its turn: Sonic Boom is back with the rest', state.activeCombatantId === d.id && !(D().legOnce || []).length && D().legendaryUsed === 0, JSON.stringify([state.activeCombatantId, D().legOnce, D().legendaryUsed]));
+      } catch(e){ ok('round 486 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
+      finally { T._queue = null; state.combatants = JSON.parse(K0); state.activeCombatantId = A0; state.combatRound = R0; save(); closePanel('turnview'); }
+    }
+    // -- Round 487: between fights, damage from the Party tracker to someone concentrating brings the same card (it was a 4.5 s toast): Roll, Kept, Lost — "Lost" ends the spell and the phone's question --
+    if (!PLAYER){
+      const P0 = JSON.stringify(state.party), K0 = JSON.stringify(state.combatants || []), A0 = state.activeCombatantId;
+      const C = panelDefs.combat, S0 = (C._condSaves || []).slice();
+      try {
+        closePanel('turnview'); await sleep(50);
+        C._condSaves = [];
+        state.combatants = []; state.activeCombatantId = null;
+        const pi = state.party.findIndex(p => !p.foe);
+        state.party[pi] = Object.assign({}, state.party[pi], { hp: 30, hpMax: Math.max(30, state.party[pi].hpMax || 30), concentration: 'Bless', concCheck: null, tempHp: 0 }); save();
+        openPanel('party'); await sleep(200);
+        panelDefs.party._applyHpDelta(pi, -12, 'slashing'); await sleep(150);
+        const card = [...document.querySelectorAll('#cond-save-stack .cond-save')].find(k => /to keep Bless/.test(k.textContent));
+        ok('between fights: a card, DC 10 for 12 damage, with its roll', !!card && /CON save DC 10 to keep Bless/.test(card.textContent) && !!card.querySelector('[data-csp="roll"]') && !!state.party[pi].concCheck, card ? card.textContent.replace(/\s+/g, ' ') : 'no card');
+        if (card){
+          card.querySelector('[data-csp="fail"]').click(); await sleep(150);
+          ok('…“Lost”: Bless ends, the phone’s question with it, the card gone', !state.party[pi].concentration && !state.party[pi].concCheck && !document.querySelector('#cond-save-stack .cond-save'), JSON.stringify([state.party[pi].concentration, state.party[pi].concCheck]));
+        }
+      } catch(e){ ok('round 487 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
+      finally { C._condSaves = S0; state.party = JSON.parse(P0); state.combatants = JSON.parse(K0); state.activeCombatantId = A0; save(); C._renderCondSaves(); }
+    }
     // -- Class features: represented, not just text ------------------------
     {
       try {

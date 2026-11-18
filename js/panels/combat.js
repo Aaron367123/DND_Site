@@ -1727,6 +1727,8 @@ registerPanel('combat',{
     // "The creature regains spent legendary actions at the start of its
     // turn." Same moment as the rest of its economy, so the same place.
     if (c.legendaryMax) c.legendaryUsed = 0;
+    // (and the ones it can take only once between its turns are back)
+    c.legOnce = undefined;
     this._tickCondTimers(c, 'start');
     this._tickByTimers(c, 'start');
     // A Shield cast through the Turn View on someone without a sheet switch
@@ -3064,8 +3066,16 @@ registerPanel('combat',{
   },
   // Still to be answered: the condition still on; the spell still held (and,
   // for a character, not already answered on their phone).
+  // Who a card is for: the creature in the fight — or, for a concentration
+  // save between fights (the Party tracker's damage), the character.
+  _condSaveWho(p){
+    const c = state.combatants.find(x => x.id === p.cid);
+    if (c || !p.conc) return c || null;
+    const m = (state.party || []).find(x => x && x.id === p.cid);
+    return m ? { id: m.id, isPC: true, name: m.name, conditions: m.conditions || [] } : null;
+  },
   _condSaveLive(p){
-    const c = state.combatants.find(x => x.id === p.cid); if (!c) return false;
+    const c = this._condSaveWho(p); if (!c) return false;
     if (p.conc){
       if (!c.isPC) return c.concentration === p.conc;
       const pc = state.party.find(x => x.id === c.id);
@@ -3102,7 +3112,7 @@ registerPanel('combat',{
   // The cards for the end-of-turn saves waiting (each answered by data-csp).
   _condSaveCards(){
     return (this._condSaves || []).filter(p => this._condSaveLive(p)).map(p => {
-      const c = state.combatants.find(x => x.id === p.cid);
+      const c = this._condSaveWho(p);
       const bonus = this.saveBonus(c, p.ab);
       if (p.conc) return `<div class="cond-save" data-k="${esc(p.k)}" role="alertdialog" aria-label="Concentration save">
         <div class="cond-save-what">🌀 <b>${esc(c.name)}</b> — took damage: CON save DC ${p.dc} to keep <b>${esc(p.conc)}</b></div>
@@ -3133,7 +3143,7 @@ registerPanel('combat',{
     const p = (this._condSaves || []).find(x => x.k === k); if (!p) return;
     const i = state.combatants.findIndex(c => c.id === p.cid);
     const c = state.combatants[i];
-    if (p.conc){ this._answerConcSave(p, c, how); return; }
+    if (p.conc){ this._answerConcSave(p, this._condSaveWho(p), how); return; }
     let passed = how === 'pass';
     if (how === 'rescue'){
       if (!c || !p.rolled) return;
