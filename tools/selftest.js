@@ -25690,6 +25690,36 @@ for (const cls of Object.keys(rule)) for (let L = 1; L <= 20; L++) for (const sc
         closePanel('battlemap'); await sleep(100); openPanel('battlemap'); await sleep(400);
       }
     }
+    // -- Round 494: a map turned a quarter can be scrolled to every corner (it was turned about its middle inside a box the unturned map's shape: its top stuck out above the scroll area, out of reach), a fitted view fits the turned shape, and a press still lands where it's pressed --
+    if (!PLAYER){
+      const B = panelDefs.battlemap, R0 = B._mapRotation, V0 = B._viewScale;
+      try {
+        openPanel('battlemap'); await sleep(400);
+        B._mapRotation = 90; B._render(); await sleep(150);
+        B._applyViewScale((B._viewScale || 1) * 3); await sleep(150);
+        const sc = B._body.querySelector('#map-scroll');
+        const box = () => { const a = B._body.querySelector('#map-stage').getBoundingClientRect(), s = sc.getBoundingClientRect(); return { l: a.left - s.left, t: a.top - s.top, r: a.right - s.left, b: a.bottom - s.top }; };
+        sc.scrollLeft = 0; sc.scrollTop = 0; await sleep(40);
+        const tl = box();
+        sc.scrollLeft = sc.scrollWidth; sc.scrollTop = sc.scrollHeight; await sleep(40);
+        const br = box();
+        ok('turned 90°, zoomed in: its top-left corner can be scrolled to', tl.l >= -1 && tl.t >= -1, JSON.stringify(tl));
+        ok('…and its bottom-right', br.r <= sc.clientWidth + 1 && br.b <= sc.clientHeight + 1, JSON.stringify(br) + ' box ' + sc.clientWidth + 'x' + sc.clientHeight);
+        // A press on a token maps to that token.
+        const t = (B._tokens || [])[0];
+        if (t){
+          const el = B._body.querySelector('.map-token[data-tid="' + CSS.escape(String(t.id)) + '"]');
+          el.scrollIntoView({ block: 'center', inline: 'center' }); await sleep(60);
+          const r = el.getBoundingClientRect(), p = B._stagePoint(r.left + r.width / 2, r.top + r.height / 2);
+          ok('…a press on a token lands on it', Math.hypot(p.x - t.x, p.y - t.y) < 3, Math.round(p.x) + ',' + Math.round(p.y) + ' vs ' + Math.round(t.x) + ',' + Math.round(t.y));
+        }
+        // Fitted, turned: the turned map's shape.
+        B._fitMapToView(); await sleep(100);
+        const f = box();
+        ok('…Fit: the whole turned map in view', f.l >= -1 && f.t >= -1 && f.r <= sc.clientWidth + 1 && f.b <= sc.clientHeight + 1 && (f.r - f.l >= sc.clientWidth * 0.9 || f.b - f.t >= sc.clientHeight * 0.9), JSON.stringify(f) + ' in ' + sc.clientWidth + 'x' + sc.clientHeight);
+      } catch(e){ ok('round 494 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
+      finally { B._mapRotation = R0 || 0; B._render(); B._applyViewScale(V0 || 1); }
+    }
     // -- Class features: represented, not just text ------------------------
     {
       try {

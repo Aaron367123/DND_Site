@@ -2343,8 +2343,10 @@ registerPanel('battlemap',{
       const zx0 = (scroll.scrollLeft - so.x) / vs,      zy0 = (scroll.scrollTop - so.y) / vs;
       const zx1 = (scroll.scrollLeft - so.x + vw) / vs, zy1 = (scroll.scrollTop - so.y + vh) / vs;
       let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+      // (the turned map's middle, in the box: its width and height swap on a quarter turn)
+      const q = this._rotQuarter(), BW = q ? H : W, BH = q ? W : H;
       for (const [zx, zy] of [[zx0,zy0],[zx1,zy0],[zx0,zy1],[zx1,zy1]]){
-        const d = this._stageDelta(zx - W / 2, zy - H / 2);
+        const d = this._stageDelta(zx - BW / 2, zy - BH / 2);
         const px = d.x + W / 2, py = d.y + H / 2;
         if (px < minX) minX = px; if (px > maxX) maxX = px;
         if (py < minY) minY = py; if (py > maxY) maxY = py;
@@ -3214,6 +3216,18 @@ registerPanel('battlemap',{
   // auto margins in a grid, main.css): the gap before the map, in scroll
   // units. Zero once the map is bigger than the window, so scrolling is as
   // it was. The zoom and pinch anchors measure from the map, not the corner.
+  // A quarter or three-quarter turn swaps the map's width and height. The
+  // stage was turned about its middle inside a box the size of the unturned
+  // map, so its turned outline stuck out past the box's top (and left) —
+  // that part of the map couldn't be scrolled to — and the box was the wrong
+  // shape for the rest. Turned about its corner and moved back onto the box
+  // instead, it fills exactly the turned size the box now has.
+  _rotQuarter(){ const r = (((this._mapRotation || 0) % 360) + 360) % 360; return r === 90 || r === 270; },
+  _rotTransform(){
+    const r = (((this._mapRotation || 0) % 360) + 360) % 360, cs = this._csScreen(), W = this._cols * cs, H = this._rows * cs;
+    const t = r === 90 ? [H, 0] : r === 180 ? [W, H] : r === 270 ? [0, W] : [0, 0];
+    return 'translate(' + t[0] + 'px,' + t[1] + 'px) rotate(' + r + 'deg)';
+  },
   _sizerOff(scrollEl){
     const sizer = scrollEl && scrollEl.querySelector('#map-sizer');
     return { x: sizer ? sizer.offsetLeft : 0, y: sizer ? sizer.offsetTop : 0 };
@@ -3226,7 +3240,9 @@ registerPanel('battlemap',{
     const zoomEl = b.querySelector('#map-zoom');
     const vs  = this._viewScale || 1;
     const cs  = this._csScreen();
-    const W   = this._cols * cs, H = this._rows * cs;
+    // (turned a quarter: the box is the turned map's shape)
+    const q = this._rotQuarter(), W = (q ? this._rows : this._cols) * cs, H = (q ? this._cols : this._rows) * cs;
+    if (this._mapRotation) stage.style.transform = this._rotTransform();
 
     if (zoomEl){
       zoomEl.style.transformOrigin = '0 0';
@@ -4801,7 +4817,9 @@ registerPanel('battlemap',{
     // swapped was framed for the one before (the Elfsong Tavern's 37×25
     // squares for Baldur's Gate's 16×10 — drawn at a third of the window).
     this._fitGridToBg();
-    const gw = this._cols * this._cellSize, gh = this._rows * this._cellSize;
+    // (turned a quarter, the map on screen is as tall as it was wide)
+    const q = this._rotQuarter();
+    const gw = (q ? this._rows : this._cols) * this._cellSize, gh = (q ? this._cols : this._rows) * this._cellSize;
     if (!gw || !gh) return;
     // Displayed size is grid × bgMapScale × viewScale (_applyBg/_setupMap
     // apply the first, the CSS transform the second), so viewScale = eff / bg.
@@ -5625,7 +5643,7 @@ registerPanel('battlemap',{
         + (this._pcsVisible?'':'hide-pcs ')
         + (this._npcsVisible?'':'hide-npcs ')
         + '" style="position:relative;display:inline-block'
-        + (this._mapRotation ? `;transform-origin:50% 50%;transform:rotate(${this._mapRotation}deg)` : '')
+        + (this._mapRotation ? ';transform-origin:0 0;transform:' + this._rotTransform() : '')
         + '">'
         +'<canvas id="map-canvas" style="display:block;position:absolute;left:0;top:0;z-index:1"></canvas>'
       +'</div>'   // #map-stage
@@ -6809,7 +6827,8 @@ registerPanel('battlemap',{
       }
       if (k === 'rotate'){
         this._mapRotation = ((this._mapRotation || 0) + 90) % 360;
-        this._saveMap(); this._render(); return;
+        // (a fitted view is fitted again: the map is the other shape now)
+        this._saveMap(); this._render(); if (this._isFitted) this._fitMapToView(); return;
       }
       if (k === 'fog-reveal' || k === 'fog-hide'){
         this._fogPaintMode = k === 'fog-hide' ? 'hide' : 'reveal';
