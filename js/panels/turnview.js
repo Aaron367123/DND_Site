@@ -85,6 +85,8 @@ registerPanel('turnview', {
       }
     } catch(e){}
     this._render();
+    // An end-of-turn save already up in its corner comes in here.
+    if ((panelDefs.combat?._condSaves || []).length) setTimeout(() => panelDefs.combat?._renderCondSaves?.(), 0);
     // Same-browser DM tab + player tab. Firebase covers separate devices;
     // this covers the second window on one laptop, where nothing goes over
     // the network at all.
@@ -103,7 +105,12 @@ registerPanel('turnview', {
   },
   // Drop the kept map node with the panel — it holds a decoded background,
   // and a closed panel should not.
-  unmount(){ this._body = null; this._pending = null; this._mapNode = null; },
+  // (its end-of-turn save cards go back to their corner)
+  unmount(){ this._body = null; this._pending = null; this._mapNode = null; setTimeout(() => panelDefs.combat?._renderCondSaves?.(), 0); },
+  _renderCondSaves(){
+    const C = panelDefs.combat, html = C && typeof C._condSaveCards === 'function' ? C._condSaveCards() : '';
+    return html ? `<div class="tv-condsaves">${html}</div>` : '';
+  },
 
   menuItems(){
     return [
@@ -2203,7 +2210,8 @@ registerPanel('turnview', {
       ['.tv-log',        () => this._renderLog()],
       ['.tv-targets',    () => this._renderTargets(c)],
       ['.tv-adjust',     () => this._renderAdjust()],
-      ['.tv-pendingwrap',() => this._renderPending()],
+      // (and the end-of-turn saves waiting — Hold Person, a rogue's poison)
+      ['.tv-pendingwrap',() => this._renderPending() + this._renderCondSaves()],
       ['.tv-turnline',   () => this._renderTurnline(c)],
       ['.tv-addrow',     () => this._editInit ? this._renderAddRow() : ''],
     ];
@@ -5602,6 +5610,9 @@ registerPanel('turnview', {
     b.addEventListener('scroll', e => { const s = e.target; if (s && s.classList && s.classList.contains('tv-init')) this._initEdges(s); }, true);
 
     b.addEventListener('click', e => {
+      // An end-of-turn save card: the tracker's own, answered there.
+      const csp = e.target.closest('[data-csp]');
+      if (csp && csp.closest('.tv-condsaves')){ panelDefs.combat?._answerCondSave?.(csp.closest('[data-k]').dataset.k, csp.dataset.csp, csp.dataset.r); return; }
       // The class row is the Party panel's own markup, which speaks data-act
       // rather than data-tv. Checked before the data-tv lookup because those
       // buttons carry no data-tv at all and would otherwise be inert.

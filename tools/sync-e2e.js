@@ -138,6 +138,20 @@ const window = {};
       const want = await pl.ev("return state.party.find(p=>p.id==='zoey').concentration || ''");
       return lat(await W(dm, "const z = state.party.find(p=>p.id==='zoey'); return !z.concCheck && (z.concentration || '') === " + JSON.stringify(want)));
     });
+    await step('DM in combat hits a concentrating PC → a DM card and the phone asks; the phone answers → the DM card goes', async () => {
+      const CARD = "document.querySelector('#cond-save-stack .cond-save, .tv-condsaves .cond-save')";
+      await dm.ev("const i = " + pidx('zoey') + "; state.party[i] = { ...state.party[i], hp: 30, concentration: 'Bless', concCheck: null }; "
+        + "window.__e2eAdded = !state.combatants.some(c => c.id === 'zoey'); if (window.__e2eAdded) state.combatants.push({ id: 'zoey', name: 'Zoey', isPC: true, hp: 30, hpMax: state.party[i].hpMax || 30, ac: state.party[i].ac || 12, initiative: 10, conditions: [] }); "
+        + "save(); const C = panelDefs.combat; C._applyHpDelta(state.combatants.findIndex(c => c.id === 'zoey'), -6, 'slashing'); return 1");
+      const card = await W(dm, "return !!" + CARD, 5000);
+      if (card == null) return { ok: false, why: 'no card on the DM screen' };
+      const t = await W(pl, "return !!document.getElementById('pa-conc-save')", 15000);
+      if (t == null) return { ok: false, why: 'the phone never asked' };
+      await pl.ev("document.querySelector('#pa-conc-save [data-pa-cs=\"roll\"]').click(); await new Promise(r=>setTimeout(r,300)); const end = document.querySelector('#pa-conc-save [data-pa-cs=\"end\"]'); if (end) end.click(); await new Promise(r=>setTimeout(r,200)); const okb = document.querySelector('#pa-conc-save [data-pa-cs=\"ok\"]'); if (okb) okb.click(); document.getElementById('pa-conc-save')?.remove(); return 1");
+      const gone = await W(dm, "return !" + CARD, 15000);
+      await dm.ev("if (window.__e2eAdded) state.combatants = state.combatants.filter(c => c.id !== 'zoey'); const i = " + pidx('zoey') + "; state.party[i] = { ...state.party[i], concentration: null, concCheck: null }; save(); return 1");
+      return lat(gone);
+    });
     await step('DM drops a PC between fights → phone rolls the death save → DM card shows it', async () => {
       await dm.ev("const i = " + pidx('zoey') + "; state.party[i] = { ...state.party[i], hp: 2, deathSaves: null, stable: false, dead: false }; save(); panelDefs.party._applyHpDelta(i, -5, 'slashing'); return 1");
       await pl.ev("paTab='you'; paRender(); return 1");

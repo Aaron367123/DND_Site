@@ -5056,6 +5056,11 @@ button.pa-cond.on{outline:2px solid currentColor; outline-offset:1px}
 .cond-timer{font-style:normal; opacity:.8; margin-left:2px}
 .cond-save-stack{position:fixed; right:16px; bottom:72px; z-index:9600; display:flex; flex-direction:column; gap:8px; max-width:min(380px, calc(100vw - 32px))}
 .cond-save-stack[hidden]{display:none}
+/* …and in the Turn View, the strip above End turn: no shadow, one row each. */
+.tv-condsaves{display:flex; flex-direction:column; gap:6px; padding:8px 12px; border-top:1px solid var(--border)}
+.tv-condsaves .cond-save{box-shadow:none; display:flex; flex-wrap:wrap; align-items:center; gap:4px 12px; padding:7px 10px}
+.tv-condsaves .cond-save-what{flex:1 1 260px}
+.tv-condsaves .cond-save-btns{margin-top:0}
 .cond-save{background:var(--panel); border:1px solid var(--accent); border-radius:var(--r-md); padding:10px 12px;
   box-shadow:0 8px 28px rgba(0,0,0,.45); font-size:var(--fs-sm)}
 .cond-save-btns{display:flex; flex-wrap:wrap; gap:6px; margin-top:8px}

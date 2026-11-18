@@ -4839,11 +4839,11 @@
           C._setCondTimer(state.combatants.findIndex(c => c.id === did), 'Paralyzed', { save: { ab: 'wis', dc: 15 } }); save();
           g = 0; while (state.activeCombatantId !== did && g++ < 20) C._nextTurn();
           C._nextTurn(); await sleep(40);
-          const card = document.querySelector('#cond-save-stack .cond-save');
+          const card = document.querySelector('#cond-save-stack .cond-save, .tv-condsaves .cond-save');
           ok('combat: a repeat save is asked for at the end of its turn, with its bonus',
              !!card && /WIS save DC 15/.test(card.textContent) && card.textContent.indexOf("(+7)") >= 0);
           card && card.querySelector('[data-csp="pass"]').click(); await sleep(40);
-          ok('combat: saving ends the condition', !(D().conditions || []).includes('Paralyzed') && !document.querySelector('#cond-save-stack .cond-save'));
+          ok('combat: saving ends the condition', !(D().conditions || []).includes('Paralyzed') && !document.querySelector('#cond-save-stack .cond-save, .tv-condsaves .cond-save'));
           C._setCondTimer(state.combatants.findIndex(c => c.id === did), 'Frightened', { kind: 'rounds', left: 2 }); save();
           const turn = () => { let k = 0; while (state.activeCombatantId !== did && k++ < 20) C._nextTurn(); C._nextTurn(); };
           turn(); const after1 = (D().conditions || []).includes('Frightened');
@@ -14687,11 +14687,14 @@ for (const cls of Object.keys(rule)) for (let L = 1; L <= 20; L++) for (const sc
         const oni = state.combatants[0]; oni.concentration = 'Fly'; save();
         document.querySelectorAll('#toast-host .toast-item').forEach(t => t.remove());
         C._applyHpDelta(0, -24, 'slashing'); await sleep(50);
-        const btn = [...document.querySelectorAll('#toast-host .toast-item')].map(t => t.querySelector('.toast-action')).find(b => b && /Roll it/.test(b.textContent));
-        ok('concentration: the reminder for a monster has a "Roll it" button (DC 12 for 24 damage)', !!btn && /DC 12 CON save to maintain Fly/.test(btn.closest('.toast-item').textContent), [...document.querySelectorAll('#toast-host .toast-item')].map(t => t.textContent).join(' | '));
+        // A card that stays until answered (it was a 4.5 s toast), with its roll.
+        const card = [...document.querySelectorAll('#cond-save-stack .cond-save, .tv-condsaves .cond-save')].find(k => /to keep Fly/.test(k.textContent));
+        const btn = card && card.querySelector('[data-csp="roll"]');
+        ok('concentration: a monster’s save is a card with its roll (DC 12 for 24 damage)', !!btn && /CON save DC 12 to keep Fly/.test(card.textContent), card ? card.textContent : 'no card');
         window.sktD = () => 1;
         btn && btn.click(); await sleep(50);
-        ok('concentration: a failed save ends the spell, and the log says so', oni.concentration == null && /loses concentration — Fly ends/.test((state.combatLog || []).slice(-1)[0].text), JSON.stringify([oni.concentration, (state.combatLog || []).slice(-1)[0]]));
+        const oniNow = () => state.combatants.find(x => x.id === oni.id) || oni;
+        ok('concentration: a failed save ends the spell, and the log says so', oniNow().concentration == null && /loses concentration — Fly ends/.test((state.combatLog || []).slice(-1)[0].text) && !document.querySelector('#cond-save-stack .cond-save'), JSON.stringify([oniNow().concentration, (state.combatLog || []).slice(-1)[0]]));
         oni.concentration = 'Fly'; window.sktD = () => 20;
         const sv = C._rollConcFor(oni.id, 12, 'Fly');
         ok('concentration: a made save keeps it', sv && sv.passed && oni.concentration === 'Fly', JSON.stringify([sv, oni.concentration]));
@@ -16338,22 +16341,22 @@ for (const cls of Object.keys(rule)) for (let L = 1; L <= 20; L++) for (const sc
         get('r235w').conditions = ['Paralyzed'];
         window.sktD = n => 3;
         C._queueCondSave(get('r235w'), 'Paralyzed', { ab: 'con', dc: 15 }); await sleep(20);
-        let card = document.querySelector('#cond-save-stack .cond-save');
+        let card = document.querySelector('#cond-save-stack .cond-save, .tv-condsaves .cond-save');
         card.querySelector('[data-csp="roll"]').click(); await sleep(20);
-        card = document.querySelector('#cond-save-stack .cond-save');
+        card = document.querySelector('#cond-save-stack .cond-save, .tv-condsaves .cond-save');
         ok('end-of-turn save: Wil fails (8 vs DC 15) — the card stays with a Luck Point, Heroic Inspiration, Indomitable',
           !!card && /Still:/.test(card.textContent) && card.querySelectorAll('[data-csp="rescue"]').length === 3, card && card.textContent);
         // Luck: another d20 of 2 — keeps the higher, the 3: still 8, a fail.
         window.sktD = n => 2;
         card.querySelector('[data-r="luck"]').click(); await sleep(20);
-        card = document.querySelector('#cond-save-stack .cond-save');
+        card = document.querySelector('#cond-save-stack .cond-save, .tv-condsaves .cond-save');
         ok('end-of-turn save: a Luck Point rolls 2 — keeps the 3, still 8; the point spent, the card still up without it',
           pw().resources[1].current === 1 && !!card && /CON 8 vs DC 15/.test(card.textContent) && !card.querySelector('[data-r="luck"]') && !!card.querySelector('[data-r="indom"]') && (get('r235w').conditions || []).includes('Paralyzed'), card && card.textContent);
         // Indomitable: reroll 2 + 5 + 9 = 16 — saved; Paralyzed ends.
         window.sktD = n => 2;
         card.querySelector('[data-r="indom"]').click(); await sleep(20);
         ok('end-of-turn save: Indomitable rerolls 2 +5 +9 — 16, saved: Paralyzed ends, the use spent, Heroic Inspiration kept',
-          !(get('r235w').conditions || []).includes('Paralyzed') && pw().resources[0].current === 0 && pw().inspiration === true && !document.querySelector('#cond-save-stack .cond-save'),
+          !(get('r235w').conditions || []).includes('Paralyzed') && pw().resources[0].current === 0 && pw().inspiration === true && !document.querySelector('#cond-save-stack .cond-save, .tv-condsaves .cond-save'),
           JSON.stringify([get('r235w').conditions, pw().resources]));
         // A hit's save in the Turn View: the ogre's hit, DC 14 STR or prone; Wil rolls 4 (+7 = 11).
         if (!T._body){ openPanel('turnview'); await sleep(200); }
@@ -16491,11 +16494,11 @@ for (const cls of Object.keys(rule)) for (let L = 1; L <= 20; L++) for (const sc
         // The end-of-turn save: Hold Monster, WIS 25; the dragon fails, keeps the card with the choice.
         dr().conditions = ['Paralyzed'];
         C._queueCondSave(dr(), 'Paralyzed', { ab: 'wis', dc: 25 }); await sleep(20);
-        document.querySelector('#cond-save-stack [data-csp="roll"]').click(); await sleep(20);
-        let card = document.querySelector('#cond-save-stack .cond-save');
+        document.querySelector('#cond-save-stack [data-csp="roll"], .tv-condsaves [data-csp="roll"]').click(); await sleep(20);
+        let card = document.querySelector('#cond-save-stack .cond-save, .tv-condsaves .cond-save');
         ok('legendary resistance: an end-of-turn save failed — the card offers it', !!card && !!card.querySelector('[data-r="lr"]'), card && card.textContent);
         card.querySelector('[data-r="lr"]').click(); await sleep(20);
-        ok('legendary resistance: …spent — Paralyzed ends, 1 left', !(dr().conditions || []).includes('Paralyzed') && dr().lrUsed === 2 && !document.querySelector('#cond-save-stack .cond-save'), JSON.stringify([dr().conditions, dr().lrUsed]));
+        ok('legendary resistance: …spent — Paralyzed ends, 1 left', !(dr().conditions || []).includes('Paralyzed') && dr().lrUsed === 2 && !document.querySelector('#cond-save-stack .cond-save, .tv-condsaves .cond-save'), JSON.stringify([dr().conditions, dr().lrUsed]));
         // The area save keeps its own ⛨ Resist for monsters — no second row.
         window.sktD = n => 2;
         const back = C.openAreaSave({ name: 'Burst', ab: 'CON', dc: 25, parts: [{ dice: '2d6', type: 'fire' }], half: true, targets: [drId] });
@@ -17073,7 +17076,7 @@ for (const cls of Object.keys(rule)) for (let L = 1; L <= 20; L++) for (const sc
         C.addMonster(find('Ogre', 'MM')); await sleep(20);
         const get = id => state.combatants.find(c => c.id === id), ogId = state.combatants[1].id;
         save();
-        const card = () => document.querySelector('#cond-save-stack .cond-save');
+        const card = () => document.querySelector('#cond-save-stack .cond-save, .tv-condsaves .cond-save');
         const para = () => (get('r252a').conditions || []).includes('Paralyzed');
         const answer = v => { const r = sktRollReq(); r.answers = Object.assign({}, r.answers, { r252a: { v, rid: r.id, at: Date.now() } }); saveJson(SKT_RR_KEY, r, 'test'); sktOnRollAnswers(); };
         C._condSaves = [];
@@ -25442,6 +25445,78 @@ for (const cls of Object.keys(rule)) for (let L = 1; L <= 20; L++) for (const sc
         ok('reach and range off the stat block, its slips too ("ranged 150/600", "reach 60/240", a line break)', rr === 'Longbow:range 150/600, Rock:range 60/240, Heavy Crossbow:range 100/400, Greataxe:reach 10', rr);
       } catch(e){ ok('round 481 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
       finally { window.sktD = realD; T._pending = null; state.party = JSON.parse(P0); state.combatants = JSON.parse(K0); state.activeCombatantId = A0; save(); closePanel('turnview'); }
+    }
+    // -- Round 482: an end-of-turn save (a rogue's poison, Hold Person) with the turn view open is a row in it above End turn — floating in the corner it sat on that button — answered there; closed, back to its corner --
+    if (!PLAYER){
+      const K0 = JSON.stringify(state.combatants || []), A0 = state.activeCombatantId;
+      const C = panelDefs.combat, T = panelDefs.turnview, S0 = (C._condSaves || []).slice();
+      try {
+        const foe = { id: 'bz482', name: 'Berserker 482', isPC: false, cls: 'enemy', hp: 60, hpMax: 60, ac: 13, initiative: 40, conditions: ['Poisoned'],
+                      condTimers: { Poisoned: { kind: 'rounds', left: 9, save: { ab: 'con', dc: 15 } } } };
+        state.combatants = [foe].concat(state.combatants.filter(c => c.id !== foe.id));
+        state.activeCombatantId = (state.combatants.find(c => c.isPC) || foe).id;
+        openPanel('turnview'); await sleep(400);
+        C._condSaves = [];
+        C._queueCondSave(foe, 'Poisoned', { ab: 'con', dc: 15 }); await sleep(150);
+        const stack = document.getElementById('cond-save-stack');
+        const row = T._body.querySelector('.tv-condsaves .cond-save');
+        ok('the save is a row in the turn view, not floating in the corner', !!row && /CON save DC 15 to end Poisoned/.test(row.textContent) && (!stack || stack.hidden), (row ? 'row' : 'no row') + ' / floating ' + (stack ? (stack.hidden ? 'hidden' : 'SHOWN') : 'none'));
+        if (row){
+          const eb = T._body.querySelector('[data-tv="end"]').getBoundingClientRect(), rb = row.getBoundingClientRect();
+          ok('…above End turn, not on it', rb.bottom <= eb.top + 1, Math.round(rb.bottom) + ' vs ' + Math.round(eb.top));
+          row.querySelector('[data-csp="pass"]').click(); await sleep(150);
+          const f2 = state.combatants.find(c => c.id === foe.id);
+          ok('…“Saved” in the turn view: Poisoned ends, the row goes', !(f2.conditions || []).includes('Poisoned') && !T._body.querySelector('.tv-condsaves'), JSON.stringify(f2.conditions));
+        }
+        // Waiting when the turn view closes: back in the corner.
+        const f3 = state.combatants.find(c => c.id === foe.id); f3.conditions = ['Poisoned'];
+        C._queueCondSave(f3, 'Poisoned', { ab: 'con', dc: 15 }); await sleep(150);
+        closePanel('turnview'); await sleep(200);
+        const st2 = document.getElementById('cond-save-stack');
+        ok('…the turn view closed: the card is back in its corner', !!st2 && !st2.hidden && /to end Poisoned/.test(st2.textContent), st2 ? (st2.hidden ? 'hidden' : st2.textContent.slice(0, 60)) : 'none');
+      } catch(e){ ok('round 482 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
+      finally { C._condSaves = S0; state.combatants = JSON.parse(K0); state.activeCombatantId = A0; save(); closePanel('turnview'); await sleep(50); C._renderCondSaves(); }
+    }
+    // -- Round 483: concentration saves are a card that stays until answered (it was a 4.5 s toast) — in the turn view above End turn; "Lost" ends the spell and what it holds, "Kept" keeps it; a player's phone answer takes the DM's card away --
+    if (!PLAYER){
+      const K0 = JSON.stringify(state.combatants || []), A0 = state.activeCombatantId, P0 = JSON.stringify(state.party);
+      const C = panelDefs.combat, T = panelDefs.turnview, S0 = (C._condSaves || []).slice();
+      try {
+        C._condSaves = [];
+        const pcC = state.combatants.find(c => c.isPC), pi = state.party.findIndex(p => p.id === pcC.id);
+        state.party[pi] = Object.assign({}, state.party[pi], { concentration: 'Moonbeam', concCheck: null });
+        const foe = { id: 'fan483', name: 'Cult Fanatic 483', isPC: false, cls: 'enemy', hp: 33, hpMax: 33, ac: 13, initiative: 40, conditions: [], concentration: 'Hold Person' };
+        const held = { id: 'held483', name: 'Bram 483', isPC: false, cls: 'ally', hp: 20, hpMax: 20, ac: 12, initiative: 1, conditions: ['Paralyzed'],
+                       condTimers: { Paralyzed: { kind: 'rounds', left: 10, save: { ab: 'wis', dc: 13 }, conc: { id: 'fan483', spell: 'Hold Person' } } } };
+        state.combatants = [foe, held].concat(state.combatants.filter(c => c.isPC));
+        state.activeCombatantId = foe.id; save();
+        openPanel('turnview'); await sleep(400);
+        const card = n => [...T._body.querySelectorAll('.tv-condsaves .cond-save')].find(k => k.textContent.includes(n));
+        // The character takes 18: DC 10, a card in the turn view (their phone asks too).
+        C._applyHpDelta(state.combatants.findIndex(c => c.id === pcC.id), -18, 'slashing'); await sleep(150);
+        const pc1 = card('to keep Moonbeam');
+        ok('a character hit while concentrating: a card in the turn view, DC 10, their phone asked too', !!pc1 && /CON save DC 10 to keep Moonbeam/.test(pc1.textContent) && /phone/.test(pc1.textContent) && !!state.party[pi].concCheck, pc1 ? pc1.textContent.replace(/\s+/g, ' ') : 'no card');
+        // The phone answers (made it): the DM's card goes.
+        state.party[pi] = Object.assign({}, state.party[pi], { concCheck: null }); save(); C._render(); await sleep(150);
+        ok('…answered on their phone: the DM’s card goes', !card('to keep Moonbeam'), 'still there');
+        // Again; this time the DM says it's lost.
+        C._applyHpDelta(state.combatants.findIndex(c => c.id === pcC.id), -4, 'slashing'); await sleep(150);
+        card('to keep Moonbeam').querySelector('[data-csp="fail"]').click(); await sleep(150);
+        ok('…“Lost”: Moonbeam ends, the phone check with it', state.party[pi].concentration == null && !state.party[pi].concCheck && !card('Moonbeam'), JSON.stringify([state.party[pi].concentration, state.party[pi].concCheck]));
+        // The fanatic is hit and loses Hold Person: Bram's paralysis ends with it.
+        C._applyHpDelta(0, -6, 'piercing'); await sleep(150);
+        const fc = card('to keep Hold Person');
+        ok('a monster hit while concentrating: its card, with its roll', !!fc && !!fc.querySelector('[data-csp="roll"]') && !/phone/.test(fc.textContent), fc ? fc.textContent.replace(/\s+/g, ' ') : 'no card');
+        fc.querySelector('[data-csp="fail"]').click(); await sleep(150);
+        const b2 = state.combatants.find(c => c.id === 'held483'), f2 = state.combatants.find(c => c.id === 'fan483');
+        ok('…“Lost”: Hold Person ends — Bram is no longer paralyzed', !f2.concentration && !(b2.conditions || []).includes('Paralyzed'), JSON.stringify([f2.concentration, b2.conditions]));
+        // "Kept" keeps it.
+        f2.concentration = 'Hold Person';
+        C._applyHpDelta(0, -6, 'piercing'); await sleep(150);
+        card('to keep Hold Person').querySelector('[data-csp="pass"]').click(); await sleep(150);
+        ok('…“Kept”: still concentrating, the card gone', state.combatants.find(c => c.id === 'fan483').concentration === 'Hold Person' && !card('Hold Person'));
+      } catch(e){ ok('round 483 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
+      finally { C._condSaves = S0; state.party = JSON.parse(P0); state.combatants = JSON.parse(K0); state.activeCombatantId = A0; save(); closePanel('turnview'); await sleep(50); C._renderCondSaves(); }
     }
     // -- Class features: represented, not just text ------------------------
     {

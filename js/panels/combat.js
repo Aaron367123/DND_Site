@@ -607,6 +607,9 @@ registerPanel('combat',{
     this._endConcOnIncap();
     this._endSummons();
     this._endConcConditions();
+    // A save card answered elsewhere (a player's phone, the condition taken
+    // off by hand) goes.
+    if ((this._condSaves || []).some(p => !this._condSaveLive(p))) setTimeout(() => this._renderCondSaves(), 0);
     const b=this._body;if(!b)return;
     const inCombat=state.combatants.length>0;
     const compact = !!(state.settings && state.settings.combatCompact);
@@ -2452,13 +2455,13 @@ registerPanel('combat',{
         // On a player's phone the save itself pops up; no reminder on top of it.
         // A monster's save can be rolled from the reminder itself (its bonus,
         // its conditions); a character's is the player's to roll.
-        if (!document.body.classList.contains('player-app')){
-          const cid = c.id;
-          showToast(`🌀 ${c.name}: DC ${dc} CON save to maintain ${conc}`,
-            c.isPC ? { alert: true } : { alert: true, action: { label: 'Roll it', run: () => this._rollConcFor(cid, dc, conc) } });
-        }
         // The player's phone asks them to roll it (player-app.js).
         if (c.isPC && partySlot) partySlot.concCheck = { id: uid(), dc, spell: conc, at: Date.now() };
+        // The DM's: a card that stays until it's answered — in the Turn View
+        // above End turn, or in its corner. It was a toast for 4.5 seconds,
+        // one of three a Multiattack pushes out, and a monster's spell went
+        // on when it was missed.
+        if (!document.body.classList.contains('player-app')) this._queueConcSave(c, dc, conc, c.isPC && partySlot ? partySlot.concCheck.id : null);
       }
       // Rage ends on falling unconscious too, for the same reason and with the
       // same consequence if missed: the B/P/S resistance would go on halving
@@ -3053,6 +3056,23 @@ registerPanel('combat',{
   // ─── End-of-turn saves (Hold Person and friends) ────────────────────────────
   // A small card that stays up until answered, over whatever panel is open —
   // the Turn View is where a DM usually is when a turn ends.
+  // A concentration save: { conc: the spell, ccId: the character's phone check }.
+  _queueConcSave(c, dc, spell, ccId){
+    this._condSaves = (this._condSaves || []).filter(p => !(p.cid === c.id && p.conc));
+    this._condSaves.push({ k: (typeof uid === 'function' ? uid() : String(Date.now())), cid: c.id, cond: '__conc', conc: spell, ccId: ccId || null, ab: 'con', dc });
+    setTimeout(() => this._renderCondSaves(), 0);
+  },
+  // Still to be answered: the condition still on; the spell still held (and,
+  // for a character, not already answered on their phone).
+  _condSaveLive(p){
+    const c = state.combatants.find(x => x.id === p.cid); if (!c) return false;
+    if (p.conc){
+      if (!c.isPC) return c.concentration === p.conc;
+      const pc = state.party.find(x => x.id === c.id);
+      return !!pc && pc.concentration === p.conc && !!pc.concCheck && (!p.ccId || pc.concCheck.id === p.ccId);
+    }
+    return (c.conditions || []).includes(p.cond);
+  },
   _queueCondSave(c, cond, sv){
     this._condSaves = (this._condSaves || []).filter(p => !(p.cid === c.id && p.cond === cond));
     this._condSaves.push({ k: (typeof uid === 'function' ? uid() : String(Date.now())), cid: c.id, cond, ab: sv.ab, dc: sv.dc });
@@ -3070,11 +3090,28 @@ registerPanel('combat',{
       });
       document.body.appendChild(host);
     }
-    const live = (this._condSaves || []).filter(p => state.combatants.some(c => c.id === p.cid && (c.conditions || []).includes(p.cond)));
+    const live = (this._condSaves || []).filter(p => this._condSaveLive(p));
     this._condSaves = live;
-    host.innerHTML = live.map(p => {
+    // With the Turn View open the cards are in it, in the strip above End
+    // turn: floating in this corner they sat on that very button.
+    const T = panelDefs.turnview, inTv = !!(T && T._body && T._body.isConnected && T._body.getClientRects().length);
+    host.innerHTML = inTv ? '' : this._condSaveCards();
+    host.hidden = inTv || !live.length;
+    if (T && T._body) T._render();
+  },
+  // The cards for the end-of-turn saves waiting (each answered by data-csp).
+  _condSaveCards(){
+    return (this._condSaves || []).filter(p => this._condSaveLive(p)).map(p => {
       const c = state.combatants.find(x => x.id === p.cid);
       const bonus = this.saveBonus(c, p.ab);
+      if (p.conc) return `<div class="cond-save" data-k="${esc(p.k)}" role="alertdialog" aria-label="Concentration save">
+        <div class="cond-save-what">🌀 <b>${esc(c.name)}</b> — took damage: CON save DC ${p.dc} to keep <b>${esc(p.conc)}</b></div>
+        ${c.isPC ? '<div class="cond-save-wait dim">📱 their phone asks them too</div>' : ''}
+        <div class="cond-save-btns">
+          <button class="btn small primary" data-csp="roll">🎲 Roll (${bonus >= 0 ? '+' : ''}${bonus})</button>
+          <button class="btn small" data-csp="pass">Kept</button>
+          <button class="btn small" data-csp="fail">Lost</button>
+        </div></div>`;
       // Rolled and failed, with something left that might turn it.
       if (p.rolled) return `<div class="cond-save" data-k="${esc(p.k)}" role="alertdialog" aria-label="Saving throw">
         <div class="cond-save-what">⟳ <b>${esc(c.name)}</b> — ${esc(String(p.ab).toUpperCase())} ${p.rolled.total} vs DC ${p.dc}: failed, still <b>${esc(p.cond)}</b>. Still:</div>
@@ -3091,12 +3128,12 @@ registerPanel('combat',{
           <button class="btn small" data-csp="fail">Failed</button>
         </div></div>`;
     }).join('');
-    host.hidden = !live.length;
   },
   _answerCondSave(k, how, key){
     const p = (this._condSaves || []).find(x => x.k === k); if (!p) return;
     const i = state.combatants.findIndex(c => c.id === p.cid);
     const c = state.combatants[i];
+    if (p.conc){ this._answerConcSave(p, c, how); return; }
     let passed = how === 'pass';
     if (how === 'rescue'){
       if (!c || !p.rolled) return;
@@ -3136,6 +3173,25 @@ registerPanel('combat',{
     this._renderCondSaves();
   },
 
+  // Kept or lost: rolled here, or as said at the table. A character's phone
+  // check is answered with it.
+  _answerConcSave(p, c, how){
+    this._condSaves = (this._condSaves || []).filter(x => x.k !== p.k);
+    if (!c){ this._renderCondSaves(); return; }
+    let kept = how === 'pass', line = '';
+    if (how === 'roll'){
+      const sv = this.rollSave(c, 'con', p.dc, {});
+      kept = sv.passed; line = sv.auto ? sv.detail : sv.total + ' vs DC ' + p.dc + ' (' + sv.detail + ')';
+    }
+    if (c.isPC){
+      const pi = state.party.findIndex(x => x.id === c.id);
+      if (pi >= 0) state.party[pi] = Object.assign({}, state.party[pi], { concCheck: null }, kept ? {} : { concentration: null });
+    } else if (!kept) c.concentration = null;
+    this._log(`${c.name} ${kept ? 'keeps concentrating on' : 'loses concentration —'} ${p.conc}${kept ? '' : ' ends'}${line ? ' (CON ' + line + ')' : ''}`);
+    showToast(kept ? `🌀 ${c.name} keeps ${p.conc}` : `🌀 ${p.conc} ends — ${c.name} lost concentration`, kept ? {} : { alert: true });
+    save(); this._render(); if (c.isPC) panelDefs.party?._render?.();
+    this._renderCondSaves();
+  },
   // A player's answer to an end-of-turn save asked from its card.
   _condSaveOnAnswers(r){
     if (!r || r.via !== 'cond') return;
