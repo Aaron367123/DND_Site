@@ -25776,12 +25776,12 @@ for (const cls of Object.keys(rule)) for (let L = 1; L <= 20; L++) for (const sc
       } catch(e){ ok('round 496 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
       finally { document.querySelector('#mapsel-close')?.click(); B._bgMapPath = P0; B._savedMaps = JSON.parse(S0); }
     }
-    // -- Round 497: an adventure map's squares from its data — size ÷ scale (868 of the 1,295 square grids carry a scale: AUD's Two Plateaus is 191 at scale 2, its squares 95.5 px; they came out 191, every other printed line), one without a scale as it was (the Elfsong Tavern's 166) --
+    // -- Round 497: an adventure map's squares from its data — size ÷ scale (868 of the 1,295 square grids carry a scale: AUD's Two Plateaus is 191 at scale 2, its squares 95.5 px, its offsets halved too; they came out 191, every other printed line), one without a scale as it was (the Elfsong Tavern's 166) --
     if (!PLAYER){
       const B = panelDefs.battlemap;
       try {
         const two = await B._advGrid('adventure/AUD/041-map-03-07.two-plateaus-shipping-company.webp');
-        ok('AUD Map 3.7 (size 191, scale 2): squares of 95.5, its offsets as given', !!two && Math.abs(two.size - 95.5) < 0.01 && two.ox === -8 && two.oy === 71, JSON.stringify(two));
+        ok('AUD Map 3.7 (size 191, scale 2): squares of 95.5, its offsets halved too (−4, 35.5: on the printed lines)', !!two && Math.abs(two.size - 95.5) < 0.01 && two.ox === -4 && two.oy === 35.5, JSON.stringify(two));
         const elf = await B._advGrid('adventure/BGDIA/009-hc2oz-map-1-2-player.webp');
         ok('…the Elfsong Tavern (no scale): 166, as before', !!elf && Math.abs(elf.size - 166) < 0.01, JSON.stringify(elf));
       } catch(e){ ok('round 497 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
@@ -25807,6 +25807,29 @@ for (const cls of Object.keys(rule)) for (let L = 1; L <= 20; L++) for (const sc
         _remoteUpdate = true; if (base == null) localStorage.removeItem(K); else localStorage.setItem(K, base); _remoteUpdate = false;
         closePanel('battlemap'); await sleep(100); openPanel('battlemap'); await sleep(300);
       }
+    }
+    // -- Round 499: finding the squares on a big picture — a 4000 px map with 1 px lines every 47: shrunk whole to 2000 its lines faded to nothing and no grid was found; a piece at its own size finds 47, and where the lines are in the whole picture --
+    if (!PLAYER){
+      try {
+        let sd = 7; const rnd = () => (sd = (sd * 16807) % 2147483647) / 2147483647;
+        const W = 4000, H = 2600, P = 47, OX = 17, OY = 31;
+        const c = document.createElement('canvas'); c.width = W; c.height = H; const g = c.getContext('2d');
+        g.fillStyle = '#c8b48c'; g.fillRect(0, 0, W, H);
+        for (let i = 0; i < 6000; i++){ g.fillStyle = 'hsla(' + (30 + rnd() * 20) + ',25%,' + (55 + rnd() * 20) + '%,.35)'; g.fillRect(rnd() * W, rnd() * H, 20 + rnd() * 80, 20 + rnd() * 80); }
+        g.fillStyle = 'rgba(60,45,30,.85)';
+        for (let x = OX; x < W; x += P) g.fillRect(x, 0, 1, H);
+        for (let y = OY; y < H; y += P) g.fillRect(0, y, W, 1);
+        const img = await new Promise(r => { const i = new Image(); i.onload = () => r(i); i.onerror = () => r(null); i.src = c.toDataURL('image/png'); });
+        const f = img && sktDetectGrid(img);
+        const md = (v, p) => ((v % p) + p) % p, near = (a, b) => Math.min(Math.abs(md(a, P) - md(b, P)), P - Math.abs(md(a, P) - md(b, P))) < 2;
+        ok('a 4000 px map, 1 px lines every 47: found, 47 apart, on its lines', !!f && Math.abs(f.size - P) < 0.5 && near(f.ox, OX) && near(f.oy, OY), JSON.stringify(f));
+        // The real one: AUD's Two Plateaus, 4096 px, its printed lines a pixel or two (found nothing shrunk whole).
+        const real = await new Promise(r => { const i = new Image(); i.crossOrigin = 'anonymous'; i.onload = () => r(i); i.onerror = () => r(null); i.src = assetUrl('adventure/AUD/041-map-03-07.two-plateaus-shipping-company.webp'); setTimeout(() => r(null), 30000); });
+        if (real){
+          const fr = sktDetectGrid(real), m95 = v => ((v % 95.5) + 95.5) % 95.5;
+          ok('…AUD’s Two Plateaus (4096 px): 95.5 squares, on its printed lines (35.5 down)', !!fr && Math.abs(fr.size - 95.5) < 0.6 && Math.abs(m95(fr.oy) - 35.5) < 3, JSON.stringify(fr));
+        }
+      } catch(e){ ok('round 499 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
     }
     // -- Class features: represented, not just text ------------------------
     {

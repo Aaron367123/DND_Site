@@ -20,12 +20,26 @@ let _mapBgImage = null; // holds the Image object
 function sktDetectGrid(img){
   const W0 = img && img.naturalWidth, H0 = img && img.naturalHeight;
   if (!W0 || !H0) return null;
-  const k = Math.min(1, 2000 / Math.max(W0, H0));
-  const W = Math.max(1, Math.round(W0 * k)), H = Math.max(1, Math.round(H0 * k));
+  // A big picture is looked at in a piece at its own size first: shrunk
+  // whole to 2000 px, its printed lines thinned to nothing — AUD's Two
+  // Plateaus (4096 px, a line a pixel or two wide every 95.5) gave no grid,
+  // as did a 2048 px copy of it; a 1600 px piece of it gave 95.6. The piece
+  // from the middle, where the map is; then, failing that, the whole shrunk.
+  if (Math.max(W0, H0) > 2000){
+    const sw = Math.min(W0, 2000), sh = Math.min(H0, 2000);
+    const r = _sktDetectGridIn(img, Math.floor((W0 - sw) / 2), Math.floor((H0 - sh) / 2), sw, sh, 1);
+    if (r) return r;
+  }
+  return _sktDetectGridIn(img, 0, 0, W0, H0, Math.min(1, 2000 / Math.max(W0, H0)));
+}
+// The search itself, on the part (sx, sy, sw, sh) of the picture drawn at k
+// times its size; the grid it finds in the whole picture's own pixels.
+function _sktDetectGridIn(img, sx, sy, sw, sh, k){
+  const W = Math.max(1, Math.round(sw * k)), H = Math.max(1, Math.round(sh * k));
   if (Math.min(W, H) < 60) return null;
   const c = document.createElement('canvas'); c.width = W; c.height = H;
   const g = c.getContext('2d', { willReadFrequently: true });
-  g.drawImage(img, 0, 0, W, H);
+  g.drawImage(img, sx, sy, sw, sh, 0, 0, W, H);
   let d; try { d = g.getImageData(0, 0, W, H).data; } catch(e){ return null; }
   const L = new Float32Array(W * H);
   for (let i = 0, j = 0; i < L.length; i++, j += 4) L[i] = 0.299 * d[j] + 0.587 * d[j + 1] + 0.114 * d[j + 2];
@@ -119,7 +133,8 @@ function sktDetectGrid(img){
   if (Math.min(ax.sharp, ay.sharp) < 5) return null;
   if (Math.min(W, H) / size < 8) return null;
   if (Math.min(bands(true, ax.p, ax.ph), bands(false, ay.p, ay.ph)) < 3) return null;
-  return { size: size / k, ox: ax.ph / k, oy: ay.ph / k };
+  const S = size / k, md = v => ((v % S) + S) % S;
+  return { size: S, ox: md(ax.ph / k + sx), oy: md(ay.ph / k + sy) };
 }
 // ─── The walls drawn on a map picture ───────────────────────────────────────
 // Walls for line of sight without drawing each one: Build → Find walls.
@@ -1807,13 +1822,16 @@ registerPanel('battlemap',{
       // pixels. Two in three of the adventures' square grids carry one, and
       // reading `size` alone gave them squares twice too big (AUD's Two
       // Plateaus: 191 for its 95.5; AVT Map 1: 50 for its 24.2 — the printed
-      // lines fell midway). Offsets are the picture's own.
+      // lines fell midway). The offsets too: AUD's offsetY 71 put the lines
+      // midway between the printed ones; 35.5 is on them (a grid found on
+      // the picture says 34.7).
       // …and how far a square is: Krezk's village map is 50 ft a square,
       // Saltmarsh's Abbey Isle 500 (48 maps aren't 5): the ruler and every
       // reach read a tenth or less. In feet, from yards or miles too.
       const per = { ft: 1, feet: 1, yd: 3, yard: 3, yards: 3, mi: 5280, mile: 5280, miles: 5280 }[String(g.units || 'ft').toLowerCase()];
       const ft = +g.distance > 0 && per ? +g.distance * per : 5;
-      return g && g.type === 'square' && +g.size > 0 ? { size: +g.size / (+g.scale > 0 ? +g.scale : 1), ox: +g.offsetX || 0, oy: +g.offsetY || 0, w: +e.w || 0, ft } : null;
+      const gs = +g.scale > 0 ? +g.scale : 1;
+      return g && g.type === 'square' && +g.size > 0 ? { size: +g.size / gs, ox: (+g.offsetX || 0) / gs, oy: (+g.offsetY || 0) / gs, w: +e.w || 0, ft } : null;
     });
   },
   // Once the picked map's picture is in (its size is what the grid scales
