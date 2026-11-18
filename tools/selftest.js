@@ -25776,6 +25776,16 @@ for (const cls of Object.keys(rule)) for (let L = 1; L <= 20; L++) for (const sc
       } catch(e){ ok('round 496 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
       finally { document.querySelector('#mapsel-close')?.click(); B._bgMapPath = P0; B._savedMaps = JSON.parse(S0); }
     }
+    // -- Round 497: an adventure map's squares from its data — size ÷ scale (868 of the 1,295 square grids carry a scale: AUD's Two Plateaus is 191 at scale 2, its squares 95.5 px; they came out 191, every other printed line), one without a scale as it was (the Elfsong Tavern's 166) --
+    if (!PLAYER){
+      const B = panelDefs.battlemap;
+      try {
+        const two = await B._advGrid('adventure/AUD/041-map-03-07.two-plateaus-shipping-company.webp');
+        ok('AUD Map 3.7 (size 191, scale 2): squares of 95.5, its offsets as given', !!two && Math.abs(two.size - 95.5) < 0.01 && two.ox === -8 && two.oy === 71, JSON.stringify(two));
+        const elf = await B._advGrid('adventure/BGDIA/009-hc2oz-map-1-2-player.webp');
+        ok('…the Elfsong Tavern (no scale): 166, as before', !!elf && Math.abs(elf.size - 166) < 0.01, JSON.stringify(elf));
+      } catch(e){ ok('round 497 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
+    }
     // -- Class features: represented, not just text ------------------------
     {
       try {

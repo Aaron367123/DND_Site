@@ -1802,7 +1802,13 @@ registerPanel('battlemap',{
     }).catch(() => ({}));
     return cache[id].then(all => {
       const e = all && all[path], g = e && e.grid;
-      return g && g.type === 'square' && +g.size > 0 ? { size: +g.size, ox: +g.offsetX || 0, oy: +g.offsetY || 0, w: +e.w || 0 } : null;
+      // `scale`: the data's size is of the picture drawn that many times
+      // over (2.07, 2, 4): a square is size ÷ scale of the picture's own
+      // pixels. Two in three of the adventures' square grids carry one, and
+      // reading `size` alone gave them squares twice too big (AUD's Two
+      // Plateaus: 191 for its 95.5; AVT Map 1: 50 for its 24.2 — the printed
+      // lines fell midway). Offsets are the picture's own.
+      return g && g.type === 'square' && +g.size > 0 ? { size: +g.size / (+g.scale > 0 ? +g.scale : 1), ox: +g.offsetX || 0, oy: +g.offsetY || 0, w: +e.w || 0 } : null;
     });
   },
   // Once the picked map's picture is in (its size is what the grid scales
