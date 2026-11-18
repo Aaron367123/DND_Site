@@ -29595,7 +29595,9 @@ for (const cls of Object.keys(rule)) for (let L = 1; L <= 20; L++) for (const sc
     // -- Round 473 (player): the game log's quick dice are big enough for a finger (28 by 24 px on a phone) --
     if (PLAYER){
       try {
-        paTab = 'more'; paMoreSub = 'log'; paRender(); await sleep(200);
+        // (on a phone, More → Game log; on a wider screen, its own tab)
+        if (paIsPhone()){ paTab = 'more'; paMoreSub = 'log'; } else { paTab = 'log'; paMoreSub = null; }
+        paRender(); await sleep(200);
         const d = [...document.querySelectorAll('#pa-screen .glog-die')];
         const coarse = matchMedia('(pointer: coarse)').matches;
         const small = d.filter(b => { const r = b.getBoundingClientRect(); return r.width < 44 || r.height < 36; });
