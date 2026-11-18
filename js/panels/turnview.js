@@ -59,7 +59,10 @@ registerPanel('turnview', {
   // the new actor and a pan carried over from someone else's turn is just an
   // offset nobody asked for.
   _panX: 0, _panY: 0,
-  _artMode: 'auto',   // grid when compact, map art when enlarged
+  // The map's picture, or just the grid ('off') — a busy map can bury the
+  // tokens in a thumbnail this size. It was 'auto/on/off' and every one drew
+  // the picture.
+  _artMode: 'on',
   _sig: null,
   _result: '',
   _resultLive: false,
@@ -102,8 +105,8 @@ registerPanel('turnview', {
     return [
       { label: 'Refresh from the tracker', icon: 'i-refresh', run: () => this._render() },
       { label: 'Clear the log', icon: 'i-trash', run: () => { this._log = []; this._render(); } },
-      { label: 'Map art: ' + this._artMode, icon: 'i-map', run: () => {
-          this._artMode = this._artMode === 'auto' ? 'on' : this._artMode === 'on' ? 'off' : 'auto';
+      { label: this._artMode === 'off' ? 'Show the map picture' : 'Hide the map picture (grid only)', icon: 'i-map', run: () => {
+          this._artMode = this._artMode === 'off' ? 'on' : 'off';
           this._render();
         } },
     ];
@@ -965,14 +968,27 @@ registerPanel('turnview', {
     if (!src.bgPath) return null;
     if (this._bgCache && this._bgCache.path === src.bgPath) return this._bgCache.img;
     const img = new Image();
-    this._bgCache = { path: src.bgPath, img: null };
+    const path = src.bgPath;
+    this._bgCache = { path, img: null };
     img.onload = () => {
-      if (this._bgCache && this._bgCache.path === src.bgPath){
+      if (this._bgCache && this._bgCache.path === path){
         this._bgCache.img = img;
         this._placeTokens();
       }
     };
-    img.src = assetUrl(src.bgPath);
+    // An uploaded map ("sktblob:<id>") is kept in the database, not a file:
+    // assetUrl made it img/sktblob%3A… — a picture that cannot exist, so an
+    // uploaded map never showed here. Fetched the way the battle map fetches
+    // it, through its cache, so the two share one download.
+    const B = this._bm();
+    if (B && B._isSharedUpload && B._isSharedUpload(path)){
+      if (typeof window.sktMapBlobGet !== 'function') return null;
+      B._fetchBlob(B._blobIdOf(path)).then(data => {
+        if (data && this._bgCache && this._bgCache.path === path) img.src = data;
+      }, () => { if (this._bgCache && this._bgCache.path === path) this._bgCache = null; });
+      return null;
+    }
+    img.src = assetUrl(path);
     return null;
   },
 
@@ -2770,14 +2786,17 @@ registerPanel('turnview', {
     // drew an abstract grid beside a hex map of Ice Peak and called it the
     // same place.
     const B = this._bm();
-    const img = this._bgImage();
+    const img = this._artMode === 'off' ? null : this._bgImage();
     const hasArt = !!img;
     if (hasArt){
       const scale = src.bgScale || 1;
       const natW = (B && B._bgMapNaturalW) || img.naturalWidth;
       const natH = (B && B._bgMapNaturalH) || img.naturalHeight;
       const dispW = natW * scale * k, dispH = natH * scale * k;
-      const url = src.bgPath ? assetUrl(src.bgPath) : img.src;
+      // A shared upload's path is a handle, not an address: its picture is
+      // the one already loaded.
+      const B2 = this._bm();
+      const url = src.bgPath && !(B2 && B2._isSharedUpload && B2._isSharedUpload(src.bgPath)) ? assetUrl(src.bgPath) : img.src;
       rot.style.backgroundImage = `url("${url}")`;
       rot.style.backgroundRepeat = 'no-repeat';
       rot.style.backgroundSize = `${dispW}px ${dispH}px`;
@@ -2931,7 +2950,7 @@ registerPanel('turnview', {
         ? sktGridPaint({
             gridColor: src.gridColor, gridOpacity: src.gridOpacity,
             gridWidth: src.gridWidth, k, crisp: false,
-            artLum: (typeof _bgLuminance === 'function') ? _bgLuminance(this._bgImage()) : null,
+            artLum: (typeof _bgLuminance === 'function' && this._artMode !== 'off') ? _bgLuminance(this._bgImage()) : null,
           })
         : { color: 'rgba(255,255,255,.34)', lineWidth: 1 / k };
       ctx.strokeStyle = paint.color;

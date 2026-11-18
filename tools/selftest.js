@@ -25196,6 +25196,51 @@ for (const cls of Object.keys(rule)) for (let L = 1; L <= 20; L++) for (const sc
       } catch(e){ ok('round 472 threw', false, e.message); }
       finally { if (dr && !was) dr.classList.remove('open'); }
     }
+    // -- Round 474: an uploaded battle map ("sktblob:" — kept in the database, not a file) shows in the turn view, with the Battle Map open or closed (it painted img/sktblob%3A…, a picture that cannot exist) --
+    if (!PLAYER){
+      const K = 'skt-battlemap-v1', base = localStorage.getItem(K);
+      const B = panelDefs.battlemap, T = panelDefs.turnview;
+      const g0 = window.sktMapBlobGet, tk0 = B._tokens, p0 = B._bgMapPath, bg0 = (typeof _mapBgImage !== 'undefined') ? _mapBgImage : null;
+      const DATA = 'data:image/svg+xml,' + encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" width="600" height="400"><rect width="600" height="400" fill="#5a7a4a"/></svg>');
+      const art = () => { const r = T._body && T._body.querySelector('.tv-map-rot'); return r ? r.style.backgroundImage : 'no map'; };
+      try {
+        window.sktMapBlobGet = id => Promise.resolve(id === 'utv474' ? DATA : null);
+        if (B._blobCache) B._blobCache.delete('utv474');
+        const d = JSON.parse(base || '{}');
+        d.bgMapPath = 'sktblob:utv474'; d.bgMapScale = 1;
+        _remoteUpdate = true; localStorage.setItem(K, JSON.stringify(d)); _remoteUpdate = false;
+        // The Battle Map closed: the turn view reads the saved map.
+        B._tokens = [];
+        try { _mapBgImage = null; } catch(e){}
+        T._bgCache = null;
+        openPanel('turnview'); await sleep(500);
+        T._mapCache = null; T._render(); await sleep(400); T._placeTokens(); await sleep(50);
+        ok('turn view, Battle Map closed: an uploaded map shows (not a grid on nothing)', /^url\("data:image/.test(art()), art().slice(0, 60));
+        // The Battle Map open, its picture in memory: still the picture, not img/sktblob…
+        const img = new Image(); img.src = DATA; await new Promise(r => { img.onload = r; img.onerror = r; setTimeout(r, 1000); });
+        B._tokens = tk0 && tk0.length ? tk0 : d.tokens; B._bgMapPath = 'sktblob:utv474';
+        try { _mapBgImage = img; } catch(e){}
+        T._mapCache = null; T._render(); await sleep(200); T._placeTokens(); await sleep(50);
+        ok('…Battle Map open: the uploaded map shows there too', /^url\("data:image/.test(art()), art().slice(0, 60));
+        // The ⋯ menu's map-picture option does something (auto, on and off all drew the picture).
+        const hide = T.menuItems().find(x => /map picture/i.test(x.label));
+        if (!hide) ok('the turn view menu has a map-picture option', false, T.menuItems().map(x => x.label).join(' | '));
+        else {
+          hide.run(); await sleep(200); T._placeTokens(); await sleep(50);
+          ok('“Hide the map picture”: grid only', /Hide/.test(hide.label) && !art(), hide.label + ' / ' + art().slice(0, 40));
+          const show = T.menuItems().find(x => /map picture/i.test(x.label));
+          show.run(); await sleep(200); T._placeTokens(); await sleep(50);
+          ok('…“Show the map picture” brings it back', /Show/.test(show.label) && /^url\("data:image/.test(art()), show.label + ' / ' + art().slice(0, 40));
+        }
+      } catch(e){ ok('round 474 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
+      finally {
+        window.sktMapBlobGet = g0; B._tokens = tk0; B._bgMapPath = p0;
+        try { _mapBgImage = bg0; } catch(e){}
+        _remoteUpdate = true; if (base == null) localStorage.removeItem(K); else localStorage.setItem(K, base); _remoteUpdate = false;
+        T._bgCache = null; T._mapCache = null; T._artMode = "on";
+        closePanel('turnview');
+      }
+    }
     // -- Class features: represented, not just text ------------------------
     {
       try {
