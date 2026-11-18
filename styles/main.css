@@ -4384,8 +4384,12 @@ select.tv-in.wide { width:126px; }
 .tv-tgt.armed { border-color:var(--accent); background:rgba(212,165,116,.12); }
 .tv-tgt.down { opacity:.55; }
 .tv-tgt-row { display:flex; align-items:center; gap:8px; }
+/* The name is what gives way to a long one ("Kael Willard Thornwood"), not
+   the R after it: it went under the ellipsis with the rest. */
 .tv-tgt-name { flex:1; min-width:0; font-size:var(--fs-md); white-space:nowrap;
-  overflow:hidden; text-overflow:ellipsis; }
+  display:flex; align-items:center; gap:4px; }
+.tv-tgt-nm { min-width:0; overflow:hidden; text-overflow:ellipsis; }
+.tv-tgt-name .tv-pip-r { flex:none; }
 .tv-tgt-hp,.tv-tgt-ac { font-size:var(--fs-sm); color:var(--text-muted); font-variant-numeric:tabular-nums; }
 .tv-tgt-ac { display:inline-flex; align-items:center; gap:3px; }
 /* What a hit inflicts, waiting on its save or a click. */
@@ -4459,7 +4463,8 @@ select.tv-in.wide { width:126px; }
 .tv-multi .btn { flex-shrink:0; display:inline-flex; align-items:center; gap:5px; }
 /* Legendary actions read as a different kind of thing from the creature's
    own turn — they belong to somebody who is not acting. */
-.tv-multi.legend { border-style:dashed; }
+/* (Its dashed border outlived the frames below, which take the border away:
+   a bare border-style brought it back at 3px in the text colour.) */
 .tv-multi.legend .tv-multi-tag { color:var(--warning); }
 .tv-multi.legend .tv-multi-text { display:flex; align-items:center; gap:8px; flex:0 0 auto; }
 .tv-multi .btn.tv-cant { opacity:.45; cursor:not-allowed; }

@@ -25241,6 +25241,128 @@ for (const cls of Object.keys(rule)) for (let L = 1; L <= 20; L++) for (const sc
         closePanel('turnview');
       }
     }
+    // -- Round 475: a spell cast above its level grows the rolls its text says — a Cultist Hierophant's 7th-level Jallarzi's Storm of Radiance is 4d10 radiant AND 4d10 thunder (the thunder stayed 2d10), Ice Knife's cold and not its piercing shard --
+    if (!PLAYER){
+      try {
+        for (let n = 0; n < 40 && !(typeof _5eLoaded !== 'undefined' && _5eLoaded); n++) await sleep(250);
+        if (typeof sktRulesLoad === 'function') await sktRulesLoad('2024');
+        const R = _sktRulesReady['2024'];
+        const hiero = (typeof sktFindMonster === 'function') && sktFindMonster('cultist-hierophant', 'XMM');
+        const rows = hiero ? sktMonsterSpellRows(hiero._raw, R) : [];
+        const j = rows.find(r => /^Jallarzi/.test(r.name));
+        const dice = j ? j.parts.map(p => p.dice + ' ' + p.type).join(' + ') : 'none';
+        ok('Cultist Hierophant: Jallarzi’s Storm of Radiance at 7th level is 4d10 radiant + 4d10 thunder', dice === '4d10 radiant + 4d10 thunder', dice);
+        const ik = sktRulesSpell(R, 'Ice Knife'), fb = sktRulesSpell(R, 'Fireball');
+        ok('sheet: Ice Knife at 2nd level keeps its shard at 1d10 (the cold dice went on it)', csSpellDamage(ik, 2) === '1d10', csSpellDamage(ik, 2));
+        ok('…Fireball at 5th level still grows: 10d6', csSpellDamage(fb, 5) === '10d6', csSpellDamage(fb, 5));
+        const fs = sktRulesSpell(R, 'Flame Strike'), hh = sktRulesSpell(R, 'Hunger of Hadar');
+        ok('the step: Flame Strike (2024) grows fire and radiant, Hunger of Hadar (your choice) one', sktSpellStep(fs, 0, 'fire') === '1d6' && sktSpellStep(fs, 1, 'radiant') === '1d6' && sktSpellStep(hh, 0, 'cold') === '1d6' && sktSpellStep(hh, 1, 'acid') === null);
+      } catch(e){ ok('round 475 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
+    }
+    // -- Round 476: turn view — a long name ("Kael Willard Thornwood") gives way in the target list, not the R after it; the reaction prompt says why the AC is up ("22 vs AC 21" — ½ cover, someone in the way) --
+    if (!PLAYER){
+      const K0 = JSON.stringify(state.combatants || []), A0 = state.activeCombatantId;
+      const T = panelDefs.turnview;
+      try {
+        openPanel('turnview'); await sleep(500);
+        const o = state.combatants || [];
+        const foe = o.find(c => !c.isPC && c.id !== state.activeCombatantId) || o.find(c => c.id !== state.activeCombatantId);
+        foe.name = 'Kael Willard Thornwood the Unreasonably Long-Named';
+        T._render(); await sleep(150);
+        const row = T._body.querySelector('.tv-tgt[data-id="' + foe.id + '"]');
+        const r = row && row.querySelector('.tv-pip-r'), nm = row && row.querySelector('.tv-tgt-name');
+        if (!r) ok('a target with a reaction shows its R', false, row ? row.innerHTML.slice(0, 120) : 'no row');
+        else {
+          const rb = r.getBoundingClientRect(), nb = nm.getBoundingClientRect();
+          ok('a long name: its R stays in sight, the name is what gets cut', rb.width > 4 && rb.right <= nb.right + 0.5 && rb.left >= nb.left, Math.round(rb.left) + '-' + Math.round(rb.right) + ' in ' + Math.round(nb.left) + '-' + Math.round(nb.right));
+        }
+        const actor = T._active();
+        T._pending = { attackerId: actor.id, attacker: actor.name, label: 'Greataxe', target: foe, hit: true, total: 22, dmg: 9, parts: [{ amt: 9, type: 'slashing' }],
+                       type: 'slashing', acBonus: 2, hitNote: '½ cover +2 AC (William in the way)', nat: 15, bonus: 7, crit: false };
+        const html = T._renderPending();
+        ok('the reaction prompt: “22 vs AC …” says it is cover, and whose', /22 vs AC \d+ · ½ cover \+2 AC \(William in the way\)/.test(html.replace(/\s+/g, ' ')), html.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').slice(0, 200));
+      } catch(e){ ok('round 476 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
+      finally { T._pending = null; state.combatants = JSON.parse(K0); state.activeCombatantId = A0; closePanel('turnview'); }
+    }
+    // -- Round 477: turn view — a breath weapon spent, the recharge rolled at the table: "↺ Recharged" brings it back (the app's own d6 was the only way), and undo spends it again --
+    if (!PLAYER){
+      const K0 = JSON.stringify(state.combatants || []), A0 = state.activeCombatantId, R0 = state.combatRound;
+      const T = panelDefs.turnview;
+      try {
+        for (let n = 0; n < 40 && !(typeof _5eLoaded !== 'undefined' && _5eLoaded); n++) await sleep(250);
+        state.combatRound = state.combatRound || 1;
+        const d = { id: 'drag477', name: 'Young White Dragon', baseName: 'Young White Dragon', _slug: 'young-white-dragon', _source: 'XMM', isPC: false, cls: 'enemy',
+                    hp: 123, hpMax: 123, ac: 17, initiative: 30, conditions: [], rechargeSpent: ['Cold Breath'], _rechRound: state.combatRound };
+        state.combatants = [d].concat(state.combatants || []); state.activeCombatantId = d.id;
+        openPanel('turnview'); await sleep(400); T._render(); await sleep(150);
+        const btn = T._body.querySelector('[data-tv="rech"]');
+        ok('a spent Cold Breath offers “↺ Recharged” (rolled at the table)', !!btn && btn.dataset.name === 'Cold Breath', btn ? btn.outerHTML.slice(0, 100) : 'none');
+        if (btn){
+          btn.click(); await sleep(150);
+          const c = state.combatants.find(x => x.id === d.id);
+          ok('…pressed: it is back — no longer spent, its save buttons are there', !(c.rechargeSpent || []).length && !!T._body.querySelector('[data-tv="save"]') && /recharged.*rolled at the table/.test(T._log[0] || ''), JSON.stringify(c.rechargeSpent) + ' ' + (T._log[0] || ''));
+          sktUndo(); await sleep(150);
+          const c2 = state.combatants.find(x => x.id === d.id);
+          ok('…undo: spent again', (c2.rechargeSpent || []).includes('Cold Breath'), JSON.stringify(c2.rechargeSpent));
+        }
+      } catch(e){ ok('round 477 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
+      finally { state.combatants = JSON.parse(K0); state.activeCombatantId = A0; state.combatRound = R0; save(); closePanel('turnview'); }
+    }
+    // -- Round 478: framed boxes stay framed — the turn view's Legendary bar had a 3px white dashed border (its old "dashed" outlived the frames, which take the border away, and came back at the default width in the text colour); no rule may bring one back --
+    if (!PLAYER){
+      const K0 = JSON.stringify(state.combatants || []), A0 = state.activeCombatantId;
+      const T = panelDefs.turnview;
+      try {
+        for (let n = 0; n < 40 && !(typeof _5eLoaded !== 'undefined' && _5eLoaded); n++) await sleep(250);
+        const pc = (state.combatants || []).find(c => c.isPC) || (state.combatants || [])[0];
+        state.combatants = (state.combatants || []).concat([{ id: 'drag478', name: 'Adult Blue Dragon', baseName: 'Adult Blue Dragon', _slug: 'adult-blue-dragon', _source: 'XMM',
+          isPC: false, cls: 'enemy', hp: 212, hpMax: 212, ac: 19, initiative: 1, conditions: [], legendaryMax: 3, legendaryUsed: 0 }]);
+        state.activeCombatantId = pc.id;
+        openPanel('turnview'); await sleep(400); T._render(); await sleep(200);
+        const bar = T._body.querySelector('.tv-multi.legend');
+        if (!bar) ok('the Legendary bar shows on someone else’s turn', false, 'none');
+        else ok('the Legendary bar: framed like the rest, no border of its own', getComputedStyle(bar).borderTopStyle === 'none', getComputedStyle(bar).borderTopStyle + ' ' + getComputedStyle(bar).borderTopWidth);
+        // Any rule more specific than a framed box's own that sets a border style on it.
+        const FR = ['combatant-card','enc-stat-box','loot-coin','loot-item','npclib-stat','npcgen-stat-box','shop-controls','shop-display','weather-stat','bestiary-folder','adv-card','notes-source-tile','bm-set-tile','tv-multi','tv-act','tv-targets','tv-adjust','sb-tile','drawer-group'];
+        const bad = [];
+        for (const sh of document.styleSheets){
+          let L; try { L = sh.cssRules; } catch(e){ continue; }
+          const walk = list => { for (const r of list){
+            if (r.cssRules && !r.selectorText){ walk(r.cssRules); continue; }
+            if (!r.selectorText || /^:is\(\.combatant-card/.test(r.selectorText)) continue;
+            const m = /(?:^|;\s*)(border(?:-top)?(?:-style)?)\s*:\s*([^;]+)/.exec(r.style.cssText);
+            if (!m || /^(none|0)\b/.test(m[2].trim()) || !/solid|dashed|dotted|double|groove|ridge|inset|outset/.test(m[2])) continue;
+            r.selectorText.split(',').forEach(sel => {
+              sel = sel.trim();
+              const subj = sel.split(/[\s>+~]+/).pop();
+              if (!FR.some(f => new RegExp('\\.' + f + '(?![\\w-])').test(subj))) return;
+              if ((sel.match(/[.:#\[]/g) || []).length > 1) bad.push(sel + ' { ' + m[0].trim() + ' }');
+            });
+          }};
+          walk(L);
+        }
+        ok('…and no rule turns a border back on over a frame', !bad.length, bad.join(' | '));
+      } catch(e){ ok('round 478 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
+      finally { state.combatants = JSON.parse(K0); state.activeCombatantId = A0; save(); closePanel('turnview'); }
+    }
+    // -- Round 479: turn view — narrowing the window keeps whoever's turn it is in sight on the initiative strip (it was centred once a turn, then left past the edge) --
+    if (!PLAYER){
+      const K0 = JSON.stringify(state.combatants || []), A0 = state.activeCombatantId;
+      const T = panelDefs.turnview;
+      let w = null, wst = null;
+      try {
+        const extra = Array.from({ length: 12 }, (_, i) => ({ id: 'crowd479_' + i, name: 'Bandit ' + (i + 1), isPC: false, cls: 'enemy', hp: 11, hpMax: 11, ac: 12, initiative: 30 - i, conditions: [] }));
+        state.combatants = extra.concat(state.combatants || []);
+        state.activeCombatantId = 'crowd479_10';
+        openPanel('turnview'); await sleep(300);
+        w = T._body.closest('.window'); wst = w.getAttribute('style');
+        w.style.width = '1300px'; T._render(); await sleep(250);
+        w.style.width = '560px'; await sleep(400);
+        const st = T._body.querySelector('.tv-init').getBoundingClientRect(), cr = T._body.querySelector('.tv-pip.cur').getBoundingClientRect();
+        ok('narrowed: the creature whose turn it is is still in sight on the strip', cr.left >= st.left - 1 && cr.right <= st.right + 1, Math.round(cr.left) + '-' + Math.round(cr.right) + ' in ' + Math.round(st.left) + '-' + Math.round(st.right));
+      } catch(e){ ok('round 479 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
+      finally { if (w) w.setAttribute('style', wst || ''); state.combatants = JSON.parse(K0); state.activeCombatantId = A0; save(); closePanel('turnview'); }
+    }
     // -- Class features: represented, not just text ------------------------
     {
       try {

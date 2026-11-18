@@ -1898,6 +1898,32 @@ function sktMonsterSpellcasting(raw){
 // blocks give only the DC — the bonus is DC − 8), a save at its DC, the
 // damage at the level it is cast (a cantrip by the caster's level, else its
 // CR). `R` is the rules data of the monster's edition.
+// A spell's higher-level dice for its damage roll i (of type `type`), or
+// null when that roll doesn't grow. "The damage increases" is the first roll;
+// "The Radiant and Thunder damage increase" (Jallarzi's Storm of Radiance) is
+// every roll of those types, "The Cold damage" (Ice Knife — its first roll is
+// the piercing shard) only that one, "both types", "all the damage" and "each
+// of its effects" every roll, "the Fire damage or the Radiant damage (your
+// choice)" the first named, and two steps (Bigby's Hand, Wall of Ice) one per
+// roll in order. Every roll used to get the first one's step, on the first.
+function sktSpellStep(s, i, type){
+  const hi = JSON.stringify((s && (s.higher || s.entriesHigherLevel)) || []);
+  const steps = [...hi.matchAll(/\{@scaledamage [^|]+\|[^|]+\|([^}|]+)/g)].map(m => m[1].trim());
+  if (!steps.length) return null;
+  if (steps.length > 1) return steps[i] || null;
+  const plain = hi.replace(/\{@\w+ ([^}|]*)[^}]*\}/g, '$1');
+  if (/\b(both|all the damage|each of its effects)\b/i.test(plain)) return steps[0];
+  const named = [...plain.matchAll(new RegExp('\\b(' + SKT_DMG_TYPE_RE.source + ')\\b', 'gi'))].map(m => m[1].toLowerCase());
+  if (!named.length) return i === 0 ? steps[0] : null;
+  const pick = /\bor\b/i.test(plain) ? named.slice(0, 1) : named;
+  return pick.includes(String(type || '').toLowerCase()) ? steps[0] : null;
+}
+// "4d10" grown by `up` steps of "1d10" → "6d10"; a different die is added on.
+function sktSpellStepped(dice, step, up){
+  if (!step || !up) return dice;
+  const st = /^(\d+)d(\d+)$/.exec(step), bm = /^(\d+)d(\d+)(.*)$/.exec(dice);
+  return st && bm && st[2] === bm[2] ? (+bm[1] + up * +st[1]) + 'd' + bm[2] + bm[3] : dice + (st ? '+' + (up * +st[1]) + 'd' + st[2] : '');
+}
 function sktMonsterSpellRows(raw, R){
   const sc = sktMonsterSpellcasting(raw);
   if (!sc || !R || typeof sktRulesSpell !== 'function') return [];
@@ -1927,15 +1953,11 @@ function sktMonsterSpellRows(raw, R){
     const cond = sktSpellSaveCond(s);
     if (!dms.length && !cond && s.name !== 'Magic Missile') return;
     const up = Math.max(0, castAt - lvl);
-    const scl = /\{@scaledamage [^|]+\|[^|]+\|([^}|]+)/.exec(JSON.stringify(s.higher || s.entriesHigherLevel || []));
     const parts = dms.map((d0, i) => {
       let dice = d0;
       if (!lvl && !i && typeof _sktCantripDice === 'function') dice = _sktCantripDice(s, cl) || dice;
-      // The higher-level step goes on the first roll ("8d6 … +1d6 for each slot level above 3").
-      if (lvl && up && scl && !i){
-        const st = /^(\d+)d(\d+)$/.exec(scl[1].trim()), bm = /^(\d+)d(\d+)(.*)$/.exec(dice);
-        dice = st && bm && st[2] === bm[2] ? (+bm[1] + up * +st[1]) + 'd' + bm[2] + bm[3] : dice + (st ? '+' + (up * +st[1]) + 'd' + st[2] : '');
-      }
+      // The higher-level step, on the rolls the spell's text grows.
+      if (lvl && up) dice = sktSpellStepped(dice, sktSpellStep(s, i, types[i] || types[0] || ''), up);
       return { avg: _sktDiceAvg(dice), dice, type: types[i] || types[0] || '' };
     });
     const isAtk = (s.spellAttack || []).length > 0, save = (s.savingThrow || [])[0];

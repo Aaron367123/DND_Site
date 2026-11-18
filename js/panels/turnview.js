@@ -1480,7 +1480,9 @@ registerPanel('turnview', {
   _scrollInit(){
     const s = this._body && this._body.querySelector('.tv-init'); if (!s) return;
     const sr = s.getBoundingClientRect();
-    const cur = s.querySelector('.tv-pip.cur'), key = state.activeCombatantId + '|' + (this._editInit ? 1 : 0);
+    // …and again when the strip changes width: narrowing the window left the
+    // creature whose turn it is past the edge, its name out of sight.
+    const cur = s.querySelector('.tv-pip.cur'), key = state.activeCombatantId + '|' + (this._editInit ? 1 : 0) + '|' + Math.round(sr.width);
     if (cur && sr.width > 0 && this._initScrolled !== key){
       this._initScrolled = key;
       const cr = cur.getBoundingClientRect();
@@ -2021,7 +2023,10 @@ registerPanel('turnview', {
       if (left === 0 && !usedNow){
         ctl = `${rech}<span class="tv-act-note">used up</span>`;
       } else if (spent){
-        ctl = `${rech}<span class="tv-act-note">spent — recharges on its turn</span>`;
+        // The app rolls the d6 at the start of its turn; a DM rolling at the
+        // table had no way to say it came back.
+        ctl = `${rech}<span class="tv-act-note">spent — recharges on its turn</span>
+          <button class="btn" data-tv="rech" data-name="${esc(a.name)}" title="You rolled the recharge at the table and it came back">↺ Recharged</button>`;
       } else if (a.heal){
         ctl = `${rech}<button class="btn" data-tv="mheal" data-ai="${i}" title="${esc(a.heal.self ? 'It heals itself' : 'Heals the creature picked on the right (itself if none)')}">${ICO('i-heart')}Heal</button>`;
       } else if (a.save){
@@ -2562,7 +2567,7 @@ registerPanel('turnview', {
       return `<button class="tv-tgt ${this._armed === t.id ? 'armed' : ''} ${(t.hp || 0) <= 0 || t.dead ? 'down' : ''}" data-tv="arm" data-id="${esc(t.id)}"
                       aria-pressed="${this._armed === t.id}">
         <span class="tv-tgt-row">
-          <span class="tv-tgt-name">${esc(t.name)}${r}</span>
+          <span class="tv-tgt-name"><span class="tv-tgt-nm" title="${esc(t.name)}">${esc(t.name)}</span>${r}</span>
           <span class="tv-tgt-hp">${t.hp}/${t.hpMax}</span>
           <span class="tv-tgt-ac">${ICO('i-shield')}${t.ac ?? '–'}</span>
         </span>
@@ -3047,7 +3052,7 @@ registerPanel('turnview', {
           .filter((v, i, a) => a.indexOf(v) === i).join(', '))}</span>` : '';
     return `<div class="tv-react"><span class="tv-react-l">Reaction?</span>${waiting}
       <span class="tv-react-note">${esc(o.target.name)} ${o.hit ? `takes ${esc(this._dmgWords(o))}` : 'was missed'}${
-        o.total == null ? '' : ` — ${o.total} vs AC ${(o.target.ac || 0) + (o.acBonus || 0)}`}</span>
+        o.total == null ? '' : ` — ${o.total} vs AC ${(o.target.ac || 0) + (o.acBonus || 0)}${o.hitNote ? ' · ' + esc(o.hitNote) : ''}`}</span>
       ${opts}
       <button class="btn primary" data-tv="react" data-who="" data-key="__none">${o.hit ? `Take ${o.dmg}` : 'Let it miss'}</button>
     </div>`;
@@ -5647,6 +5652,15 @@ registerPanel('turnview', {
       else if (act === 'rider'){ this._rollSave(+el.dataset.ai, el.dataset.half === '1', true); }
       else if (act === 'area'){ this._areaSave(+el.dataset.ai); }
       else if (act === 'multi'){ this._startMulti(); }
+      else if (act === 'rech'){
+        const c = this._active(), name = el.dataset.name;
+        if (c && (c.rechargeSpent || []).includes(name)){
+          this._snapshot(`${c.name} · ${name} recharged`);
+          c.rechargeSpent = c.rechargeSpent.filter(n => n !== name);
+          this._log.unshift(`<strong>${esc(c.name)}</strong> — ${esc(name)} recharged <span style="opacity:.7">· rolled at the table</span>`);
+          save(); this._render();
+        }
+      }
       else if (act === 'legend'){ this._useLegendary(el.dataset.id, +el.dataset.ai); }
       else if (act === 'lair'){ this._useLair(el.dataset.id, +el.dataset.i); }
       else if (act === 'qmiss'){ if (this._queue){ this._queue.misses++; this._advanceQueue(); } }

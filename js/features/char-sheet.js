@@ -1906,12 +1906,15 @@ function csSpellDamage(s, slot){
   const m = /\{@damage ([^}|]+)/.exec(JSON.stringify(s.entries || []));
   if (!m) return '';
   let expr = m[1].trim();
-  const sc = /\{@scaledamage [^|]+\|[^|]+\|([^}|]+)/.exec(JSON.stringify(s.higher || []));
   const up = Math.max(0, (slot || s.level) - s.level);
-  if (sc && up){
-    const st = /^(\d+)d(\d+)$/.exec(sc[1].trim()), bm = /^(\d+)d(\d+)(.*)$/.exec(expr);
-    if (st && bm && st[2] === bm[2]) expr = (+bm[1] + up * +st[1]) + 'd' + bm[2] + bm[3];
-    else if (st) expr += ' + ' + (up * +st[1]) + 'd' + st[2];
+  // Only when the text grows this roll: Ice Knife's first is the piercing
+  // shard, and "1d10 + 1d6" at 2nd level put the cold dice on it.
+  if (up && typeof sktSpellStep === 'function'){
+    const after = JSON.stringify(s.entries || []).slice(m.index + m[0].length).slice(0, 40);
+    const ty = (new RegExp('^[^a-z]*(' + SKT_DMG_TYPE_RE.source + ')\\b', 'i').exec(after) || [])[1] || (s.damageInflict || [])[0] || '';
+    const st = sktSpellStep(s, 0, ty);
+    if (st){ const a = /^(\d+)d(\d+)$/.exec(st), bm = /^(\d+)d(\d+)(.*)$/.exec(expr);
+      expr = a && bm && a[2] === bm[2] ? (+bm[1] + up * +a[1]) + 'd' + bm[2] + bm[3] : expr + (a ? ' + ' + (up * +a[1]) + 'd' + a[2] : ''); }
   }
   // A bonus to one school's spell damage (the Evoker's Empowered Evocation).
   { const pc = typeof csPc === 'function' && CS ? csPc() : null, sd = pc && pc.sheet && pc.sheet.schoolDamage;
