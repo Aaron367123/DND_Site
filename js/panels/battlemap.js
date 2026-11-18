@@ -6069,7 +6069,9 @@ registerPanel('battlemap',{
         // Spiral out from there so adding the whole party doesn't pile every
         // member onto one square.
         const spot = this._freeCellNear(centre.x, centre.y);
-        this._tokens.push({id:uid(),label:p.name,x:spot.x,y:spot.y,isPC:true,color:'#696969',size:1,dead:false,icon:p.icon||'⚔',portrait:p.portrait||null});
+        // (with who it stands for: a character's token placed by hand had no
+        // cid, so a rename lost it — the tracker's own always did)
+        this._tokens.push({id:uid(),cid:p.id,label:p.name,x:spot.x,y:spot.y,isPC:true,color:'#696969',size:1,dead:false,icon:p.icon||'⚔',portrait:p.portrait||null});
         this._renderTokens();this._saveMap();
         this._render(); // refresh party quick-add row
       }
@@ -6808,8 +6810,8 @@ registerPanel('battlemap',{
       if (pi !== ''){
         const p = state.party[parseInt(pi)];
         if (!p) return;
-        if (this._tokens.find(t => t.label === p.name && t.isPC)){ showToast(p.name+' already on map'); return; }
-        this._tokens.push({id:uid(), label:p.name, x, y, isPC:true, color:'#696969', size:1, dead:false, icon:p.icon||'⚔', portrait:p.portrait||null});
+        if (this._tokens.find(t => t && t.isPC && (t.cid === p.id || t.label === p.name))){ showToast(p.name+' already on map'); return; }
+        this._tokens.push({id:uid(), cid:p.id, label:p.name, x, y, isPC:true, color:'#696969', size:1, dead:false, icon:p.icon||'⚔', portrait:p.portrait||null});
         this._renderTokens(); this._saveMap();
         this._render(); // refresh quick-add row (the dropped member disappears from it)
       } else if (mid){
@@ -8851,7 +8853,7 @@ registerPanel('battlemap',{
         const partyMatch = state.party.find(p => p.name === name);
         const icon = (c.icon || (partyMatch && sktPcIcon(partyMatch)) || '⚔');
         const portrait = c.portrait || (partyMatch && partyMatch.portrait) || null;
-        this._tokens.push({id:uid(),label:name,x,y,isPC:true,color:'#696969',size:1,dead:(c.hp||0)<=0,icon,portrait});
+        this._tokens.push({id:uid(),cid:cid||undefined,label:name,x,y,isPC:true,color:'#696969',size:1,dead:(c.hp||0)<=0,icon,portrait});
         placed++;
       }
     });

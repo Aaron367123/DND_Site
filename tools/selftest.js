@@ -25857,6 +25857,27 @@ for (const cls of Object.keys(rule)) for (let L = 1; L <= 20; L++) for (const sc
       } catch(e){ ok('round 500 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
       finally { B._tokens = JSON.parse(T0); state.combatants = JSON.parse(K0); save(); B._render(); }
     }
+    // -- Round 501: a character's token placed by hand (the party bar, Add party) says who it stands for — it had no cid, so only its label tied it to them, and a rename lost it --
+    if (!PLAYER){
+      const B = panelDefs.battlemap, T0 = JSON.stringify(B._tokens || []), K0 = JSON.stringify(state.combatants || []);
+      try {
+        openPanel('battlemap'); await sleep(300);
+        const p = state.party.find(x => !x.foe), q = state.party.filter(x => !x.foe)[1];
+        B._tokens = (B._tokens || []).filter(t => !t.isPC); B._render(); await sleep(80);
+        const chip = [...B._body.querySelectorAll('[data-mact="add-party"]')].find(b => state.party[+b.dataset.pi] === p);
+        chip && chip.click(); await sleep(120);
+        const t1 = B._tokens.find(t => t.isPC && t.label === p.name);
+        ok('the party bar’s token for ' + p.name + ' carries who it is (cid)', !!t1 && t1.cid === p.id, t1 ? JSON.stringify({ cid: t1.cid }) : 'no token');
+        state.combatants = [];
+        B._syncParty(); await sleep(100);
+        const t2 = q && B._tokens.find(t => t.isPC && t.label === q.name);
+        ok('…Add party’s too', !q || (!!t2 && t2.cid === q.id), t2 ? JSON.stringify({ cid: t2.cid }) : 'no token');
+        // Its label renamed: still theirs.
+        if (t1){ t1.label = p.name + ' the Bold'; B._render(); await sleep(80); }
+        ok('…its label changed, it is still ' + p.name + '’s (the bar doesn’t offer them)', ![...B._body.querySelectorAll('[data-mact="add-party"]')].some(b => state.party[+b.dataset.pi] === p) && sktTokenForCombatant(B._tokens, { id: p.id, name: p.name }) === t1);
+      } catch(e){ ok('round 501 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
+      finally { B._tokens = JSON.parse(T0); state.combatants = JSON.parse(K0); save(); B._render(); }
+    }
     // -- Class features: represented, not just text ------------------------
     {
       try {
