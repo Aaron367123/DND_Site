@@ -25786,6 +25786,28 @@ for (const cls of Object.keys(rule)) for (let L = 1; L <= 20; L++) for (const sc
         ok('…the Elfsong Tavern (no scale): 166, as before', !!elf && Math.abs(elf.size - 166) < 0.01, JSON.stringify(elf));
       } catch(e){ ok('round 497 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
     }
+    // -- Round 498: an adventure map's squares are as far as its data says — Krezk's village is 50 ft a square (it read 5: the ruler and every reach a tenth), and a 5 ft map after it is 5 again --
+    if (!PLAYER){
+      const B = panelDefs.battlemap, F0 = B._ftPerCell, K = 'skt-battlemap-v1', base = localStorage.getItem(K);
+      try {
+        const krezk = await B._advGrid('adventure/CoS/083-022.webp');
+        ok('Krezk (Curse of Strahd 8.1): 50 ft a square', !!krezk && krezk.ft === 50, JSON.stringify(krezk));
+        const elf = await B._advGrid('adventure/BGDIA/009-hc2oz-map-1-2-player.webp');
+        ok('…the Elfsong Tavern: 5', !!elf && elf.ft === 5, JSON.stringify(elf));
+        // Applied when the map is put up (its picture in): Krezk, then the tavern.
+        openPanel('battlemap'); await sleep(300);
+        const put = async (path, g) => { B._bgMapPath = path; B._bgLoadedPath = path; B._bgMapNaturalW = B._bgMapNaturalW || 1000; B._useAdvGrid(path, g, 0); await sleep(50); };
+        await put('adventure/CoS/083-022.webp', krezk);
+        const a = B._ftPerCell;
+        await put('adventure/BGDIA/009-hc2oz-map-1-2-player.webp', elf);
+        ok('…put up: Krezk measures 50 a square, the tavern after it 5', a === 50 && B._ftPerCell === 5, a + ' then ' + B._ftPerCell);
+      } catch(e){ ok('round 498 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
+      finally {
+        B._ftPerCell = F0;
+        _remoteUpdate = true; if (base == null) localStorage.removeItem(K); else localStorage.setItem(K, base); _remoteUpdate = false;
+        closePanel('battlemap'); await sleep(100); openPanel('battlemap'); await sleep(300);
+      }
+    }
     // -- Class features: represented, not just text ------------------------
     {
       try {

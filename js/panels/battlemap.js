@@ -1781,7 +1781,7 @@ registerPanel('battlemap',{
     const path = this._bgMapPath;
     this._advGrid(path).then(g => {
       if (_mapBgImage !== img) return;
-      if (g){ const sc = g.w ? this._bgMapNaturalW / g.w : 1; this._applyGrid({ size: g.size * sc, ox: g.ox * sc, oy: g.oy * sc }, 'from the adventure’s map'); return; }
+      if (g){ const sc = g.w ? this._bgMapNaturalW / g.w : 1; this._ftPerCell = g.ft || 5; this._applyGrid({ size: g.size * sc, ox: g.ox * sc, oy: g.oy * sc }, 'from the adventure’s map'); return; }
       let f = null; try { f = sktDetectGrid(img); } catch(e){}
       if (!f){ showToast('No squares found on this map. Use Align and click two corners of a printed square.'); return; }
       const k = img.naturalWidth ? (this._bgMapNaturalW || img.naturalWidth) / img.naturalWidth : 1;
@@ -1808,7 +1808,12 @@ registerPanel('battlemap',{
       // reading `size` alone gave them squares twice too big (AUD's Two
       // Plateaus: 191 for its 95.5; AVT Map 1: 50 for its 24.2 — the printed
       // lines fell midway). Offsets are the picture's own.
-      return g && g.type === 'square' && +g.size > 0 ? { size: +g.size / (+g.scale > 0 ? +g.scale : 1), ox: +g.offsetX || 0, oy: +g.offsetY || 0, w: +e.w || 0 } : null;
+      // …and how far a square is: Krezk's village map is 50 ft a square,
+      // Saltmarsh's Abbey Isle 500 (48 maps aren't 5): the ruler and every
+      // reach read a tenth or less. In feet, from yards or miles too.
+      const per = { ft: 1, feet: 1, yd: 3, yard: 3, yards: 3, mi: 5280, mile: 5280, miles: 5280 }[String(g.units || 'ft').toLowerCase()];
+      const ft = +g.distance > 0 && per ? +g.distance * per : 5;
+      return g && g.type === 'square' && +g.size > 0 ? { size: +g.size / (+g.scale > 0 ? +g.scale : 1), ox: +g.offsetX || 0, oy: +g.offsetY || 0, w: +e.w || 0, ft } : null;
     });
   },
   // Once the picked map's picture is in (its size is what the grid scales
@@ -1824,6 +1829,7 @@ registerPanel('battlemap',{
     if (g){
       const sc = g.w ? this._bgMapNaturalW / g.w : 1, sz = Math.max(8, g.size * sc), mod = v => ((v % sz) + sz) % sz;
       this._cellSize = sz; this._gridOffsetX = mod(g.ox * sc); this._gridOffsetY = mod(g.oy * sc);
+      this._ftPerCell = g.ft || 5;
     }
     this._fitGridToBg(); this._pullTokensOnto(); this._saveMap(); this._render(); if (g) this._fitMapToView();
   },
