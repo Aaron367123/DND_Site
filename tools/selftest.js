@@ -22420,7 +22420,7 @@ for (const cls of Object.keys(rule)) for (let L = 1; L <= 20; L++) for (const sc
       const B = panelDefs.battlemap;
       const S0 = localStorage.getItem('skt-battlemap-v1'), P0 = B._bgMapPath, I0 = _mapBgImage, W0 = B._bgMapNaturalW, H0 = B._bgMapNaturalH;
       const putReal = window.sktMapBlobPut, readyReal = window.sktMapBlobReady;
-      const keep = { cs: B._cellSize, ox: B._gridOffsetX, oy: B._gridOffsetY, cols: B._cols, rows: B._rows, tool: B._tool, sc: B._bgMapScale, lts: B._lastTokenScale };
+      const keep = { ft: B._ftPerCell, cs: B._cellSize, ox: B._gridOffsetX, oy: B._gridOffsetY, cols: B._cols, rows: B._rows, tool: B._tool, sc: B._bgMapScale, lts: B._lastTokenScale };
       let keepT = null, keepD = null, keepF, fogSaved = false;
       // A made-up map: mottled ground, some walls, and (optionally) grid lines.
       const mkMap = async (w, h, grid, name, type) => {
@@ -22479,7 +22479,7 @@ for (const cls of Object.keys(rule)) for (let L = 1; L <= 20; L++) for (const sc
         document.querySelectorAll('#toast-host .toast-item').forEach(t => t.remove());
         window.sktMapBlobPut = putReal; window.sktMapBlobReady = readyReal;
         if (fogSaved) B._fog = keepF;
-        B._cellSize = keep.cs; B._gridOffsetX = keep.ox; B._gridOffsetY = keep.oy; B._cols = keep.cols; B._rows = keep.rows; B._tool = keep.tool; B._bgMapScale = keep.sc; B._lastTokenScale = keep.lts;
+        B._ftPerCell = keep.ft; B._cellSize = keep.cs; B._gridOffsetX = keep.ox; B._gridOffsetY = keep.oy; B._cols = keep.cols; B._rows = keep.rows; B._tool = keep.tool; B._bgMapScale = keep.sc; B._lastTokenScale = keep.lts;
         _mapBgImage = I0; B._bgMapPath = P0; B._bgMapNaturalW = W0; B._bgMapNaturalH = H0;
         if (keepT){ B._tokens = keepT; B._drawings = keepD; }
         if (S0 != null) localStorage.setItem('skt-battlemap-v1', S0);
@@ -22492,7 +22492,7 @@ for (const cls of Object.keys(rule)) for (let L = 1; L <= 20; L++) for (const sc
       const B = panelDefs.battlemap;
       const S0 = localStorage.getItem('skt-battlemap-v1'), P0 = B._bgMapPath, I0 = _mapBgImage, W0 = B._bgMapNaturalW, H0 = B._bgMapNaturalH;
       const putReal = window.sktMapBlobPut, readyReal = window.sktMapBlobReady, retireReal = B._retireBlob;
-      const keep = { cs: B._cellSize, ox: B._gridOffsetX, oy: B._gridOffsetY, cols: B._cols, rows: B._rows, sc: B._bgMapScale, lts: B._lastTokenScale, size: B._bgMapSize };
+      const keep = { ft: B._ftPerCell, cs: B._cellSize, ox: B._gridOffsetX, oy: B._gridOffsetY, cols: B._cols, rows: B._rows, sc: B._bgMapScale, lts: B._lastTokenScale, size: B._bgMapSize };
       let keepT = null, keepD = null, keepF, fogSaved = false;
       try {
         openPanel('battlemap'); await sleep(600);
@@ -22521,7 +22521,7 @@ for (const cls of Object.keys(rule)) for (let L = 1; L <= 20; L++) for (const sc
         document.querySelectorAll('#toast-host .toast-item').forEach(t => t.remove());
         window.sktMapBlobPut = putReal; window.sktMapBlobReady = readyReal; B._retireBlob = retireReal;
         if (fogSaved) B._fog = keepF;
-        B._cellSize = keep.cs; B._gridOffsetX = keep.ox; B._gridOffsetY = keep.oy; B._cols = keep.cols; B._rows = keep.rows; B._bgMapScale = keep.sc; B._lastTokenScale = keep.lts; B._bgMapSize = keep.size;
+        B._ftPerCell = keep.ft; B._cellSize = keep.cs; B._gridOffsetX = keep.ox; B._gridOffsetY = keep.oy; B._cols = keep.cols; B._rows = keep.rows; B._bgMapScale = keep.sc; B._lastTokenScale = keep.lts; B._bgMapSize = keep.size;
         _mapBgImage = I0; B._bgMapPath = P0; B._bgMapNaturalW = W0; B._bgMapNaturalH = H0;
         if (keepT){ B._tokens = keepT; B._drawings = keepD; }
         if (S0 != null) localStorage.setItem('skt-battlemap-v1', S0);
@@ -22564,7 +22564,7 @@ for (const cls of Object.keys(rule)) for (let L = 1; L <= 20; L++) for (const sc
       const B = panelDefs.battlemap;
       const S0 = localStorage.getItem('skt-battlemap-v1'), P0 = B._bgMapPath, I0 = _mapBgImage, W0 = B._bgMapNaturalW, H0 = B._bgMapNaturalH, L0 = B._bgLoadedPath;
       const putReal = window.sktMapBlobPut, readyReal = window.sktMapBlobReady;
-      const keep = { cs: B._cellSize, ox: B._gridOffsetX, oy: B._gridOffsetY, cols: B._cols, rows: B._rows, sc: B._bgMapScale, lts: B._lastTokenScale, size: B._bgMapSize };
+      const keep = { ft: B._ftPerCell, cs: B._cellSize, ox: B._gridOffsetX, oy: B._gridOffsetY, cols: B._cols, rows: B._rows, sc: B._bgMapScale, lts: B._lastTokenScale, size: B._bgMapSize };
       let keepT = null, keepD = null, keepF, fogSaved = false;
       try {
         openPanel('battlemap'); await sleep(600);
@@ -22614,7 +22614,7 @@ for (const cls of Object.keys(rule)) for (let L = 1; L <= 20; L++) for (const sc
         document.querySelectorAll('#toast-host .toast-item').forEach(t => t.remove());
         window.sktMapBlobPut = putReal; window.sktMapBlobReady = readyReal;
         if (fogSaved) B._fog = keepF;
-        B._cellSize = keep.cs; B._gridOffsetX = keep.ox; B._gridOffsetY = keep.oy; B._cols = keep.cols; B._rows = keep.rows; B._bgMapScale = keep.sc; B._lastTokenScale = keep.lts; B._bgMapSize = keep.size;
+        B._ftPerCell = keep.ft; B._cellSize = keep.cs; B._gridOffsetX = keep.ox; B._gridOffsetY = keep.oy; B._cols = keep.cols; B._rows = keep.rows; B._bgMapScale = keep.sc; B._lastTokenScale = keep.lts; B._bgMapSize = keep.size;
         _mapBgImage = I0; B._bgMapPath = P0; B._bgMapNaturalW = W0; B._bgMapNaturalH = H0; B._bgLoadedPath = L0;
         if (keepT){ B._tokens = keepT; B._drawings = keepD; }
         if (S0 != null) localStorage.setItem('skt-battlemap-v1', S0);
@@ -22626,7 +22626,7 @@ for (const cls of Object.keys(rule)) for (let L = 1; L <= 20; L++) for (const sc
     {
       const B = panelDefs.battlemap;
       const S0 = localStorage.getItem('skt-battlemap-v1'), P0 = B._bgMapPath, I0 = _mapBgImage, W0 = B._bgMapNaturalW, H0 = B._bgMapNaturalH, L0 = B._bgLoadedPath;
-      const keep = { cs: B._cellSize, ox: B._gridOffsetX, oy: B._gridOffsetY, cols: B._cols, rows: B._rows, size: B._bgMapSize, set: B._settingsOpen };
+      const keep = { ft: B._ftPerCell, cs: B._cellSize, ox: B._gridOffsetX, oy: B._gridOffsetY, cols: B._cols, rows: B._rows, size: B._bgMapSize, set: B._settingsOpen };
       const toast = re => [...document.querySelectorAll('#toast-host .toast-item')].find(t => re.test(t.textContent));
       try {
         openPanel('battlemap'); await sleep(600);
@@ -22663,7 +22663,7 @@ for (const cls of Object.keys(rule)) for (let L = 1; L <= 20; L++) for (const sc
       } catch(e){ ok('round 395 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
       finally {
         document.querySelectorAll('#toast-host .toast-item').forEach(t => t.remove());
-        B._cellSize = keep.cs; B._gridOffsetX = keep.ox; B._gridOffsetY = keep.oy; B._cols = keep.cols; B._rows = keep.rows; B._bgMapSize = keep.size; B._settingsOpen = keep.set;
+        B._ftPerCell = keep.ft; B._cellSize = keep.cs; B._gridOffsetX = keep.ox; B._gridOffsetY = keep.oy; B._cols = keep.cols; B._rows = keep.rows; B._bgMapSize = keep.size; B._settingsOpen = keep.set;
         _mapBgImage = I0; B._bgMapPath = P0; B._bgMapNaturalW = W0; B._bgMapNaturalH = H0; B._bgLoadedPath = L0;
         if (S0 != null) localStorage.setItem('skt-battlemap-v1', S0);
         try { B._render(); } catch(e){}
@@ -22934,7 +22934,7 @@ for (const cls of Object.keys(rule)) for (let L = 1; L <= 20; L++) for (const sc
     {
       const B = panelDefs.battlemap;
       const S0 = localStorage.getItem('skt-battlemap-v1'), P0 = B._bgMapPath, I0 = _mapBgImage, W0 = B._bgMapNaturalW, H0 = B._bgMapNaturalH;
-      const keep = { cs: B._cellSize, ox: B._gridOffsetX, oy: B._gridOffsetY, cols: B._cols, rows: B._rows, sc: B._bgMapScale, lts: B._lastTokenScale, tool: B._tool, shape: B._tplShape };
+      const keep = { ft: B._ftPerCell, cs: B._cellSize, ox: B._gridOffsetX, oy: B._gridOffsetY, cols: B._cols, rows: B._rows, sc: B._bgMapScale, lts: B._lastTokenScale, tool: B._tool, shape: B._tplShape };
       let keepT = null, keepD = null, keepF, fogSaved = false;
       try {
         // 1. The sight index answers as testing every wall did
@@ -23029,7 +23029,7 @@ for (const cls of Object.keys(rule)) for (let L = 1; L <= 20; L++) for (const sc
       finally {
         try { B._endWallFind(); } catch(e){}
         if (fogSaved) B._fog = keepF;
-        B._cellSize = keep.cs; B._gridOffsetX = keep.ox; B._gridOffsetY = keep.oy; B._cols = keep.cols; B._rows = keep.rows; B._bgMapScale = keep.sc; B._lastTokenScale = keep.lts; B._tool = keep.tool; B._tplShape = keep.shape;
+        B._ftPerCell = keep.ft; B._cellSize = keep.cs; B._gridOffsetX = keep.ox; B._gridOffsetY = keep.oy; B._cols = keep.cols; B._rows = keep.rows; B._bgMapScale = keep.sc; B._lastTokenScale = keep.lts; B._tool = keep.tool; B._tplShape = keep.shape;
         _mapBgImage = I0; B._bgMapPath = P0; B._bgMapNaturalW = W0; B._bgMapNaturalH = H0;
         if (keepT){ B._tokens = keepT; B._drawings = keepD; }
         if (S0 != null) localStorage.setItem('skt-battlemap-v1', S0);
@@ -23041,7 +23041,7 @@ for (const cls of Object.keys(rule)) for (let L = 1; L <= 20; L++) for (const sc
     {
       const B = panelDefs.battlemap;
       const S0 = localStorage.getItem('skt-battlemap-v1'), P0 = B._bgMapPath, I0 = _mapBgImage, W0 = B._bgMapNaturalW, H0 = B._bgMapNaturalH;
-      const keep = { cs: B._cellSize, ox: B._gridOffsetX, oy: B._gridOffsetY, cols: B._cols, rows: B._rows, sc: B._bgMapScale, lts: B._lastTokenScale, tool: B._tool, shape: B._tplShape };
+      const keep = { ft: B._ftPerCell, cs: B._cellSize, ox: B._gridOffsetX, oy: B._gridOffsetY, cols: B._cols, rows: B._rows, sc: B._bgMapScale, lts: B._lastTokenScale, tool: B._tool, shape: B._tplShape };
       let keepT = null, keepD = null, keepF, fogSaved = false;
       try {
         // the gap finder on its own: two walls in line with a square's gap; a corner isn't a gap
@@ -23105,7 +23105,7 @@ for (const cls of Object.keys(rule)) for (let L = 1; L <= 20; L++) for (const sc
         try { B._endWallFind(); } catch(e){}
         document.querySelectorAll('.ctx-menu, [data-wall-erase]').forEach(m => m.remove()); B._wallErasing = false;
         if (fogSaved) B._fog = keepF;
-        B._cellSize = keep.cs; B._gridOffsetX = keep.ox; B._gridOffsetY = keep.oy; B._cols = keep.cols; B._rows = keep.rows; B._bgMapScale = keep.sc; B._lastTokenScale = keep.lts; B._tool = keep.tool; B._tplShape = keep.shape;
+        B._ftPerCell = keep.ft; B._cellSize = keep.cs; B._gridOffsetX = keep.ox; B._gridOffsetY = keep.oy; B._cols = keep.cols; B._rows = keep.rows; B._bgMapScale = keep.sc; B._lastTokenScale = keep.lts; B._tool = keep.tool; B._tplShape = keep.shape;
         _mapBgImage = I0; B._bgMapPath = P0; B._bgMapNaturalW = W0; B._bgMapNaturalH = H0;
         if (keepT){ B._tokens = keepT; B._drawings = keepD; }
         if (S0 != null) localStorage.setItem('skt-battlemap-v1', S0);
