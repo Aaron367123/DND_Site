@@ -25629,8 +25629,10 @@ for (const cls of Object.keys(rule)) for (let L = 1; L <= 20; L++) for (const sc
           ok('the token panel stays inside the window', pr.bottom <= wr.bottom + 1, Math.round(pr.bottom) + ' vs ' + Math.round(wr.bottom));
           const hide = document.getElementById('tp-hide');
           hide.scrollIntoView({ block: 'nearest' }); await sleep(80);
-          const hr = hide.getBoundingClientRect(), hit = document.elementFromPoint(hr.left + hr.width / 2, hr.top + hr.height / 2);
-          ok('…scrolled to, “Hide from players” can be pressed', hit === hide || hide.contains(hit), hit && (hit.id || hit.className));
+          // (inside the panel's visible part and the window's: geometry, as
+          // whatever modal an earlier round left open would cover the point)
+          const hr = hide.getBoundingClientRect(), pr2 = p.getBoundingClientRect();
+          ok('…scrolled to, “Hide from players” is in view inside the window', hr.height > 0 && hr.top >= pr2.top - 1 && hr.bottom <= pr2.bottom + 1 && hr.bottom <= wr.bottom + 1, [hr.top, hr.bottom, pr2.top, pr2.bottom, wr.bottom].map(Math.round).join(','));
           const rng = document.getElementById('tp-size');
           ok('…the Size slider has a track to drag (it was ~40 px)', rng.getBoundingClientRect().width >= 60, Math.round(rng.getBoundingClientRect().width));
         }
