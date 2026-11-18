@@ -1807,15 +1807,19 @@ registerPanel('battlemap',{
   },
   // Once the picked map's picture is in (its size is what the grid scales
   // by): our squares on its squares. Not if another map has been picked.
+  // A map with no squares in its data (a city, a region) still brings the
+  // tokens onto it: they kept the last map's places and hung off its edge.
   _useAdvGrid(path, g, tries){
-    if (!g || this._bgMapPath !== path) return;
+    if (this._bgMapPath !== path) return;
     if (this._bgLoadedPath !== path || !this._bgMapNaturalW){
       if (tries < 150) setTimeout(() => this._useAdvGrid(path, g, tries + 1), 200);
       return;
     }
-    const sc = g.w ? this._bgMapNaturalW / g.w : 1, sz = Math.max(8, g.size * sc), mod = v => ((v % sz) + sz) % sz;
-    this._cellSize = sz; this._gridOffsetX = mod(g.ox * sc); this._gridOffsetY = mod(g.oy * sc);
-    this._fitGridToBg(); this._pullTokensOnto(); this._saveMap(); this._render(); this._fitMapToView();
+    if (g){
+      const sc = g.w ? this._bgMapNaturalW / g.w : 1, sz = Math.max(8, g.size * sc), mod = v => ((v % sz) + sz) % sz;
+      this._cellSize = sz; this._gridOffsetX = mod(g.ox * sc); this._gridOffsetY = mod(g.oy * sc);
+    }
+    this._fitGridToBg(); this._pullTokensOnto(); this._saveMap(); this._render(); if (g) this._fitMapToView();
   },
   // A new map smaller than the last left tokens past its edge — drawn
   // nowhere, and no way to reach them. Each comes onto the map at the
@@ -4793,12 +4797,15 @@ registerPanel('battlemap',{
     // stage is what gets laid out. Fitting the image instead (what this used
     // to do) left the last row overflowing, which raised a scrollbar, which
     // shrank clientHeight, which meant "Fit" reliably failed to fit.
+    // …the grid of THIS picture: fitted to the cells it had, a map just
+    // swapped was framed for the one before (the Elfsong Tavern's 37×25
+    // squares for Baldur's Gate's 16×10 — drawn at a third of the window).
+    this._fitGridToBg();
     const gw = this._cols * this._cellSize, gh = this._rows * this._cellSize;
     if (!gw || !gh) return;
     // Displayed size is grid × bgMapScale × viewScale (_applyBg/_setupMap
     // apply the first, the CSS transform the second), so viewScale = eff / bg.
     const eff = Math.max(0.1, Math.min(this._maxEff(), Math.min(vw / gw, vh / gh)));
-    this._fitGridToBg();
     this._isFitted = true; // panel resize will re-fit until the user manually zooms
     this._pendingRefit = false;
     this._applyViewScale(eff / (this._bgMapScale || 1));

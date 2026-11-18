@@ -25657,6 +25657,39 @@ for (const cls of Object.keys(rule)) for (let L = 1; L <= 20; L++) for (const sc
       } catch(e){ ok('round 490 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
       finally { document.querySelector('#mapsel-close')?.click(); B._bgMapPath = P0; B._settingsOpen = S0; B._render(); }
     }
+    // -- Round 491: choosing a different map — it's fitted to its own grid (the last map's squares framed it: Baldur's Gate at a third of the window after the Elfsong Tavern), and tokens come onto it even when its data has no squares (they hung off its edge) --
+    if (!PLAYER){
+      const B = panelDefs.battlemap, K = 'skt-battlemap-v1', base = localStorage.getItem(K);
+      const keep = { p: B._bgMapPath, cols: B._cols, rows: B._rows, cs: B._cellSize, toks: JSON.stringify(B._tokens || []), v: B._viewScale };
+      let w = null, wst = null;
+      try {
+        openPanel('battlemap'); await sleep(500);
+        w = B._body.closest('.window'); wst = w.getAttribute('style'); w.style.width = '900px'; w.style.height = '640px'; await sleep(300);
+        // The map before: big (60×40 squares), its tokens far down it.
+        B._cols = 60; B._rows = 40;
+        (B._tokens || []).forEach((t, i) => { t.x = (40 + i) * B._cellSize + B._cellSize / 2; t.y = 36 * B._cellSize + B._cellSize / 2; });
+        // The new one: 1000×700, nothing in its data about squares (as a city map's).
+        const path = 'data:image/svg+xml,' + encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" width="1000" height="700"><rect width="1000" height="700" fill="#7a9a6a"/></svg>');
+        B._bgMapPath = path; B._resetMapScene(); B._bgMapScale = 1; B._lastTokenScale = 1; B._gridOffsetX = 0; B._gridOffsetY = 0; B._saveMap();
+        B._loadBgFromPath(path, true);
+        B._advGrid(path).then(g => B._useAdvGrid(path, g, 0));
+        for (let n = 0; n < 40 && B._bgLoadedPath !== path; n++) await sleep(100);
+        await sleep(600);
+        const auto = B._viewScale;
+        const sc = B._body.querySelector('#map-scroll'), st = B._body.querySelector('#map-stage').getBoundingClientRect();
+        ok('the new map fills the window (fitted to its own squares, not the last map’s)', st.width >= sc.clientWidth * 0.9 || st.height >= sc.clientHeight * 0.9, Math.round(st.width) + 'x' + Math.round(st.height) + ' in ' + sc.clientWidth + 'x' + sc.clientHeight);
+        const W = B._cols * B._cellSize, H = B._rows * B._cellSize;
+        const off = (B._tokens || []).filter(t => !(t.x > 0 && t.x < W && t.y > 0 && t.y < H));
+        ok('…every token is on it', (B._tokens || []).length > 0 && !off.length, off.map(t => t.label + '@' + Math.round(t.x) + ',' + Math.round(t.y)).join(' ') + ' / ' + W + 'x' + H);
+        B._fitMapToView(); await sleep(100);
+        ok('…the same view a Fit gives', Math.abs(B._viewScale - auto) < 0.03 * B._viewScale, auto + ' vs ' + B._viewScale);
+      } catch(e){ ok('round 491 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
+      finally {
+        if (w) w.setAttribute('style', wst || '');
+        _remoteUpdate = true; if (base == null) localStorage.removeItem(K); else localStorage.setItem(K, base); _remoteUpdate = false;
+        closePanel('battlemap'); await sleep(100); openPanel('battlemap'); await sleep(400);
+      }
+    }
     // -- Class features: represented, not just text ------------------------
     {
       try {
