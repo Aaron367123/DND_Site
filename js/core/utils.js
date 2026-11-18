@@ -2026,8 +2026,11 @@ function sktParseMonsterAttacks(raw){
         // How far it reaches, and how far it throws or shoots: "reach 5 ft.
         // or range 30/120 ft." — the turn view's long range and out of reach.
         if (parsed.toHit){
-          const d0 = String(a.desc || ''), rm = /\breach (\d+) ?ft/i.exec(d0), gm = /\brange (\d+)(?:\/(\d+))? ?ft/i.exec(d0);
-          if (rm) parsed.reach = +rm[1];
+          // (The books' own slips too: "ranged 150/600 ft.", "reach 60/240 ft."
+          // on a thrown rock, a line break after "range".)
+          const d0 = String(a.desc || ''), rm = /\breach\s+(\d+)(?:\s*\/\s*(\d+))?\s*(?:ft|feet)/i.exec(d0), gm = /\branged?\s+(\d+)(?:\s*\/\s*(\d+))?\s*(?:ft|feet)/i.exec(d0);
+          if (rm && rm[2]) parsed.range = [+rm[1], +rm[2]];
+          else if (rm) parsed.reach = +rm[1];
           if (gm) parsed.range = [+gm[1], +(gm[2] || gm[1])];
         }
         out.push(parsed);

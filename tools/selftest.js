@@ -25413,6 +25413,36 @@ for (const cls of Object.keys(rule)) for (let L = 1; L <= 20; L++) for (const sc
         state.combatants = JSON.parse(K0); state.activeCombatantId = A0; save(); closePanel('turnview');
       }
     }
+    // -- Round 481: turn view — an opportunity attack is a melee one: a character whose sheet lists a hand crossbow first swings the dagger (the crossbow was rolled) --
+    if (!PLAYER){
+      const K0 = JSON.stringify(state.combatants || []), A0 = state.activeCombatantId, P0 = JSON.stringify(state.party);
+      const T = panelDefs.turnview, realD = window.sktD;
+      try {
+        window.sktD = n => n === 20 ? 15 : realD(n);
+        const pcC = state.combatants.find(c => c.isPC), pi = state.party.findIndex(p => p.id === pcC.id);
+        state.party[pi] = Object.assign({}, state.party[pi], { sheet: Object.assign({}, state.party[pi].sheet || {}, { attacks: [
+          { name: 'Hand Crossbow', atkBonus: '+7', damage: '1d6+4 piercing', props: ['A', 'L', 'LD'], range: '30/120' },
+          { name: 'Dagger', atkBonus: '+7', damage: '1d4+4 piercing', props: ['F', 'L', 'T'], range: '20/60' } ] }) });
+        const foe = { id: 'gob481', name: 'Goblin Boss', isPC: false, cls: 'enemy', hp: 21, hpMax: 21, ac: 1, initiative: 40, conditions: [] };
+        state.combatants = [foe].concat(state.combatants.filter(c => c.id !== foe.id));
+        state.activeCombatantId = foe.id;
+        pcC.reactionUsed = false;
+        openPanel('turnview'); await sleep(300);
+        T._pending = { kind: 'move', mover: foe, rows: [pcC], moved: 10 };
+        T._useOA(pcC.id); await sleep(150);
+        const said = String((T._pending && T._pending.label) || '') + ' ' + String(T._result || '') + ' ' + (T._log || []).slice(0, 2).join(' ');
+        ok('the opportunity attack is the dagger, not the hand crossbow listed first', /Dagger \(opportunity attack\)/.test(said) && !/Crossbow/.test(said), said.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').slice(0, 200));
+        // Reach and range as the books print them, slips included.
+        const P = sktParseMonsterAttacks({ actions: [
+          { name: 'Longbow', desc: 'Ranged Weapon Attack: +4 to hit, ranged 150/600 ft., one target. Hit: 6 (1d8 + 2) piercing damage.' },
+          { name: 'Rock', desc: 'Ranged Weapon Attack: +14 to hit, reach 60/240 ft., one target. Hit: 30 (4d10 + 8) bludgeoning damage.' },
+          { name: 'Heavy Crossbow', desc: 'Ranged Weapon Attack: +4 to hit, range\n\n100/400 ft., one target. Hit: 7 (1d10 + 2) piercing damage.' },
+          { name: 'Greataxe', desc: 'Melee Attack Roll: +7, reach 10 ft. Hit: 10 (1d12 + 4) slashing damage.' } ] });
+        const rr = P.map(a => a.name + ':' + (a.reach != null ? 'reach ' + a.reach : '') + (a.range ? 'range ' + a.range.join('/') : '')).join(', ');
+        ok('reach and range off the stat block, its slips too ("ranged 150/600", "reach 60/240", a line break)', rr === 'Longbow:range 150/600, Rock:range 60/240, Heavy Crossbow:range 100/400, Greataxe:reach 10', rr);
+      } catch(e){ ok('round 481 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
+      finally { window.sktD = realD; T._pending = null; state.party = JSON.parse(P0); state.combatants = JSON.parse(K0); state.activeCombatantId = A0; save(); closePanel('turnview'); }
+    }
     // -- Class features: represented, not just text ------------------------
     {
       try {

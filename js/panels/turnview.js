@@ -5529,7 +5529,9 @@ registerPanel('turnview', {
       if (live) delete live.mvBack;
       if (had && live){ try { B._saveMap(); B._footMove && B._footMove(); } catch(e){} } }
     const list = this._attacksFor(who);
-    const melee = list.find(a => !a.save && (a.pc ? a.dmgText : (a.parts || []).length));
+    // A melee attack, as the rule says: the first one that wasn't a save took
+    // Zindle's hand crossbow (his sheet's first row) for his.
+    const melee = list.find(a => !a.save && !a.ranged && !a.spell && (a.pc ? a.dmgText : (a.parts || []).length));
     if (melee){
       // Attacker and target passed explicitly. An opportunity attack takes
       // nobody's turn, so the turn pointer must not move even for an instant —
