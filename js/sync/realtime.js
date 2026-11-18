@@ -210,7 +210,7 @@ function _portraitFetch(id, tries){
       if (!hit) return;
       _remoteUpdate = true;
       try { localStorage.setItem('skt-party-v1', JSON.stringify(arr)); } finally { _remoteUpdate = false; }
-      loadDomain('party'); ['party', 'combat'].forEach(_reloadPanel);
+      loadDomain('party', { remote: true }); ['party', 'combat'].forEach(_reloadPanel);
       if (typeof panelDefs !== 'undefined' && panelDefs.battlemap && panelDefs.battlemap._syncFromCombat) panelDefs.battlemap._syncFromCombat();
       if (typeof paRender === 'function') paRender();
     } catch(e){ _diag('portrait', e); }
@@ -255,7 +255,7 @@ const _ENTITY_KEYS = {
     // The player view's turn bar is not a panel, so _reloadPanel can't reach
     // it — and it is the one surface a player watches between their turns.
     postApply(){
-      loadDomain('combat');
+      loadDomain('combat', { remote: true });
       if (typeof sktNoteRemoteCombat === 'function') sktNoteRemoteCombat();
       ['combat','party'].forEach(_reloadPanel);
       if (typeof paRender === 'function') paRender();
@@ -303,7 +303,7 @@ const _ENTITY_KEYS = {
     },
     recordOpts(n){ return n.indexOf('items/') === 0 ? _REC_HP : null; },
     postApply(){
-      loadDomain('party'); ['party', 'combat'].forEach(_reloadPanel);
+      loadDomain('party', { remote: true }); ['party', 'combat'].forEach(_reloadPanel);
       if (typeof panelDefs !== 'undefined' && panelDefs.battlemap && panelDefs.battlemap._syncFromCombat) panelDefs.battlemap._syncFromCombat();
       // A phone's cast spell or damage roll comes on the party record: the
       // Turn View redraws only if what it shows changed (its signature).
@@ -1417,7 +1417,7 @@ function _applyRemoteKey(key, fbVal) {
   // domain that changed (a party update no longer re-parses combat/shop/
   // settings, and vice versa).
   const _STATE_DOMAINS = {'skt-party-v1':'party','skt-combat-v1':'combat','skt-shop-v1':'shop','skt-settings-v1':'settings','skt-prompt-v1':'prompt'};
-  if (_STATE_DOMAINS[key]) loadDomain(_STATE_DOMAINS[key]);
+  if (_STATE_DOMAINS[key]) loadDomain(_STATE_DOMAINS[key], { remote: true });
 
   // A reaction prompt travels both ways: the DM raises it, a player answers
   // it, the DM applies the answer. Both ends are told the moment it changes.

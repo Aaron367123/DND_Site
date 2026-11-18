@@ -125,7 +125,15 @@ function _tidyGroupNames(){
     list[i] = { ...c, baseName: b[1], name: fixed };
   });
 }
-function loadDomain(domain){
+// `opts.remote`: an update from another device. Its record is the newer, and
+// the other half (the party card or the combat card) comes in its own update;
+// pulling one into line with the other here put back a value the other device
+// had already moved on from, in memory only — measured: a phone held Zoey at
+// 24 HP with 0 in its storage, the party update having landed before the
+// combat one that took her out of the fight, and its next save would have
+// pushed the 24 back as a heal.
+function loadDomain(domain, opts){
+  const remote = !!(opts && opts.remote);
   try{
     if(domain==='party'){
       const r=localStorage.getItem(PARTY_KEY);
@@ -141,11 +149,11 @@ function loadDomain(domain){
       migratePartyHpManual();
       migratePartyDetailTraits();
       migratePartyEdition();
-      reconcilePcHp();
+      if (!remote) reconcilePcHp();
     }else if(domain==='combat'){
       const r=localStorage.getItem(COMBAT_KEY);
       if(r){const d=JSON.parse(r)||{};if(Array.isArray(d.combatants))state.combatants=d.combatants.filter(c=>c&&typeof c==='object');if(typeof d.combatRound==='number')state.combatRound=d.combatRound;state.activeCombatantId=d.activeCombatantId??null;}
-      reconcilePcHp();
+      if (!remote) reconcilePcHp();
       _tidyGroupNames();
     }else if(domain==='shop'){
       const r=localStorage.getItem(SHOP_KEY);

@@ -158,7 +158,7 @@ const window = {};
       // The phone's own screen is the character sheet: its Death saves Roll.
       const DS = "#pa-screen [data-cs=\"death\"], #pa-screen [data-pa-death=\"roll\"]";
       const t = await W(pl, "paTab='you'; return !!document.querySelector('" + DS + "')", 15000);
-      if (t == null) return { ok: false, why: 'no death save on the phone: ' + await pl.ev("const z = state.party.find(p=>p.id==='zoey'); return JSON.stringify({ hp: z.hp, ds: z.deathSaves, dead: z.dead, stable: z.stable, tab: paTab, me: (paPc()||{}).id, inFight: (state.combatants||[]).some(c=>c.id==='zoey') })") };
+      if (t == null) return { ok: false, why: 'no death save on the phone: ' + await pl.ev("const z = state.party.find(p=>p.id==='zoey'); return JSON.stringify({ hp: z.hp, ds: z.deathSaves, dead: z.dead, stable: z.stable, tab: paTab, me: (paPc()||{}).id, inFight: (state.combatants||[]).some(c=>c.id==='zoey') })") + ' · the DM has ' + await dm.ev("const z = state.party.find(p=>p.id==='zoey'); return JSON.stringify({ hp: z.hp, ds: z.deathSaves, conc: z.concentration, cc: z.concCheck, inFight: (state.combatants||[]).some(c=>c.id==='zoey') })") };
       await pl.ev("document.querySelector('" + DS + "').click(); return 1");
       await sleep(400);
       const after = await pl.ev("const z = state.party.find(p=>p.id==='zoey'); return JSON.stringify({ hp: z.hp, ds: z.deathSaves || null })");

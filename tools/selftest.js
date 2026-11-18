@@ -25518,6 +25518,28 @@ for (const cls of Object.keys(rule)) for (let L = 1; L <= 20; L++) for (const sc
       } catch(e){ ok('round 483 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
       finally { C._condSaves = S0; state.party = JSON.parse(P0); state.combatants = JSON.parse(K0); state.activeCombatantId = A0; save(); closePanel('turnview'); await sleep(50); C._renderCondSaves(); }
     }
+    // -- Round 484: sync — a character update from another device isn't pulled back to a stale combat card's HP (the party update lands before the combat one that took her out of the fight: memory said 24, storage 0, and the next save pushed the 24 back as a heal); a load of its own still lines the two up --
+    if (!PLAYER){
+      const P0 = JSON.stringify(state.party), K0 = JSON.stringify(state.combatants || []), A0 = state.activeCombatantId;
+      const PK = 'skt-party-v1';
+      try {
+        const pi = state.party.findIndex(p => !p.foe), p = state.party[pi];
+        state.party[pi] = Object.assign({}, p, { hp: 24 });
+        state.combatants = [{ id: p.id, name: p.name, isPC: true, hp: 24, hpMax: p.hpMax, ac: p.ac || 12, initiative: 10, conditions: [] }]; save();
+        // Another device's party record: 0 HP. Its combat update hasn't come yet.
+        const arr = JSON.parse(localStorage.getItem(PK)); arr[pi] = Object.assign({}, arr[pi], { hp: 0 });
+        _remoteUpdate = true; try { localStorage.setItem(PK, JSON.stringify(arr)); } finally { _remoteUpdate = false; }
+        _ENTITY_KEYS[PK].postApply();
+        ok('a remote party update: its 0 HP holds — not pulled back to the combat card’s 24', state.party[pi].hp === 0, state.party[pi].hp);
+        ok('…memory and storage agree', JSON.parse(localStorage.getItem(PK))[pi].hp === state.party[pi].hp);
+        // A load of this device's own (startup): the tracker's HP still wins, as it always has.
+        const arr2 = JSON.parse(localStorage.getItem(PK)); arr2[pi] = Object.assign({}, arr2[pi], { hp: 7 });
+        _remoteUpdate = true; try { localStorage.setItem(PK, JSON.stringify(arr2)); } finally { _remoteUpdate = false; }
+        loadDomain('party');
+        ok('…its own load: lined up with the tracker (24)', state.party[pi].hp === 24, state.party[pi].hp);
+      } catch(e){ ok('round 484 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
+      finally { state.party = JSON.parse(P0); state.combatants = JSON.parse(K0); state.activeCombatantId = A0; save(); }
+    }
     // -- Class features: represented, not just text ------------------------
     {
       try {
