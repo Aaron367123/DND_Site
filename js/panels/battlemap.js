@@ -684,9 +684,9 @@ registerPanel('battlemap',{
       if (Object.keys(want).length || drop.length) window.sktMapBlobRefs(m => { drop.forEach(k => { delete m[k]; }); Object.assign(m, want); });
     }
   },
-  _onOtherFloor(name){
+  _onOtherFloor(name, id){
     if (!this._floors) return null;
-    const f = this._floorList().find(x => x.id !== this._floors.active && x.snap && (x.snap.tokens || []).some(t => t && t.isPC && t.label === name));
+    const f = this._floorList().find(x => x.id !== this._floors.active && x.snap && (x.snap.tokens || []).some(t => t && t.isPC && ((id && t.cid === id) || t.label === name)));
     return f || null;
   },
   // A new floor's empty map: this one's grid and scale, nothing on it.
@@ -5592,8 +5592,10 @@ registerPanel('battlemap',{
     const _mine = _isPlayer && typeof paPc === 'function' ? paPc() : null;
     const partyBtns=state.party.map((p,pi)=>{
       if (_isPlayer && (!_mine || _mine.id !== p.id)) return '';
-      const onMap=this._tokens.find(t=>t.label===p.name&&t.isPC);
-      if(onMap || this._onOtherFloor(p.name))return '';
+      // (by who it stands for first: a label can lag a rename, and the bar
+      // then offered someone already on the map)
+      const onMap=this._tokens.find(t=>t&&t.isPC&&(t.cid===p.id||t.label===p.name));
+      if(onMap || this._onOtherFloor(p.name, p.id))return '';
       // renderIcon handles emoji vs uploaded images (data: URLs / img/ paths) vs SVG.
       const iconHtml = renderIcon(sktPcIcon(p), p.name);
       return '<button class="btn small" data-mact="add-party" data-pi="'+pi+'" draggable="true" title="Click to add at the centre of your current view, or drag onto the map for precise placement" style="font-size:var(--fs-xs);display:inline-flex;align-items:center;gap:4px;cursor:grab">'
@@ -8839,7 +8841,8 @@ registerPanel('battlemap',{
       || { x: this._cols*cs/2, y: this._rows*cs/2 };
     source.forEach((c)=>{
       const name=c.name||c.label;
-      if(!this._tokens.find(t=>t.label===name&&t.isPC) && !this._onOtherFloor(name)){
+      const cid=c.id||null;
+      if(!this._tokens.find(t=>t&&t.isPC&&((cid&&t.cid===cid)||t.label===name)) && !this._onOtherFloor(name, cid)){
         // _freeCellNear reads this._tokens, and we push as we go, so each
         // member takes the next free ring rather than stacking on the first.
         const {x, y} = this._freeCellNear(centre.x, centre.y);

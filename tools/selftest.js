@@ -25839,6 +25839,24 @@ for (const cls of Object.keys(rule)) for (let L = 1; L <= 20; L++) for (const sc
         }
       } catch(e){ ok('round 499 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
     }
+    // -- Round 500: a character on the map is known by who the token stands for, not only its label — a label that lags a rename ("Creambak the Bold" on the token, "Creambak" in the party) had the party bar offer them again, and syncing the party put a second token down --
+    if (!PLAYER){
+      const B = panelDefs.battlemap, T0 = JSON.stringify(B._tokens || []), K0 = JSON.stringify(state.combatants || []);
+      try {
+        openPanel('battlemap'); await sleep(300);
+        const p = state.party.find(x => !x.foe);
+        B._tokens = (B._tokens || []).filter(t => t.cid !== p.id && t.label !== p.name)
+          .concat([{ id: 'tk_r500', cid: p.id, label: p.name + ' the Bold', isPC: true, x: 125, y: 125, size: 1 }]);
+        B._render(); await sleep(100);
+        const offered = [...B._body.querySelectorAll('[data-mact="add-party"]')].some(b => state.party[+b.dataset.pi] === p);
+        ok('a token for them under another label: the party bar doesn’t offer them again', !offered, 'offered');
+        const n0 = B._tokens.filter(t => t.cid === p.id).length;
+        state.combatants = [];
+        B._syncParty(); await sleep(100);
+        ok('…nor does adding the whole party put a second one down', B._tokens.filter(t => t.cid === p.id || t.label === p.name).length === n0, B._tokens.filter(t => t.cid === p.id || t.label === p.name).map(t => t.label).join(', '));
+      } catch(e){ ok('round 500 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
+      finally { B._tokens = JSON.parse(T0); state.combatants = JSON.parse(K0); save(); B._render(); }
+    }
     // -- Class features: represented, not just text ------------------------
     {
       try {
