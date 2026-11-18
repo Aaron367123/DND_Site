@@ -3023,13 +3023,16 @@ registerPanel('battlemap',{
       const tokenN = (s.snapshot?.tokens || []).length;
       const fogN   = (s.snapshot?.fog || []).length;
       const drawingN = (s.snapshot?.drawings || []).length;
+      // (the map by its name, and what's on it in words: "009-hc2oz-map-1-2-player",
+      // "10 tok · 2 drw" read like a file listing)
       const bgLabel = s.snapshot?.bgMapPath
-        ? s.snapshot.bgMapPath.split('/').pop().replace(/\.[^.]+$/, '')
+        ? this._mapTitle(s.snapshot.bgMapPath)
         : (s.snapshot?.hadUploadedImage ? '⚠ Upload (no bg)' : 'No background');
+      const pl = (n, w) => n + ' ' + w + (n === 1 ? '' : 's');
       const stats = [
-        tokenN   ? tokenN + ' tok'  : null,
-        fogN     ? fogN + ' fog'    : null,
-        drawingN ? drawingN + ' drw' : null,
+        tokenN   ? pl(tokenN, 'token') : null,
+        drawingN ? pl(drawingN, 'drawing') : null,
+        fogN     ? 'fog' : null,
       ].filter(Boolean).join(' · ');
       return `<div class="mapsel-saved-row" style="display:flex;align-items:center;gap:6px;background:var(--panel-2);border:1px solid var(--border);border-radius:4px;padding:5px 8px;margin-bottom:4px;font-size:var(--fs-md)">
         <button data-savedmap-load="${esc(s.id)}" style="flex:1;background:transparent;border:none;color:var(--text);font-family:inherit;font-size:var(--fs-md);cursor:pointer;text-align:left;padding:2px 4px;display:flex;flex-direction:column;gap:1px" title="Load this saved map">
@@ -7123,8 +7126,11 @@ registerPanel('battlemap',{
     backdrop.querySelector('#mapsel-save')?.addEventListener('click', () => {
       // A shared upload has no filename to borrow — splitting "sktblob:u1abc"
       // on "/" just hands the id straight back as the suggested name.
-      const suggested = (this._bgMapPath && !this._isSharedUpload(this._bgMapPath))
-        ? (this._bgMapPath.split('/').pop().replace(/\.[^.]+$/, '') + ((this._tokens||[]).length ? ' — saved' : ''))
+      // (its name from the adventure, once that's read: it suggested the file's)
+      const named = this._bgMapPath && !this._isSharedUpload(this._bgMapPath) ? this._mapTitleAsync(this._bgMapPath) : Promise.resolve(null);
+      named.then(title => {
+      const suggested = title
+        ? (title + ((this._tokens||[]).length ? ' — saved' : ''))
         : (_mapBgImage ? 'Uploaded map' : 'Map ' + (this._savedMaps.length + 1));
       showModal('Save map', [
         { id:'name', label:'Map name', type:'text', value: suggested }
@@ -7182,6 +7188,7 @@ registerPanel('battlemap',{
         } else {
           commit();
         }
+      });
       });
     });
 
@@ -7964,20 +7971,31 @@ registerPanel('battlemap',{
   // Settings tile, which showed the file name ("009-hc2oz-map-1-2-player").
   // The adventure is read once (the picker's cache), then drawn again.
   _mapTitle(path){
+    if (this._isSharedUpload(path)) return 'Uploaded map';
     const file = String(path || '').split('/').pop().replace(/\.(webp|jpg|jpeg|png)$/i, '');
     const m = /^adventure\/([^/]+)\//.exec(path || '');
     if (!m) return file;
     const id = m[1], have = (this._mapsByAdv || {})[id];
     if (have){ const hit = have.find(x => x.path === path); return hit && hit.title ? hit.title + (hit.type === 'mapPlayer' ? ' (players\u2019)' : '') : file; }
-    this._mapsByAdv = this._mapsByAdv || {};
-    if (!this._mapTitleLoading){
-      this._mapTitleLoading = true;
-      fetch('data/adventure/adventure-' + id.toLowerCase() + '.json').then(r => r.ok ? r.json() : null).then(j => {
-        const found = []; if (j) this._extractMaps(j, found);
-        this._mapsByAdv[id] = this._linkPlayerTitles(found);
-      }).catch(() => { this._mapsByAdv[id] = []; }).finally(() => { this._mapTitleLoading = false; if (this._settingsOpen && this._body) this._render(); });
-    }
+    this._advMapsFor(id).then(() => { if (this._settingsOpen && this._body) this._render(); });
     return file;
+  },
+  // An adventure's maps, read once (the picker shares the cache).
+  _advMapsFor(id){
+    this._mapsByAdv = this._mapsByAdv || {};
+    if (this._mapsByAdv[id]) return Promise.resolve(this._mapsByAdv[id]);
+    const L = this._advMapsLoading || (this._advMapsLoading = {});
+    if (!L[id]) L[id] = fetch('data/adventure/adventure-' + id.toLowerCase() + '.json').then(r => r.ok ? r.json() : null).then(j => {
+      const found = []; if (j) this._extractMaps(j, found);
+      return (this._mapsByAdv[id] = this._linkPlayerTitles(found));
+    }).catch(() => (this._mapsByAdv[id] = [])).finally(() => { delete L[id]; });
+    return L[id];
+  },
+  // …and once it's there: for what's asked for straight away (the name a
+  // save suggests), not just what's drawn again when it comes.
+  _mapTitleAsync(path){
+    const m = /^adventure\/([^/]+)\//.exec(path || '');
+    return (m ? this._advMapsFor(m[1]) : Promise.resolve()).then(() => this._mapTitle(path), () => this._mapTitle(path));
   },
 
   // Right-side Settings drawer. Renders only when this._settingsOpen.

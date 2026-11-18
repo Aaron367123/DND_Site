@@ -25757,6 +25757,25 @@ for (const cls of Object.keys(rule)) for (let L = 1; L <= 20; L++) for (const sc
       } catch(e){ ok('round 495 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
       finally { B._mapRotation = R0 || 0; B._tokens = JSON.parse(T0); B._render(); }
     }
+    // -- Round 496: saving an adventure's map suggests its name ("Map 1.2: Elfsong Tavern (players’) — saved", not "009-hc2oz-map-1-2-player — saved", even before the adventure's data was read); the saved list says it in words ("10 tokens · 1 drawing", not "10 tok · 1 drw") --
+    if (!PLAYER){
+      const B = panelDefs.battlemap, P0 = B._bgMapPath, S0 = JSON.stringify(B._savedMaps || []);
+      try {
+        openPanel('battlemap'); await sleep(300);
+        if (B._mapsByAdv) delete B._mapsByAdv.BGDIA;
+        B._bgMapPath = 'adventure/BGDIA/009-hc2oz-map-1-2-player.webp';
+        B._openMapPicker(); for (let n = 0; n < 40 && !document.getElementById('mapsel-save'); n++) await sleep(100);
+        document.getElementById('mapsel-save').click();
+        let inp = null; for (let n = 0; n < 50 && !(inp = [...document.querySelectorAll('input')].find(i => i.getClientRects().length && /saved$/.test(i.value))); n++) await sleep(100);
+        ok('Save current as… suggests the map’s name', !!inp && /^Map 1\.2: Elfsong Tavern \(players’\) — saved$/.test(inp.value), inp ? inp.value : 'no name field');
+        [...document.querySelectorAll('button')].filter(b => b.getClientRects().length && /^Cancel$/.test(b.textContent.trim())).forEach(b => b.click()); await sleep(150);
+        document.querySelector('#mapsel-close')?.click(); await sleep(100);
+        B._savedMaps = [{ id: 'map_r496', name: 'Tavern', ts: Date.now(), snapshot: { bgMapPath: B._bgMapPath, tokens: [{ id: 'a' }, { id: 'b' }], drawings: [{ id: 'd' }], fog: [] } }];
+        const html = B._renderSavedMapsSection().replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ');
+        ok('…the saved list: its name and what’s on it in words', /Map 1\.2: Elfsong Tavern/.test(html) && /2 tokens · 1 drawing/.test(html) && !/tok\b|drw/.test(html), html.slice(0, 160));
+      } catch(e){ ok('round 496 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
+      finally { document.querySelector('#mapsel-close')?.click(); B._bgMapPath = P0; B._savedMaps = JSON.parse(S0); }
+    }
     // -- Class features: represented, not just text ------------------------
     {
       try {
