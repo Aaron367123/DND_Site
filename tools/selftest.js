@@ -30124,6 +30124,47 @@ for (const cls of Object.keys(rule)) for (let L = 1; L <= 20; L++) for (const sc
       } catch(e){ ok('round 488 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
       finally { if (keepT != null){ _remoteUpdate = true; try { localStorage.setItem('skt-battlemap-v1', keepT); } finally { _remoteUpdate = false; } } paTab = keepTab; paRender(); }
     }
+    // -- Round 492 (player): the DM puts up another map — the phone settles on the player's token again at a square a finger can use (it arrived fitted whole, the token tiny), even after they'd moved the last one about --
+    if (PLAYER){
+      const keepTab = paTab, B = panelDefs.battlemap, K = 'skt-battlemap-v1', base = localStorage.getItem(K);
+      try {
+        if (paMyIdx() < 0) paSetPc(state.party[0].id);
+        paTab = 'you'; paRender(); await sleep(150);
+        paTab = 'map'; paRender(); await sleep(1200);
+        // They've handled this map: it's theirs now.
+        document.querySelector('.pa-mount').dispatchEvent(new TouchEvent('touchstart', { bubbles: true, touches: [] }));
+        // The DM's next map: big, the token mid-way across it.
+        const d = JSON.parse(base || '{}'), me = paPc();
+        const svg = '<svg xmlns="http://www.w3.org/2000/svg" width="3000" height="2000"><rect width="3000" height="2000" fill="#8a7a5a"/></svg>';
+        d.bgMapPath = 'data:image/svg+xml,' + encodeURIComponent(svg); d.cols = 60; d.rows = 40; d.cellSize = 50; d.bgMapScale = 1;
+        const mine = (d.tokens || []).find(t => t.cid === me.id); if (mine){ mine.x = 30 * 50 + 25; mine.y = 20 * 50 + 25; }
+        _remoteUpdate = true; try { localStorage.setItem(K, JSON.stringify(d)); } finally { _remoteUpdate = false; }
+        B.applyMapState(d, { source: 'remote' });
+        for (let n = 0; n < 30 && B._bgLoadedPath !== d.bgMapPath; n++) await sleep(100);
+        await sleep(1500);
+        const sq = B._csScreen() * B._screenScale(), off = paMyOffset();
+        ok('another map from the DM: back on my token at a finger-sized square', sq >= 31.5 && off != null && off < 20, JSON.stringify({ sq: +sq.toFixed(1), off }));
+      } catch(e){ ok('round 492 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
+      finally {
+        _remoteUpdate = true; try { if (base == null) localStorage.removeItem(K); else localStorage.setItem(K, base); } finally { _remoteUpdate = false; }
+        try { B.applyMapState(JSON.parse(base || '{}'), { source: 'remote' }); } catch(e){}
+        paTab = keepTab; paRender();
+      }
+    }
+    // -- Round 493 (player): the map's footer hint says what this screen can do — "Right-click for options" is the DM's (a player's right-click does nothing); a player drags their own token; the TV just pings --
+    if (PLAYER){
+      const keepTab = paTab, me0 = paMe().pcId, B = panelDefs.battlemap;
+      try {
+        if (paMyIdx() < 0) paSetPc(state.party[0].id);
+        paTab = 'map'; paRender(); await sleep(600);
+        const hint = () => ((document.querySelector('#pa-screen .map-foot-hint') || {}).textContent || '');
+        ok('a player’s map: no “right-click for options”; their own token to drag', !/Right-click/.test(hint()) && /Drag your token/.test(hint()), hint());
+        // The TV: no character of its own.
+        paSetPc(null); paTab = 'map'; paRender(); await sleep(400);
+        ok('…the TV: just “Hold to ping”', hint() === 'Hold to ping', hint());
+      } catch(e){ ok('round 493 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
+      finally { if (me0) paSetPc(me0); paTab = keepTab; paRender(); }
+    }
   }
 
   // ══════════════════════════════════════════════════════════ mobile / phone

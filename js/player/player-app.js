@@ -957,7 +957,9 @@ let paMapObs = null, paMapLast = null;
 // map's picture arrives after the tab opens and the view refits to it, which
 // left their token off to one side (or off the screen) of a map that had
 // centred on it a moment before.
-let paMapHeld = false, paMapOpened = 0;
+// (and the DM putting up another map is an opening too: it arrives fitted
+// whole, the token tiny again)
+let paMapHeld = false, paMapOpened = 0, paMapPath = null;
 // How far (screen px) your token sits from the middle of the map's view.
 function paMyOffset(){
   const t = paMyToken(); if (!t) return null;
@@ -1022,7 +1024,7 @@ function paCenterOnToken(t, smooth, zoomIn){
 }
 function paWatchMap(host){
   if (paMapObs) paMapObs.disconnect();
-  paMapLast = null; paMapHeld = false; paMapOpened = Date.now();
+  paMapLast = null; paMapHeld = false; paMapOpened = Date.now(); paMapPath = (panelDefs.battlemap || {})._bgMapPath || null;
   const box = host.querySelector('.pa-mount'); if (!box || typeof MutationObserver !== 'function') return;
   const held = () => { paMapHeld = true; };
   ['touchstart', 'mousedown', 'wheel'].forEach(ev => box.addEventListener(ev, held, { passive: true, capture: true }));
@@ -1032,6 +1034,9 @@ function paWatchMap(host){
     pend = setTimeout(() => {
       if (paTab !== 'map') return;
       const t = paMyToken(); if (!t) return;
+      // Another map: settle on them again, as at opening.
+      const path = (panelDefs.battlemap || {})._bgMapPath || null;
+      if (path !== paMapPath){ paMapPath = path; paMapLast = null; paMapHeld = false; paMapOpened = Date.now(); }
       // Your token arrived after the map opened (the DM just placed it): the
       // bar gets its Me button.
       if (!document.querySelector('[data-pa-me]')){ document.querySelector('#pa-screen .pa-draw')?.remove(); paAddDrawBar(document.getElementById('pa-screen')); }

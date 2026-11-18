@@ -5646,7 +5646,10 @@ registerPanel('battlemap',{
       // Hidden on touch by CSS: there is no right-click on a phone, so this
       // hint spent a row of a 390px screen telling you to do something you
       // can't.
-      +'<span class="map-foot-hint" style="font-size:var(--fs-2xs);color:var(--text-dim)">Drag tokens · Right-click for options · Hold to ping</span>'
+      // What THIS screen can do: right-click options are the DM's (a
+      // player's right-click does nothing), and the TV moves no one.
+      +'<span class="map-foot-hint" style="font-size:var(--fs-2xs);color:var(--text-dim)">'+(!document.body.classList.contains('player-mode') ? 'Drag tokens · Right-click for options · Hold to ping'
+          : (typeof paPc === 'function' && paPc()) ? 'Drag your token · Click a token to see it · Hold to ping' : 'Hold to ping')+'</span>'
       // …and the one a phone can do, which nobody would find on their own.
       +'<span class="map-foot-touch" style="font-size:var(--fs-2xs);color:var(--text-dim)">Hold a finger on the map to ping</span>'
     +'</div>';
