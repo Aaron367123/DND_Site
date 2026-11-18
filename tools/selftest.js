@@ -25720,6 +25720,31 @@ for (const cls of Object.keys(rule)) for (let L = 1; L <= 20; L++) for (const sc
       } catch(e){ ok('round 494 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
       finally { B._mapRotation = R0 || 0; B._render(); B._applyViewScale(V0 || 1); }
     }
+    // -- Round 495: on a turned map, tokens and their names stay upright — a name sat beside its token reading sideways at 90°; it's under it, level, and stays under it as the token moves on another screen --
+    if (!PLAYER){
+      const B = panelDefs.battlemap, R0 = B._mapRotation, T0 = JSON.stringify(B._tokens || []);
+      try {
+        openPanel('battlemap'); await sleep(400);
+        const t = (B._tokens || []).find(x => !x.dead) || (B._tokens || [])[0];
+        if (!t) ok('the fixture has a token', false, 'none');
+        // (alone, mid-map: no neighbour below to send its name above)
+        if (t){ t.x = Math.round(B._cols / 2) * B._cellSize + B._cellSize / 2; t.y = Math.round(B._rows / 2) * B._cellSize + B._cellSize / 2; (B._tokens || []).forEach(o => { if (o !== t && Math.hypot(o.x - t.x, o.y - t.y) < B._cellSize * 4) o.x += B._cellSize * 8; }); }
+        if (t) for (const rot of [90, 270]){
+          B._mapRotation = rot; B._render(); await sleep(200);
+          const el = B._body.querySelector('.map-token[data-tid="' + CSS.escape(String(t.id)) + '"]');
+          el.scrollIntoView({ block: 'center', inline: 'center' }); await sleep(60);
+          const nm = () => B._body.querySelector('.map-token-name[data-tid="' + CSS.escape(String(t.id)) + '"]');
+          const tr = el.getBoundingClientRect(), nr = nm().getBoundingClientRect();
+          const below = nr.top >= tr.bottom - 2 && Math.abs((nr.left + nr.right) / 2 - (tr.left + tr.right) / 2) < 4;
+          ok(rot + '°: the name is under its token, level (wider than tall)', below && nr.width > nr.height, JSON.stringify({ tok: [tr.left, tr.top, tr.right, tr.bottom].map(Math.round), name: [nr.left, nr.top, nr.right, nr.bottom].map(Math.round) }));
+          // A move from another screen (the live tick): the name comes along, still under it.
+          B._applyLiveToken(t.id, t.x + B._cellSize * 2, t.y); await sleep(60);
+          const tr2 = el.getBoundingClientRect(), nr2b = 0, nr2 = nm().getBoundingClientRect();
+          ok('…moved from another screen: still under it', nr2.top >= tr2.bottom - 2 && Math.abs((nr2.left + nr2.right) / 2 - (tr2.left + tr2.right) / 2) < 4, JSON.stringify({ tok: [tr2.left, tr2.top].map(Math.round), name: [nr2.left, nr2.top].map(Math.round) }));
+        }
+      } catch(e){ ok('round 495 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
+      finally { B._mapRotation = R0 || 0; B._tokens = JSON.parse(T0); B._render(); }
+    }
     // -- Class features: represented, not just text ------------------------
     {
       try {

@@ -2212,6 +2212,20 @@ registerPanel('battlemap',{
   },
   // Rotate a screen-space delta into stage space (inverse of _mapRotation).
   // Used for both point conversion above and drag deltas.
+  // The other way: a map offset as it shows on screen.
+  _screenVec(x, y){
+    const rot = (((this._mapRotation || 0) % 360) + 360) % 360;
+    if (rot === 90)  return { x: -y, y: x };
+    if (rot === 180) return { x: -x, y: -y };
+    if (rot === 270) return { x: y,  y: -x };
+    return { x, y };
+  },
+  // A turned map turned its tokens' pictures and its names with it: a name
+  // read sideways at 90 degrees. They're drawn upright: each label sits at
+  // the offset that is "below" (or "above", "right of") its token ON SCREEN,
+  // and is turned back by the map's turn. `t`: its CSS translate, kept.
+  _rotDeg(){ return (((this._mapRotation || 0) % 360) + 360) % 360; },
+  _uprightTf(t){ const r = this._rotDeg(); return r ? 'transform-origin:0 0;transform:rotate(' + (-r) + 'deg) ' + t : 'transform:' + t; },
   _stageDelta(dx, dy){
     const rot = (((this._mapRotation || 0) % 360) + 360) % 360;
     if (rot === 90)  return { x: dy,  y: -dx };
@@ -3777,15 +3791,18 @@ registerPanel('battlemap',{
     const vs = this._viewScale || 1;
     const els = [...b.querySelectorAll('.map-token-name')];
     const byId = new Map((this._tokens || []).map(t => [String(t.id), t]));
-    const drawn = els.map(el => ({ el, t: byId.get(el.dataset.tid) })).filter(d => d.t);
-    drawn.forEach(({ el, t }) => {
+    // (where each token shows on screen: on a turned map "beside" and
+    // "below" are the screen's, not the map's)
+    const drawn = els.map(el => ({ el, t: byId.get(el.dataset.tid) })).filter(d => d.t)
+      .map(d => Object.assign(d, { s: this._screenVec(d.t.x || 0, d.t.y || 0) }));
+    drawn.forEach(({ el, t, s }) => {
       const h = el.offsetHeight || 16 / vs;
       let near = Infinity;
       for (const d of drawn){
-        const o = d.t;
-        if (o === t) continue;
-        if (Math.abs((o.y || 0) - (t.y || 0)) >= h) continue;   // the two label lines don't meet
-        near = Math.min(near, Math.abs((o.x || 0) - (t.x || 0)));
+        const o = d.s;
+        if (d.t === t) continue;
+        if (Math.abs(o.y - s.y) >= h) continue;   // the two label lines don't meet
+        near = Math.min(near, Math.abs(o.x - s.x));
       }
       // Too little room for even a few letters: a stub reading '…' says
       // nothing, so hide the name until the token is hovered — what most
@@ -3798,12 +3815,14 @@ registerPanel('battlemap',{
       // hover, like a name with no room beside it.
       const tokEl = b.querySelector('.map-token[data-tid="' + CSS.escape(String(t.id)) + '"]');
       const dim = (tokEl && tokEl.offsetHeight) || 40;
-      const blocked = dir => drawn.some(d => d.t !== t && Math.abs((d.t.x || 0) - (t.x || 0)) < dim * 0.9
-        && dir * ((d.t.y || 0) - (t.y || 0)) > 0 && dir * ((d.t.y || 0) - (t.y || 0)) < dim * 1.6);
+      const blocked = dir => drawn.some(d => d.t !== t && Math.abs(d.s.x - s.x) < dim * 0.9
+        && dir * (d.s.y - s.y) > 0 && dir * (d.s.y - s.y) < dim * 1.6);
       const below = blocked(1), above = below && blocked(-1);
       const dy = below && !above ? -(dim / 2 + 4 + h) : dim / 2 + 4;
-      el.style.top = ((t.y || 0) + dy).toFixed(1) + 'px';
-      el.dataset.dy = dy.toFixed(1);
+      const off = this._stageDelta(0, dy);
+      el.style.left = ((t.x || 0) + off.x).toFixed(1) + 'px';
+      el.style.top = ((t.y || 0) + off.y).toFixed(1) + 'px';
+      el.dataset.dx = off.x.toFixed(1); el.dataset.dy = off.y.toFixed(1);
       el.classList.toggle('above', below && !above);
       el.classList.toggle('tight', room < 40 / vs || (below && above));
     });
@@ -5426,7 +5445,7 @@ registerPanel('battlemap',{
     const el = b.querySelector('.map-token[data-tid="' + CSS.escape(String(id)) + '"]');
     if (el){ el.style.left = x + 'px'; el.style.top = y + 'px'; }
     const nm = b.querySelector('.map-token-name[data-tid="' + CSS.escape(String(id)) + '"]');
-    if (nm){ nm.style.left = x + 'px'; nm.style.top = (y + (+nm.dataset.dy || 0)) + 'px'; }
+    if (nm){ nm.style.left = (x + (+nm.dataset.dx || 0)) + 'px'; nm.style.top = (y + (+nm.dataset.dy || 0)) + 'px'; }
     const cd = b.querySelector('.map-token-conds[data-tid="' + CSS.escape(String(id)) + '"]');
     if (cd){ cd.style.left = (x + (+cd.dataset.dx || 0)) + 'px'; cd.style.top = (y + (+cd.dataset.dy || 0)) + 'px'; }
     const ev = b.querySelector('.map-token-elev[data-tid="' + CSS.escape(String(id)) + '"]');
@@ -8187,7 +8206,7 @@ registerPanel('battlemap',{
       // Lettering that reads on the token's colour: dark on a light token
       // (a yellow PC had white text at 1.2:1), light on a dark one.
       const ink = (typeof _bmInk === 'function') ? _bmInk(t.color) : '#fff';
-      el.style.cssText=`left:${px}px;top:${py}px;width:${dim}px;height:${dim}px;background:${t.color};font-size:${fontSize.toFixed(1)}px;position:absolute;transform:translate(-50%,-50%);z-index:2;border-radius:50%;border:2px solid rgba(212,165,116,0.8);display:flex;align-items:center;justify-content:center;cursor:pointer;user-select:none;font-weight:600;color:${ink};text-shadow:${ink === '#fff' ? '0 1px 2px rgba(0,0,0,.7)' : 'none'};text-align:center;line-height:1.1;overflow:visible;box-sizing:border-box`;
+      el.style.cssText=`left:${px}px;top:${py}px;width:${dim}px;height:${dim}px;background:${t.color};font-size:${fontSize.toFixed(1)}px;position:absolute;transform:translate(-50%,-50%)${this._rotDeg() ? ' rotate(' + (-this._rotDeg()) + 'deg)' : ''};z-index:2;border-radius:50%;border:2px solid rgba(212,165,116,0.8);display:flex;align-items:center;justify-content:center;cursor:pointer;user-select:none;font-weight:600;color:${ink};text-shadow:${ink === '#fff' ? '0 1px 2px rgba(0,0,0,.7)' : 'none'};text-align:center;line-height:1.1;overflow:visible;box-sizing:border-box`;
       if (hasIcon){
         // A picture sits in a round clip of its own. The token can't clip it
         // (it overflows on purpose, for the touch target), and a species
@@ -8223,8 +8242,9 @@ registerPanel('battlemap',{
       // Floor divided by _viewScale for the same reason as the glyph floor
       // above — it must stay 11 SCREEN px, not 11 stage px.
       const nameFs = Math.max(11 / (this._viewScale || 1), 10 * tokScale);
-      nameEl.dataset.dy = (dim / 2 + 4).toFixed(1);
-      nameEl.style.cssText = `left:${px}px;top:${py + dim/2 + 4}px;font-size:${nameFs.toFixed(1)}px;position:absolute;transform:translateX(-50%);z-index:2;pointer-events:none;color:#fff;background:rgba(0,0,0,.6);padding:1px 6px;border-radius:8px;text-shadow:0 1px 2px rgba(0,0,0,0.9);white-space:nowrap;font-weight:600;line-height:1.25;box-sizing:border-box;overflow:hidden;text-overflow:ellipsis`;
+      const nOff = this._stageDelta(0, dim / 2 + 4);
+      nameEl.dataset.dx = nOff.x.toFixed(1); nameEl.dataset.dy = nOff.y.toFixed(1);
+      nameEl.style.cssText = `left:${px + nOff.x}px;top:${py + nOff.y}px;font-size:${nameFs.toFixed(1)}px;position:absolute;${this._uprightTf('translateX(-50%)')};z-index:2;pointer-events:none;color:#fff;background:rgba(0,0,0,.6);padding:1px 6px;border-radius:8px;text-shadow:0 1px 2px rgba(0,0,0,0.9);white-space:nowrap;font-weight:600;line-height:1.25;box-sizing:border-box;overflow:hidden;text-overflow:ellipsis`;
       nameEl.textContent = displayLabel;
       frag.appendChild(nameEl);
       // Its conditions, a small pill at the token's top right: "Prone",
@@ -8233,13 +8253,14 @@ registerPanel('battlemap',{
         const ce = document.createElement('div');
         ce.className = 'map-token-conds';
         ce.dataset.tid = t.id;
-        ce.dataset.dx = '0'; ce.dataset.dy = (-dim / 2).toFixed(1);
+        const cOff = this._stageDelta(0, -dim / 2);
+        ce.dataset.dx = cOff.x.toFixed(1); ce.dataset.dy = cOff.y.toFixed(1);
         const cap = k => String(k).charAt(0).toUpperCase() + String(k).slice(1);
         ce.title = t.conds.map(cap).join(', ');
         ce.textContent = cap(t.conds[0]) + (t.conds.length > 1 ? ' +' + (t.conds.length - 1) : '');
         // Centred on the top edge and no wider than the token (zoomed far out:
         // wide enough to read), so two side by side don't overlap.
-        ce.style.cssText = `left:${px}px;top:${py - dim / 2}px;font-size:${(nameFs * 0.8).toFixed(1)}px;max-width:${Math.max(dim, 56 / (this._viewScale || 1)).toFixed(0)}px;position:absolute;transform:translate(-50%,-50%);z-index:3;pointer-events:none;overflow:hidden;text-overflow:ellipsis`;
+        ce.style.cssText = `left:${px + cOff.x}px;top:${py + cOff.y}px;font-size:${(nameFs * 0.8).toFixed(1)}px;max-width:${Math.max(dim, 56 / (this._viewScale || 1)).toFixed(0)}px;position:absolute;${this._uprightTf('translate(-50%,-50%)')};z-index:3;pointer-events:none;overflow:hidden;text-overflow:ellipsis`;
         frag.appendChild(ce);
       }
       // Its height, a pill at the token's right edge: "↑30 ft".
@@ -8247,10 +8268,11 @@ registerPanel('battlemap',{
         const ev = document.createElement('div');
         ev.className = 'map-token-elev';
         ev.dataset.tid = t.id;
-        ev.dataset.dx = (dim / 2).toFixed(1); ev.dataset.dy = '0';
+        const eOff = this._stageDelta(dim / 2, 0);
+        ev.dataset.dx = eOff.x.toFixed(1); ev.dataset.dy = eOff.y.toFixed(1);
         ev.textContent = this._elevText(t);
         ev.title = (t.elev > 0 ? 'Flying ' + t.elev + ' ft up' : t.elev * -1 + ' ft below the ground');
-        ev.style.cssText = `left:${px + dim / 2}px;top:${py}px;font-size:${(nameFs * 0.8).toFixed(1)}px;position:absolute;transform:translate(-25%,-50%);z-index:3;pointer-events:none;white-space:nowrap`;
+        ev.style.cssText = `left:${px + eOff.x}px;top:${py + eOff.y}px;font-size:${(nameFs * 0.8).toFixed(1)}px;position:absolute;${this._uprightTf('translate(-25%,-50%)')};z-index:3;pointer-events:none;white-space:nowrap`;
         frag.appendChild(ev);
       }
       // _fitTokenNames may have shortened it to fit beside a neighbour.
