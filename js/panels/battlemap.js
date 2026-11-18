@@ -1796,7 +1796,7 @@ registerPanel('battlemap',{
     const path = this._bgMapPath;
     this._advGrid(path).then(g => {
       if (_mapBgImage !== img) return;
-      if (g){ const sc = g.w ? this._bgMapNaturalW / g.w : 1; this._ftPerCell = g.ft || 5; this._applyGrid({ size: g.size * sc, ox: g.ox * sc, oy: g.oy * sc }, 'from the adventure’s map'); return; }
+      if (g){ const sc = g.w ? this._bgMapNaturalW / g.w : 1, fit = this._advFit(g, img); this._ftPerCell = g.ft || 5; this._applyGrid({ size: fit.size * sc, ox: fit.ox * sc, oy: fit.oy * sc }, 'from the adventure’s map'); return; }
       let f = null; try { f = sktDetectGrid(img); } catch(e){}
       if (!f){ showToast('No squares found on this map. Use Align and click two corners of a printed square.'); return; }
       const k = img.naturalWidth ? (this._bgMapNaturalW || img.naturalWidth) / img.naturalWidth : 1;
@@ -1817,27 +1817,49 @@ registerPanel('battlemap',{
     }).catch(() => ({}));
     return cache[id].then(all => {
       const e = all && all[path], g = e && e.grid;
-      // `scale`: the data's size is of the picture drawn that many times
-      // over (2.07, 2, 4): a square is size ÷ scale of the picture's own
-      // pixels. Two in three of the adventures' square grids carry one, and
-      // reading `size` alone gave them squares twice too big (AUD's Two
-      // Plateaus: 191 for its 95.5; AVT Map 1: 50 for its 24.2 — the printed
-      // lines fell midway). The offsets too: AUD's offsetY 71 put the lines
-      // midway between the printed ones; 35.5 is on them (a grid found on
-      // the picture says 34.7).
+      // `scale` (two in three of the adventures' square grids carry one):
+      // read against the pictures' own printed lines, found on 22 maps of 20
+      // adventures —
+      //   the offsets are always in pixels of the picture drawn `scale` times
+      //   over: AUD's Two Plateaus' offsetY 71 put every line midway between
+      //   the printed ones, 35.5 is on them; Baldur's Gate, Saltmarsh,
+      //   Rime of the Frostmaiden, Phandelver, the Carnival the same.
+      //   the size is NOT consistent: most books give it in the picture's own
+      //   pixels (BGDIA 2.4: 131, printed 131), some in the drawn-over ones
+      //   (AUD, Bigby's PaBTSO: 191 for a printed 95.5).
+      // So `size` is the first reading and `alt` (size ÷ scale) the other,
+      // and the picture decides between them once it's in (_advSize).
       // …and how far a square is: Krezk's village map is 50 ft a square,
       // Saltmarsh's Abbey Isle 500 (48 maps aren't 5): the ruler and every
       // reach read a tenth or less. In feet, from yards or miles too.
       const per = { ft: 1, feet: 1, yd: 3, yard: 3, yards: 3, mi: 5280, mile: 5280, miles: 5280 }[String(g.units || 'ft').toLowerCase()];
       const ft = +g.distance > 0 && per ? +g.distance * per : 5;
       const gs = +g.scale > 0 ? +g.scale : 1;
-      return g && g.type === 'square' && +g.size > 0 ? { size: +g.size / gs, ox: (+g.offsetX || 0) / gs, oy: (+g.offsetY || 0) / gs, w: +e.w || 0, ft } : null;
+      return g && g.type === 'square' && +g.size > 0 ? { size: +g.size, alt: gs !== 1 ? +g.size / gs : null, ox: (+g.offsetX || 0) / gs, oy: (+g.offsetY || 0) / gs, w: +e.w || 0, ft } : null;
     });
   },
   // Once the picked map's picture is in (its size is what the grid scales
   // by): our squares on its squares. Not if another map has been picked.
   // A map with no squares in its data (a city, a region) still brings the
   // tokens onto it: they kept the last map's places and hung off its edge.
+  // Of an adventure grid's two readings of its size (see _advGrid), the one
+  // the picture's printed squares are: found on it, the other if that's
+  // nearer, the data's own `size` if nothing's found. In the data's pixels.
+  _advSize(g, img){ return this._advFit(g, img).size; },
+  // …and where its lines are: the picture's own when what's found there
+  // agrees with the size chosen (a few books' offsets are simply off — a
+  // Curse of Strahd map's lines fell mid-square across the page), the data's
+  // otherwise. { size, ox, oy } in the data's pixels.
+  _advFit(g, img){
+    if (!g) return { size: 0, ox: 0, oy: 0 };
+    const data = { size: g.size, ox: g.ox, oy: g.oy };
+    if (!img) return data;
+    let f = null; try { f = sktDetectGrid(img); } catch(e){}
+    if (!f) return data;
+    const sc = g.w && img.naturalWidth ? img.naturalWidth / g.w : 1, found = f.size / sc;
+    const size = g.alt && Math.abs(found - g.alt) < Math.abs(found - g.size) && Math.abs(found - g.alt) / g.alt < 0.06 ? g.alt : g.size;
+    return Math.abs(found - size) / size < 0.04 ? { size: found, ox: f.ox / sc, oy: f.oy / sc } : { size, ox: g.ox, oy: g.oy };
+  },
   _useAdvGrid(path, g, tries){
     if (this._bgMapPath !== path) return;
     if (this._bgLoadedPath !== path || !this._bgMapNaturalW){
@@ -1845,8 +1867,9 @@ registerPanel('battlemap',{
       return;
     }
     if (g){
-      const sc = g.w ? this._bgMapNaturalW / g.w : 1, sz = Math.max(8, g.size * sc), mod = v => ((v % sz) + sz) % sz;
-      this._cellSize = sz; this._gridOffsetX = mod(g.ox * sc); this._gridOffsetY = mod(g.oy * sc);
+      const fit = this._advFit(g, _mapBgImage);
+      const sc = g.w ? this._bgMapNaturalW / g.w : 1, sz = Math.max(8, fit.size * sc), mod = v => ((v % sz) + sz) % sz;
+      this._cellSize = sz; this._gridOffsetX = mod(fit.ox * sc); this._gridOffsetY = mod(fit.oy * sc);
       this._ftPerCell = g.ft || 5;
     }
     this._fitGridToBg(); this._pullTokensOnto(); this._saveMap(); this._render(); if (g) this._fitMapToView();

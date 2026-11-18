@@ -22595,6 +22595,7 @@ for (const cls of Object.keys(rule)) for (let L = 1; L <= 20; L++) for (const sc
         const foot2 = B._body.querySelector('.map-foot');
         ok('…a smaller map again, nobody to move: the footer still counts its squares', !!foot2 && B._cols === 8 && foot2.textContent.includes('8×6'), foot2 && foot2.textContent);
         // An adventure's map, picked from the list: the grid its data gives
+        // (to a pixel or so: where its printed lines are found, they're used)
         const path = 'adventure/SKT/044-308.webp';
         const want = await B._advGrid(path);
         ok('an adventure map’s grid, from the adventure’s data', !!want && want.size === 96, JSON.stringify(want));
@@ -22607,7 +22608,7 @@ for (const cls of Object.keys(rule)) for (let L = 1; L <= 20; L++) for (const sc
         if (card) card.click();
         for (let i = 0; i < 100 && !(B._bgLoadedPath === path && Math.abs(B._cellSize - 96) < 0.5); i++) await sleep(100);
         const sc = B._bgMapNaturalW / (want ? 1600 : 1), md = (v, p) => ((v % p) + p) % p;
-        ok('…picked from the list: our squares are its squares', !!card && B._bgLoadedPath === path && Math.abs(B._cellSize - 96) < 0.5 && Math.abs(B._gridOffsetX - md(want.ox, 96)) < 0.5 && Math.abs(B._gridOffsetY - md(want.oy, 96)) < 0.5, JSON.stringify([!!card, B._bgLoadedPath, B._cellSize, B._gridOffsetX, B._gridOffsetY, want]));
+        ok('…picked from the list: our squares are its squares', !!card && B._bgLoadedPath === path && Math.abs(B._cellSize - 96) < 0.5 && Math.abs(B._gridOffsetX - md(want.ox, 96)) < 1.5 && Math.abs(B._gridOffsetY - md(want.oy, 96)) < 1.5, JSON.stringify([!!card, B._bgLoadedPath, B._cellSize, B._gridOffsetX, B._gridOffsetY, want]));
       } catch(e){ ok('round 394 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
       finally {
         document.querySelectorAll('.modal-backdrop').forEach(m => m.remove());
@@ -22641,7 +22642,7 @@ for (const cls of Object.keys(rule)) for (let L = 1; L <= 20; L++) for (const sc
         tile.click();
         let tt = null; for (let i = 0; i < 50 && !(tt = toast(/Grid matched/)); i++) await sleep(100);
         const md = (v, p) => ((v % p) + p) % p;
-        ok('…an adventure map: the grid its data gives', Math.abs(B._cellSize - 96) < 0.01 && Math.abs(B._gridOffsetX - md(-36, 96)) < 0.01 && Math.abs(B._gridOffsetY - md(-24, 96)) < 0.01 && !!tt && /adventure/.test(tt.textContent), JSON.stringify([B._cellSize, B._gridOffsetX, B._gridOffsetY, tt && tt.textContent]));
+        ok('…an adventure map: the grid its data gives', Math.abs(B._cellSize - 96) < 0.5 && Math.abs(B._gridOffsetX - md(-36, 96)) < 1.5 && Math.abs(B._gridOffsetY - md(-24, 96)) < 1.5 && !!tt && /adventure/.test(tt.textContent), JSON.stringify([B._cellSize, B._gridOffsetX, B._gridOffsetY, tt && tt.textContent]));
         tt.querySelector('button').click(); await sleep(250);
         ok('…Undo: the hand alignment back', B._cellSize === 98.4 && B._gridOffsetX === 11 && B._gridOffsetY === 7);
         // A shared upload, on screen as its shrunk copy: what's found is scaled up
@@ -25776,14 +25777,21 @@ for (const cls of Object.keys(rule)) for (let L = 1; L <= 20; L++) for (const sc
       } catch(e){ ok('round 496 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
       finally { document.querySelector('#mapsel-close')?.click(); B._bgMapPath = P0; B._savedMaps = JSON.parse(S0); }
     }
-    // -- Round 497: an adventure map's squares from its data — size ÷ scale (868 of the 1,295 square grids carry a scale: AUD's Two Plateaus is 191 at scale 2, its squares 95.5 px, its offsets halved too; they came out 191, every other printed line), one without a scale as it was (the Elfsong Tavern's 166) --
+    // -- Round 497: an adventure map's squares from its data and its picture — a scaled grid's offsets are ÷ scale (AUD's offsetY 71 fell midway between the printed lines; 35.5 is on them); its size is read both ways and the printed squares decide: AUD's Two Plateaus 95.5 (191 ÷ 2), Baldur's Gate 2.4 131 as given; no scale, as it was --
     if (!PLAYER){
       const B = panelDefs.battlemap;
       try {
         const two = await B._advGrid('adventure/AUD/041-map-03-07.two-plateaus-shipping-company.webp');
-        ok('AUD Map 3.7 (size 191, scale 2): squares of 95.5, its offsets halved too (−4, 35.5: on the printed lines)', !!two && Math.abs(two.size - 95.5) < 0.01 && two.ox === -4 && two.oy === 35.5, JSON.stringify(two));
+        ok('AUD Map 3.7 (size 191, scale 2): its offsets halved (−4, 35.5), its size 191 or 95.5', !!two && two.size === 191 && Math.abs(two.alt - 95.5) < 0.01 && two.ox === -4 && two.oy === 35.5, JSON.stringify(two));
         const elf = await B._advGrid('adventure/BGDIA/009-hc2oz-map-1-2-player.webp');
-        ok('…the Elfsong Tavern (no scale): 166, as before', !!elf && Math.abs(elf.size - 166) < 0.01, JSON.stringify(elf));
+        ok('…the Elfsong Tavern (no scale): 166, as before', !!elf && Math.abs(elf.size - 166) < 0.01 && !elf.alt, JSON.stringify(elf));
+        const load = p => new Promise(r => { const i = new Image(); i.crossOrigin = 'anonymous'; i.onload = () => r(i); i.onerror = () => r(null); i.src = assetUrl(p); setTimeout(() => r(null), 30000); });
+        const audImg = await load('adventure/AUD/041-map-03-07.two-plateaus-shipping-company.webp');
+        if (audImg){ const fa = B._advFit(two, audImg), m = v => ((v % 95.5) + 95.5) % 95.5;
+          ok('…and its lines where the printed ones are (35.5 down)', Math.abs(m(fa.oy) - 35.5) < 3, JSON.stringify(fa)); }
+        if (audImg) ok('…its picture decides: 95.5 (its printed squares)', Math.abs(B._advSize(two, audImg) - 95.5) < 0.5, B._advSize(two, audImg));
+        const bgP = 'adventure/BGDIA/037-wcrji-map-2-4-player.webp', bg = await B._advGrid(bgP), bgImg = await load(bgP);
+        if (bgImg) ok('Baldur’s Gate 2.4 (size 131, scale 2): its picture says 131 — the size as given', !!bg && Math.abs(B._advSize(bg, bgImg) - 131) < 0.5, bg && B._advSize(bg, bgImg));
       } catch(e){ ok('round 497 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
     }
     // -- Round 498: an adventure map's squares are as far as its data says — Krezk's village is 50 ft a square (it read 5: the ruler and every reach a tenth), and a 5 ft map after it is 5 again --
