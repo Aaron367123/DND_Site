@@ -76,7 +76,11 @@ registerPanel('turnview', {
     try {
       if (this._ro) this._ro.disconnect();
       if (typeof ResizeObserver === 'function'){
-        this._ro = new ResizeObserver(es => { const e = es[es.length - 1]; if (e) this._bodyW = e.contentRect.width; });
+        // A narrower window isn't always a render: the strip re-centres on
+        // whoever's turn it is when its width changes.
+        this._ro = new ResizeObserver(es => { const e = es[es.length - 1]; if (!e) return;
+          const was = this._bodyW; this._bodyW = e.contentRect.width;
+          if (was != null && Math.round(was) !== Math.round(this._bodyW)) this._scrollInit(); });
         this._ro.observe(body);
       }
     } catch(e){}
@@ -1303,6 +1307,52 @@ registerPanel('turnview', {
   },
   // A character's attack that is ranged: a weapon with ammunition, or a
   // spell attack the spell says is ranged (Fire Bolt, not Shocking Grasp).
+  // "30/120" → [30, 120]; "60" → [60, 60].
+  _rangePair(v){ const m = /^(\d+)(?:\/(\d+))?/.exec(String(v == null ? '' : v)); return m ? [+m[1], +(m[2] || m[1])] : null; },
+  // A spell's range in feet from its rules entry: 0 for touch, null for
+  // self, sight and the rest.
+  _spellFeet(name){
+    if (typeof _sktRulesReady === 'undefined' || typeof sktRulesSpell !== 'function') return null;
+    for (const ed of ['2024', '2014']){
+      const R = _sktRulesReady[ed]; if (!R) continue;
+      const s = sktRulesSpell(R, name); if (!s) continue;
+      const d = s.range && s.range.distance;
+      return d && d.type === 'feet' ? +d.amount || null : d && d.type === 'touch' ? 0 : null;
+    }
+    return null;
+  },
+  // Can this attack reach that target from where the two stand? null when it
+  // can (or the map can't say), { dis } at long range — disadvantage — and
+  // { out } past its reach or its range. Every attack used to roll at any
+  // distance: a greataxe across the room, a javelin at 100 ft with no
+  // disadvantage.
+  _rangeCheck(c, t, a){
+    if (!c || !t || !a || a.save || a.feature || a.toHit === 'auto') return null;
+    const ft = this._ftBetween(c, t); if (ft == null) return null;
+    let reach = null, rng = null;
+    if (a.pc){
+      const props = a.props || [];
+      if (a.spell){
+        const f = this._spellFeet(a.sheetName || a.name);
+        if (f == null) return null;
+        if (f === 0) reach = 5; else rng = [f, f];
+      } else {
+        if (!a.ranged || props.includes('T')) reach = props.includes('R') ? 10 : 5;
+        rng = this._rangePair(a.rangeText);
+        if (reach == null && !rng) return null;
+      }
+    } else {
+      reach = a.reach != null ? a.reach : null; rng = a.range || null;
+      if (reach == null && !rng) return null;
+    }
+    if (reach != null && ft <= reach) return null;
+    if (rng){
+      if (ft <= rng[0]) return null;
+      if (ft <= rng[1]) return { dis: 'long range, ' + ft + ' ft', ft };
+      return { out: ft + ' ft away — its range is ' + (rng[1] > rng[0] ? rng[0] + '/' + rng[1] : rng[0]) + ' ft', ft };
+    }
+    return { out: ft + ' ft away — its reach is ' + reach + ' ft', ft };
+  },
   _pcRanged(row, sheetRow){
     if (((sheetRow && sheetRow.props) || []).includes('A')) return true;
     if (!row.spell || typeof _sktRulesReady === 'undefined' || typeof sktRulesSpell !== 'function') return false;
@@ -1686,6 +1736,9 @@ registerPanel('turnview', {
           bonusAction: /\(bonus action\)\s*$/i.test(String(a.name || '')),
         };
         row.ranged = this._pcRanged(row, a);
+        // Its range as the sheet has it ("30/120"), and its own name — for a
+        // spell, where the range is read from the rules.
+        row.rangeText = a.range || null; row.sheetName = a.name;
         // Eldritch Blast's beams ("1d10+4 force ×2 beams"): the damage is one
         // beam's, and the count is how many attacks. Rolled as one attack with
         // "force ×2 beams" for its type, the second beam never happened.
@@ -2006,6 +2059,8 @@ registerPanel('turnview', {
     }
     const manualSlot = this._manualOpen ? manual
       : `<button class="tv-manual-open" data-tv="manualopen">✎ Rolled it yourself?</button>`;
+    // Who the next roll is at: how far, for each attack's reach or range.
+    const tgtA = this._armed && this._armed !== c.id ? this._order().find(o => o.id === this._armed) : null;
     const rows = list.map((a, i) => {
       // A legendary action is spent from the Legendary bar, at the end of
       // someone else's turn — never one of the creature's own actions.
@@ -2016,7 +2071,8 @@ registerPanel('turnview', {
       const spent = (c.rechargeSpent || []).includes(a.name);
       const left = a.pc ? null : this._usesLeft(c, a);
       const usedNow = left === 0 && (c.usesRound || {})[a.name] === (state.combatRound || 0) + ':' + (state.activeCombatantId || '');
-      const rech = (a.recharge
+      const rc0 = tgtA ? this._rangeCheck(c, tgtA, a) : null;
+      const rech = (rc0 ? `<span class="tv-save tv-range ${rc0.out ? 'out' : ''}" title="${esc(rc0.out || rc0.dis)}">${rc0.out ? (/reach/.test(rc0.out) ? 'out of reach' : 'out of range') : 'long range'} · ${rc0.ft} ft</span>` : '') + (a.recharge
         ? `<span class="tv-save rech" title="Recharges on a d6 roll of ${esc(String(a.recharge))} at the start of its turn">↺ ${esc(String(a.recharge))}</span>`
         : '') + (left != null ? `<span class="tv-save rech" title="Uses that don't come back in this fight">${left}/${this._usesMax(a)} ${a.slotLevel ? this._ordLevel(a.slotLevel) + ' slots' : 'left'}</span>` : '');
       let ctl;
@@ -3615,7 +3671,12 @@ registerPanel('turnview', {
     // Steady Aim: the next attack this turn.
     if (c.aimed && !c.aimed.used && typeof sktMoveKey === 'function' && c.aimed.k === sktMoveKey()){ advWhy.push('Steady Aim'); c.aimed = Object.assign({}, c.aimed, { used: true }); }
     if (c.sapped){ disWhy.push('sapped'); c.sapped = undefined; }
-    if (a.ranged && !a.closeOk){ const foe = this._rangedThreat(c); if (foe) disWhy.push('ranged, ' + foe.name + ' within 5 ft'); }
+    // Long range: disadvantage. Past its reach or range: rolled anyway (the
+    // tokens may be loosely placed), and said.
+    const rc = this._rangeCheck(c, t, a);
+    if (rc && rc.dis) disWhy.push(rc.dis);
+    // (thrown or shot, not swung: the 5 ft rule is for a ranged attack)
+    if ((a.ranged || (rc && rc.dis)) && !a.closeOk){ const foe = this._rangedThreat(c); if (foe) disWhy.push('ranged, ' + foe.name + ' within 5 ft'); }
     // Blood Frenzy (a sahuagin, a quipper): "advantage on melee attack rolls
     // against any creature that doesn't have all its hit points".
     const CB = panelDefs.combat;
@@ -3697,6 +3758,7 @@ registerPanel('turnview', {
     const extra = (pcSheet.rollDice || []).filter(x => (x.on || []).some(k => atkTags.includes(k))).map(x => ({ label: x.label, n: this._d(x.die) }));
     if (extra.length) hitNote = (hitNote ? hitNote + ' · ' : '') + extra.map(x => x.label + ' +' + x.n).join(', ');
     if (exhBonus) hitNote = (hitNote ? hitNote + ' · ' : '') + 'exhaustion ' + exhBonus;
+    if (rc && rc.out) hitNote = (hitNote ? hitNote + ' · ' : '') + '⚠ ' + rc.out;
     // Attacking gives a hidden creature away, hit or miss.
     if (c.hidden){ c.hidden = null; hitNote = (hitNote ? hitNote + ' · ' : '') + 'no longer hidden'; }
     const total = nat + bonus + exhBonus + extra.reduce((s, x) => s + x.n, 0);

@@ -25363,6 +25363,56 @@ for (const cls of Object.keys(rule)) for (let L = 1; L <= 20; L++) for (const sc
       } catch(e){ ok('round 479 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
       finally { if (w) w.setAttribute('style', wst || ''); state.combatants = JSON.parse(K0); state.activeCombatantId = A0; save(); closePanel('turnview'); }
     }
+    // -- Round 480: turn view — reach and range off the map: a bite at someone 20 ft off is "out of reach" (it rolled as if adjacent), a javelin at 60 ft is long range and rolls with disadvantage, a cantrip past its 60 ft is out of range --
+    if (!PLAYER){
+      const K0 = JSON.stringify(state.combatants || []), A0 = state.activeCombatantId, BK = localStorage.getItem('skt-battlemap-v1');
+      const T = panelDefs.turnview, BM = panelDefs.battlemap, tk0 = BM._tokens;
+      const realD = window.sktD;
+      try {
+        for (let n = 0; n < 40 && !(typeof _5eLoaded !== 'undefined' && _5eLoaded); n++) await sleep(250);
+        if (typeof sktRulesLoad === 'function') await sktRulesLoad('2024');
+        window.sktD = n => n === 20 ? 15 : realD(n);
+        const pc = state.combatants.find(c => c.isPC);
+        const foe = { id: 'bz480', name: 'Berserker Commander', baseName: 'Berserker Commander', _slug: 'berserker-commander', _source: 'XMM', isPC: false, cls: 'enemy',
+                      hp: 136, hpMax: 136, ac: 16, initiative: 40, conditions: [] };
+        state.combatants = [foe].concat(state.combatants.filter(c => c.isPC));
+        state.activeCombatantId = foe.id;
+        // Two tokens on a plain 50 px grid: the character at (2,2), the berserker 4 squares east, then 12.
+        const place = cells => { BM._tokens = [{ id: 'tk_pc480', cid: pc.id, label: 'P', x: 125, y: 125, size: 1, isPC: true }, { id: 'tk_bz480', cid: foe.id, label: 'B', x: 125 + cells * 50, y: 125, size: 1 }]; T._mapCache = null; };
+        const rowOf = name => [...T._body.querySelectorAll('.tv-act')].find(r => r.querySelector('b, .tv-act-name') && new RegExp('^' + name).test(r.textContent.trim()));
+        openPanel('turnview'); await sleep(400);
+        place(4); T._armed = pc.id; T._render(); await sleep(150);
+        const gx = rowOf('Greataxe');
+        const tag = gx && gx.querySelector('.tv-range');
+        ok('20 ft off: the Greataxe says “out of reach · 20 ft”', !!tag && /out of reach · 20 ft/.test(tag.textContent) && tag.classList.contains('out'), tag ? tag.textContent : (gx ? 'no tag' : 'no Greataxe row'));
+        const jv = rowOf('Javelin'), jt = jv && jv.querySelector('.tv-range');
+        ok('…the Javelin (range 30/120) at 20 ft: nothing to say', !!jv && !jt, jt ? jt.textContent : '');
+        gx.querySelector('[data-tv="roll"]').click(); await sleep(200);
+        const p1 = T._pending;
+        ok('…rolled anyway, and the result says it was out of reach', /20 ft away — its reach is 5 ft/.test((p1 && p1.hitNote) || T._result || ''), (p1 && p1.hitNote) || String(T._result).replace(/<[^>]+>/g, '').slice(0, 120));
+        T._pending = null; T._clearPrompt && T._clearPrompt();
+        place(12); T._render(); await sleep(150);
+        const jv2 = rowOf('Javelin'), jt2 = jv2 && jv2.querySelector('.tv-range');
+        ok('60 ft off: the Javelin is “long range · 60 ft”', !!jt2 && /long range · 60 ft/.test(jt2.textContent) && !jt2.classList.contains('out'), jt2 ? jt2.textContent : 'no tag');
+        jv2.querySelector('[data-tv="roll"]').click(); await sleep(200);
+        const p2 = T._pending;
+        const r2 = p2 ? p2.hitNote || '' : String(T._result).replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ');
+        ok('…and rolls with disadvantage for it', /long range, 60 ft/.test(r2) && /\d+\/\d+ → \d+ dis/.test(r2), r2.slice(0, 220));
+        T._pending = null; T._clearPrompt && T._clearPrompt();
+        // A character's: a 60 ft cantrip at 60 ft is fine, at 65 out; a thrown 60/120 blade at 90 is long range.
+        place(13);
+        const rof = T._rangeCheck(foe, pc, { pc: true, spell: true, sheetName: 'Ray of Frost', name: 'Ray of Frost' });
+        const blade = T._rangeCheck(foe, pc, { pc: true, props: ['F', 'T'], rangeText: '60/120', ranged: false, name: 'Psychic Blades' });
+        place(12);
+        const rof60 = T._rangeCheck(foe, pc, { pc: true, spell: true, sheetName: 'Ray of Frost', name: 'Ray of Frost' });
+        ok('a character: Ray of Frost at 65 ft out of range, at 60 ft fine; Psychic Blades at 65 ft long range', !!rof && /range is 60 ft/.test(rof.out || '') && rof60 === null && !!blade && /long range/.test(blade.dis || ''), JSON.stringify([rof, rof60, blade]));
+      } catch(e){ ok('round 480 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
+      finally {
+        window.sktD = realD; T._pending = null; T._armed = null; BM._tokens = tk0; T._mapCache = null;
+        _remoteUpdate = true; if (BK == null) localStorage.removeItem('skt-battlemap-v1'); else localStorage.setItem('skt-battlemap-v1', BK); _remoteUpdate = false;
+        state.combatants = JSON.parse(K0); state.activeCombatantId = A0; save(); closePanel('turnview');
+      }
+    }
     // -- Class features: represented, not just text ------------------------
     {
       try {

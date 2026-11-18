@@ -4481,6 +4481,9 @@ select.tv-in.wide { width:126px; }
 .tv-advbar .btn { font-size:var(--fs-xs); padding:4px 10px; }
 .tv-advbar .tv-note { max-width:none; flex:1; min-width:140px; }
 .tv-save.rech { color:var(--text-muted); }
+/* How far the picked target is, when it matters: long range, out of reach. */
+.tv-save.tv-range { color:var(--text-muted); }
+.tv-save.tv-range.out { color:var(--warning); }
 /* Temp HP absorbs damage first, so it belongs beside the HP it sits on top
    of, not in a list somewhere else. */
 .tv-temp { font-size:var(--fs-sm); color:var(--success); margin-left:3px; vertical-align:2px; }

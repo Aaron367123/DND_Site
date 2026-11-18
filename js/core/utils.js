@@ -2023,6 +2023,13 @@ function sktParseMonsterAttacks(raw){
         parsed.group = tag;
         // what the hit does besides damage (prone, grappled…)
         if (parsed.toHit && !parsed.save){ const oh = sktOnHitCondition(a.desc); if (oh) parsed.onHit = oh; }
+        // How far it reaches, and how far it throws or shoots: "reach 5 ft.
+        // or range 30/120 ft." — the turn view's long range and out of reach.
+        if (parsed.toHit){
+          const d0 = String(a.desc || ''), rm = /\breach (\d+) ?ft/i.exec(d0), gm = /\brange (\d+)(?:\/(\d+))? ?ft/i.exec(d0);
+          if (rm) parsed.reach = +rm[1];
+          if (gm) parsed.range = [+gm[1], +(gm[2] || gm[1])];
+        }
         out.push(parsed);
       }
     });

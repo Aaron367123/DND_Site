@@ -2215,7 +2215,7 @@ function sktPassiveGrants(text){
 // moves forward: an older build doesn't know it, keeps it as it is, and
 // can't undo the newer work. Raise SKT_RULES_REV when a rules change should
 // reach every saved character.
-const SKT_RULES_REV = '2026-11-13a';
+const SKT_RULES_REV = '2026-11-18a';
 let _sktStatesBusy = false;
 function sktStatesSyncAll(){
   if (_sktStatesBusy || typeof state === 'undefined' || !Array.isArray(state.party)) return;
@@ -3708,7 +3708,7 @@ function sktBuildAttacks(ctx, gear, sc){
   if (ctx.psychicBlades){
     const pab = Math.max(m.str, m.dex), pflat = (pab === m.str ? ctx.rageOn : 0) + ctx.damageBonusAll;
     const row = (die, extra) => Object.assign({ name: 'Psychic Blades', atkBonus: sktSigned(pab + pb), str: pab === m.str && pab !== m.dex,
-      damage: die + sktSigned(pab + pflat) + ' psychic', props: ['F', 'T'], range: '60', mastery: ctx.edition === '2024' ? 'Vex' : '' }, extra || {});
+      damage: die + sktSigned(pab + pflat) + ' psychic', props: ['F', 'T'], range: '60/120', mastery: ctx.edition === '2024' ? 'Vex' : '' }, extra || {});
     out.push(row('1d6'), row('1d4', { name: 'Psychic Blades (bonus action)' }));
   }
   // Attack cantrips the character knows.

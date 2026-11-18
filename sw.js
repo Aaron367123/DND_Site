@@ -34,10 +34,10 @@
  */
 'use strict';
 
-const BUILD = '678514cc32';
+const BUILD = 'c80814fcd2';
 const PRECACHE = [
   'skt-workspace.html',
-  'styles/main.css?v=1c410b5a2f',
+  'styles/main.css?v=11ea813975',
   'styles/theme.css?v=deee6dceaa',
   'js/core/errors.js?v=67c70f2e1d',
   'js/core/data.js?v=183a16905e',
@@ -46,7 +46,7 @@ const PRECACHE = [
   'js/generated/token-index.js?v=2840810fc7',
   'js/generated/species-portraits.js?v=56581792b0',
   'js/core/campaign.js?v=171a617f55',
-  'js/core/utils.js?v=b543c562fe',
+  'js/core/utils.js?v=6cfe0ac0e9',
   'js/ui/dice-fx.js?v=1acff2694d',
   'js/core/state.js?v=8030e53453',
   'js/core/undo.js?v=97bc094c01',
@@ -57,7 +57,7 @@ const PRECACHE = [
   'js/panels/attacks.js?v=99097afcf2',
   'js/generated/reactions.js?v=0e74ab8786',
   'js/generated/rules.js?v=8efb8beae9',
-  'js/panels/turnview.js?v=f104296d66',
+  'js/panels/turnview.js?v=8838a45d6c',
   'js/panels/party.js?v=61af31ece1',
   'js/panels/shop.js?v=17d3872e4c',
   'js/sync/notes-sync.js?v=7ee89969f6',
@@ -94,7 +94,7 @@ const PRECACHE = [
   'js/ui/zoom-pan.js?v=31a2882b02',
   'js/ui/workspaces.js?v=07664d648a',
   'js/ui/command-palette.js?v=fd1d3547c2',
-  'js/features/char-rules.js?v=f871c6770d',
+  'js/features/char-rules.js?v=b606b2446c',
   'js/features/char-effects.js?v=6b739e6eda',
   'js/features/char-sheet.js?v=0aea78b4e5',
   'js/features/char-print.js?v=940c5d7b3f',
