@@ -3570,7 +3570,7 @@ registerPanel('battlemap',{
     if (walked && walked.legs && walked.legs.length > 1) l.textContent += ' (' + walked.legs.map(show).join(' + ') + ')';
     l.classList.toggle('over', !!over);
     l.style.left = x1 + 'px'; l.style.top = y1 + 'px'; l.style.fontSize = (13 * k).toFixed(2) + 'px';
-    l.style.transform = 'translate(' + (14 * k) + 'px, ' + (-30 * k) + 'px)';
+    l.style.transformOrigin = this._rotDeg() ? '0 0' : ''; l.style.transform = (this._rotDeg() ? 'rotate(' + (-this._rotDeg()) + 'deg) ' : '') + 'translate(' + (14 * k) + 'px, ' + (-30 * k) + 'px)';   // (upright on a turned map)
     m.classList.toggle('over', !!over);
     this._measureFt = ft;
     if (this._tool === 'ruler'){ this._rulerLast = [x0, y0, x1, y1]; this._rulerSend(bent ? walked.pts : [[x0, y0], [x1, y1]], l.textContent); }
@@ -3638,7 +3638,7 @@ registerPanel('battlemap',{
       const l = m.querySelector('.bm-measure-l');
       l.textContent = (v.by ? v.by + ': ' : '') + v.t;
       l.style.left = P[2 * n - 2] + 'px'; l.style.top = P[2 * n - 1] + 'px'; l.style.fontSize = (13 * k).toFixed(2) + 'px';
-      l.style.transform = 'translate(' + (14 * k) + 'px, ' + (-30 * k) + 'px)';
+      l.style.transformOrigin = this._rotDeg() ? '0 0' : ''; l.style.transform = (this._rotDeg() ? 'rotate(' + (-this._rotDeg()) + 'deg) ' : '') + 'translate(' + (14 * k) + 'px, ' + (-30 * k) + 'px)';   // (upright on a turned map)
     });
     clearTimeout(this._remoteRulerT);
     if (Object.keys(R).length) this._remoteRulerT = setTimeout(() => this._drawRemoteRulers(), 61000);
@@ -4108,6 +4108,7 @@ registerPanel('battlemap',{
       const p = this._areaMid(t); if (!p) return '';
       const txt = this._areaName(t) + (t.dm ? ' · hidden' : '');
       return '<text x="' + p.x.toFixed(1) + '" y="' + p.y.toFixed(1) + '" text-anchor="middle" dominant-baseline="middle" font-size="' + (11 / vs).toFixed(1) + '"'
+        + (this._rotDeg() ? ' transform="rotate(' + (-this._rotDeg()) + ' ' + p.x.toFixed(1) + ' ' + p.y.toFixed(1) + ')"' : '')
         + ' fill="#fff" stroke="rgba(0,0,0,.65)" stroke-width="' + (3 / vs).toFixed(2) + '" paint-order="stroke" font-weight="600" data-tpll="' + t.id + '">'
         + txt.replace(/&/g, '&amp;').replace(/</g, '&lt;') + '</text>';
     }).join('');
@@ -4499,7 +4500,7 @@ registerPanel('battlemap',{
       + '<circle cx="' + x.toFixed(1) + '" cy="' + y.toFixed(1) + '" r="' + r.toFixed(1) + '" fill="#2f5d8a" fill-opacity=".95" stroke="#fff" stroke-width="' + sw + '"/>'
       // a page with a turned corner
       + '<path d="M' + (x - pw / 2).toFixed(1) + ' ' + (y - ph / 2).toFixed(1) + 'h' + (pw * .65).toFixed(1) + 'l' + (pw * .35).toFixed(1) + ' ' + (pw * .35).toFixed(1) + 'v' + (ph - pw * .35).toFixed(1) + 'h' + (-pw).toFixed(1) + 'z" fill="#fff"/>'
-      + (n.title ? '<text x="' + (x + r * 1.3).toFixed(1) + '" y="' + y.toFixed(1) + '" dominant-baseline="middle" font-size="' + (11 / vs).toFixed(1) + '" font-weight="600" fill="#fff" stroke="rgba(0,0,0,.7)" stroke-width="' + (3 / vs).toFixed(2) + '" paint-order="stroke">' + e(String(n.title).slice(0, 40)) + '</text>' : '')
+      + (n.title ? '<text x="' + (x + r * 1.3).toFixed(1) + '" y="' + y.toFixed(1) + '"' + (this._rotDeg() ? ' transform="rotate(' + (-this._rotDeg()) + ' ' + x.toFixed(1) + ' ' + y.toFixed(1) + ')"' : '') + ' dominant-baseline="middle" font-size="' + (11 / vs).toFixed(1) + '" font-weight="600" fill="#fff" stroke="rgba(0,0,0,.7)" stroke-width="' + (3 / vs).toFixed(2) + '" paint-order="stroke">' + e(String(n.title).slice(0, 40)) + '</text>' : '')
       + '</g>';
   },
   // The note whose pin is at (x, y) — the DM's map only.
@@ -4846,6 +4847,9 @@ registerPanel('battlemap',{
     this._isFitted = true; // panel resize will re-fit until the user manually zooms
     this._pendingRefit = false;
     this._applyViewScale(eff / (this._bgMapScale || 1));
+    // All of it is in view now: a scroll left from before (zoomed in, at the
+    // far corner) hid a strip of it.
+    scrollEl.scrollLeft = 0; scrollEl.scrollTop = 0;
     this._saveViewState();
   },
 

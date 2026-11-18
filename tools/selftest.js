@@ -25742,6 +25742,18 @@ for (const cls of Object.keys(rule)) for (let L = 1; L <= 20; L++) for (const sc
           const tr2 = el.getBoundingClientRect(), nr2b = 0, nr2 = nm().getBoundingClientRect();
           ok('…moved from another screen: still under it', nr2.top >= tr2.bottom - 2 && Math.abs((nr2.left + nr2.right) / 2 - (tr2.left + tr2.right) / 2) < 4, JSON.stringify({ tok: [tr2.left, tr2.top].map(Math.round), name: [nr2.left, nr2.top].map(Math.round) }));
         }
+        // The ruler's distance and an area's name, level on a turned map too.
+        B._mapRotation = 90; B._render(); await sleep(150);
+        const cs = B._cellSize, x0 = 3 * cs, y0 = 3 * cs;
+        B._measureShow(x0, y0, x0 + 6 * cs, y0); await sleep(60);
+        const rl = B._body.querySelector('.bm-measure-l'), rr = rl && rl.getBoundingClientRect();
+        ok('90°: the ruler’s distance reads level', !!rr && rr.width > rr.height * 1.5, rr ? Math.round(rr.width) + 'x' + Math.round(rr.height) : 'none');
+        B._measureHide();
+        const D0 = JSON.stringify(B._drawings || []);
+        B._drawings = (B._drawings || []).concat([{ k: 'tpl', id: 'r495a', shape: 'sphere', x: 6 * cs, y: 6 * cs, ft: 20, c: '#ff7a3d' }]); B._render(); await sleep(150);
+        const al = B._body.querySelector('[data-tpll="r495a"]'), ar = al && al.getBoundingClientRect();
+        ok('…an area’s name too', !!ar && ar.width > ar.height * 1.5, ar ? Math.round(ar.width) + 'x' + Math.round(ar.height) : 'none');
+        B._drawings = JSON.parse(D0);
       } catch(e){ ok('round 495 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
       finally { B._mapRotation = R0 || 0; B._tokens = JSON.parse(T0); B._render(); }
     }
