@@ -5450,7 +5450,9 @@ registerPanel('battlemap',{
     const vs = this._screenScale ? (this._screenScale() || 1) : 1, r = 28 / vs;
     const el = document.createElement('div');
     el.className = 'map-ping';
-    el.style.cssText = 'left:' + (x - r).toFixed(1) + 'px;top:' + (y - r).toFixed(1) + 'px;width:' + (2 * r).toFixed(1) + 'px;height:' + (2 * r).toFixed(1) + 'px;--ping:' + (/^#[0-9a-f]{3,8}$/i.test(c || '') ? c : '#ffd36b');
+    el.style.cssText = 'left:' + (x - r).toFixed(1) + 'px;top:' + (y - r).toFixed(1) + 'px;width:' + (2 * r).toFixed(1) + 'px;height:' + (2 * r).toFixed(1) + 'px;--ping:' + (/^#[0-9a-f]{3,8}$/i.test(c || '') ? c : '#ffd36b')
+      // (turned back with a turned map: its name under it, level)
+      + (this._rotDeg && this._rotDeg() ? ';transform:rotate(' + (-this._rotDeg()) + 'deg)' : '');
     el.innerHTML = '<i></i><i></i><b style="font-size:' + (11 / vs).toFixed(1) + 'px">' + String(by || '').replace(/[&<>"]/g, ch => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[ch]) + '</b>';
     stage.appendChild(el);
     setTimeout(() => el.remove(), 3000);

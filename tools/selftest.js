@@ -25878,6 +25878,21 @@ for (const cls of Object.keys(rule)) for (let L = 1; L <= 20; L++) for (const sc
       } catch(e){ ok('round 501 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
       finally { B._tokens = JSON.parse(T0); state.combatants = JSON.parse(K0); save(); B._render(); }
     }
+    // -- Round 502: a ping on a turned map — its name under the rings, level (it read sideways with the map) --
+    if (!PLAYER){
+      const B = panelDefs.battlemap, R0 = B._mapRotation;
+      try {
+        openPanel('battlemap'); await sleep(300);
+        B._mapRotation = 90; B._render(); await sleep(150);
+        const cs = B._cellSize;
+        B._showPing(5 * cs, 5 * cs, '#ffd36b', 'Zoey'); await sleep(60);
+        const el = [...B._body.querySelectorAll('.map-ping')].pop(), b = el && el.querySelector('b');
+        const er = el.getBoundingClientRect(), br = b.getBoundingClientRect();
+        ok('90°: a ping’s name reads level, under its rings', br.width > br.height && br.top >= er.top + er.height / 2, JSON.stringify({ rings: [er.left, er.top, er.right, er.bottom].map(Math.round), name: [br.left, br.top, br.right, br.bottom].map(Math.round) }));
+        el.remove();
+      } catch(e){ ok('round 502 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
+      finally { B._mapRotation = R0 || 0; B._render(); }
+    }
     // -- Class features: represented, not just text ------------------------
     {
       try {
