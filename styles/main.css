@@ -2913,6 +2913,10 @@ body.player-mode #campaign-btn{display:none !important}
 /* Placed but not revealed — only ever drawn on the DM's screen. */
 .map-token.tok-hidden{opacity:.55;border-style:dashed}
 .map-token.tok-hidden::after{content:'👁';position:absolute;top:-8px;right:-8px;font-size:11px;line-height:1;filter:grayscale(1);opacity:.9;pointer-events:none}
+/* The token panel is taller than the Battle Map window opens (548 against
+   500): its Del, Hide and Conditions were below the window's edge, out of
+   reach until the window was made bigger. It scrolls inside the window. */
+#token-panel{max-height:calc(100% - 60px); overflow-y:auto; box-sizing:border-box}
 .map-token-label{position:absolute;bottom:-16px;left:50%;transform:translateX(-50%);font-size:var(--fs-2xs);white-space:nowrap;color:var(--text);background:rgba(0,0,0,.6);padding:1px 4px;border-radius:var(--r-sm);pointer-events:none}
 .token-panel{position:absolute;right:8px;top:8px;width:160px;background:var(--panel);border:1px solid var(--border);border-radius:var(--r-md);padding:10px;font-size:var(--fs-sm);z-index:10;display:none}
 .token-panel.open{display:block}

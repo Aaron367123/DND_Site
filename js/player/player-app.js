@@ -1036,13 +1036,18 @@ function paWatchMap(host){
       // bar gets its Me button.
       if (!document.querySelector('[data-pa-me]')){ document.querySelector('#pa-screen .pa-draw')?.remove(); paAddDrawBar(document.getElementById('pa-screen')); }
       const k = t.x + ',' + t.y;
-      if (k !== paMapLast) paCenterOnMe(paMapLast != null);
-      else if (!paMapHeld && Date.now() - paMapOpened < 15000 && (paMyOffset() || 0) > 8) paCenterOnMe(false);
+      // Opening (until the player touches the map): onto them at a square
+      // a finger can use, as Me does — a whole map fitted to a phone left
+      // their token about 20 px across, with nothing to centre on. Moving
+      // later only follows, at the zoom they have.
+      const settling = !paMapHeld && Date.now() - paMapOpened < 15000;
+      if (k !== paMapLast) paCenterOnMe(paMapLast != null, paMapLast == null && settling);
+      else if (settling && (paMyOffset() || 0) > 8) paCenterOnMe(false, true);
     }, 120);
   });
   paMapObs.observe(box, { subtree: true, childList: true, attributes: true, attributeFilter: ['style'] });
   // Once the stage has its size (the map image sets it).
-  setTimeout(() => { if (paTab === 'map') paCenterOnMe(false); }, 60);
+  setTimeout(() => { if (paTab === 'map') paCenterOnMe(false, true); }, 60);
 }
 
 function paMountPanel(host, id){

@@ -25611,6 +25611,50 @@ for (const cls of Object.keys(rule)) for (let L = 1; L <= 20; L++) for (const sc
       } catch(e){ ok('round 487 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
       finally { C._condSaves = S0; state.party = JSON.parse(P0); state.combatants = JSON.parse(K0); state.activeCombatantId = A0; save(); C._renderCondSaves(); }
     }
+    // -- Round 489: the token panel in a Battle Map window at its opening size (500 tall) — its Del, Hide and Conditions were below the window's edge, out of reach; it scrolls inside the window now, and its Size slider has a track to drag --
+    if (!PLAYER){
+      const B = panelDefs.battlemap;
+      let w = null, wst = null;
+      try {
+        openPanel('battlemap'); await sleep(600);
+        w = B._body.closest('.window'); wst = w.getAttribute('style');
+        w.style.width = '680px'; w.style.height = '500px'; await sleep(300);
+        const t = (B._tokens || [])[0];
+        if (!t) ok('the fixture has a token', false, 'none');
+        else {
+          const el = B._body.querySelector('.map-token[data-tid="' + CSS.escape(String(t.id)) + '"]');
+          el.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true, clientX: 300, clientY: 300, button: 2 }));
+          await sleep(300);
+          const p = document.getElementById('token-panel'), wr = w.getBoundingClientRect(), pr = p.getBoundingClientRect();
+          ok('the token panel stays inside the window', pr.bottom <= wr.bottom + 1, Math.round(pr.bottom) + ' vs ' + Math.round(wr.bottom));
+          const hide = document.getElementById('tp-hide');
+          hide.scrollIntoView({ block: 'nearest' }); await sleep(80);
+          const hr = hide.getBoundingClientRect(), hit = document.elementFromPoint(hr.left + hr.width / 2, hr.top + hr.height / 2);
+          ok('…scrolled to, “Hide from players” can be pressed', hit === hide || hide.contains(hit), hit && (hit.id || hit.className));
+          const rng = document.getElementById('tp-size');
+          ok('…the Size slider has a track to drag (it was ~40 px)', rng.getBoundingClientRect().width >= 60, Math.round(rng.getBoundingClientRect().width));
+        }
+      } catch(e){ ok('round 489 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
+      finally { const p = document.getElementById('token-panel'); if (p) p.style.display = 'none'; if (w) w.setAttribute('style', wst || ''); }
+    }
+    // -- Round 490: an adventure's map by its name — Settings said "009-hc2oz-map-1-2-player", it says "Map 1.2: Elfsong Tavern (players’)"; Choose a map opens on that adventure's maps (an empty grid until one was picked) --
+    if (!PLAYER){
+      const B = panelDefs.battlemap, P0 = B._bgMapPath, S0 = B._settingsOpen;
+      try {
+        openPanel('battlemap'); await sleep(400);
+        B._bgMapPath = 'adventure/BGDIA/009-hc2oz-map-1-2-player.webp';
+        B._settingsOpen = true; B._render();
+        for (let n = 0; n < 40 && !/Elfsong/.test((B._body.querySelector('.bm-set-tile') || {}).textContent || ''); n++) await sleep(150);
+        const tile = B._body.querySelector('.bm-set-tile');
+        ok('Settings: the map by its name, not its file', !!tile && /Map 1\.2: Elfsong Tavern \(players’\)/.test(tile.textContent) && !/009-hc2oz/.test(tile.textContent), tile ? tile.textContent.replace(/\s+/g, ' ') : 'no tile');
+        B._openMapPicker();
+        for (let n = 0; n < 60 && !document.querySelector('.mapsel-card'); n++) await sleep(150);
+        const sel = document.getElementById('mapsel-adv');
+        const cards = document.querySelectorAll('.mapsel-card');
+        ok('Choose a map: opens on the map’s own adventure, its maps showing', !!sel && sel.value === 'BGDIA' && cards.length > 10 && [...cards].some(c => /Elfsong/.test(c.textContent)), (sel && sel.value) + ' / ' + cards.length);
+      } catch(e){ ok('round 490 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
+      finally { document.querySelector('#mapsel-close')?.click(); B._bgMapPath = P0; B._settingsOpen = S0; B._render(); }
+    }
     // -- Class features: represented, not just text ------------------------
     {
       try {
@@ -30019,6 +30063,31 @@ for (const cls of Object.keys(rule)) for (let L = 1; L <= 20; L++) for (const sc
         ok('the quick dice: 44 by 38 px for a finger', d.length >= 6 && (!coarse || !small.length), coarse + ' ' + small.map(b => b.textContent + ' ' + Math.round(b.getBoundingClientRect().width) + 'x' + Math.round(b.getBoundingClientRect().height)).join(','));
       } catch(e){ ok('round 473 threw', false, e.message); }
       finally { paMoreSub = null; paTab = 'you'; paRender(); }
+    }
+    // -- Round 488 (player): opening the Map tab lands on your token at a square a finger can use (a whole map fitted to a phone left it ~20 px across, with nothing to centre on) --
+    if (PLAYER){
+      const keepTab = paTab, B = panelDefs.battlemap; let keepT = null;
+      try {
+        if (paMyIdx() < 0) paSetPc(state.party[0].id);
+        try { localStorage.removeItem(B._viewKey()); } catch(e){}
+        paTab = 'you'; paRender(); await sleep(150);
+        // (my token mid-map, away from the edges, so there is room to centre it)
+        keepT = localStorage.getItem('skt-battlemap-v1');
+        { const d = JSON.parse(keepT || '{}'), cs0 = d.cellSize || 50, mine = (d.tokens || []).find(t => t.cid === paPc().id);
+          if (mine){ mine.x = Math.round((d.cols || 20) / 2) * cs0 + cs0 / 2; mine.y = Math.round((d.rows || 14) / 2) * cs0 + cs0 / 2; }
+          _remoteUpdate = true; try { localStorage.setItem('skt-battlemap-v1', JSON.stringify(d)); } finally { _remoteUpdate = false; } }
+        paTab = 'map'; paRender(); await sleep(1800);
+        const t = paMyToken();
+        if (!t) ok('map: the fixture puts my token on the map', false, 'none');
+        else {
+          const sq = B._csScreen() * B._screenScale(), off = paMyOffset();
+          // (a map smaller than the screen has nowhere to scroll: nothing to centre)
+          const sc = document.querySelector('#pa-screen .pa-mount #map-scroll');
+          const roomy = !!sc && (sc.scrollWidth > sc.clientWidth + 2 || sc.scrollHeight > sc.clientHeight + 2);
+          ok('opening the map: a square big enough for a finger, on my token', sq >= 31.5 && off != null && (!roomy || off < 20), JSON.stringify({ sq: +sq.toFixed(1), off, roomy }));
+        }
+      } catch(e){ ok('round 488 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
+      finally { if (keepT != null){ _remoteUpdate = true; try { localStorage.setItem('skt-battlemap-v1', keepT); } finally { _remoteUpdate = false; } } paTab = keepTab; paRender(); }
     }
   }
 

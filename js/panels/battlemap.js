@@ -5644,7 +5644,7 @@ registerPanel('battlemap',{
       +'<span class="map-foot-touch" style="font-size:var(--fs-2xs);color:var(--text-dim)">Hold a finger on the map to ping</span>'
     +'</div>';
 
-    html+='<div id="token-panel" style="position:absolute;right:8px;top:52px;width:164px;background:var(--panel);border:1px solid var(--border);border-radius:5px;padding:10px;font-size:var(--fs-sm);z-index:20;display:none;box-shadow:0 4px 16px rgba(0,0,0,.5)">'
+    html+='<div id="token-panel" style="position:absolute;right:8px;top:52px;width:196px;background:var(--panel);border:1px solid var(--border);border-radius:5px;padding:10px;font-size:var(--fs-sm);z-index:20;display:none;box-shadow:0 4px 16px rgba(0,0,0,.5)">'
       +'<div style="font-weight:500;margin-bottom:8px;display:flex;justify-content:space-between;align-items:center">'
         +'<span id="tp-name" style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:110px">Token</span>'
         +'<button class="btn icon-btn" id="tp-close" style="padding:0 4px;font-size:var(--fs-lg);flex-shrink:0">'+ICO('i-close')+'</button>'
@@ -5662,7 +5662,7 @@ registerPanel('battlemap',{
         +'<button class="btn icon-btn" id="tp-size-down" title="Smaller (¼ cell)" style="padding:1px 6px;font-size:var(--fs-lg)">−</button>'
         +'<input type="range" id="tp-size" min="0.25" max="6" step="0.25" value="1" style="flex:1">'
         +'<button class="btn icon-btn" id="tp-size-up" title="Bigger (¼ cell)" style="padding:1px 6px;font-size:var(--fs-lg)">+</button>'
-        +'<span id="tp-size-val" style="font-size:var(--fs-sm);color:var(--text-muted);min-width:52px;text-align:right">1.00 cells</span>'
+        +'<span id="tp-size-val" style="font-size:var(--fs-sm);color:var(--text-muted);min-width:40px;text-align:right;white-space:nowrap">1.00 cells</span>'
       +'</div>'
       +'<label class="field-label">Height (flying, or below ground)</label>'
       +'<div style="display:flex;gap:4px;margin-bottom:6px;align-items:center">'
@@ -7227,38 +7227,8 @@ registerPanel('battlemap',{
     // Captures `id` (for parent linking) and `mapParent.id` so we can backfill
     // player-version titles from their DM counterparts — 5etools data sets the
     // player map's `title` to "Player Version" rather than the actual map name.
-    const extractMaps = (node, out)=>{
-      if (!node) return;
-      if (Array.isArray(node)){ node.forEach(n => extractMaps(n, out)); return; }
-      if (typeof node !== 'object') return;
-      if (node.type === 'image' && (node.imageType === 'map' || node.imageType === 'mapPlayer') && node.href?.path){
-        const path = node.href.path;
-        const fallback = path.split('/').pop().replace(/\.[^.]+$/, '');
-        out.push({
-          path,
-          title: node.title || fallback,
-          type: node.imageType,
-          id: node.id,
-          parentId: node.mapParent?.id,
-        });
-      }
-      for (const k in node) extractMaps(node[k], out);
-    };
-
-    // Backfill player-map titles from their parent DM map so search by name finds both.
-    const linkPlayerTitles = (maps)=>{
-      const byId = {};
-      maps.forEach(m => { if (m.id) byId[m.id] = m; });
-      maps.forEach(m => {
-        if (m.type === 'mapPlayer' && m.parentId && byId[m.parentId]){
-          const parentTitle = byId[m.parentId].title;
-          if (parentTitle && m.title === 'Player Version') m.title = parentTitle;
-          // Stash searchable parent title even if the player map already had a unique name.
-          m.searchTitle = parentTitle;
-        }
-      });
-      return maps;
-    };
+    const extractMaps = (node, out) => this._extractMaps(node, out);
+    const linkPlayerTitles = maps => this._linkPlayerTitles(maps);
 
     // Fetch + extract maps for one adventure, cached.
     const loadOneAdvMaps = async (advId)=>{
@@ -7484,6 +7454,11 @@ registerPanel('battlemap',{
     searchInput.addEventListener('input', e => runSearch(e.target.value));
     // <select> reliably emits 'change' the moment the user picks an option.
     sel.addEventListener('change', handlePick);
+    // Open on the adventure the map on screen comes from: its other maps are
+    // the likeliest next pick (the tavern's upstairs, the next room). The
+    // grid was empty until an adventure was chosen.
+    const curAdv = (/^adventure\/([^/]+)\//.exec(this._bgMapPath || '') || [])[1];
+    if (curAdv && Array.from(sel.options).some(o => o.value === curAdv)){ sel.value = curAdv; handlePick(); }
   },
 
   _applyBg(stage,W,H){
@@ -7898,12 +7873,67 @@ registerPanel('battlemap',{
     this._applyFogBlur();
   },
 
+  // Every map in an adventure's data (extracted from the map picker, which
+  // uses them as well): {type:'image', imageType:'map'|'mapPlayer'}, with
+  // the id and parent that let a player version borrow its DM map's title.
+  _extractMaps(node, out){
+    if (!node) return;
+    if (Array.isArray(node)){ node.forEach(n => this._extractMaps(n, out)); return; }
+    if (typeof node !== 'object') return;
+    if (node.type === 'image' && (node.imageType === 'map' || node.imageType === 'mapPlayer') && node.href?.path){
+      const path = node.href.path;
+      const fallback = path.split('/').pop().replace(/\.[^.]+$/, '');
+      out.push({
+        path,
+        title: node.title || fallback,
+        type: node.imageType,
+        id: node.id,
+        parentId: node.mapParent?.id,
+      });
+    }
+    for (const k in node) this._extractMaps(node[k], out);
+  },
+
+  // Backfill player-map titles from their parent DM map so search by name finds both.
+  _linkPlayerTitles(maps){
+    const byId = {};
+    maps.forEach(m => { if (m.id) byId[m.id] = m; });
+    maps.forEach(m => {
+      if (m.type === 'mapPlayer' && m.parentId && byId[m.parentId]){
+        const parentTitle = byId[m.parentId].title;
+        if (parentTitle && m.title === 'Player Version') m.title = parentTitle;
+        // Stash searchable parent title even if the player map already had a unique name.
+        m.searchTitle = parentTitle;
+      }
+    });
+    return maps;
+  },
+  // A map's name as its adventure gives it ("Elfsong Tavern"), for the
+  // Settings tile, which showed the file name ("009-hc2oz-map-1-2-player").
+  // The adventure is read once (the picker's cache), then drawn again.
+  _mapTitle(path){
+    const file = String(path || '').split('/').pop().replace(/\.(webp|jpg|jpeg|png)$/i, '');
+    const m = /^adventure\/([^/]+)\//.exec(path || '');
+    if (!m) return file;
+    const id = m[1], have = (this._mapsByAdv || {})[id];
+    if (have){ const hit = have.find(x => x.path === path); return hit && hit.title ? hit.title + (hit.type === 'mapPlayer' ? ' (players\u2019)' : '') : file; }
+    this._mapsByAdv = this._mapsByAdv || {};
+    if (!this._mapTitleLoading){
+      this._mapTitleLoading = true;
+      fetch('data/adventure/adventure-' + id.toLowerCase() + '.json').then(r => r.ok ? r.json() : null).then(j => {
+        const found = []; if (j) this._extractMaps(j, found);
+        this._mapsByAdv[id] = this._linkPlayerTitles(found);
+      }).catch(() => { this._mapsByAdv[id] = []; }).finally(() => { this._mapTitleLoading = false; if (this._settingsOpen && this._body) this._render(); });
+    }
+    return file;
+  },
+
   // Right-side Settings drawer. Renders only when this._settingsOpen.
   // Wires up in _wire alongside the toolbar buttons.
   _renderSettingsSidebar(){
     const mapName = !this._bgMapPath ? 'No map'
       : this._isSharedUpload(this._bgMapPath) ? 'Uploaded map'
-      : this._bgMapPath.split('/').pop().replace(/\.(webp|jpg|jpeg|png)$/i, '');
+      : this._mapTitle(this._bgMapPath);
     const fogOn = this._fog !== null;
     const paint = this._fogPaintMode;
     // Brush size slider in screenshot is 0–100; map to internal 1–5 cells.
