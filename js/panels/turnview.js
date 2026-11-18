@@ -2635,7 +2635,10 @@ registerPanel('turnview', {
           <span class="tv-tgt-hp">${t.hp}/${t.hpMax}</span>
           <span class="tv-tgt-ac">${ICO('i-shield')}${t.ac ?? '–'}</span>
         </span>
-        ${(tags => tags.length ? `<span class="tv-tgt-tags">${tags.map(esc).join(' · ')}</span>` : '')([...(t.conditions || []), t.dodging ? 'Dodging' : '', t.hidden ? 'Hidden' : ''].filter(Boolean))}
+        ${(tags => tags.length ? `<span class="tv-tgt-tags">${tags.map(esc).join(' · ')}</span>` : '')([
+          // How far from whoever is acting, off the map: who's in reach at a glance.
+          (ft => ft == null ? '' : ft + ' ft')(c ? this._ftBetween(c, t) : null),
+          ...(t.conditions || []), t.dodging ? 'Dodging' : '', t.hidden ? 'Hidden' : ''].filter(Boolean))}
         <span class="tv-hpbar"><i style="width:${pct}%;background:${col}"></i></span>
       </button>`;
     }).join('');

@@ -25540,6 +25540,27 @@ for (const cls of Object.keys(rule)) for (let L = 1; L <= 20; L++) for (const sc
       } catch(e){ ok('round 484 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
       finally { state.party = JSON.parse(P0); state.combatants = JSON.parse(K0); state.activeCombatantId = A0; save(); }
     }
+    // -- Round 485: turn view — each target says how far it is from whoever is acting, off the map ("20 ft · Poisoned"); no map, no number --
+    if (!PLAYER){
+      const K0 = JSON.stringify(state.combatants || []), A0 = state.activeCombatantId;
+      const T = panelDefs.turnview, BM = panelDefs.battlemap, tk0 = BM._tokens;
+      try {
+        const pc = state.combatants.find(c => c.isPC);
+        const foe = { id: 'gob485', name: 'Goblin 485', isPC: false, cls: 'enemy', hp: 7, hpMax: 7, ac: 15, initiative: 40, conditions: ['Poisoned'] };
+        state.combatants = [foe].concat(state.combatants.filter(c => c.isPC));
+        state.activeCombatantId = foe.id;
+        BM._tokens = [{ id: 'tk_pc485', cid: pc.id, label: 'P', x: 125, y: 125, size: 1, isPC: true }, { id: 'tk_g485', cid: foe.id, label: 'G', x: 325, y: 125, size: 1 }];
+        T._mapCache = null;
+        openPanel('turnview'); await sleep(300); T._mapCache = null; T._render(); await sleep(150);
+        const row = T._body.querySelector('.tv-tgt[data-id="' + pc.id + '"]');
+        const tags = row && row.querySelector('.tv-tgt-tags');
+        ok('a target says how far it is: 20 ft', !!tags && /^20 ft/.test(tags.textContent.trim()), tags ? tags.textContent : 'no tags');
+        BM._tokens = []; T._mapCache = null; T._render(); await sleep(100);
+        const t2 = T._body.querySelector('.tv-tgt[data-id="' + pc.id + '"] .tv-tgt-tags');
+        ok('…no tokens on the map: no number', !t2 || !/ft/.test(t2.textContent), t2 ? t2.textContent : '');
+      } catch(e){ ok('round 485 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
+      finally { BM._tokens = tk0; T._mapCache = null; state.combatants = JSON.parse(K0); state.activeCombatantId = A0; save(); closePanel('turnview'); }
+    }
     // -- Class features: represented, not just text ------------------------
     {
       try {
