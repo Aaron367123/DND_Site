@@ -25985,6 +25985,56 @@ for (const cls of Object.keys(rule)) for (let L = 1; L <= 20; L++) for (const sc
       } catch(e){ ok('round 505 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
       finally { B._tokens = JSON.parse(T0); state.combatants = JSON.parse(K0); B._drawings = JSON.parse(D0); save(); B._render(); }
     }
+    // -- Round 506: Ctrl+C on a token, Ctrl+V where the pointer is — another there (a group spaced as it was); typing keeps its own Ctrl+C --
+    if (!PLAYER){
+      const B = panelDefs.battlemap, HS = B._hoverStage, T0 = JSON.stringify(B._tokens || []), K0 = JSON.stringify(state.combatants || []);
+      const key = (k, o) => document.dispatchEvent(new KeyboardEvent('keydown', Object.assign({ key: k, ctrlKey: true, bubbles: true, cancelable: true }, o || {})));
+      try {
+        openPanel('battlemap'); await sleep(300);
+        const cs = B._csScreen(), win = B._body.closest('.window');
+        state.combatants = (state.combatants || []).filter(c => c.isPC);
+        B._tokens = (B._tokens || []).filter(t => t.isPC).map(t => Object.assign({}, t, { x: 30.5 * cs, y: 30.5 * cs })).concat([
+          { id: 'tk_r506a', label: 'Bandit', x: 2.5 * cs, y: 2.5 * cs, size: 1, color: '#334455' },
+          { id: 'tk_r506b', label: 'Bandit Captain', x: 4.5 * cs, y: 2.5 * cs, size: 1 }]);
+        save(); B._render(); await sleep(120);
+        win.classList.add('focused');
+        B._selected = 'tk_r506a'; B._clip = null;
+        key('c'); await sleep(40);
+        ok('Ctrl+C on the selected token: it’s on the clip', JSON.stringify(B._clip) === '["tk_r506a"]', JSON.stringify(B._clip));
+        { const sc = B._body.querySelector('#map-scroll'), r = sc.getBoundingClientRect(), cx = Math.round(r.left + r.width / 2), cy = Math.round(r.top + r.height / 2);
+          sc.dispatchEvent(new MouseEvent('mousemove', { clientX: cx, clientY: cy, bubbles: true }));
+          const want = B._stagePoint(cx, cy);
+          const got = B._hoverStage();
+          ok('the pointer over the map is followed', !!got && Math.abs(got.x - want.x) < 0.5 && Math.abs(got.y - want.y) < 0.5, JSON.stringify([got, want]));
+          sc.dispatchEvent(new MouseEvent('mouseleave', { bubbles: false }));
+          ok('…and forgotten once it leaves', B._hoverStage() == null); }
+        B._hoverStage = () => ({ x: 10.5 * cs, y: 8.5 * cs });
+        const n0 = B._tokens.length;
+        key('v'); await sleep(120);
+        const p1 = B._tokens.slice(n0);
+        ok('Ctrl+V: another where the pointer is', p1.length === 1 && Math.abs(p1[0].x - 10.5 * cs) < 1 && Math.abs(p1[0].y - 8.5 * cs) < 1 && p1[0].color === '#334455' && /^Bandit 2$/.test(p1[0].label), JSON.stringify(p1[0]));
+        key('v'); await sleep(120);
+        const p2 = B._tokens.slice(n0 + 1);
+        ok('…again: one more, beside it, not on it', p2.length === 1 && Math.max(Math.abs(p2[0].x - p1[0].x), Math.abs(p2[0].y - p1[0].y)) >= cs - 1, JSON.stringify(p2.map(t => [t.label, t.x, t.y])));
+        // A group, spaced as it was.
+        B._group = new Set(['tk_r506a', 'tk_r506b']); B._selected = 'tk_r506a';
+        key('c'); await sleep(40);
+        B._hoverStage = () => ({ x: 15.5 * cs, y: 15.5 * cs });
+        const n1 = B._tokens.length;
+        key('v'); await sleep(150);
+        const g = B._tokens.slice(n1);
+        ok('a group: both, two squares apart as they were, round the pointer', g.length === 2 && Math.abs(Math.abs(g[0].x - g[1].x) - 2 * cs) < 1 && g[0].y === g[1].y && Math.abs((g[0].x + g[1].x) / 2 - 15.5 * cs) < 1, JSON.stringify(g.map(t => [t.label, t.x / cs, t.y / cs])));
+        ok('…and the pasted ones are the group', B._group.size === 2 && g.every(t => B._group.has(t.id)));
+        B._groupClear();
+        // Typing keeps its Ctrl+C.
+        const inp = document.createElement('input'); B._body.appendChild(inp); inp.focus();
+        B._clip = null; B._selected = 'tk_r506a';
+        inp.dispatchEvent(new KeyboardEvent('keydown', { key: 'c', ctrlKey: true, bubbles: true, cancelable: true })); await sleep(30);
+        ok('Ctrl+C in a text box isn’t the map’s', B._clip == null);
+        inp.remove();
+      } catch(e){ ok('round 506 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
+      finally { B._group && B._group.clear(); B._hoverStage = HS; B._hoverAt = null; B._clip = null; B._selected = null; B._closePanel && B._closePanel(); B._tokens = JSON.parse(T0); state.combatants = JSON.parse(K0); save(); B._render(); }
+    }
     // -- Class features: represented, not just text ------------------------
     {
       try {

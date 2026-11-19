@@ -1459,6 +1459,7 @@ registerPanel('battlemap',{
   _startMapKeys(){
     this._stopMapKeys();
     this._mapKeyHandler = (e) => {
+      if ((e.ctrlKey || e.metaKey) && !e.altKey && !e.shiftKey && (e.key === 'c' || e.key === 'C' || e.key === 'v' || e.key === 'V')){ this._clipKey(e); return; }
       if (e.ctrlKey || e.metaKey || e.altKey) return;
       const tg = e.target;
       if (tg && (tg.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(tg.tagName || ''))) return;
@@ -2788,6 +2789,39 @@ registerPanel('battlemap',{
   _copyable(t){
     return !!t && !t.isPC && !document.body.classList.contains('player-mode');
   },
+  // Ctrl+C on the selected token (or its group), Ctrl+V: another set where
+  // the pointer is on the map, spaced as they were — or beside them, with the
+  // pointer off it. Again for more. The DM's, on the focused map window; text
+  // being typed or selected keeps its own Ctrl+C.
+  _hoverStage(){ return this._hoverAt ? this._stagePoint(this._hoverAt.cx, this._hoverAt.cy) : null; },
+  _clipKey(e){
+    if (document.body.classList.contains('player-mode')) return;
+    const tg = e.target;
+    if (tg && (tg.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(tg.tagName || ''))) return;
+    if (document.querySelector('.modal-backdrop')) return;
+    const win = this._body && this._body.closest('.window'); if (!win || !win.classList.contains('focused')) return;
+    const k = String(e.key).toLowerCase();
+    if (k === 'c'){
+      const sel = typeof getSelection === 'function' ? String(getSelection() || '') : '';
+      const t = !sel && this._selected && (this._tokens || []).find(x => x && x.id === this._selected);
+      const set = t ? this._copySet(t) : [];
+      if (!set.length) return;
+      e.preventDefault();
+      this._clip = set.map(x => x.id);
+      if (typeof showToast === 'function') showToast((set.length > 1 ? set.length + ' tokens' : set[0].label) + ' copied — Ctrl+V puts ' + (set.length > 1 ? 'them' : 'another') + ' where the pointer is');
+      return;
+    }
+    const src = (this._clip || []).map(id => (this._tokens || []).find(x => x && x.id === id)).filter(x => this._copyable(x));
+    if (!src.length) return;
+    e.preventDefault();
+    const h = this._hoverStage();
+    // (spaced as they were: each keeps its place from the set's middle)
+    const mx = src.reduce((s, x) => s + x.x, 0) / src.length, my = src.reduce((s, x) => s + x.y, 0) / src.length;
+    const made = src.map(x => this._copyToken(x, h ? { x: h.x + x.x - mx, y: h.y + x.y - my } : null)).filter(Boolean);
+    if (!made.length) return;
+    if (made.length > 1){ this._group = new Set(made.map(x => x.id)); this._renderTokens(); }
+    else { this._selected = made[0].id; this._showPanel(made[0]); this._renderTokens(); }
+  },
   // What Copy copies: this token, or the group it's in (Shift+click) — three
   // goblins, three more. A group's characters stay one of each.
   _copySet(t){
@@ -2796,11 +2830,11 @@ registerPanel('battlemap',{
       ? [...this._group].map(id => (this._tokens || []).find(k => k && k.id === id)).filter(Boolean) : [t];
     return g.filter(k => this._copyable(k));
   },
-  _copyToken(t){
+  _copyToken(t, at){
     if (!this._copyable(t)) return null;
     const LOOK = ['size', 'color', 'portrait', 'picOwn', 'icon', 'hidden', 'elev', 'rotation', 'lt', 'dv'];
     const look = Object.fromEntries(LOOK.filter(f => t[f] != null).map(f => [f, t[f]]));
-    const spot = this._freeCellNear(t.x, t.y, t.size) || { x: t.x, y: t.y };
+    const spot = this._freeCellNear(at ? at.x : t.x, at ? at.y : t.y, t.size) || { x: t.x, y: t.y };
     const C = (typeof panelDefs !== 'undefined') && panelDefs.combat;
     const c = this._combatantFor(t);
     let k;
@@ -5867,7 +5901,7 @@ registerPanel('battlemap',{
       +'<button class="btn small" id="tp-floor" style="width:100%;margin-top:6px;display:none" title="Up or down the stairs: onto another floor of the building">⇅ To another floor…</button>'
       +'<div style="display:flex;gap:4px;margin-top:6px">'
         +'<button class="btn small" id="tp-kill" style="flex:1">☠</button>'
-        +'<button class="btn small" id="tp-copy" style="flex:1.4" title="Another one beside it — in the fight too, with its own hit points">⎘ Copy</button>'
+        +'<button class="btn small" id="tp-copy" style="flex:1.4" title="Another one beside it — in the fight too, with its own hit points. Or Ctrl+C, then Ctrl+V where you want it">⎘ Copy</button>'
         +'<button class="btn small danger" id="tp-del" style="flex:1">Del</button>'
       +'</div>'
     +'</div>';
@@ -6677,6 +6711,11 @@ registerPanel('battlemap',{
     });
     // Suppress browser context menu so right-click drag is usable
     scrollEl.addEventListener('contextmenu', e => e.preventDefault());
+    // Where the pointer is on the map, for Ctrl+V (none once it's left).
+    // (kept on screen and turned into the map's place when it's wanted, so a
+    // scroll under a still pointer doesn't leave it stale)
+    scrollEl.addEventListener('mousemove', e => { this._hoverAt = { cx: e.clientX, cy: e.clientY }; });
+    scrollEl.addEventListener('mouseleave', () => { this._hoverAt = null; });
     // Hold still on the map with no tool up — the mouse button or a finger,
     // half a second — and it pings: a pulse there on every screen for a few
     // seconds, with who made it. "Here", the way a finger on the table says
