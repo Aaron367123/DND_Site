@@ -2763,7 +2763,7 @@ body.player-mode #campaign-btn{display:none !important}
   /* The token panel: 164px wide, with the 44px touch buttons either side,
      left its Size and Facing sliders 0px wide — a thumb with no track that
      couldn't be dragged — and pushed the value past the panel's edge. */
-  #token-panel{width:min(300px, calc(100% - 16px)) !important; max-height:calc(100% - 60px); overflow-y:auto; box-sizing:border-box}
+  #token-panel{width:min(300px, calc(100% - 16px)) !important; max-height:calc(100% - 84px); overflow-y:auto; box-sizing:border-box}
   #token-panel input[type=range]{min-width:90px}
   /* Same for the party bar, minus the "Party:" caption — the row of character
      chips is self-evident and the label cost a chip's worth of width. */
@@ -2916,7 +2916,8 @@ body.player-mode #campaign-btn{display:none !important}
 /* The token panel is taller than the Battle Map window opens (548 against
    500): its Del, Hide and Conditions were below the window's edge, out of
    reach until the window was made bigger. It scrolls inside the window. */
-#token-panel{max-height:calc(100% - 60px); overflow-y:auto; box-sizing:border-box}
+/* (its box is the window's body, footer and all: 52px down, the footer's 22px row and a gap below — it ran 14px over the footer's line) */
+#token-panel{max-height:calc(100% - 84px); overflow-y:auto; box-sizing:border-box}
 .map-token-label{position:absolute;bottom:-16px;left:50%;transform:translateX(-50%);font-size:var(--fs-2xs);white-space:nowrap;color:var(--text);background:rgba(0,0,0,.6);padding:1px 4px;border-radius:var(--r-sm);pointer-events:none}
 .token-panel{position:absolute;right:8px;top:8px;width:160px;background:var(--panel);border:1px solid var(--border);border-radius:var(--r-md);padding:10px;font-size:var(--fs-sm);z-index:10;display:none}
 .token-panel.open{display:block}

@@ -26221,6 +26221,21 @@ for (const cls of Object.keys(rule)) for (let L = 1; L <= 20; L++) for (const sc
       } catch(e){ ok('round 513 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
       finally { document.querySelectorAll('.modal-backdrop').forEach(m => m.remove()); B._tool = ''; B._tokens = JSON.parse(T0); save(); B._render(); }
     }
+    // -- Round 514: the token panel ends above the map's footer (its box is the window's body, footer and all: it ran 14px over the "Moved" line) --
+    if (!PLAYER){
+      const B = panelDefs.battlemap, T0 = JSON.stringify(B._tokens || []), K0 = JSON.stringify(state.combatants || []);
+      try {
+        openPanel('battlemap'); await sleep(300);
+        const cs = B._csScreen();
+        state.combatants = (state.combatants || []).filter(c => c.isPC).concat([{ id: 'r514o', name: 'Ogre', hp: 59, hpMax: 59, ac: 11, init: 8, conditions: [] }]);
+        B._tokens = (B._tokens || []).filter(t => t.isPC).concat([{ id: 'tk_r514o', cid: 'r514o', label: 'Ogre', x: 4.5 * cs, y: 4.5 * cs, size: 2 }]);
+        save(); B._render(); await sleep(100);
+        B._showPanel(B._tokens.find(t => t.id === 'tk_r514o')); await sleep(80);
+        const tp = B._body.querySelector('#token-panel').getBoundingClientRect(), ft = B._body.querySelector('.map-foot').getBoundingClientRect();
+        ok('the token panel ends above the footer', tp.height > 100 && tp.bottom <= ft.top + 0.5, JSON.stringify({ panel: Math.round(tp.bottom), footer: Math.round(ft.top) }));
+      } catch(e){ ok('round 514 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
+      finally { B._closePanel && B._closePanel(); B._tokens = JSON.parse(T0); state.combatants = JSON.parse(K0); save(); B._render(); }
+    }
     // -- Class features: represented, not just text ------------------------
     {
       try {
