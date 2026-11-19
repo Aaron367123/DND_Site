@@ -26168,6 +26168,21 @@ for (const cls of Object.keys(rule)) for (let L = 1; L <= 20; L++) for (const sc
       } catch(e){ ok('round 511 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
       finally { B._closePanel && B._closePanel(); B._tokens = JSON.parse(T0); state.combatants = JSON.parse(K0); save(); B._render(); }
     }
+    // -- Round 512: the ? overlay lists the battle map's keys — Shift+click, the arrows, Ctrl+C/V, Delete were nowhere to be found --
+    if (!PLAYER && typeof showHelpOverlay === 'function'){
+      try {
+        showHelpOverlay(); await sleep(80);
+        const ov = document.getElementById('help-overlay'), txt = ov ? ov.textContent : '';
+        ok('the shortcuts overlay has the battle map’s', /Battle map/.test(txt) && /Paste a copy where the pointer is/.test(txt) && /Box tokens into the group/.test(txt), txt.slice(0, 120));
+        const row = ov && [...ov.querySelectorAll('.help-keys')].find(k => /^Ctrl\s*\+\s*V$/.test(k.textContent.trim()));
+        ok('…each key written as it’s pressed (Ctrl + V)', !!row && row.querySelectorAll('kbd').length === 2, row ? row.innerHTML : 'none');
+        const zi = ov && [...ov.querySelectorAll('.help-keys')].find(k => /^Ctrl\s*\+\s*\+$/.test(k.textContent.trim()));
+        ok('…and zoom in reads Ctrl + + (it read Ctrl + + + − + 0)', !!zi && zi.querySelectorAll('kbd').length === 2, [...ov.querySelectorAll('.help-keys')].map(k => k.textContent.trim()).filter(t => /Ctrl/.test(t)).join(' | '));
+        showHelpOverlay();
+        ok('…and it closes again', !document.getElementById('help-overlay'));
+      } catch(e){ ok('round 512 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
+      finally { const o = document.getElementById('help-overlay'); if (o) o.remove(); }
+    }
     // -- Class features: represented, not just text ------------------------
     {
       try {
