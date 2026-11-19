@@ -26069,6 +26069,28 @@ for (const cls of Object.keys(rule)) for (let L = 1; L <= 20; L++) for (const sc
       } catch(e){ ok('round 507 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
       finally { B._tokens = JSON.parse(T0); state.combatants = JSON.parse(K0); state.combatRound = R0; state.activeCombatantId = A0; B._cols = C0; B._rows = W0; save(); B._applyViewScale(V0 || 1); B._render(); }
     }
+    // -- Round 509: a fighter's token panel opens on what a DM opens it for — damage, conditions, hide, Copy, Del — not on eight settings of how it looks (the panel had to be scrolled to them on every hit) --
+    if (!PLAYER){
+      const B = panelDefs.battlemap, T0 = JSON.stringify(B._tokens || []), K0 = JSON.stringify(state.combatants || []);
+      try {
+        openPanel('battlemap'); await sleep(300);
+        const cs = B._csScreen();
+        state.combatants = (state.combatants || []).filter(c => c.isPC).concat([{ id: 'r509b', name: 'Berserker Commander', hp: 80, hpMax: 136, ac: 16, init: 9, conditions: [] }]);
+        B._tokens = (B._tokens || []).filter(t => t.isPC).concat([{ id: 'tk_r509b', cid: 'r509b', label: 'Berserker Commander', x: 4.5 * cs, y: 4.5 * cs, size: 1 }]);
+        save(); B._render(); await sleep(120);
+        B._showPanel(B._tokens.find(t => t.id === 'tk_r509b')); await sleep(80);
+        const tp = B._body.querySelector('#token-panel'); tp.scrollTop = 0; await sleep(30);
+        const pr = tp.getBoundingClientRect(), seen = id => { const r = B._body.querySelector(id).getBoundingClientRect(); return r.height > 0 && r.top >= pr.top && r.bottom <= pr.bottom; };
+        ok('the panel opens on damage and healing, conditions, Copy and Del', ['#tp-dmg', '#tp-heal', '#tp-amt', '#tp-cond', '#tp-hide', '#tp-copy', '#tp-del'].every(seen),
+          ['#tp-dmg', '#tp-cond', '#tp-del'].map(id => id + ':' + Math.round(B._body.querySelector(id).getBoundingClientRect().bottom)).join(' ') + ' panel bottom ' + Math.round(pr.bottom));
+        const by = id => B._body.querySelector(id).getBoundingClientRect().top;
+        ok('…how it looks comes after', by('#tp-label') > by('#tp-del') && by('#tp-rot') > by('#tp-del'));
+        const nm = B._body.querySelector('#tp-name');
+        ok('its name has the heading’s width (it was cut at 110 px, beside room to spare), and reads whole', nm.getBoundingClientRect().width > 130 && nm.scrollWidth <= nm.clientWidth + 1 && nm.textContent === 'Berserker Commander', nm.scrollWidth + ' / ' + nm.clientWidth);
+        ok('…and isn’t said twice', /^80\/136 HP/.test(B._body.querySelector('#tp-hp-line').textContent), B._body.querySelector('#tp-hp-line').textContent);
+      } catch(e){ ok('round 509 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
+      finally { B._closePanel && B._closePanel(); B._tokens = JSON.parse(T0); state.combatants = JSON.parse(K0); save(); B._render(); }
+    }
     // -- Class features: represented, not just text ------------------------
     {
       try {

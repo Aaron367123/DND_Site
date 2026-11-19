@@ -5883,47 +5883,16 @@ registerPanel('battlemap',{
 
     html+='<div id="token-panel" style="position:absolute;right:8px;top:52px;width:196px;background:var(--panel);border:1px solid var(--border);border-radius:5px;padding:10px;font-size:var(--fs-sm);z-index:20;display:none;box-shadow:0 4px 16px rgba(0,0,0,.5)">'
       +'<div style="font-weight:500;margin-bottom:8px;display:flex;justify-content:space-between;align-items:center">'
-        +'<span id="tp-name" style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:110px">Token</span>'
+        +'<span id="tp-name" style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:1;min-width:0">Token</span>'
         +'<button class="btn icon-btn" id="tp-close" style="padding:0 4px;font-size:var(--fs-lg);flex-shrink:0">'+ICO('i-close')+'</button>'
       +'</div>'
-      +'<label class="field-label">Label</label>'
-      +'<input type="text" id="tp-label" style="margin-bottom:6px;font-size:var(--fs-sm)">'
-      +'<label class="field-label">Color</label>'
-      +'<input type="color" id="tp-color" style="width:100%;height:26px;margin-bottom:6px;cursor:pointer">'
-      +'<div id="tp-pic-row" style="display:flex;gap:4px;margin-bottom:6px;align-items:center">'
-        +'<button class="btn small" id="tp-pic" style="flex:1" title="A picture of your own on this token — a named NPC, art you found. Or drop a picture file onto the token.">Picture…</button>'
-        +'<button class="btn icon-btn" id="tp-pic-x" title="Back to its own picture" style="padding:1px 6px">'+ICO('i-close')+'</button>'
-      +'</div>'
-      +'<label class="field-label">Size (cells)</label>'
-      +'<div style="display:flex;gap:4px;margin-bottom:8px;align-items:center">'
-        +'<button class="btn icon-btn" id="tp-size-down" title="Smaller (¼ cell)" style="padding:1px 6px;font-size:var(--fs-lg)">−</button>'
-        +'<input type="range" id="tp-size" min="0.25" max="6" step="0.25" value="1" style="flex:1">'
-        +'<button class="btn icon-btn" id="tp-size-up" title="Bigger (¼ cell)" style="padding:1px 6px;font-size:var(--fs-lg)">+</button>'
-        +'<span id="tp-size-val" style="font-size:var(--fs-sm);color:var(--text-muted);min-width:40px;text-align:right;white-space:nowrap">1.00 cells</span>'
-      +'</div>'
-      +'<label class="field-label">Height (flying, or below ground)</label>'
-      +'<div style="display:flex;gap:4px;margin-bottom:6px;align-items:center">'
-        +'<button class="btn icon-btn" id="tp-elev-down" title="5 ft lower" style="padding:1px 6px;font-size:var(--fs-lg)">−</button>'
-        +'<span id="tp-elev-val" style="flex:1;text-align:center;font-size:var(--fs-sm)">0 ft</span>'
-        +'<button class="btn icon-btn" id="tp-elev-up" title="5 ft higher" style="padding:1px 6px;font-size:var(--fs-lg)">+</button>'
-      +'</div>'
-      +'<label class="field-label">Light it carries</label>'
-      +'<select id="tp-light" style="width:100%;margin-bottom:6px;font-size:var(--fs-sm)">'
-        + SKT_LIGHTS.map(l => '<option value="' + l[0] + '">' + l[1] + (l[2] ? ' (' + l[2] + '/' + l[3] + ' ft)' : '') + '</option>').join('')
-      +'</select>'
-      +'<label class="field-label">Darkvision (ft)</label>'
-      +'<input type="number" id="tp-dv" min="0" step="5" placeholder="from its sheet" style="width:100%;margin-bottom:6px;font-size:var(--fs-sm)">'
-      +'<label class="field-label">Facing</label>'
-      +'<div style="display:flex;gap:3px;margin-bottom:6px;align-items:center">'
-        +'<button class="btn icon-btn" id="tp-rot-left" title="Rotate -45°" style="padding:1px 6px;font-size:var(--fs-sm)">↺</button>'
-        +'<input type="range" id="tp-rot" min="0" max="359" step="5" value="0" style="flex:1">'
-        +'<button class="btn icon-btn" id="tp-rot-right" title="Rotate +45°" style="padding:1px 6px;font-size:var(--fs-sm)">↻</button>'
-        +'<span id="tp-rot-val" style="font-size:var(--fs-xs);color:var(--text-muted);min-width:30px;text-align:right">0°</span>'
-      +'</div>'
+      // What a DM opens a token's panel for, mid-fight, first: its hit points,
+      // conditions, hide, Copy and Del. They were under eight settings of how
+      // it looks, and the panel had to be scrolled to them on every hit.
       // Damage, healing and conditions where the creature IS, instead of
       // hunting for its card in the tracker. Shown only for a token that
       // stands for someone in the fight; _showPanel fills it in.
-      +'<div id="tp-hp" style="display:none;border-top:1px solid var(--border);margin:6px 0 0;padding-top:6px">'
+      +'<div id="tp-hp" style="display:none;margin:0">'
         +'<div id="tp-hp-line" style="font-size:var(--fs-sm);margin-bottom:4px"></div>'
         +'<div style="display:flex;gap:4px;align-items:center;margin-bottom:6px">'
           +'<button class="btn small" id="tp-dmg" style="flex:1" title="Damage">−</button>'
@@ -5939,6 +5908,43 @@ registerPanel('battlemap',{
         +'<button class="btn small" id="tp-kill" style="flex:1">☠</button>'
         +'<button class="btn small" id="tp-copy" style="flex:1.4" title="Another one beside it — in the fight too, with its own hit points. Or Ctrl+C, then Ctrl+V where you want it">⎘ Copy</button>'
         +'<button class="btn small danger" id="tp-del" style="flex:1">Del</button>'
+      +'</div>'
+      // …then how it looks.
+      +'<div class="tp-looks" style="border-top:1px solid var(--border);margin-top:8px;padding-top:6px">'
+        +'<label class="field-label">Label</label>'
+        +'<input type="text" id="tp-label" style="margin-bottom:6px;font-size:var(--fs-sm)">'
+        +'<label class="field-label">Color</label>'
+        +'<input type="color" id="tp-color" style="width:100%;height:26px;margin-bottom:6px;cursor:pointer">'
+        +'<div id="tp-pic-row" style="display:flex;gap:4px;margin-bottom:6px;align-items:center">'
+          +'<button class="btn small" id="tp-pic" style="flex:1" title="A picture of your own on this token — a named NPC, art you found. Or drop a picture file onto the token.">Picture…</button>'
+          +'<button class="btn icon-btn" id="tp-pic-x" title="Back to its own picture" style="padding:1px 6px">'+ICO('i-close')+'</button>'
+        +'</div>'
+        +'<label class="field-label">Size (cells)</label>'
+        +'<div style="display:flex;gap:4px;margin-bottom:8px;align-items:center">'
+          +'<button class="btn icon-btn" id="tp-size-down" title="Smaller (¼ cell)" style="padding:1px 6px;font-size:var(--fs-lg)">−</button>'
+          +'<input type="range" id="tp-size" min="0.25" max="6" step="0.25" value="1" style="flex:1">'
+          +'<button class="btn icon-btn" id="tp-size-up" title="Bigger (¼ cell)" style="padding:1px 6px;font-size:var(--fs-lg)">+</button>'
+          +'<span id="tp-size-val" style="font-size:var(--fs-sm);color:var(--text-muted);min-width:40px;text-align:right;white-space:nowrap">1.00 cells</span>'
+        +'</div>'
+        +'<label class="field-label">Height (flying, or below ground)</label>'
+        +'<div style="display:flex;gap:4px;margin-bottom:6px;align-items:center">'
+          +'<button class="btn icon-btn" id="tp-elev-down" title="5 ft lower" style="padding:1px 6px;font-size:var(--fs-lg)">−</button>'
+          +'<span id="tp-elev-val" style="flex:1;text-align:center;font-size:var(--fs-sm)">0 ft</span>'
+          +'<button class="btn icon-btn" id="tp-elev-up" title="5 ft higher" style="padding:1px 6px;font-size:var(--fs-lg)">+</button>'
+        +'</div>'
+        +'<label class="field-label">Light it carries</label>'
+        +'<select id="tp-light" style="width:100%;margin-bottom:6px;font-size:var(--fs-sm)">'
+          + SKT_LIGHTS.map(l => '<option value="' + l[0] + '">' + l[1] + (l[2] ? ' (' + l[2] + '/' + l[3] + ' ft)' : '') + '</option>').join('')
+        +'</select>'
+        +'<label class="field-label">Darkvision (ft)</label>'
+        +'<input type="number" id="tp-dv" min="0" step="5" placeholder="from its sheet" style="width:100%;margin-bottom:6px;font-size:var(--fs-sm)">'
+        +'<label class="field-label">Facing</label>'
+        +'<div style="display:flex;gap:3px;margin-bottom:6px;align-items:center">'
+          +'<button class="btn icon-btn" id="tp-rot-left" title="Rotate -45°" style="padding:1px 6px;font-size:var(--fs-sm)">↺</button>'
+          +'<input type="range" id="tp-rot" min="0" max="359" step="5" value="0" style="flex:1">'
+          +'<button class="btn icon-btn" id="tp-rot-right" title="Rotate +45°" style="padding:1px 6px;font-size:var(--fs-sm)">↻</button>'
+          +'<span id="tp-rot-val" style="font-size:var(--fs-xs);color:var(--text-muted);min-width:30px;text-align:right">0°</span>'
+        +'</div>'
       +'</div>'
     +'</div>';
 
@@ -8758,7 +8764,7 @@ registerPanel('battlemap',{
     const b=this._body;if(!b)return;
     const tp=b.querySelector('#token-panel');if(!tp)return;
     tp.style.display='block';
-    b.querySelector('#tp-name').textContent=t.label;
+    b.querySelector('#tp-name').textContent=t.label; b.querySelector('#tp-name').title=t.label||'';
     const rewire=(sel,ev,fn)=>{
       const el=b.querySelector(sel);if(!el)return;
       const fresh=el.cloneNode(true);
@@ -8803,7 +8809,7 @@ registerPanel('battlemap',{
       this._saveMap();
       this._renderTokens();
     };
-    rewire('#tp-label','change',e=>{t.label=e.target.value;b.querySelector('#tp-name').textContent=t.label;this._saveMap();this._renderTokens();});
+    rewire('#tp-label','change',e=>{t.label=e.target.value;b.querySelector('#tp-name').textContent=t.label;b.querySelector('#tp-name').title=t.label;this._saveMap();this._renderTokens();});
     rewire('#tp-color','change',e=>{t.color=e.target.value;this._saveMap();this._renderTokens();});
     // (a character's picture is their sheet's)
     const picRow = b.querySelector('#tp-pic-row'); if (picRow) picRow.style.display = t.isPC ? 'none' : 'flex';
@@ -8858,7 +8864,8 @@ registerPanel('battlemap',{
       const c = state.combatants[i];
       hpBox.style.display = 'block';
       const line = b.querySelector('#tp-hp-line');
-      if (line) line.textContent = c.name + ' \u00b7 ' + (c.hp || 0) + '/' + (c.hpMax || 0) + ' HP'
+      // (its name is the panel's heading, just above)
+      if (line) line.textContent = (c.hp || 0) + '/' + (c.hpMax || 0) + ' HP'
         + ((c.conditions || []).length ? ' \u00b7 ' + c.conditions.join(', ') : '');
     };
     paintHp();
