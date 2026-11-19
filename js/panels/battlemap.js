@@ -30,7 +30,14 @@ function sktDetectGrid(img){
     const r = _sktDetectGridIn(img, Math.floor((W0 - sw) / 2), Math.floor((H0 - sh) / 2), sw, sh, 1);
     if (r) return r;
   }
-  return _sktDetectGridIn(img, 0, 0, W0, H0, Math.min(1, 2000 / Math.max(W0, H0)));
+  // Shrunk by a whole number (½, ⅓…), to no more than 2400 px: shrunk by
+  // 2000/4032 instead, the resampling blurred some columns more than others,
+  // in a beat every 125 px — and that was found as squares. A phone's photo
+  // of anything (4032, 4080 and 8064 px wide, measured on bare noise) came
+  // with a grid of 16 × 12. On 80 of the adventures' large maps the whole
+  // shrink finds the same as before but for one found, one lost, and one
+  // wrong grid not offered.
+  return _sktDetectGridIn(img, 0, 0, W0, H0, 1 / Math.max(1, Math.ceil(Math.max(W0, H0) / 2400)));
 }
 // The search itself, on the part (sx, sy, sw, sh) of the picture drawn at k
 // times its size; the grid it finds in the whole picture's own pixels.
@@ -1806,8 +1813,8 @@ registerPanel('battlemap',{
   // said, with Undo.
   _applyGrid(found, how){
     const img = _mapBgImage, was = { cs: this._cellSize, ox: this._gridOffsetX, oy: this._gridOffsetY };
-    const sz = Math.max(8, found.size), mod = v => ((v % sz) + sz) % sz;
-    this._cellSize = sz; this._gridOffsetX = mod(found.ox); this._gridOffsetY = mod(found.oy);
+    const sz = Math.max(8, found.size);
+    this._cellSize = sz; this._gridOffsetX = this._wrapOff(found.ox, sz); this._gridOffsetY = this._wrapOff(found.oy, sz);
     this._fitGridToBg(); const n = this._pullTokensOnto(true); this._saveMap(); this._render();
     showToast('Grid matched to the map’s squares, ' + how + '.' + this._movedNote(n), { action: { label: 'Undo', run: () => {
       if (_mapBgImage !== img) return;
@@ -1895,8 +1902,8 @@ registerPanel('battlemap',{
     }
     if (g){
       const fit = this._advFit(g, _mapBgImage);
-      const sc = g.w ? this._bgMapNaturalW / g.w : 1, sz = Math.max(8, fit.size * sc), mod = v => ((v % sz) + sz) % sz;
-      this._cellSize = sz; this._gridOffsetX = mod(fit.ox * sc); this._gridOffsetY = mod(fit.oy * sc);
+      const sc = g.w ? this._bgMapNaturalW / g.w : 1, sz = Math.max(8, fit.size * sc);
+      this._cellSize = sz; this._gridOffsetX = this._wrapOff(fit.ox * sc, sz); this._gridOffsetY = this._wrapOff(fit.oy * sc, sz);
       this._ftPerCell = g.ft || 5;
     }
     this._fitGridToBg(); this._pullTokensOnto(); this._saveMap(); this._render(); if (g) this._fitMapToView();
@@ -2171,7 +2178,7 @@ registerPanel('battlemap',{
     // An upload not kept is let go when the next map replaces it — keeping it
     // was two menus deep (Map ▾ → Choose a map… → Save current as…), and
     // nothing said it would go. One press here, or Map ▾ → Keep this map.
-    showToast('Map shared — the players have it now. Keep it to come back to it later.', { action: { label: 'Keep it', run: () => this._saveCurrentAs() } });
+    showToast('Map shared — the players have it now. Keep it to come back to it later.', { aside: true, action: { label: 'Keep it', run: () => this._saveCurrentAs() } });
     // Only a throwaway upload goes: _retireBlob keeps anything a saved map
     // still points at, on this device or any other.
     this._retireBlob(replacedPath);
@@ -2185,8 +2192,19 @@ registerPanel('battlemap',{
   _fitGridToBg(){
     if (!_mapBgImage || !this._bgMapNaturalW) return;
     const cs = this._cellSize;
-    this._cols = Math.max(8, Math.ceil(this._bgMapNaturalW / cs));
-    this._rows = Math.max(6, Math.ceil(this._bgMapNaturalH / cs));
+    // (less a hair: a found square of 99.9999 on a picture 40 squares wide
+    // is 40 columns, not 41 — the 41st was a phantom past the picture's edge)
+    this._cols = Math.max(8, Math.ceil(this._bgMapNaturalW / cs - 0.02));
+    this._rows = Math.max(6, Math.ceil(this._bgMapNaturalH / cs - 0.02));
+  },
+  // A grid offset, wrapped into one square — and a hair short of a whole
+  // square is none. A map printed with a line on its edge is found at -0.5 or
+  // so, which wrapped to 99.5 of 100: the squares then began one in, so the
+  // picture's first column was no square at all (fog there could never be
+  // cleared) and a phantom column hung past its other edge.
+  _wrapOff(v, sz){
+    const m = (((+v || 0) % sz) + sz) % sz, tol = Math.max(1, Math.min(4, sz * 0.03));
+    return (m < tol || sz - m < tol) ? 0 : m;
   },
 
   // ─── Per-device view zoom ──────────────────────────────────────────────────
@@ -6616,8 +6634,8 @@ registerPanel('battlemap',{
           const newCs = Math.max(8, (csX + csY) / 2);
           const minIx = Math.min(ix, a.ix), minIy = Math.min(iy, a.iy);
           this._cellSize = newCs;
-          this._gridOffsetX = ((minIx % newCs) + newCs) % newCs;
-          this._gridOffsetY = ((minIy % newCs) + newCs) % newCs;
+          this._gridOffsetX = this._wrapOff(minIx, newCs);
+          this._gridOffsetY = this._wrapOff(minIy, newCs);
           this._alignFirstClick = null;
           this._tool = '';
           this._removeAlignMarker();

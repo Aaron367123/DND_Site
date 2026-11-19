@@ -26384,6 +26384,108 @@ for (const cls of Object.keys(rule)) for (let L = 1; L <= 20; L++) for (const sc
         closePanel('battlemap');
       }
     }
+    // -- Round 519: an upload printed with lines on its edges gets its squares from the edge — the grid was found at -0.5, wrapped to 99.5 of 100, so the squares began one in: the first column was no square (its fog could never be cleared) and a phantom 41st hung past the far edge --
+    if (!PLAYER){
+      const B = panelDefs.battlemap;
+      const S0 = localStorage.getItem('skt-battlemap-v1'), P0 = B._bgMapPath, I0 = _mapBgImage, W0 = B._bgMapNaturalW, H0 = B._bgMapNaturalH;
+      const putReal = window.sktMapBlobPut, readyReal = window.sktMapBlobReady, retireReal = B._retireBlob, refsReal = window.sktMapBlobRefs;
+      const keep = { ft: B._ftPerCell, cs: B._cellSize, ox: B._gridOffsetX, oy: B._gridOffsetY, cols: B._cols, rows: B._rows, sc: B._bgMapScale, lts: B._lastTokenScale, size: B._bgMapSize };
+      let keepT = null, keepD = null, keepF, fogSaved = false;
+      try {
+        ok('an offset a hair short of a whole square is none', B._wrapOff(-0.5, 100) === 0 && B._wrapOff(99.5, 100) === 0 && B._wrapOff(0.6, 100) === 0 && Math.abs(B._wrapOff(35, 100) - 35) < 1e-9 && Math.abs(B._wrapOff(-65, 100) - 35) < 1e-9);
+        openPanel('battlemap'); await sleep(400);
+        keepT = B._tokens.slice(); keepD = B._drawings.slice(); keepF = B._fog; fogSaved = true;
+        B._tokens = []; B._drawings = []; B._fog = null;
+        B._retireBlob = () => {};
+        window.sktMapBlobPut = () => Promise.resolve(true); window.sktMapBlobReady = () => true; window.sktMapBlobRefs = () => Promise.resolve({});
+        const upload = async (W, H, first, name) => {
+          document.querySelectorAll('#toast-host .toast-item').forEach(t => t.remove());
+          const c = document.createElement('canvas'); c.width = W; c.height = H;
+          const g = c.getContext('2d'); g.fillStyle = '#6b7b5b'; g.fillRect(0, 0, W, H);
+          g.strokeStyle = '#222'; g.lineWidth = 3;
+          for (let x = first; x <= W; x += 100){ g.beginPath(); g.moveTo(x, 0); g.lineTo(x, H); g.stroke(); }
+          for (let y = first; y <= H; y += 100){ g.beginPath(); g.moveTo(0, y); g.lineTo(W, y); g.stroke(); }
+          B._useImageFile(new File([await new Promise(r => c.toBlob(r, 'image/png'))], name, { type: 'image/png' }));
+          for (let i = 0; i < 80; i++){ await sleep(100); if ([...document.querySelectorAll('#toast-host .toast-item')].some(t => /Grid matched|No squares/.test(t.textContent))) break; }
+        };
+        // Lines on the edges: 40 × 30 squares, from the picture's own edge.
+        await upload(4000, 3000, 0, 'edges.png');
+        const k = B._csScreen() / B._cellSize;   // picture pixels → stage
+        ok('lines on its edges: 40 × 30 squares, no phantom one past the edge', B._cols === 40 && B._rows === 30, B._cols + '×' + B._rows + ' cs ' + B._cellSize);
+        const c0 = B._cellAtPx(50 * k, 50 * k), cL = B._cellAtPx(3950 * k, 2950 * k);
+        ok('…the first column and row are squares (their fog can be cleared)', !!c0 && c0.col === 0 && c0.row === 0, JSON.stringify(c0) + ' off ' + B._gridOffsetX + ',' + B._gridOffsetY);
+        ok('…and the last are the 40th and 30th', !!cL && cL.col === 39 && cL.row === 29, JSON.stringify(cL));
+        // A real offset (squares start 35 in) is kept.
+        await upload(3035, 2035, 35, 'offset.png');
+        ok('a picture whose squares start 35 in: kept at 35', Math.abs(B._gridOffsetX - 35) < 2 && Math.abs(B._gridOffsetY - 35) < 2, B._gridOffsetX + ',' + B._gridOffsetY);
+      } catch(e){ ok('round 519 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
+      finally {
+        document.querySelectorAll('#toast-host .toast-item, .ctx-menu, .modal-backdrop').forEach(t => t.remove());
+        window.sktMapBlobPut = putReal; window.sktMapBlobReady = readyReal; B._retireBlob = retireReal; window.sktMapBlobRefs = refsReal;
+        if (fogSaved) B._fog = keepF;
+        B._ftPerCell = keep.ft; B._cellSize = keep.cs; B._gridOffsetX = keep.ox; B._gridOffsetY = keep.oy; B._cols = keep.cols; B._rows = keep.rows; B._bgMapScale = keep.sc; B._lastTokenScale = keep.lts; B._bgMapSize = keep.size;
+        _mapBgImage = I0; B._bgMapPath = P0; B._bgMapNaturalW = W0; B._bgMapNaturalH = H0;
+        if (keepT){ B._tokens = keepT; B._drawings = keepD; }
+        if (S0 != null) localStorage.setItem('skt-battlemap-v1', S0);
+        try { B._render(); } catch(e){}
+        closePanel('battlemap');
+      }
+    }
+    // -- Round 520: a phone's photo — no grid made up from the shrinking (4032 px shrunk to 2000 beat every 125 px, found as 16 × 12 squares on bare noise), and the upload's Keep it and its grid's Undo both stay up, whichever comes first (the second took the first's place) --
+    if (!PLAYER){
+      const B = panelDefs.battlemap;
+      const S0 = localStorage.getItem('skt-battlemap-v1'), P0 = B._bgMapPath, I0 = _mapBgImage, W0 = B._bgMapNaturalW, H0 = B._bgMapNaturalH;
+      const putReal = window.sktMapBlobPut, readyReal = window.sktMapBlobReady, retireReal = B._retireBlob, refsReal = window.sktMapBlobRefs;
+      const keep = { ft: B._ftPerCell, cs: B._cellSize, ox: B._gridOffsetX, oy: B._gridOffsetY, cols: B._cols, rows: B._rows, sc: B._bgMapScale, lts: B._lastTokenScale, size: B._bgMapSize };
+      let keepT = null, keepD = null, keepF, fogSaved = false;
+      try {
+        // A photo-sized picture of bare noise, and one with squares printed on it.
+        const photo = async (lines, type) => {
+          const W = 4032, H = 3024, c = document.createElement('canvas'); c.width = W; c.height = H;
+          const g = c.getContext('2d'), id = g.createImageData(W, H);
+          let seed = 7; const rnd = () => (seed = (seed * 16807) % 2147483647) / 2147483647;
+          for (let i = 0; i < id.data.length; i += 4){ const v = (rnd() * 60 + 80) | 0; id.data[i] = v; id.data[i + 1] = v + 10; id.data[i + 2] = v - 10; id.data[i + 3] = 255; }
+          g.putImageData(id, 0, 0);
+          if (lines){ g.strokeStyle = '#1a1a1a'; g.lineWidth = 3; for (let x = 50; x < W; x += 100){ g.beginPath(); g.moveTo(x, 0); g.lineTo(x, H); g.stroke(); } for (let y = 50; y < H; y += 100){ g.beginPath(); g.moveTo(0, y); g.lineTo(W, y); g.stroke(); } }
+          return await new Promise(r => c.toBlob(r, type || 'image/jpeg', 0.9));
+        };
+        const asImg = async blob => { const u = URL.createObjectURL(blob), i = new Image(); await new Promise(r => { i.onload = r; i.src = u; }); return i; };
+        const bare = await asImg(await photo(false));
+        ok('a phone photo of bare noise (4032 × 3024): no squares made up', sktDetectGrid(bare) === null, JSON.stringify(sktDetectGrid(bare)));
+        const gridded = await photo(true);
+        const gi = await asImg(gridded), f = sktDetectGrid(gi);
+        ok('…one with squares printed on it: found', !!f && Math.abs(f.size - 100) < 2, JSON.stringify(f));
+        // Uploaded: the grid's Undo and the share's Keep it, both up — the share last, then first.
+        openPanel('battlemap'); await sleep(400);
+        keepT = B._tokens.slice(); keepD = B._drawings.slice(); keepF = B._fog; fogSaved = true;
+        B._tokens = []; B._drawings = []; B._fog = null;
+        B._retireBlob = () => {};
+        window.sktMapBlobReady = () => true; window.sktMapBlobRefs = () => Promise.resolve({});
+        for (const [label, delay] of [['the share after the grid', 1500], ['the share before the grid', 0]]){
+          document.querySelectorAll('#toast-host .toast-item').forEach(t => t.remove());
+          window.sktMapBlobPut = () => new Promise(r => setTimeout(() => r(true), delay));
+          B._useImageFile(new File([gridded], 'IMG_2041.JPG', { type: 'image/jpeg' }));
+          let both = false, seen = [];
+          for (let i = 0; i < 60 && !both; i++){
+            await sleep(100);
+            seen = [...document.querySelectorAll('#toast-host .toast-item')];
+            both = seen.some(t => /Keep it/.test(t.textContent)) && seen.some(t => /Grid matched/.test(t.textContent) && /Undo/.test(t.textContent));
+          }
+          ok(label + ': Keep it and the grid’s Undo both up', both, seen.map(t => t.textContent).join(' / '));
+        }
+      } catch(e){ ok('round 520 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
+      finally {
+        document.querySelectorAll('#toast-host .toast-item, .ctx-menu, .modal-backdrop').forEach(t => t.remove());
+        window.sktMapBlobPut = putReal; window.sktMapBlobReady = readyReal; B._retireBlob = retireReal; window.sktMapBlobRefs = refsReal;
+        if (fogSaved) B._fog = keepF;
+        B._ftPerCell = keep.ft; B._cellSize = keep.cs; B._gridOffsetX = keep.ox; B._gridOffsetY = keep.oy; B._cols = keep.cols; B._rows = keep.rows; B._bgMapScale = keep.sc; B._lastTokenScale = keep.lts; B._bgMapSize = keep.size;
+        _mapBgImage = I0; B._bgMapPath = P0; B._bgMapNaturalW = W0; B._bgMapNaturalH = H0;
+        if (keepT){ B._tokens = keepT; B._drawings = keepD; }
+        if (S0 != null) localStorage.setItem('skt-battlemap-v1', S0);
+        try { B._render(); } catch(e){}
+        closePanel('battlemap');
+      }
+    }
     // -- Class features: represented, not just text ------------------------
     {
       try {

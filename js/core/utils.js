@@ -683,8 +683,13 @@ function showToast(msg, opts){
   const hasAction = !!(opts.action && typeof opts.action.run === 'function');
   const kind = opts.sticky ? 'sticky' : (opts.alert || SKT_TOAST_ALERT.test(safeMsg)) ? 'alert' : hasAction ? 'action' : 'note';
   const leave = (t, ms) => { clearTimeout(t._exit); t._exit = setTimeout(() => { t.classList.remove('show'); setTimeout(() => t.remove(), 200); }, ms); };
+  // opts.aside: an offer beside the routine line, not in its place — an
+  // upload's "Keep it" and its grid's "Undo" arrive a moment apart, and
+  // whichever came second took the other's place. Only another aside
+  // replaces one; it stays a little longer, as nothing asked for it.
+  const aside = hasAction && !!opts.aside && kind === 'action';
   const timeoutMs = kind === 'note' ? 1500 + Math.min(1500, Math.max(0, safeMsg.length - 40) * 30)
-                  : kind === 'action' ? 4000 : 4500;
+                  : aside ? 8000 : kind === 'action' ? 4000 : 4500;
   // Already showing: keep that one up a little longer rather than add a twin.
   if (kind !== 'sticky' && !hasAction){
     const twin = [...host.children].find(c => !c.classList.contains('sticky') && c._msg === safeMsg && c.classList.contains('show'));
@@ -692,7 +697,9 @@ function showToast(msg, opts){
   }
   // One routine line at a time: a note takes the place of the last note, an
   // action of the last note or action.
-  if (kind === 'note' || kind === 'action'){
+  if (aside){
+    [...host.children].forEach(c => { if (c.dataset.kind === 'aside') c.remove(); });
+  } else if (kind === 'note' || kind === 'action'){
     [...host.children].forEach(c => {
       if (c.dataset.kind === 'note' || (kind === 'action' && c.dataset.kind === 'action')) c.remove();
     });
@@ -707,7 +714,7 @@ function showToast(msg, opts){
   }
   const t = document.createElement('div');
   t.className = 'toast-item ' + kind + (hasAction ? ' has-action' : '');
-  t.dataset.kind = kind;
+  t.dataset.kind = aside ? 'aside' : kind;
   t._msg = safeMsg;
   t.setAttribute('role', kind === 'alert' || kind === 'sticky' ? 'alert' : 'status');
   if (hasAction){
