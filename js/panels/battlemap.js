@@ -1503,10 +1503,7 @@ registerPanel('battlemap',{
       }
       if ((e.key === 'Delete' || e.key === 'Backspace') && !isPlayer){
         e.preventDefault();
-        const wasPC = !!t.isPC;
-        this._tokens = this._tokens.filter(x => x !== t);
-        this._selected = null; this._closePanel(); this._saveMap();
-        if (wasPC) this._render(); else this._renderTokens();
+        this._delTokens(this._withGroup(t));
       }
     };
     document.addEventListener('keydown', this._mapKeyHandler);
@@ -2833,9 +2830,23 @@ registerPanel('battlemap',{
   // goblins, three more. A group's characters stay one of each.
   _copySet(t){
     if (!this._copyable(t)) return [];
-    const g = this._group && this._group.size > 1 && this._group.has(t.id)
+    return this._withGroup(t).filter(k => this._copyable(k));
+  },
+  // This token, or — when it's one of a group (Shift+click) — the group.
+  // Copy, Hide and Del (and the Delete key) take the lot: the ambush hidden
+  // in one press, the fallen cleared away together.
+  _withGroup(t){
+    if (!t) return [];
+    return this._group && this._group.size > 1 && this._group.has(t.id)
       ? [...this._group].map(id => (this._tokens || []).find(k => k && k.id === id)).filter(Boolean) : [t];
-    return g.filter(k => this._copyable(k));
+  },
+  _delTokens(list){
+    const gone = new Set(list);
+    const wasPC = list.some(x => x && x.isPC);
+    this._tokens = (this._tokens || []).filter(x => !gone.has(x));
+    if (this._group) list.forEach(x => x && this._group.delete(x.id));
+    this._selected = null; this._closePanel(); this._saveMap();
+    if (wasPC) this._render(); else this._renderTokens();
   },
   _copyToken(t, at){
     if (!this._copyable(t)) return null;
@@ -8831,8 +8842,11 @@ registerPanel('battlemap',{
     // Re-queried each time: rewire() swaps the button for a fresh clone, so
     // a reference taken now points at a node that is no longer on screen.
     const paintHide = () => {
-      const el = b.querySelector('#tp-hide');
-      if (el) el.textContent = t.hidden ? '\u{1F441} Reveal to players' : '\u{1F441} Hide from players';
+      const el = b.querySelector('#tp-hide'), g = this._withGroup(t), n = g.length;
+      // (a group: all hidden → Reveal them; otherwise Hide the lot)
+      const shown = n > 1 ? !g.every(x => x.hidden) : !t.hidden;
+      if (el) el.textContent = '\u{1F441} ' + (shown ? 'Hide ' + (n > 1 ? 'these ' + n + ' ' : '') + 'from players' : 'Reveal ' + (n > 1 ? 'these ' + n + ' ' : '') + 'to players');
+      const db = b.querySelector('#tp-del'); if (db) db.textContent = n > 1 ? 'Del ' + n : 'Del';
     };
     paintHide();
     // Another floor of the building (the DM's, with floors).
@@ -8843,9 +8857,11 @@ registerPanel('battlemap',{
       if (typeof showContextMenu === 'function') showContextMenu(r.left, r.bottom + 4, otherFloors().map(f => ({ label: f.name, onClick: () => this._tokenToFloor(t, f.id) })));
     });
     rewire('#tp-hide','click',()=>{
-      t.hidden = !t.hidden;
+      const g = this._withGroup(t), hide = g.length > 1 ? !g.every(x => x.hidden) : !t.hidden;
+      g.forEach(x => { if (hide) x.hidden = true; else delete x.hidden; });
       this._saveMap(); this._renderTokens(); paintHide();
-      if (typeof showToast === 'function') showToast(t.hidden ? t.label + ' is hidden from the players' : t.label + ' is on the players\u2019 map');
+      const who = g.length > 1 ? g.length + ' tokens are' : t.label + ' is';
+      if (typeof showToast === 'function') showToast(hide ? who + ' hidden from the players' : who + ' on the players\u2019 map');
     });
 
     // The fight, from the token. Everything goes through the tracker's own
@@ -8935,15 +8951,7 @@ registerPanel('battlemap',{
       if (typeof showToast === 'function') showToast((made.length > 1 ? made.length + ' more beside them' + (made.some(x => x.cid) ? ', in the fight' : '') + ' — drag one to move them all'
         : k.label + ' is beside ' + t.label + (k.cid ? ', in the fight' : '')) + (made.some(x => x.hidden) ? ' (hidden from the players)' : ''));
     });
-    rewire('#tp-del','click',()=>{
-      const i=this._tokens.findIndex(x=>x.id===t.id);
-      let wasPC = false;
-      if (i>=0){ wasPC = !!this._tokens[i].isPC; this._tokens.splice(i,1); }
-      this._selected=null;
-      this._closePanel();
-      this._saveMap();
-      if (wasPC) this._render(); else this._renderTokens();
-    });
+    rewire('#tp-del','click',()=>{ this._delTokens(this._withGroup(t)); });
     rewire('#tp-close','click',()=>{this._selected=null;this._closePanel();this._renderTokens();});
   },
 

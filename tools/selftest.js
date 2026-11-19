@@ -26091,6 +26091,41 @@ for (const cls of Object.keys(rule)) for (let L = 1; L <= 20; L++) for (const sc
       } catch(e){ ok('round 509 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
       finally { B._closePanel && B._closePanel(); B._tokens = JSON.parse(T0); state.combatants = JSON.parse(K0); save(); B._render(); }
     }
+    // -- Round 510: Hide and Del (and the Delete key) take a whole group — the ambush hidden in one press, the fallen cleared away together; one at a time, each --
+    if (!PLAYER){
+      const B = panelDefs.battlemap, T0 = JSON.stringify(B._tokens || []);
+      try {
+        openPanel('battlemap'); await sleep(300);
+        const cs = B._csScreen(), win = B._body.closest('.window');
+        const mk = (id, x, o) => Object.assign({ id, label: id, x: x * cs, y: 3.5 * cs, size: 1 }, o || {});
+        B._tokens = (B._tokens || []).filter(t => t.isPC).concat([mk('Ork A', 2.5), mk('Ork B', 3.5), mk('Ork C', 4.5, { hidden: true }), mk('Ork D', 6.5)]);
+        B._render(); await sleep(100);
+        const T = id => B._tokens.find(t => t.id === id);
+        B._group = new Set(['Ork A', 'Ork B', 'Ork C']);
+        B._showPanel(T('Ork A')); await sleep(50);
+        const hb = () => B._body.querySelector('#tp-hide');
+        ok('a group’s panel: Hide these 3, Del 3', /Hide these 3 from players/.test(hb().textContent) && B._body.querySelector('#tp-del').textContent === 'Del 3', hb().textContent + ' | ' + B._body.querySelector('#tp-del').textContent);
+        hb().click(); await sleep(60);
+        ok('…Hide: all three hidden (the one already hidden stays so)', ['Ork A', 'Ork B', 'Ork C'].every(id => T(id).hidden) && !T('Ork D').hidden);
+        ok('…and it offers to reveal them', /Reveal these 3 to players/.test(hb().textContent), hb().textContent);
+        hb().click(); await sleep(60);
+        ok('…Reveal: all three on the players’ map', ['Ork A', 'Ork B', 'Ork C'].every(id => !T(id).hidden));
+        B._body.querySelector('#tp-del').click(); await sleep(60);
+        ok('…Del: the three gone, the fourth still there', !T('Ork A') && !T('Ork B') && !T('Ork C') && !!T('Ork D'), B._tokens.map(t => t.id).join(','));
+        // The Delete key, on a group of one-and-another.
+        B._tokens.push(mk('Ork E', 8.5)); B._render(); await sleep(60);
+        B._group = new Set(['Ork D', 'Ork E']); B._selected = 'Ork D'; win.classList.add('focused');
+        document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Delete', bubbles: true, cancelable: true })); await sleep(60);
+        ok('the Delete key takes the group too', !T('Ork D') && !T('Ork E'), B._tokens.map(t => t.id).join(','));
+        // One token on its own: just it.
+        B._tokens.push(mk('Ork F', 2.5), mk('Ork G', 4.5)); B._groupClear(); B._render(); await sleep(60);
+        B._showPanel(T('Ork F')); await sleep(40);
+        ok('one on its own: Hide from players, Del', /^\S+ Hide from players$/.test(hb().textContent) && B._body.querySelector('#tp-del').textContent === 'Del', hb().textContent);
+        hb().click(); await sleep(40);
+        ok('…hides just it', T('Ork F').hidden && !T('Ork G').hidden);
+      } catch(e){ ok('round 510 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
+      finally { B._group && B._group.clear(); B._selected = null; B._closePanel && B._closePanel(); B._tokens = JSON.parse(T0); save(); B._render(); }
+    }
     // -- Class features: represented, not just text ------------------------
     {
       try {
