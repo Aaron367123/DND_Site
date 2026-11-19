@@ -25932,6 +25932,37 @@ for (const cls of Object.keys(rule)) for (let L = 1; L <= 20; L++) for (const sc
       } catch(e){ ok('round 503 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
       finally { B._closePanel && B._closePanel(); B._tokens = JSON.parse(T0); state.combatants = JSON.parse(K0); save(); B._render(); }
     }
+    // -- Round 504: Copy on a group (Shift+click) copies the group — three goblins, three more, and the copies are the group to drag away --
+    if (!PLAYER){
+      const B = panelDefs.battlemap, T0 = JSON.stringify(B._tokens || []), K0 = JSON.stringify(state.combatants || []);
+      try {
+        openPanel('battlemap'); await sleep(300);
+        const cs = B._csScreen();
+        state.combatants = (state.combatants || []).filter(c => c.isPC).concat([
+          { id: 'r504a', name: 'Goblin 1', baseName: 'Goblin', hp: 7, hpMax: 7, ac: 15, init: 12, conditions: [] },
+          { id: 'r504b', name: 'Goblin 2', baseName: 'Goblin', hp: 7, hpMax: 7, ac: 15, init: 12, conditions: [] }]);
+        B._tokens = (B._tokens || []).filter(t => t.isPC).concat([
+          { id: 'tk_r504a', cid: 'r504a', label: 'Goblin 1', baseName: 'Goblin', x: 4.5 * cs, y: 4.5 * cs, size: 1 },
+          { id: 'tk_r504b', cid: 'r504b', label: 'Goblin 2', baseName: 'Goblin', x: 5.5 * cs, y: 4.5 * cs, size: 1 },
+          { id: 'tk_r504c', label: 'Crate', x: 6.5 * cs, y: 4.5 * cs, size: 1 }]);
+        save(); B._render(); await sleep(120);
+        const pc = B._tokens.find(t => t.isPC);
+        B._group = new Set(['tk_r504a', 'tk_r504b', 'tk_r504c'].concat(pc ? [pc.id] : []));
+        const a = B._tokens.find(t => t.id === 'tk_r504a');
+        B._showPanel(a); await sleep(60);
+        const btn = B._body.querySelector('#tp-copy');
+        ok('a group’s Copy says how many (its character isn’t one)', /Copy 3$/.test(btn.textContent.trim()), btn.textContent);
+        const ids0 = new Set(B._tokens.map(t => t.id)), npc0 = B._tokens.filter(t => t.isPC).length;
+        btn.click(); await sleep(200);
+        const made = B._tokens.filter(t => !ids0.has(t.id));
+        ok('…three more on the map', made.length === 3, made.map(t => t.label).join(', '));
+        ok('…the goblins in the fight, as Goblin 3 and 4', state.combatants.filter(c => /^Goblin [34]$/.test(c.name)).length === 2, state.combatants.map(c => c.name).join(', '));
+        ok('…none on another', made.every(m => B._tokens.every(o => o === m || Math.max(Math.abs(o.x - m.x), Math.abs(o.y - m.y)) >= cs - 1)));
+        ok('…and the copies are the group now', B._group.size === 3 && made.every(m => B._group.has(m.id)), [...B._group].join(','));
+        ok('…no second character', B._tokens.filter(t => t.isPC).length === npc0);
+      } catch(e){ ok('round 504 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
+      finally { B._group && B._group.clear(); B._closePanel && B._closePanel(); B._tokens = JSON.parse(T0); state.combatants = JSON.parse(K0); save(); B._render(); }
+    }
     // -- Class features: represented, not just text ------------------------
     {
       try {

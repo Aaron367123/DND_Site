@@ -2788,6 +2788,14 @@ registerPanel('battlemap',{
   _copyable(t){
     return !!t && !t.isPC && !document.body.classList.contains('player-mode');
   },
+  // What Copy copies: this token, or the group it's in (Shift+click) — three
+  // goblins, three more. A group's characters stay one of each.
+  _copySet(t){
+    if (!this._copyable(t)) return [];
+    const g = this._group && this._group.size > 1 && this._group.has(t.id)
+      ? [...this._group].map(id => (this._tokens || []).find(k => k && k.id === id)).filter(Boolean) : [t];
+    return g.filter(k => this._copyable(k));
+  },
   _copyToken(t){
     if (!this._copyable(t)) return null;
     const LOOK = ['size', 'color', 'portrait', 'picOwn', 'icon', 'hidden', 'elev', 'rotation', 'lt', 'dv'];
@@ -8831,11 +8839,17 @@ registerPanel('battlemap',{
     rewire('#tp-elev-down','click',()=>{ this._setElev(t, (+t.elev || 0) - 5); elevShow(); });
     rewire('#tp-elev-up','click',()=>{ this._setElev(t, (+t.elev || 0) + 5); elevShow(); });
     rewire('#tp-kill','click',()=>{t.dead=!t.dead;this._saveMap();this._renderTokens();});
-    { const cb = b.querySelector('#tp-copy'); if (cb) cb.style.display = this._copyable(t) ? '' : 'none'; }
+    { const cb = b.querySelector('#tp-copy'), n = this._copySet(t).length;
+      if (cb){ cb.style.display = n ? '' : 'none'; cb.textContent = n > 1 ? '⎘ Copy ' + n : '⎘ Copy'; } }
     rewire('#tp-copy','click',()=>{
-      const k = this._copyToken(t); if (!k) return;
+      const set = this._copySet(t);
+      const made = set.map(k => this._copyToken(k)).filter(Boolean); if (!made.length) return;
+      // A group's copies are the group now: drag one and they all go.
+      if (set.length > 1){ this._group = new Set(made.map(k => k.id)); this._renderTokens(); }
       this._showPanel(t);
-      if (typeof showToast === 'function') showToast(k.label + ' is beside ' + t.label + (k.cid ? ', in the fight' : '') + (k.hidden ? ' (hidden from the players)' : ''));
+      const k = made[0];
+      if (typeof showToast === 'function') showToast((made.length > 1 ? made.length + ' more beside them' + (made.some(x => x.cid) ? ', in the fight' : '') + ' — drag one to move them all'
+        : k.label + ' is beside ' + t.label + (k.cid ? ', in the fight' : '')) + (made.some(x => x.hidden) ? ' (hidden from the players)' : ''));
     });
     rewire('#tp-del','click',()=>{
       const i=this._tokens.findIndex(x=>x.id===t.id);
