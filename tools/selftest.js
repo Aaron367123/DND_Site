@@ -26131,6 +26131,8 @@ for (const cls of Object.keys(rule)) for (let L = 1; L <= 20; L++) for (const sc
       const B = panelDefs.battlemap, T0 = JSON.stringify(B._tokens || []), K0 = JSON.stringify(state.combatants || []);
       try {
         openPanel('battlemap'); openPanel('combat'); await sleep(300);
+        // (an empty history: the suite's earlier rounds fill it to its cap of 25, where a new entry pushes the oldest out and the count stands still)
+        _sktUndoStack.length = 0; _sktRedoStack.length = 0;
         const cs = B._csScreen();
         state.combatants = (state.combatants || []).filter(c => c.isPC).concat([{ id: 'r511g', name: 'Goblin', hp: 7, hpMax: 7, ac: 15, init: 12, conditions: [] }]);
         B._tokens = (B._tokens || []).filter(t => t.isPC).concat([{ id: 'tk_r511g', cid: 'r511g', label: 'Goblin', x: 4.5 * cs, y: 4.5 * cs, size: 1, auto: true }]);
