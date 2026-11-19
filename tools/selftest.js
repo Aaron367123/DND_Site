@@ -25963,6 +25963,28 @@ for (const cls of Object.keys(rule)) for (let L = 1; L <= 20; L++) for (const sc
       } catch(e){ ok('round 504 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
       finally { B._group && B._group.clear(); B._closePanel && B._closePanel(); B._tokens = JSON.parse(T0); state.combatants = JSON.parse(K0); save(); B._render(); }
     }
+    // -- Round 505: an area's "creatures inside" are the ones whose tokens are in it — a marker put down by hand with a fighter's name (an Ogre beside the Ogre in the fight) counted that fighter, standing outside --
+    if (!PLAYER){
+      const B = panelDefs.battlemap, T0 = JSON.stringify(B._tokens || []), K0 = JSON.stringify(state.combatants || []), D0 = JSON.stringify(B._drawings || []);
+      try {
+        openPanel('battlemap'); await sleep(300);
+        const cs = B._csScreen();
+        state.combatants = (state.combatants || []).filter(c => c.isPC).concat([
+          { id: 'r505o', name: 'Ogre', hp: 59, hpMax: 59, ac: 11, init: 8, conditions: [] },
+          { id: 'r505g', name: 'Goblin', hp: 7, hpMax: 7, ac: 15, init: 12, conditions: [] }]);
+        B._tokens = (B._tokens || []).filter(t => t.isPC).map(t => Object.assign({}, t, { x: 30 * cs, y: 30 * cs })).concat([
+          { id: 'tk_r505o', cid: 'r505o', label: 'Ogre', x: 20.5 * cs, y: 4.5 * cs, size: 2 },
+          { id: 'tk_r505m', label: 'Ogre', x: 4.5 * cs, y: 4.5 * cs, size: 2 },
+          { id: 'tk_r505g', cid: 'r505g', label: 'Goblin', x: 5.5 * cs, y: 5.5 * cs, size: 1 }]);
+        save(); B._render(); await sleep(120);
+        const area = { k: 'tpl', id: 'r505a', shape: 'circle', x: 5 * cs, y: 5 * cs, ft: 15, ang: 0 };
+        const inside = B._tokensInArea(area).map(t => t.id).sort();
+        ok('(the area holds the marker and the goblin)', inside.includes('tk_r505m') && inside.includes('tk_r505g') && !inside.includes('tk_r505o'), inside.join(','));
+        const ids = B._areaTargets(area);
+        ok('its creatures inside: the goblin, not the Ogre standing outside it', ids.length === 1 && ids[0] === 'r505g', JSON.stringify(ids));
+      } catch(e){ ok('round 505 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
+      finally { B._tokens = JSON.parse(T0); state.combatants = JSON.parse(K0); B._drawings = JSON.parse(D0); save(); B._render(); }
+    }
     // -- Class features: represented, not just text ------------------------
     {
       try {

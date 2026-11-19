@@ -4753,12 +4753,14 @@ registerPanel('battlemap',{
   // The fighters an area holds: its tokens, matched to the fight by cid or by
   // name like the rest of the map. Its menu and the save dialog's "In the …"
   // buttons both ask this.
+  // (By _combatantFor: a marker put down by hand with a fighter's name — an
+  // Ogre beside the Ogre in the fight — isn't that fighter, who may be
+  // standing outside the area. Each fighter once.)
   _areaTargets(t){
-    return this._tokensInArea(t).map(tok => {
-      const c = (state.combatants || []).find(c => (tok.cid != null && c.id === tok.cid)
-        || (typeof sktNormName === 'function' && sktNormName(c.name) === sktNormName(tok.label)));
+    return [...new Set(this._tokensInArea(t).map(tok => {
+      const c = this._combatantFor(tok);
       return c ? c.id : null;
-    }).filter(Boolean);
+    }).filter(Boolean))];
   },
   _areaMenu(t, cx, cy, x, y){
     const isPlayer = document.body.classList.contains('player-mode');
