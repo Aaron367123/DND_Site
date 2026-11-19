@@ -134,7 +134,14 @@ function _sktUndoRedraw(){
   if (typeof CS !== 'undefined' && CS && typeof csRender === 'function'){ try { csRender(); } catch(e){} }
 }
 
+// (an undo putting a key back is no new change to that key: the map
+// re-placing a token as the tracker comes back left a "Map change" of its own)
 function _sktUndoGoto(entry, target, other){
+  _sktUndoCover.push(entry.keys);
+  try { _sktUndoGotoNow(entry, target, other); }
+  finally { const i = _sktUndoCover.lastIndexOf(entry.keys); if (i >= 0) _sktUndoCover.splice(i, 1); }
+}
+function _sktUndoGotoNow(entry, target, other){
   const domains = new Set();
   let mapBack = false;
   entry.keys.forEach(k => {
@@ -172,10 +179,23 @@ function _sktUndoGoto(entry, target, other){
 // Run `fn`, and if it changed anything, remember how to put it back.
 // opts.keys  — which localStorage keys the action can touch (default combat + party)
 // opts.quiet — record it, but don't show the toast (the caller shows its own)
+// The keys an sktUndoable running right now puts back itself. The map's own
+// entry for the same change ("Map change", recorded as a token goes) was a
+// second Undo on top of it: removing a monster from the tracker left one, and
+// the next Ctrl+Z after the real undo did nothing anyone could see.
+const _sktUndoCover = [];
+function sktUndoCovers(key){ return _sktUndoCover.some(ks => ks.includes(key)); }
+
 function sktUndoable(label, fn, opts){
   const keys = (opts && opts.keys) || SKT_UNDO_DEFAULT_KEYS;
   const before = _sktUndoSnap(keys);
-  const finish = () => _sktUndoRecord(label, keys, before, opts);
+  _sktUndoCover.push(keys);
+  let done = false;
+  const finish = () => {
+    if (done) return; done = true;
+    const i = _sktUndoCover.lastIndexOf(keys); if (i >= 0) _sktUndoCover.splice(i, 1);
+    return _sktUndoRecord(label, keys, before, opts);
+  };
   let r;
   try { r = fn(); }
   catch(e){ finish(); throw e; }

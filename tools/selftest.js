@@ -26126,6 +26126,46 @@ for (const cls of Object.keys(rule)) for (let L = 1; L <= 20; L++) for (const sc
       } catch(e){ ok('round 510 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
       finally { B._group && B._group.clear(); B._selected = null; B._closePanel && B._closePanel(); B._tokens = JSON.parse(T0); save(); B._render(); }
     }
+    // -- Round 511: one Undo takes back a copy whole — the fighter and its token (the map's Copy, the tracker's Duplicate); a removed monster's Undo leaves no second entry behind --
+    if (!PLAYER && typeof sktUndo === 'function'){
+      const B = panelDefs.battlemap, T0 = JSON.stringify(B._tokens || []), K0 = JSON.stringify(state.combatants || []);
+      try {
+        openPanel('battlemap'); openPanel('combat'); await sleep(300);
+        const cs = B._csScreen();
+        state.combatants = (state.combatants || []).filter(c => c.isPC).concat([{ id: 'r511g', name: 'Goblin', hp: 7, hpMax: 7, ac: 15, init: 12, conditions: [] }]);
+        B._tokens = (B._tokens || []).filter(t => t.isPC).concat([{ id: 'tk_r511g', cid: 'r511g', label: 'Goblin', x: 4.5 * cs, y: 4.5 * cs, size: 1, auto: true }]);
+        save(); B._render(); await sleep(150);
+        const foes = () => state.combatants.filter(c => !c.isPC).map(c => c.name).join(',');
+        const toks = () => B._tokens.filter(t => !t.isPC).map(t => t.label).join(',');
+        // The map's Copy.
+        let d0 = sktUndoDepth();
+        B._showPanel(B._tokens.find(t => t.id === 'tk_r511g')); await sleep(50);
+        B._body.querySelector('#tp-copy').click(); await sleep(200);
+        ok('the map’s Copy: one Undo entry', sktUndoDepth() === d0 + 1 && foes() === 'Goblin 1,Goblin 2', (sktUndoDepth() - d0) + ' | ' + foes());
+        sktUndo(); await sleep(200);
+        ok('…Undo: the second goblin gone from the fight and the map, the first “Goblin” again', foes() === 'Goblin' && toks() === 'Goblin', foes() + ' | ' + toks());
+        ok('…and nothing else left to undo for it', sktUndoDepth() === d0, String(sktUndoDepth() - d0));
+        sktRedo(); await sleep(200);
+        ok('…Redo: back again, token and all', foes() === 'Goblin 1,Goblin 2' && toks().split(',').sort().join(',') === 'Goblin 1,Goblin 2', foes() + ' | ' + toks());
+        sktUndo(); await sleep(200);
+        // The tracker's Duplicate.
+        B._closePanel(); d0 = sktUndoDepth();
+        const C = panelDefs.combat; C._render(); await sleep(80);
+        const dup = [...document.querySelectorAll('[data-act="duplicate"]')].find(b => state.combatants[+b.dataset.idx] && state.combatants[+b.dataset.idx].id === 'r511g');
+        dup.click(); await sleep(250);
+        ok('the tracker’s Duplicate: one Undo entry (it had none)', sktUndoDepth() === d0 + 1 && foes() === 'Goblin 1,Goblin 2' && B._tokens.filter(t => !t.isPC).length === 2, (sktUndoDepth() - d0) + ' | ' + foes() + ' | ' + toks());
+        sktUndo(); await sleep(250);
+        ok('…Undo: fighter and token gone', foes() === 'Goblin' && toks() === 'Goblin' && sktUndoDepth() === d0, foes() + ' | ' + toks() + ' | ' + (sktUndoDepth() - d0));
+        // Remove, and its Undo.
+        C._render(); await sleep(80); d0 = sktUndoDepth();
+        const rm = [...document.querySelectorAll('[data-act="remove"]')].find(b => state.combatants[+b.dataset.idx] && state.combatants[+b.dataset.idx].id === 'r511g');
+        rm.click(); await sleep(250);
+        ok('Remove a monster: one Undo entry, not a stray “Map change” too', sktUndoDepth() === d0 + 1 && toks() === '', (sktUndoDepth() - d0) + ' ' + sktUndoLabel());
+        sktUndo(); await sleep(250);
+        ok('…Undo: it and its token back, and no entry left over', foes() === 'Goblin' && toks() === 'Goblin' && sktUndoDepth() === d0, foes() + ' | ' + toks() + ' | ' + (sktUndoDepth() - d0) + ' ' + sktUndoLabel());
+      } catch(e){ ok('round 511 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
+      finally { B._closePanel && B._closePanel(); B._tokens = JSON.parse(T0); state.combatants = JSON.parse(K0); save(); B._render(); }
+    }
     // -- Class features: represented, not just text ------------------------
     {
       try {

@@ -1098,7 +1098,12 @@ registerPanel('combat',{
         sktUndoable('Removed ' + who, () => this._remove(i),
                     { keys: ['skt-combat-v1', 'skt-party-v1', 'skt-battlemap-v1'] });
       }
-      else if(act==='duplicate')      this._duplicate(parseInt(el.dataset.idx));
+      else if(act==='duplicate'){
+        // (one Undo: the copy and the token the map puts down for it)
+        const i = parseInt(el.dataset.idx), who = state.combatants[i]?.name || 'Combatant';
+        if (typeof sktUndoable === 'function') sktUndoable('Duplicated ' + who, () => this._duplicate(i), { keys: ['skt-combat-v1', 'skt-party-v1', 'skt-battlemap-v1'] });
+        else this._duplicate(i);
+      }
       else if(act==='rmcond'){
         const i = parseInt(el.dataset.idx), cond = el.dataset.cond;
         const who = state.combatants[i]?.name || 'Combatant';

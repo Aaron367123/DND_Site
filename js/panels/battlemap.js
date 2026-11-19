@@ -1338,6 +1338,8 @@ registerPanel('battlemap',{
   _captureUndo(){
     const cur = this._undoSnapshot();
     if (this._undoRestoring){ this._lastCommitted = cur; return; }
+    // (a change the app's undo is already taking whole — the map with it)
+    if (typeof sktUndoCovers === 'function' && sktUndoCovers('skt-battlemap-v1')){ this._lastCommitted = cur; return; }
     if (this._lastCommitted != null && this._lastCommitted !== cur){
       const prev = this._lastCommitted, epoch = this._undoEpoch;
       if (typeof sktUndoRecordCustom === 'function'){
@@ -2790,6 +2792,19 @@ registerPanel('battlemap',{
   // Duplicate does it — "Goblin 1", "Goblin 2", full hit points, none of the
   // first one's conditions. A marker not in the fight is copied, numbered the
   // same way. Not a character's: there is one of each.
+  // Copies made as one Undo: the fighter the tracker gained and the token
+  // together. Two separate entries left a "Goblin 2" in the fight with no
+  // token when only the map's was taken back.
+  _copyAsOne(fn){
+    if (typeof sktUndoable !== 'function') return fn();
+    let out;
+    sktUndoable('Copy', () => { out = fn(); }, { keys: ['skt-combat-v1', 'skt-party-v1', 'skt-battlemap-v1'], quiet: true });
+    return out;
+  },
+  _copyUndoToast(msg){
+    if (typeof showToast !== 'function') return;
+    showToast(msg, typeof sktUndo === 'function' ? { action: { label: 'Undo', run: () => sktUndo() } } : undefined);
+  },
   _copyable(t){
     return !!t && !t.isPC && !document.body.classList.contains('player-mode');
   },
@@ -2821,8 +2836,9 @@ registerPanel('battlemap',{
     const h = this._hoverStage();
     // (spaced as they were: each keeps its place from the set's middle)
     const mx = src.reduce((s, x) => s + x.x, 0) / src.length, my = src.reduce((s, x) => s + x.y, 0) / src.length;
-    const made = src.map(x => this._copyToken(x, h ? { x: h.x + x.x - mx, y: h.y + x.y - my } : null)).filter(Boolean);
+    const made = this._copyAsOne(() => src.map(x => this._copyToken(x, h ? { x: h.x + x.x - mx, y: h.y + x.y - my } : null)).filter(Boolean)) || [];
     if (!made.length) return;
+    this._copyUndoToast(made.length > 1 ? made.length + ' placed' : made[0].label + ' placed');
     if (made.length > 1){ this._group = new Set(made.map(x => x.id)); this._renderTokens(); }
     else { this._selected = made[0].id; this._showPanel(made[0]); this._renderTokens(); }
   },
@@ -8943,12 +8959,12 @@ registerPanel('battlemap',{
       if (cb){ cb.style.display = n ? '' : 'none'; cb.textContent = n > 1 ? '⎘ Copy ' + n : '⎘ Copy'; } }
     rewire('#tp-copy','click',()=>{
       const set = this._copySet(t);
-      const made = set.map(k => this._copyToken(k)).filter(Boolean); if (!made.length) return;
+      const made = this._copyAsOne(() => set.map(k => this._copyToken(k)).filter(Boolean)) || []; if (!made.length) return;
       // A group's copies are the group now: drag one and they all go.
       if (set.length > 1){ this._group = new Set(made.map(k => k.id)); this._renderTokens(); }
       this._showPanel(t);
       const k = made[0];
-      if (typeof showToast === 'function') showToast((made.length > 1 ? made.length + ' more beside them' + (made.some(x => x.cid) ? ', in the fight' : '') + ' — drag one to move them all'
+      this._copyUndoToast((made.length > 1 ? made.length + ' more beside them' + (made.some(x => x.cid) ? ', in the fight' : '') + ' — drag one to move them all'
         : k.label + ' is beside ' + t.label + (k.cid ? ', in the fight' : '')) + (made.some(x => x.hidden) ? ' (hidden from the players)' : ''));
     });
     rewire('#tp-del','click',()=>{ this._delTokens(this._withGroup(t)); });
@@ -9166,7 +9182,10 @@ function sktReconcileTokens(tokens, combatants, cols, rows, cs, centre, opts){
   for (let i = tokens.length - 1; i >= 0; i--){
     const t = tokens[i];
     if (!t || !t.auto) continue;
-    if (list.some(c => sktTokenForCombatant([t], c))) continue;
+    // A token that says whose it is (cid) is theirs only: by name, a copy
+    // whose fighter was taken back ("Goblin 2", undone) passed for the first
+    // goblin — renamed "Goblin" again, the copy's group name — and stayed.
+    if (t.cid != null ? list.some(c => c && c.id === t.cid) : list.some(c => sktTokenForCombatant([t], c))) continue;
     // A character is still standing there when the fight ends. Removing PCs
     // with the monsters meant the next fight put every one of them back in
     // the middle of the map, wherever the party had walked to — the token
