@@ -2719,6 +2719,9 @@ body.player-mode #campaign-btn{display:none !important}
 .map-toolbar .btn{display:inline-flex;align-items:center;gap:5px;line-height:1}
 .map-toolbar .btn .ico{width:15px;height:15px}
 .bt-s{display:none}
+/* the map's toolbar when its row would wrap: pictures, not words (see _fitToolbar) */
+.map-toolbar.compact .bt-l{display:none}
+.map-toolbar.compact .bt-s{display:inline}
 .map-party-icon{display:inline-flex;width:14px;height:14px;align-items:center;justify-content:center;flex-shrink:0;line-height:1}
 .map-party-icon img{width:100%;height:100%;object-fit:cover;border-radius:50%}
 .map-toolbar .btn{font-size:var(--fs-sm);padding:2px 8px} .map-toolbar .btn.active{background:var(--accent);color:var(--on-accent);border-color:var(--accent)}

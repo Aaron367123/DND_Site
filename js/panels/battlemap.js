@@ -1184,6 +1184,7 @@ registerPanel('battlemap',{
       if (this._resizeObserver) this._resizeObserver.disconnect();
       let _resizeTimer = null;
       this._resizeObserver = new ResizeObserver(() => {
+        this._fitToolbar();
         if (!this._isFitted || !_mapBgImage) return;
         clearTimeout(_resizeTimer);
         _resizeTimer = setTimeout(() => this._fitMapToView(), 80);
@@ -1431,6 +1432,24 @@ registerPanel('battlemap',{
     this._updateUndoButtons();
   },
 
+  // The toolbar on one row. At the window's usual 680px its buttons ran
+  // past the edge and Undo, Redo and ⚙ sat on a second row of their own, a
+  // strip of map gone for three icons. When the row would wrap, the tools
+  // drop their words and keep their pictures (every one has its title); with
+  // room again, the words come back.
+  _fitToolbar(){
+    const tb = this._body && this._body.querySelector('.map-toolbar'); if (!tb) return false;
+    tb.classList.remove('compact');
+    const kids = [...tb.children].filter(k => k.offsetParent && k.offsetWidth);
+    if (!kids.length) return false;
+    // (wrapped: starting below the first row's bottom — a slider sits lower
+    // in its row than the buttons, and isn't on a row of its own for that)
+    const top = Math.min(...kids.map(k => k.offsetTop));
+    const row1 = Math.max(...kids.filter(k => k.offsetTop <= top + 4).map(k => k.offsetTop + k.offsetHeight));
+    const wraps = kids.some(k => k.offsetTop >= row1);
+    tb.classList.toggle('compact', wraps);
+    return wraps;
+  },
   _updateUndoButtons(){
     const b = this._body; if (!b) return;
     const u = b.querySelector('[data-mact="undo"]'), r = b.querySelector('[data-mact="redo"]');
@@ -5977,6 +5996,7 @@ registerPanel('battlemap',{
 
     b.innerHTML=html;
     this._setupMap();
+    this._fitToolbar();
     // Restore scroll on the freshly-mounted #map-scroll so cursor-centered
     // wheel-zoom doesn't reset to top-left when the debounced re-render fires.
     const newScroll = b.querySelector('#map-scroll');

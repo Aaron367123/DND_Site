@@ -26236,6 +26236,26 @@ for (const cls of Object.keys(rule)) for (let L = 1; L <= 20; L++) for (const sc
       } catch(e){ ok('round 514 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
       finally { B._closePanel && B._closePanel(); B._tokens = JSON.parse(T0); state.combatants = JSON.parse(K0); save(); B._render(); }
     }
+    // -- Round 515: the map's toolbar keeps to one row — at the window's usual 680px Undo, Redo and the gear wrapped onto a row of their own; the tools drop their words (not their pictures) when the row would wrap, and get them back with room --
+    if (!PLAYER){
+      const B = panelDefs.battlemap;
+      let w = null, W0 = '';
+      try {
+        openPanel('battlemap'); await sleep(300);
+        w = B._body.closest('.window'); W0 = w.style.width;
+        const tb = () => B._body.querySelector('.map-toolbar');
+        const oneRow = () => { const k = [...tb().children].filter(x => x.offsetParent && x.offsetWidth); const t = Math.min(...k.map(x => x.offsetTop)); const r1 = Math.max(...k.filter(x => x.offsetTop <= t + 4).map(x => x.offsetTop + x.offsetHeight)); return k.every(x => x.offsetTop < r1); };
+        w.style.width = '680px'; await sleep(250);
+        ok('680px: one row, Undo to ⚙ on it', oneRow() && tb().classList.contains('compact'), JSON.stringify({ h: tb().offsetHeight, compact: tb().classList.contains('compact') }));
+        const er = B._body.querySelector('[data-mact="tool-erase"]');
+        ok('…the tools as pictures, each still named in its title', er.querySelector('.bt-l').offsetWidth === 0 && er.querySelector('.ico') && /Erase/i.test(er.title), er.title);
+        B._render(); await sleep(120);
+        ok('…and after a redraw too', oneRow() && tb().classList.contains('compact'));
+        w.style.width = '1300px'; await sleep(250);
+        ok('1300px: the words back', !tb().classList.contains('compact') && B._body.querySelector('[data-mact="tool-erase"] .bt-l').offsetWidth > 0 && oneRow());
+      } catch(e){ ok('round 515 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
+      finally { if (w){ w.style.width = W0; } await sleep(150); }
+    }
     // -- Class features: represented, not just text ------------------------
     {
       try {
