@@ -25893,6 +25893,45 @@ for (const cls of Object.keys(rule)) for (let L = 1; L <= 20; L++) for (const sc
       } catch(e){ ok('round 502 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
       finally { B._mapRotation = R0 || 0; B._render(); }
     }
+    // -- Round 503: the token panel's Copy — another goblin beside this one, in the fight too (five more goblins meant the Combat Tracker, then dragging each from the middle of the view) --
+    if (!PLAYER){
+      const B = panelDefs.battlemap, T0 = JSON.stringify(B._tokens || []), K0 = JSON.stringify(state.combatants || []);
+      try {
+        openPanel('battlemap'); await sleep(300);
+        const cs = B._csScreen();
+        state.combatants = (state.combatants || []).filter(c => c.isPC).concat([{ id: 'r503g', name: 'Goblin', hp: 3, hpMax: 7, ac: 15, init: 12, conditions: ['prone'] }]);
+        B._tokens = (B._tokens || []).filter(t => t.isPC).concat([
+          { id: 'tk_r503g', cid: 'r503g', label: 'Goblin', x: 4.5 * cs, y: 4.5 * cs, size: 1, color: '#125634', hidden: true, elev: 10 },
+          { id: 'tk_r503s', label: 'Statue', x: 10 * cs, y: 10 * cs, size: 2, color: '#777777' }]);
+        save(); B._render(); await sleep(120);
+        const g = B._tokens.find(t => t.id === 'tk_r503g');
+        B._showPanel(g); await sleep(60);
+        const btn = B._body.querySelector('#tp-copy');
+        ok('a monster’s token panel offers Copy', !!btn && btn.style.display !== 'none' && btn.getBoundingClientRect().width > 0);
+        btn.click(); await sleep(150);
+        const nc = state.combatants.find(c => c.id !== 'r503g' && !c.isPC);
+        ok('…another goblin is in the fight, at full hit points, without the first one’s conditions', !!nc && nc.hp === 7 && !(nc.conditions || []).length && /^Goblin 2$/.test(nc.name), JSON.stringify(nc));
+        ok('…and the first is Goblin 1, on the map too', (state.combatants.find(c => c.id === 'r503g') || {}).name === 'Goblin 1' && g.label === 'Goblin 1', g.label);
+        const k = nc && B._tokens.filter(t => t.cid === nc.id);
+        ok('…one token for it', !!k && k.length === 1, k && k.length);
+        const t2 = k && k[0], d = t2 ? Math.max(Math.abs(t2.x - g.x), Math.abs(t2.y - g.y)) / cs : -1;
+        ok('…beside the first, not on it', Math.abs(d - 1) < 0.01, 'cells apart: ' + d);
+        ok('…looking the same, hidden as it is, at its height', !!t2 && t2.color === '#125634' && t2.hidden === true && t2.elev === 10 && t2.label === 'Goblin 2', JSON.stringify(t2));
+        // A marker not in the fight, Large.
+        const s = B._tokens.find(t => t.id === 'tk_r503s');
+        B._showPanel(s); await sleep(60);
+        B._body.querySelector('#tp-copy').click(); await sleep(120);
+        const s2 = B._tokens.find(t => t.id !== 'tk_r503s' && /^Statue/.test(t.label));
+        ok('a marker not in the fight: copied, numbered', !!s2 && s2.label === 'Statue 2' && s.label === 'Statue 1' && s2.size === 2 && !s2.cid, JSON.stringify(s2));
+        ok('…a Large one doesn’t overlap the first', !!s2 && Math.max(Math.abs(s2.x - s.x), Math.abs(s2.y - s.y)) >= 2 * cs - 1, s2 && JSON.stringify([s2.x - s.x, s2.y - s.y]));
+        ok('…the fight is as it was', state.combatants.filter(c => !c.isPC).length === 2);
+        // A character's: there's one of each.
+        const pc = B._tokens.find(t => t.isPC);
+        if (pc){ B._showPanel(pc); await sleep(60); }
+        ok('a character’s token: no Copy', !pc || B._body.querySelector('#tp-copy').style.display === 'none');
+      } catch(e){ ok('round 503 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
+      finally { B._closePanel && B._closePanel(); B._tokens = JSON.parse(T0); state.combatants = JSON.parse(K0); save(); B._render(); }
+    }
     // -- Class features: represented, not just text ------------------------
     {
       try {

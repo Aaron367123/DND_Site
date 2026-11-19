@@ -2367,8 +2367,8 @@ registerPanel('battlemap',{
   // reconciler has to place tokens with this panel CLOSED — at which point
   // there is no `this._tokens` to read, only the stored JSON. One copy of the
   // search, two callers.
-  _freeCellNear(px, py){
-    return sktFreeCell(this._tokens, this._cols, this._rows, this._csScreen(), px, py);
+  _freeCellNear(px, py, size){
+    return sktFreeCell(this._tokens, this._cols, this._rows, this._csScreen(), px, py, size);
   },
 
   // The part of the stage currently on screen, in STAGE coordinates, or null
@@ -2777,6 +2777,52 @@ registerPanel('battlemap',{
     };
     next();
     return added;
+  },
+  // ─── Another one, beside it ───────────────────────────────────────────────
+  // Five more goblins: the token panel's Copy puts another beside this one,
+  // looking the same (its picture, size, colour, height, light; hidden if it
+  // is). One in the fight goes into the tracker too, as the tracker's own
+  // Duplicate does it — "Goblin 1", "Goblin 2", full hit points, none of the
+  // first one's conditions. A marker not in the fight is copied, numbered the
+  // same way. Not a character's: there is one of each.
+  _copyable(t){
+    return !!t && !t.isPC && !document.body.classList.contains('player-mode');
+  },
+  _copyToken(t){
+    if (!this._copyable(t)) return null;
+    const LOOK = ['size', 'color', 'portrait', 'picOwn', 'icon', 'hidden', 'elev', 'rotation', 'lt', 'dv'];
+    const look = Object.fromEntries(LOOK.filter(f => t[f] != null).map(f => [f, t[f]]));
+    const spot = this._freeCellNear(t.x, t.y, t.size) || { x: t.x, y: t.y };
+    const C = (typeof panelDefs !== 'undefined') && panelDefs.combat;
+    const c = this._combatantFor(t);
+    let k;
+    if (c && !c.isPC && C && typeof C._duplicate === 'function'){
+      const ids = new Set((state.combatants || []).map(x => x.id));
+      const toks = new Set((this._tokens || []).map(x => x.id));
+      C._duplicate(state.combatants.findIndex(x => x.id === c.id));
+      const nc = (state.combatants || []).find(x => !ids.has(x.id));
+      if (!nc) return null;
+      // (the tracker may have put a token down for it already — wherever the
+      // view's middle was: that one is it, moved here)
+      k = (this._tokens || []).find(x => x && !toks.has(x.id) && x.cid === nc.id);
+      if (!k){ k = _sktTokenForNewCombatant(nc, spot.x, spot.y); this._tokens.push(k); }
+      Object.assign(k, look, { x: spot.x, y: spot.y, label: nc.name, cid: nc.id, dead: false });
+      if (nc.baseName) k.baseName = nc.baseName;
+      // (the first one's token turns "Goblin 1" as its fighter does: the
+      // map follows a rename by cid)
+      try { C._render && C._render(); } catch(e){}
+    } else {
+      const base = String(t.baseName || t.label || '').replace(/\s+\d+$/, '').trim() || 'Token';
+      const same = (this._tokens || []).filter(x => x && !x.isPC && String(x.baseName || x.label || '').replace(/\s+\d+$/, '').trim() === base);
+      const taken = new Set(same.map(x => { const m = String(x.label || '').match(/\s(\d+)$/); return m ? +m[1] : 1; }));
+      if (t.label === base){ t.label = base + ' 1'; }
+      t.baseName = base;
+      let n = 1; while (taken.has(n)) n++;
+      k = Object.assign({ id: uid(), label: base + ' ' + n, baseName: base, x: spot.x, y: spot.y, isPC: false, dead: false }, look);
+      this._tokens.push(k);
+    }
+    this._saveMap(); this._renderTokens();
+    return k;
   },
   // Hurt things look hurt: a ring at half HP and a brighter one near the end.
   // Two bands, not six — the point is to read the state of a fight off the
@@ -5811,6 +5857,7 @@ registerPanel('battlemap',{
       +'<button class="btn small" id="tp-floor" style="width:100%;margin-top:6px;display:none" title="Up or down the stairs: onto another floor of the building">⇅ To another floor…</button>'
       +'<div style="display:flex;gap:4px;margin-top:6px">'
         +'<button class="btn small" id="tp-kill" style="flex:1">☠</button>'
+        +'<button class="btn small" id="tp-copy" style="flex:1.4" title="Another one beside it — in the fight too, with its own hit points">⎘ Copy</button>'
         +'<button class="btn small danger" id="tp-del" style="flex:1">Del</button>'
       +'</div>'
     +'</div>';
@@ -8784,6 +8831,12 @@ registerPanel('battlemap',{
     rewire('#tp-elev-down','click',()=>{ this._setElev(t, (+t.elev || 0) - 5); elevShow(); });
     rewire('#tp-elev-up','click',()=>{ this._setElev(t, (+t.elev || 0) + 5); elevShow(); });
     rewire('#tp-kill','click',()=>{t.dead=!t.dead;this._saveMap();this._renderTokens();});
+    { const cb = b.querySelector('#tp-copy'); if (cb) cb.style.display = this._copyable(t) ? '' : 'none'; }
+    rewire('#tp-copy','click',()=>{
+      const k = this._copyToken(t); if (!k) return;
+      this._showPanel(t);
+      if (typeof showToast === 'function') showToast(k.label + ' is beside ' + t.label + (k.cid ? ', in the fight' : '') + (k.hidden ? ' (hidden from the players)' : ''));
+    });
     rewire('#tp-del','click',()=>{
       const i=this._tokens.findIndex(x=>x.id===t.id);
       let wasPC = false;
