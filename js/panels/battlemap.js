@@ -6524,8 +6524,14 @@ registerPanel('battlemap',{
       if(this._tokens.find(t => Math.abs((t.x||0)-cx) < csClick/2 && Math.abs((t.y||0)-cy) < csClick/2)) return;
       const isPC=this._tool==='add-pc';
       // An NPC can go down already hidden: the ambush the players haven't seen.
+      // The monsters of the books in use, offered as the name is typed: a
+      // name that's a stat block's goes into the fight with it (Add to the
+      // fight), and "Orge" typed by hand found nothing. The party's names
+      // for + PC.
+      const names = isPC ? (state.party || []).filter(p => p && !p.foe).map(p => p.name)
+        : [...new Set((typeof sktMonsterPool === 'function' ? sktMonsterPool('encounter') : []).map(d => d && d.name).filter(Boolean))].sort();
       showModal((isPC?'Place PC':'Place NPC'),[
-        {id:'label',label:'Name',type:'text',value:'',placeholder:isPC?'PC name':'Enemy name'}
+        {id:'label',label:'Name',type:'text',value:'',placeholder:isPC?'PC name':'Enemy name — a monster’s, or anyone’s',list:names}
       ].concat(isPC ? [] : [{id:'hid',label:'Hidden from the players',type:'checkbox',value:false}]),'Place').then(r2=>{
         if(!r2||!r2.label)return;
         const tk = {id:uid(),label:r2.label,x:cx,y:cy,isPC,color:'#696969',size:1,dead:false};

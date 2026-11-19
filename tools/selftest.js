@@ -26191,6 +26191,36 @@ for (const cls of Object.keys(rule)) for (let L = 1; L <= 20; L++) for (const sc
       } catch(e){ ok('round 512 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
       finally { const o = document.getElementById('help-overlay'); if (o) o.remove(); }
     }
+    // -- Round 513: + NPC offers the monsters' names as the name is typed (a typo made a marker no stat block would answer to); + PC, the party's --
+    if (!PLAYER){
+      const B = panelDefs.battlemap, T0 = JSON.stringify(B._tokens || []);
+      try {
+        openPanel('battlemap'); await sleep(300);
+        for (let n = 0; n < 40 && typeof _5eLoaded !== 'undefined' && !_5eLoaded; n++) await sleep(250);
+        const pool = typeof sktMonsterPool === 'function' ? sktMonsterPool('encounter') : [];
+        const place = async tool => {
+          B._tokens = []; B._tool = tool; B._render(); await sleep(80);
+          const cv = B._body.querySelector('#map-canvas'), r = B._body.querySelector('#map-scroll').getBoundingClientRect();
+          cv.dispatchEvent(new MouseEvent('click', { clientX: Math.round(r.left + r.width / 2), clientY: Math.round(r.top + r.height / 2), bubbles: true }));
+          await sleep(150);
+          return document.getElementById('mf-label');
+        };
+        const inp = await place('add-npc');
+        const dl = inp && inp.list, names = dl ? [...dl.options].map(o => o.value) : [];
+        ok('+ NPC: the name box offers the monsters in use', !!inp && pool.length > 0 && names.length === new Set(pool.map(d => d.name)).size && names.includes(pool[0].name), (inp ? 'list ' + names.length : 'no box') + ' / pool ' + pool.length);
+        // Pick one, place it.
+        inp.value = pool[0].name;
+        const go = [...document.querySelectorAll('.modal-backdrop button')].find(b => /^Place$/.test(b.textContent.trim()));
+        go && go.click(); await sleep(150);
+        ok('…placed under that name', B._tokens.some(t => t.label === pool[0].name && !t.isPC), B._tokens.map(t => t.label).join(','));
+        const inp2 = await place('add-pc');
+        const n2 = inp2 && inp2.list ? [...inp2.list.options].map(o => o.value) : [];
+        ok('+ PC: the party’s names', n2.length > 0 && n2.every(v => state.party.some(p => p.name === v)), n2.join(','));
+        const x = [...document.querySelectorAll('.modal-backdrop button')].find(b => /cancel/i.test(b.textContent));
+        x && x.click(); await sleep(60);
+      } catch(e){ ok('round 513 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
+      finally { document.querySelectorAll('.modal-backdrop').forEach(m => m.remove()); B._tool = ''; B._tokens = JSON.parse(T0); save(); B._render(); }
+    }
     // -- Class features: represented, not just text ------------------------
     {
       try {

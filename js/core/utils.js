@@ -861,7 +861,10 @@ function showModal(title, fields, confirmLabel) {
         control = '<input id="mf-' + f.id + '" type="' + (f.type||'text') + '"'
           + ' value="' + esc(f.value !== undefined ? String(f.value) : '') + '"'
           + ' placeholder="' + esc(f.placeholder||'') + '"'
-          + minAttr + maxAttr + ' autocomplete="off">';
+          + (Array.isArray(f.list) && f.list.length ? ' list="mf-' + f.id + '-list"' : '')
+          + minAttr + maxAttr + ' autocomplete="off">'
+          // f.list: names to offer as it's typed (the browser's own list)
+          + (Array.isArray(f.list) && f.list.length ? '<datalist id="mf-' + f.id + '-list">' + f.list.map(function(v){ return '<option value="' + esc(String(v)) + '">'; }).join('') + '</datalist>' : '');
       }
       fieldHtml += f.type === 'checkbox'
         ? '<div class="modal-field modal-check"><label>' + control + ' ' + (f.label||'') + '</label></div>'
