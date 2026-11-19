@@ -68,6 +68,10 @@ const SKT_SYNC_KEYS = [
   'skt-quests-v1',    // the party's quests, kept by the DM (js/panels/quests.js)
   'skt-factions-v1',  // the party's standing with factions, kept by the DM (js/panels/factions.js)
   'skt-homebrew-v1',  // the DM's own monsters, items and spells (js/panels/homebrew.js)
+  'skt-battlemap-saved-v1',   // the DM's saved maps (Map ▾ → Save current as…):
+                              // kept on the one device that saved them, so a
+                              // second DM screen had none. DM screens only
+                              // (_DM_PRIVATE_KEYS), merged by sktMergeSavedMaps.
   'skt-adventures-hidden-v1', // same idea for hidden adventures (LMoP, SKT,
                               // ToA, …). Adventure IDs match `_source` tags
                               // on items / monsters from those modules.
@@ -924,7 +928,9 @@ const _DM_ONLY_KEYS = new Set(['skt-time-v1', 'skt-weather-v2', 'skt-handouts-v1
 // player's phone's storage (measured: both phones had them within 6 s).
 // No phone panel shows them. A phone neither listens for these nor sends
 // them; a second DM screen still gets them.
-const _DM_PRIVATE_KEYS = new Set(['skt-enc-v1']);
+// The saved maps too: a phone has no use for them, and they are the DM's
+// (hidden monsters, maps not reached yet, names like "the ambush").
+const _DM_PRIVATE_KEYS = new Set(['skt-enc-v1', 'skt-battlemap-saved-v1']);
 function _notForThisDevice(k){ return _DM_PRIVATE_KEYS.has(k) && _isPlayerMode(); }
 
 // Push one whole key; resolves to the value the server ended up holding.
@@ -1301,6 +1307,35 @@ function _mergeRecordStr(baseStr, mineStr, theirsStr, opts){
 // loot item's quantity: the DM sells one of three potions while a player
 // uses two — none left, where one side's change used to be lost (1 left).
 const _WHOLE_MERGE = { 'skt-loot-v1': { delta: new Set(['cp', 'sp', 'ep', 'gp', 'pp', 'qty']) } };
+// The saved maps, two devices' lists made one. Each device kept its own, so
+// the server's copy arriving would have replaced a list the server had never
+// seen — a laptop's saved maps gone the first time a second screen synced.
+// So: every map either side has, the newer copy of one both have; a map
+// deleted anywhere (`gone`: id → when) stays deleted, and isn't brought back
+// by a device that still had it. Newest first, at most 40, as the library
+// keeps them; the same answer from either side, so the two settle at once.
+const SKT_SAVED_MAPS_MAX = 40, SKT_SAVED_GONE_MAX = 300, SKT_SAVED_BYTES_MAX = 1900000;
+function sktMergeSavedMaps(aStr, bStr){
+  const read = s => { try { const d = s ? JSON.parse(s) : null; return { saved: Array.isArray(d && d.saved) ? d.saved : [], gone: (d && d.gone && typeof d.gone === 'object' && !Array.isArray(d.gone)) ? d.gone : {} }; } catch(e){ return { saved: [], gone: {} }; } };
+  const A = read(aStr), B = read(bStr);
+  const gone = {};
+  [A.gone, B.gone].forEach(g => Object.keys(g).forEach(id => { const t = +g[id] || 0; if (!(id in gone) || t > gone[id]) gone[id] = t; }));
+  const by = new Map();
+  A.saved.concat(B.saved).forEach(m => {
+    if (!m || !m.id || gone[m.id] != null) return;
+    const o = by.get(m.id);
+    if (!o || (+m.ts || 0) > (+o.ts || 0)) by.set(m.id, m);
+  });
+  const saved = [...by.values()].sort((p, q) => ((+q.ts || 0) - (+p.ts || 0)) || String(p.id).localeCompare(String(q.id)));
+  // (over the cap, or too big for one database value: the oldest go, and are gone everywhere)
+  while (saved.length > SKT_SAVED_MAPS_MAX || (saved.length > 1 && JSON.stringify(saved).length > SKT_SAVED_BYTES_MAX)){
+    const x = saved.pop(); gone[x.id] = Date.now();
+  }
+  const ids = Object.keys(gone).sort((p, q) => (gone[q] - gone[p]) || p.localeCompare(q)).slice(0, SKT_SAVED_GONE_MAX);
+  const g2 = {}; ids.sort().forEach(id => { g2[id] = gone[id]; });
+  return JSON.stringify({ saved, gone: g2 });
+}
+window.sktMergeSavedMaps = sktMergeSavedMaps;
 function _mergeJsonStr(baseStr, mineStr, theirsStr, key){
   let mine, theirs, base;
   try { mine = JSON.parse(mineStr); theirs = JSON.parse(theirsStr); }
@@ -1360,7 +1395,13 @@ function _applyRemoteKey(key, fbVal) {
   // had nothing to add, and the flag is cleared (below) so we don't push bytes
   // the node already holds.
   let applyVal = fbVal, mergedOurs = false;
-  if (_dirtyKeys.has(key) && key !== 'skt-battlemap-v1' && !_ATOMIC_KEYS.has(key)){
+  if (key === 'skt-battlemap-saved-v1'){
+    const localVal = localStorage.getItem(key);
+    if (localVal != null && localVal !== fbVal){
+      applyVal = sktMergeSavedMaps(localVal, fbVal);
+      mergedOurs = (applyVal !== fbVal);
+    }
+  } else if (_dirtyKeys.has(key) && key !== 'skt-battlemap-v1' && !_ATOMIC_KEYS.has(key)){
     const localVal = localStorage.getItem(key);
     if (localVal != null && localVal !== fbVal){
       applyVal = _mergeJsonStr(_lastServer[key], localVal, fbVal, key);
@@ -1481,6 +1522,9 @@ function _applyRemoteKey(key, fbVal) {
   }
   if (key === 'skt-messages-v1' && typeof sktMsgChanged === 'function'){
     try { sktMsgChanged(false); } catch(e){ _diag('messages', e); }
+  }
+  if (key === 'skt-battlemap-saved-v1' && typeof sktSavedMapsChanged === 'function'){
+    try { sktSavedMapsChanged(); } catch(e){ _diag('saved maps', e); }
   }
   if (key === 'skt-quests-v1' && typeof sktQuestsChanged === 'function'){
     try { sktQuestsChanged(); } catch(e){ _diag('quests', e); }
@@ -2022,6 +2066,14 @@ window.sktMapBlobRefs = function(fn){
 // asking — and caching a dropped connection as "gone" would hide a map that
 // is perfectly fine until the page is reloaded.
 window.sktMapBlobGet = function(id){
+  // Not connected yet: wait until it is. Answering null here said "gone" —
+  // and the battle map keeps "gone" (it never asks again), so a DM screen
+  // reloaded with an uploaded map on it asked before sign-in had finished
+  // and stayed blank: "no longer on the server", with the picture right there.
+  if (!_realtimeStarted){
+    if (typeof sktSyncExpected === 'function' && !sktSyncExpected()) return Promise.resolve(null);
+    return _rtReady.then(() => window.sktMapBlobGet(id));
+  }
   if (!_fbDb) return Promise.resolve(null);
   return _fbDb.ref(_blobBase() + '/' + id).once('value')
     .then(snap => {

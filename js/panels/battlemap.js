@@ -1124,6 +1124,7 @@ registerPanel('battlemap',{
       if (raw){
         const d = JSON.parse(raw);
         if (Array.isArray(d.saved)) this._savedMaps = d.saved;
+        if (d.gone && typeof d.gone === 'object') this._savedGone = d.gone;
       }
     } catch(e){}
     // After sign-in, not now: before it the rules answer permission_denied.
@@ -1767,7 +1768,7 @@ registerPanel('battlemap',{
         // Show it here first, share it second. Encoding and uploading a
         // few megabytes takes a moment, and the DM should not be looking
         // at a spinner in the meantime.
-        this._shareUploadedMap(img, replacedPath);
+        this._shareUploadedMap(img, replacedPath, file.name);
         // Then line our grid up with the squares printed on it (after a
         // paint, so the new map is on screen first).
         setTimeout(() => this._autoGrid(img, file.name), 60);
@@ -2127,7 +2128,7 @@ registerPanel('battlemap',{
   // already on screen locally by this point — and says so out loud, because
   // the players not being able to see it is not something to find out
   // halfway through a session.
-  async _shareUploadedMap(img, replacedPath){
+  async _shareUploadedMap(img, replacedPath, fileName){
     // sktMapBlobPut answers false when there is no database handle, so there
     // is nothing to test separately; asking realtimeLive whether it is
     // connected would just be a second, drifting answer to one question.
@@ -2153,7 +2154,7 @@ registerPanel('battlemap',{
       // A dropped connection shouldn't cost the players the map: one press
       // tries again (while it's still the map on screen).
       showToast('Could not send the map to the players — it’s only on this device for now.', { alert: true, action: { label: 'Try again', run: () => {
-        if (_mapBgImage === img && !this._bgMapPath) this._shareUploadedMap(img, replacedPath);
+        if (_mapBgImage === img && !this._bgMapPath) this._shareUploadedMap(img, replacedPath, fileName);
       } } });
       return;
     }
@@ -2166,7 +2167,11 @@ registerPanel('battlemap',{
     this._bgMapPath = 'sktblob:' + id;
     this._bgMapSize = { w: img.naturalWidth, h: img.naturalHeight };
     this._saveMap();
-    showToast('Map shared — the players have it now');
+    if (fileName) this._uploadNames[id] = String(fileName);
+    // An upload not kept is let go when the next map replaces it — keeping it
+    // was two menus deep (Map ▾ → Choose a map… → Save current as…), and
+    // nothing said it would go. One press here, or Map ▾ → Keep this map.
+    showToast('Map shared — the players have it now. Keep it to come back to it later.', { action: { label: 'Keep it', run: () => this._saveCurrentAs() } });
     // Only a throwaway upload goes: _retireBlob keeps anything a saved map
     // still points at, on this device or any other.
     this._retireBlob(replacedPath);
@@ -3276,7 +3281,109 @@ registerPanel('battlemap',{
   // the active-map save — quota errors are swallowed (rare for this list
   // since each entry is small, just metadata + token/fog state).
   _saveSavedMaps(){
-    saveJson('skt-battlemap-saved-v1', {saved:this._savedMaps}, 'saved maps');
+    saveJson('skt-battlemap-saved-v1', {saved:this._savedMaps, gone:this._savedGone || {}}, 'saved maps');
+  },
+  // An upload's file name, for the name a kept map is offered ("Cloud Giant
+  // Castle", not "Uploaded map"). This device's uploads only, for the session.
+  _uploadNames: {},
+  _uploadName(path){
+    const id = this._blobIdOf(path), n = id && this._uploadNames[id];
+    return n ? n.replace(/\.[a-z0-9]{2,5}$/i, '').replace(/[_-]+/g, ' ').trim() : null;
+  },
+  // The map on screen is an upload no saved map keeps: it goes when the next
+  // map replaces it.
+  _uploadUnkept(){
+    if (!this._isSharedUpload(this._bgMapPath)) return false;
+    return !(this._savedMaps || []).some(m => m && m.snapshot && m.snapshot.bgMapPath === this._bgMapPath);
+  },
+  // Save the map on screen to the library (Map ▾ → Choose a map… → Save
+  // current as…, Map ▾ → Keep this map, and an upload's Keep it). onDone
+  // runs once it's saved (the picker closes itself).
+  _saveCurrentAs(onDone){
+    // A shared upload has no filename to borrow — splitting "sktblob:u1abc"
+    // on "/" just hands the id straight back as the suggested name.
+    // (its name from the adventure, once that's read: it suggested the file's)
+    const named = this._bgMapPath && !this._isSharedUpload(this._bgMapPath) ? this._mapTitleAsync(this._bgMapPath) : Promise.resolve(null);
+    named.then(title => {
+    const suggested = title
+      ? (title + ((this._tokens||[]).length ? ' — saved' : ''))
+      : (_mapBgImage ? (this._uploadName(this._bgMapPath) || 'Uploaded map') : 'Map ' + (this._savedMaps.length + 1));
+    showModal('Save map', [
+      { id:'name', label:'Map name', type:'text', value: suggested }
+    ], 'Save').then(r => {
+      if (!r) return;
+      const name = (r.name || '').trim();
+      if (!name){ if (typeof showToast==='function') showToast('Name required'); return; }
+      const lc = name.toLowerCase();
+      const clash = this._savedMaps.find(s => (s.name||'').toLowerCase() === lc);
+      const commit = () => {
+        // Replace any existing entry with the same case-insensitive name so
+        // re-saving overwrites instead of cluttering the list.
+        const replaced = this._savedMaps.filter(s => (s.name||'').toLowerCase() === lc);
+        this._savedMaps = this._savedMaps.filter(s => (s.name||'').toLowerCase() !== lc);
+        const entry = {
+          id: 'map_' + (typeof uid === 'function' ? uid() : Date.now().toString(36)),
+          name,
+          ts: Date.now(),
+          snapshot: this._snapshotMap(),
+        };
+        this._savedMaps.unshift(entry);
+        // Cap library so quota doesn't creep over time. Saved-map snapshots
+        // can be 20-50 KB each with lots of tokens/fog; 40 caps the list at
+        // about 1-2 MB worst case. Say WHICH ones went: new entries unshift
+        // to the front, so this drops the oldest saves, and doing it in
+        // silence meant a full library quietly ate them.
+        let dropped = [], droppedEntries = [];
+        if (this._savedMaps.length > 40){
+          droppedEntries = this._savedMaps.slice(40);
+          dropped = droppedEntries.map(s => s.name || 'untitled');
+          this._savedMaps.length = 40;
+        }
+        this._forgetSaved(replaced.concat(droppedEntries));
+        this._saveSavedMaps();
+        this._updateSavedRefs(entry, replaced.concat(droppedEntries));
+        if (onDone) onDone();
+        if (typeof showToast === 'function'){
+          // An upload whose share failed never reached the server, so there
+          // is nothing for the saved map to point at. Say so now, while the
+          // image is still on screen to re-upload — not on the day the map
+          // is loaded and comes back blank.
+          const noArt = entry.snapshot && entry.snapshot.hadUploadedImage;
+          showToast('Saved "' + name + '"'
+            + (noArt ? ' · its background was never shared, so it will not come back — re-upload it and save again to keep it' : '')
+            + (dropped.length ? ` · library full, dropped oldest: ${dropped.join(', ')}` : ''));
+        }
+      };
+      // Overwriting is as destructive as deleting, and the delete button
+      // asks first — this didn't, so re-saving under a suggested name (which
+      // is derived from the map file, and so collides by default on the same
+      // map) silently replaced the earlier save with no way back.
+      if (clash && typeof showConfirm === 'function'){
+        showConfirm('A saved map named "' + clash.name + '" already exists. Overwrite it?',
+          {title:'Overwrite saved map', confirmLabel:'Overwrite', danger:true})
+          .then(ok => { if (ok) commit(); });
+      } else {
+        commit();
+      }
+    });
+    });
+  },
+  // Saved maps deleted (or overwritten, or past the cap) are remembered as
+  // gone, so another DM screen that still has them doesn't bring them back
+  // when the lists are merged (sktMergeSavedMaps).
+  _savedGone: null,
+  _forgetSaved(entries){
+    const g = this._savedGone || (this._savedGone = {}), now = Date.now();
+    (entries || []).forEach(e => { if (e && e.id) g[e.id] = now; });
+  },
+  // Another DM screen's saved maps arrived (merged with ours): read them back.
+  _reloadSavedMaps(){
+    try {
+      const d = JSON.parse(localStorage.getItem('skt-battlemap-saved-v1') || '{}');
+      this._savedMaps = Array.isArray(d.saved) ? d.saved : [];
+      this._savedGone = d.gone && typeof d.gone === 'object' ? d.gone : {};
+    } catch(e){}
+    this._reconcileSavedRefs();
   },
 
   // Snapshot the full per-map state into a plain JSON object suitable for
@@ -6165,6 +6272,7 @@ registerPanel('battlemap',{
       else if(act==='map-menu'){
         const r = btn.getBoundingClientRect();
         const items = [{ label: 'Choose a map…', onClick: () => this._openMapPicker() }];
+        if (this._uploadUnkept()) items.push({ label: 'Keep this map…', onClick: () => this._saveCurrentAs() });
         if (_mapBgImage) items.push({ label: 'Remove this map image', onClick: () => { _mapBgImage = null; this._bgMapPath = null; this._saveMap(); this._render(); } });
         items.push({ label: 'Grid, snapping and alignment…', onClick: () => { this._settingsOpen = true; this._render(); } });
         // Floors: a tower's storeys, a ship's decks — one map each, one on
@@ -6981,7 +7089,7 @@ registerPanel('battlemap',{
         const lose = (this._drawings || []).length || this._fog;
         const go = () => this._useImageFile(file);
         if (!lose || typeof showConfirm !== 'function'){ go(); return; }
-        showConfirm('Use “' + file.name + '” as the map? The walls, doors, areas, drawings and fog on this one are cleared. To keep a copy, save it first: Map ▾ → Choose a map… → Save current as….', { title: 'New map', confirmLabel: 'Use it' })
+        showConfirm('Use “' + file.name + '” as the map? The walls, doors, areas, drawings and fog on this one are cleared. To keep a copy, save it first: Map ▾ → Keep this map (or Choose a map… → Save current as…).', { title: 'New map', confirmLabel: 'Use it' })
           .then(ok => { if (ok) go(); });
         return;
       }
@@ -7368,6 +7476,7 @@ registerPanel('battlemap',{
       if (!entry) return;
       const doDelete = () => {
         this._savedMaps = this._savedMaps.filter(s => s.id !== id);
+        this._forgetSaved([entry]);
         this._saveSavedMaps();
         this._updateSavedRefs(null, [entry]);
         // Remove the row from the DOM in place. If the list is now empty,
@@ -7385,74 +7494,7 @@ registerPanel('battlemap',{
         });
       } else { doDelete(); }
     }));
-    backdrop.querySelector('#mapsel-save')?.addEventListener('click', () => {
-      // A shared upload has no filename to borrow — splitting "sktblob:u1abc"
-      // on "/" just hands the id straight back as the suggested name.
-      // (its name from the adventure, once that's read: it suggested the file's)
-      const named = this._bgMapPath && !this._isSharedUpload(this._bgMapPath) ? this._mapTitleAsync(this._bgMapPath) : Promise.resolve(null);
-      named.then(title => {
-      const suggested = title
-        ? (title + ((this._tokens||[]).length ? ' — saved' : ''))
-        : (_mapBgImage ? 'Uploaded map' : 'Map ' + (this._savedMaps.length + 1));
-      showModal('Save map', [
-        { id:'name', label:'Map name', type:'text', value: suggested }
-      ], 'Save').then(r => {
-        if (!r) return;
-        const name = (r.name || '').trim();
-        if (!name){ if (typeof showToast==='function') showToast('Name required'); return; }
-        const lc = name.toLowerCase();
-        const clash = this._savedMaps.find(s => (s.name||'').toLowerCase() === lc);
-        const commit = () => {
-          // Replace any existing entry with the same case-insensitive name so
-          // re-saving overwrites instead of cluttering the list.
-          const replaced = this._savedMaps.filter(s => (s.name||'').toLowerCase() === lc);
-          this._savedMaps = this._savedMaps.filter(s => (s.name||'').toLowerCase() !== lc);
-          const entry = {
-            id: 'map_' + (typeof uid === 'function' ? uid() : Date.now().toString(36)),
-            name,
-            ts: Date.now(),
-            snapshot: this._snapshotMap(),
-          };
-          this._savedMaps.unshift(entry);
-          // Cap library so quota doesn't creep over time. Saved-map snapshots
-          // can be 20-50 KB each with lots of tokens/fog; 40 caps the list at
-          // about 1-2 MB worst case. Say WHICH ones went: new entries unshift
-          // to the front, so this drops the oldest saves, and doing it in
-          // silence meant a full library quietly ate them.
-          let dropped = [], droppedEntries = [];
-          if (this._savedMaps.length > 40){
-            droppedEntries = this._savedMaps.slice(40);
-            dropped = droppedEntries.map(s => s.name || 'untitled');
-            this._savedMaps.length = 40;
-          }
-          this._saveSavedMaps();
-          this._updateSavedRefs(entry, replaced.concat(droppedEntries));
-          close();
-          if (typeof showToast === 'function'){
-            // An upload whose share failed never reached the server, so there
-            // is nothing for the saved map to point at. Say so now, while the
-            // image is still on screen to re-upload — not on the day the map
-            // is loaded and comes back blank.
-            const noArt = entry.snapshot && entry.snapshot.hadUploadedImage;
-            showToast('Saved "' + name + '"'
-              + (noArt ? ' · its background was never shared, so it will not come back — re-upload it and save again to keep it' : '')
-              + (dropped.length ? ` · library full, dropped oldest: ${dropped.join(', ')}` : ''));
-          }
-        };
-        // Overwriting is as destructive as deleting, and the delete button
-        // asks first — this didn't, so re-saving under a suggested name (which
-        // is derived from the map file, and so collides by default on the same
-        // map) silently replaced the earlier save with no way back.
-        if (clash && typeof showConfirm === 'function'){
-          showConfirm('A saved map named "' + clash.name + '" already exists. Overwrite it?',
-            {title:'Overwrite saved map', confirmLabel:'Overwrite', danger:true})
-            .then(ok => { if (ok) commit(); });
-        } else {
-          commit();
-        }
-      });
-      });
-    });
+    backdrop.querySelector('#mapsel-save')?.addEventListener('click', () => this._saveCurrentAs(close));
 
     const searchInput = backdrop.querySelector('#mapsel-search');
     const sel = backdrop.querySelector('#mapsel-adv');
@@ -9451,4 +9493,10 @@ function _bmInk(color){
   const lin = v => { v /= 255; return v <= 0.03928 ? v / 12.92 : Math.pow((v + 0.055) / 1.055, 2.4); };
   const L = 0.2126 * lin(parseInt(h.slice(0, 2), 16)) + 0.7152 * lin(parseInt(h.slice(2, 4), 16)) + 0.0722 * lin(parseInt(h.slice(4, 6), 16));
   return (1.05 / (L + 0.05)) >= ((L + 0.05) / 0.0603) ? '#fff' : '#1a1a1a';
+}
+
+// Another DM screen saved or deleted a map (realtime.js, after merging).
+function sktSavedMapsChanged(){
+  const B = (typeof panelDefs !== 'undefined') && panelDefs.battlemap;
+  if (B && typeof B._reloadSavedMaps === 'function') B._reloadSavedMaps();
 }

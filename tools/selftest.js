@@ -26285,6 +26285,105 @@ for (const cls of Object.keys(rule)) for (let L = 1; L <= 20; L++) for (const sc
       } catch(e){ ok('round 516 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
       finally { B._tool = ''; B._tplShape = S0; if (w) w.style.width = W0; B._tokens = JSON.parse(T0); save(); B._applyViewScale(V0 || 1); B._render(); await sleep(100); }
     }
+    // -- Round 517: saved maps follow the DM to any screen — the list was kept on the one device that saved it; merged, not replaced (a second screen's arrival would have wiped the first's), deletions stay deleted, phones never get it --
+    if (!PLAYER && typeof sktMergeSavedMaps === 'function'){
+      const B = panelDefs.battlemap, L0 = localStorage.getItem('skt-battlemap-saved-v1'), S0 = B._savedMaps, G0 = B._savedGone;
+      try {
+        const m = (id, ts, name) => ({ id, name: name || id, ts, snapshot: { bgMapPath: 'adventure/x/' + id + '.webp', tokens: [] } });
+        const J = o => JSON.stringify(o), P = s => JSON.parse(s);
+        ok('the saved maps sync, to DM screens only', SKT_SYNC_KEYS.includes('skt-battlemap-saved-v1') && _DM_PRIVATE_KEYS.has('skt-battlemap-saved-v1'));
+        // Each side's own maps: both kept.
+        const laptop = J({ saved: [m('a', 100), m('b', 90)] }), tablet = J({ saved: [m('c', 95)] });
+        const r1 = P(sktMergeSavedMaps(laptop, tablet));
+        ok('a screen arriving with its own maps: both lists kept, newest first', r1.saved.map(x => x.id).join() === 'a,c,b', r1.saved.map(x => x.id).join());
+        ok('…the same answer from either side', sktMergeSavedMaps(laptop, tablet) === sktMergeSavedMaps(tablet, laptop));
+        ok('…and merging it again changes nothing', sktMergeSavedMaps(sktMergeSavedMaps(laptop, tablet), tablet) === sktMergeSavedMaps(laptop, tablet));
+        // The same map saved again on one: the newer copy.
+        const r2 = P(sktMergeSavedMaps(J({ saved: [m('a', 100, 'Old')] }), J({ saved: [m('a', 200, 'New')] })));
+        ok('the same map saved again: the newer copy', r2.saved.length === 1 && r2.saved[0].name === 'New');
+        // Deleted on one: stays deleted, whichever side still has it.
+        const del = J({ saved: [m('b', 90)], gone: { a: 300 } });
+        const r3 = P(sktMergeSavedMaps(laptop, del)), r3b = P(sktMergeSavedMaps(del, laptop));
+        ok('deleted on one screen: not brought back by the other', r3.saved.map(x => x.id).join() === 'b' && r3b.saved.map(x => x.id).join() === 'b' && r3.gone.a === 300, J(r3.saved.map(x => x.id)));
+        // The cap.
+        const many = J({ saved: Array.from({ length: 30 }, (_, i) => m('p' + i, 1000 + i)) }), more = J({ saved: Array.from({ length: 30 }, (_, i) => m('q' + i, 2000 + i)) });
+        const r4 = P(sktMergeSavedMaps(many, more));
+        ok('two full-ish lists: the newest 40, the rest gone', r4.saved.length === 40 && r4.saved[0].id === 'q29' && r4.gone.p0 != null, r4.saved.length + ' ' + r4.saved[0].id);
+        ok('a broken value doesn’t take the other side’s maps with it', P(sktMergeSavedMaps('{oops', laptop)).saved.length === 2);
+        // The picker's delete and overwrite remember what went.
+        B._savedMaps = [m('d1', 100, 'Dock'), m('d2', 90, 'Keep')]; B._savedGone = {}; B._saveSavedMaps();
+        openPanel('battlemap'); await sleep(200);
+        B._openMapPicker(); await sleep(500);
+        const delBtn = document.querySelector('[data-savedmap-del="d1"]');
+        delBtn && delBtn.click(); await sleep(100);
+        const yes = [...document.querySelectorAll('.modal-backdrop button')].find(b => /^Delete$/.test(b.textContent.trim()));
+        yes && yes.click(); await sleep(150);
+        const stored = P(localStorage.getItem('skt-battlemap-saved-v1'));
+        ok('deleting a saved map remembers it went', !!delBtn && stored.saved.map(x => x.id).join() === 'd2' && stored.gone && stored.gone.d1 > 0, J(stored));
+        document.querySelectorAll('.modal-backdrop').forEach(x => x.remove());
+        // Another screen's list arriving: the map's own list follows it.
+        localStorage.setItem('skt-battlemap-saved-v1', sktMergeSavedMaps(localStorage.getItem('skt-battlemap-saved-v1'), J({ saved: [m('e1', 500, 'From the tablet')] })));
+        sktSavedMapsChanged();
+        ok('…and another screen’s maps show here once they arrive', B._savedMaps.map(x => x.id).join() === 'e1,d2', B._savedMaps.map(x => x.id).join());
+      } catch(e){ ok('round 517 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
+      finally {
+        document.querySelectorAll('.modal-backdrop').forEach(x => x.remove());
+        if (L0 == null) localStorage.removeItem('skt-battlemap-saved-v1'); else localStorage.setItem('skt-battlemap-saved-v1', L0);
+        B._savedMaps = S0; B._savedGone = G0;
+      }
+    }
+    // -- Round 518: an upload says it can be kept, with Keep it — keeping was two menus deep and nothing said an upload goes when the map changes; Map ▾ → Keep this map too, named from the file --
+    if (!PLAYER){
+      const B = panelDefs.battlemap;
+      const S0 = localStorage.getItem('skt-battlemap-v1'), P0 = B._bgMapPath, I0 = _mapBgImage, W0 = B._bgMapNaturalW, H0 = B._bgMapNaturalH;
+      const L0 = localStorage.getItem('skt-battlemap-saved-v1'), SM0 = B._savedMaps, SG0 = B._savedGone;
+      const putReal = window.sktMapBlobPut, readyReal = window.sktMapBlobReady, retireReal = B._retireBlob, refsReal = window.sktMapBlobRefs;
+      const keep = { ft: B._ftPerCell, cs: B._cellSize, ox: B._gridOffsetX, oy: B._gridOffsetY, cols: B._cols, rows: B._rows, sc: B._bgMapScale, lts: B._lastTokenScale, size: B._bgMapSize };
+      let keepT = null, keepD = null, keepF, fogSaved = false;
+      try {
+        openPanel('battlemap'); await sleep(600);
+        keepT = B._tokens.slice(); keepD = B._drawings.slice(); keepF = B._fog; fogSaved = true;
+        B._tokens = []; B._drawings = []; B._fog = null; B._savedMaps = []; B._savedGone = {};
+        B._retireBlob = () => {};
+        window.sktMapBlobPut = () => Promise.resolve(true); window.sktMapBlobReady = () => true; window.sktMapBlobRefs = () => Promise.resolve({});
+        document.querySelectorAll('#toast-host .toast-item').forEach(t => t.remove());
+        const c = document.createElement('canvas'); c.width = 900; c.height = 600;
+        const g = c.getContext('2d'); g.fillStyle = '#4b5b6b'; g.fillRect(0, 0, 900, 600);
+        B._useImageFile(new File([await new Promise(r => c.toBlob(r, 'image/png'))], 'Cloud_Giant-Castle.png', { type: 'image/png' }));
+        let shared = null;
+        for (let i = 0; i < 60 && !shared; i++){ await sleep(100); shared = [...document.querySelectorAll('#toast-host .toast-item')].find(t => /Map shared/.test(t.textContent)); }
+        const kb = shared && [...shared.querySelectorAll('button')].find(b => /Keep it/.test(b.textContent));
+        ok('an upload shared: it says it can be kept, with Keep it', !!kb && /^sktblob:/.test(B._bgMapPath || ''), shared ? shared.textContent : 'no message');
+        // Map ▾ offers it too, while it's not kept.
+        B._body.querySelector('[data-mact="map-menu"]').click(); await sleep(120);
+        const item = [...document.querySelectorAll('.ctx-menu-item')].find(e => /Keep this map/.test(e.textContent));
+        ok('…and Map ▾ → Keep this map', !!item);
+        document.querySelectorAll('.ctx-menu').forEach(m => m.remove());
+        // Keep it: the save, named from the file.
+        kb.click(); await sleep(200);
+        const nm = document.getElementById('mf-name');
+        ok('…Keep it asks a name, the file’s', !!nm && nm.value === 'Cloud Giant Castle', nm ? nm.value : 'no dialog');
+        [...document.querySelectorAll('.modal-backdrop button')].find(b => /^Save$/.test(b.textContent.trim())).click(); await sleep(200);
+        const k = B._savedMaps.find(m => m.name === 'Cloud Giant Castle');
+        ok('…kept: in the saved maps, with its picture', !!k && k.snapshot.bgMapPath === B._bgMapPath && !B._uploadUnkept(), JSON.stringify(k && k.snapshot.bgMapPath));
+        B._body.querySelector('[data-mact="map-menu"]').click(); await sleep(120);
+        ok('…and Map ▾ no longer offers to keep it', ![...document.querySelectorAll('.ctx-menu-item')].some(e => /Keep this map/.test(e.textContent)));
+        document.querySelectorAll('.ctx-menu').forEach(m => m.remove());
+      } catch(e){ ok('round 518 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
+      finally {
+        document.querySelectorAll('#toast-host .toast-item, .ctx-menu, .modal-backdrop').forEach(t => t.remove());
+        window.sktMapBlobPut = putReal; window.sktMapBlobReady = readyReal; B._retireBlob = retireReal; window.sktMapBlobRefs = refsReal;
+        if (fogSaved) B._fog = keepF;
+        B._ftPerCell = keep.ft; B._cellSize = keep.cs; B._gridOffsetX = keep.ox; B._gridOffsetY = keep.oy; B._cols = keep.cols; B._rows = keep.rows; B._bgMapScale = keep.sc; B._lastTokenScale = keep.lts; B._bgMapSize = keep.size;
+        _mapBgImage = I0; B._bgMapPath = P0; B._bgMapNaturalW = W0; B._bgMapNaturalH = H0;
+        if (keepT){ B._tokens = keepT; B._drawings = keepD; }
+        if (S0 != null) localStorage.setItem('skt-battlemap-v1', S0);
+        if (L0 == null) localStorage.removeItem('skt-battlemap-saved-v1'); else localStorage.setItem('skt-battlemap-saved-v1', L0);
+        B._savedMaps = SM0; B._savedGone = SG0;
+        try { B._render(); } catch(e){}
+        closePanel('battlemap');
+      }
+    }
     // -- Class features: represented, not just text ------------------------
     {
       try {

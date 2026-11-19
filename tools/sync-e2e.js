@@ -462,6 +462,59 @@ const window = {};
       return t == null ? { ok: false, why: 'DM ' + d + ' · phone ' + await pl.ev(geo) } : { ok: true, lat: t };
     });
 
+    await step('DM keeps the uploaded map → saved on the server, a second screen’s list merges in, the phone never gets it', async () => {
+      const K = 'skt-battlemap-saved-v1', tag = 'E2E kept ' + Date.now();
+      // Keep it the way the DM does: Map ▾ → Choose a map… → Save current as…
+      const saved = await dm.ev("openPanel('battlemap'); const B = panelDefs.battlemap; B._openMapPicker(); for (let i = 0; i < 40 && !document.getElementById('mapsel-save'); i++) await new Promise(r=>setTimeout(r,100));"
+        + " document.getElementById('mapsel-save').click(); for (let i = 0; i < 40 && !document.getElementById('mf-name'); i++) await new Promise(r=>setTimeout(r,100));"
+        + " document.getElementById('mf-name').value = " + JSON.stringify(tag) + "; [...document.querySelectorAll('.modal-backdrop button')].find(b => /^Save$/.test(b.textContent.trim())).click();"
+        + " await new Promise(r=>setTimeout(r,300)); document.querySelectorAll('.modal-backdrop').forEach(m => m.remove());"
+        + " const e = B._savedMaps.find(m => m.name === " + JSON.stringify(tag) + "); return e ? [e.id, e.snapshot.bgMapPath].join(' ') : ''");
+      if (!saved) return { ok: false, why: 'the save never happened' };
+      const [sid, path] = saved.split(' ');
+      const onServer = "return _fbDb.ref(_wholePath('" + K + "')).once('value').then(s => String(s.val() || ''))";
+      const t1 = await W(dm, "const v = await (async () => { " + onServer + " })(); return v.indexOf(" + JSON.stringify(sid) + ") >= 0", 20000);
+      if (t1 == null) return { ok: false, why: 'the saved map never reached the server' };
+      const refd = await dm.ev("return window.sktMapBlobRefs(null).then(m => !!m && m[" + JSON.stringify(sid) + "] === " + JSON.stringify(path.replace(/^sktblob:/, '')) + ")");
+      if (/^sktblob:/.test(path) && !refd) return { ok: false, why: 'the kept upload is not protected from cleanup (no ref)' };
+      // A second DM screen's list arrives, with a map of its own and without ours.
+      const other = JSON.stringify({ saved: [{ id: 'e2e_tablet_' + Date.now(), name: 'E2E tablet map', ts: Date.now() - 1000, snapshot: { bgMapPath: 'adventure/SKT/000-map.webp', tokens: [] } }] });
+      await dm.ev("_fbDb.ref(_wholePath('" + K + "')).set(" + JSON.stringify(other) + "); return 1");
+      const t2 = await W(dm, "const v = await (async () => { " + onServer + " })(); const B = panelDefs.battlemap; return v.indexOf(" + JSON.stringify(sid) + ") >= 0 && v.indexOf('E2E tablet map') >= 0 && B._savedMaps.some(m => m.id === " + JSON.stringify(sid) + ") && B._savedMaps.some(m => m.name === 'E2E tablet map')", 20000);
+      if (t2 == null) return { ok: false, why: 'merged lists didn’t settle: DM ' + await dm.ev("return panelDefs.battlemap._savedMaps.map(m => m.name).join(' | ')") + ' · server ' + (await dm.ev(onServer)).slice(0, 200) };
+      const phone = await pl.ev("return String(localStorage.getItem('" + K + "') || '')");
+      if (/E2E/.test(phone)) return { ok: false, why: 'the phone got the DM’s saved maps' };
+      // Another map, then the kept one again: its picture is still there, on both screens.
+      await dm.ev("const B = panelDefs.battlemap; B._openMapPicker(); for (let i = 0; i < 40 && !document.getElementById('mapsel-adv'); i++) await new Promise(r=>setTimeout(r,100)); const sel = document.getElementById('mapsel-adv'); const o = [...sel.options].find(x => x.value); sel.value = o.value; sel.dispatchEvent(new Event('change', { bubbles: true })); for (let i = 0; i < 80 && !document.querySelector('.mapsel-card[data-path]'); i++) await new Promise(r=>setTimeout(r,100)); document.querySelector('.mapsel-card[data-path]').click(); return 1");
+      const away = await W(dm, "const p = panelDefs.battlemap._bgMapPath || ''; return !!p && p !== " + JSON.stringify(path), 20000);
+      if (away == null) return { ok: false, why: 'never switched to another map' };
+      await new Promise(r => setTimeout(r, 1500));
+      const still = await dm.ev("return window.sktMapBlobGet(" + JSON.stringify(path.replace(/^sktblob:/, '')) + ").then(v => !!v)");
+      if (/^sktblob:/.test(path) && !still) return { ok: false, why: 'the kept upload was deleted when the map changed' };
+      await dm.ev("const B = panelDefs.battlemap; B._openMapPicker(); for (let i = 0; i < 60 && !document.querySelector('[data-savedmap-load=" + JSON.stringify(sid) + "]'); i++) await new Promise(r=>setTimeout(r,100)); document.querySelector('[data-savedmap-load=" + JSON.stringify(sid) + "]').click(); return 1");
+      const back = await W(dm, "const B = panelDefs.battlemap; return B._bgMapPath === " + JSON.stringify(path) + " && !!_mapBgImage && _mapBgImage.naturalWidth > 0", 30000);
+      if (back == null) return { ok: false, why: 'the kept map didn’t come back on the DM’s screen (' + await dm.ev("return panelDefs.battlemap._bgMapPath") + ')' };
+      const back2 = await W(pl, "const B = panelDefs.battlemap; return !!B && B._bgMapPath === " + JSON.stringify(path) + " && !!_mapBgImage && _mapBgImage.naturalWidth > 0", 30000);
+      if (back2 == null) return { ok: false, why: 'the kept map didn’t come back on the phone' };
+      // Tidy: both gone (the picker's way, so the upload is let go as well).
+      await dm.ev("const B = panelDefs.battlemap; const drop = B._savedMaps.filter(m => /^E2E /.test(m.name)); B._savedMaps = B._savedMaps.filter(m => !/^E2E /.test(m.name)); B._forgetSaved(drop); B._saveSavedMaps(); await B._updateSavedRefs(null, drop); return 1");
+      return { ok: true, lat: t1 + t2 };
+    });
+
+    await step('an uploaded map survives a reload — the DM’s screen and the phone both draw it again', async () => {
+      const path = await dm.ev("return panelDefs.battlemap._bgMapPath || ''");
+      if (!/^sktblob:/.test(path)) return { ok: false, why: 'no uploaded map on screen to reload (' + path + ')' };
+      const geo = "const B = panelDefs.battlemap; return [B._bgMapPath, B._bgMapNaturalW, B._bgMapNaturalH, B._cols, B._rows].join(' ')";
+      const g0 = await dm.ev(geo);
+      await dm.reload();
+      const t1 = await W(dm, "openPanel('battlemap'); const B = panelDefs.battlemap; return !!_mapBgImage && _mapBgImage.naturalWidth > 0 && [B._bgMapPath, B._bgMapNaturalW, B._bgMapNaturalH, B._cols, B._rows].join(' ') === " + JSON.stringify(g0), 40000);
+      if (t1 == null) return { ok: false, why: 'DM after reload: ' + await dm.ev(geo) + ' (was ' + g0 + ')' };
+      await pl.reload();
+      const t2 = await W(pl, "paTab = 'map'; paRender(); const B = panelDefs.battlemap; return !!B && !!_mapBgImage && _mapBgImage.naturalWidth > 0 && [B._bgMapPath, B._bgMapNaturalW, B._bgMapNaturalH, B._cols, B._rows].join(' ') === " + JSON.stringify(g0), 40000);
+      if (t2 == null) return { ok: false, why: 'phone after reload: ' + await pl.ev(geo) + ' (was ' + g0 + ')' };
+      return { ok: true, lat: t1 + t2 };
+    });
+
     // ── Handouts, roll requests, reactions ──────────────────────────────────
     await step('DM sends a handout → phone pops it up', async () => {
       await dm.ev("openPanel('handouts'); await new Promise(r=>setTimeout(r,300)); panelDefs.handouts.send({ title: 'Stress handout', text: 'A note from the DM', to: 'all' }); return 1");
