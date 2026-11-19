@@ -3053,7 +3053,7 @@ registerPanel('battlemap',{
   // token this screen doesn't draw (hidden from the players, on another
   // floor) isn't gone to.
   _followTurn(){
-    const b = this._body; if (!b || this._drag) return false;
+    const b = this._body; if (!b || this._drag || this._panning) return false;
     if (typeof state === 'undefined' || !(+state.combatRound > 0) || state.activeCombatantId == null) return false;
     if (document.body.classList.contains('player-mode') && typeof paPc === 'function'){
       const me = paPc();
@@ -6756,6 +6756,8 @@ registerPanel('battlemap',{
       const startScrollX = scrollEl.scrollLeft, startScrollY = scrollEl.scrollTop;
       let didMove = false;
       scrollEl.style.cursor = 'grabbing';
+      // (a pan in hand: the map doesn't slide off to whose turn came up)
+      this._panning = true;
       const onMove = ev => {
         const dx = ev.clientX - startX, dy = ev.clientY - startY;
         if (!didMove && Math.abs(dx)+Math.abs(dy) < 3) return;
@@ -6765,6 +6767,7 @@ registerPanel('battlemap',{
       };
       const onUp = () => {
         scrollEl.style.cursor = '';
+        this._panning = false;
         document.removeEventListener('mousemove', onMove);
         document.removeEventListener('mouseup', onUp);
       };

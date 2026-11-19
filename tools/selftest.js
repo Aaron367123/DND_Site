@@ -26062,6 +26062,14 @@ for (const cls of Object.keys(rule)) for (let L = 1; L <= 20; L++) for (const sc
         const s1 = [sc.scrollLeft, sc.scrollTop];
         state.activeCombatantId = 'r507c'; save(); await sleep(800);
         ok('…the next one already in view: the map stays put', sc.scrollLeft === s1[0] && sc.scrollTop === s1[1], JSON.stringify([s1, [sc.scrollLeft, sc.scrollTop]]));
+        // Mid-pan (the middle button held): the map stays in the DM's hand.
+        { const s0 = [sc.scrollLeft, sc.scrollTop], r = sc.getBoundingClientRect(), cx = Math.round(r.left + r.width / 2), cy = Math.round(r.top + r.height / 2);
+          sc.dispatchEvent(new MouseEvent('mousedown', { button: 1, clientX: cx, clientY: cy, bubbles: true, cancelable: true }));
+          state.activeCombatantId = 'r507a'; save(); await sleep(900);
+          ok('…the turn moves on mid-pan: the map stays in the DM’s hand', sc.scrollLeft === s0[0] && sc.scrollTop === s0[1], JSON.stringify([s0, [sc.scrollLeft, sc.scrollTop]]));
+          document.dispatchEvent(new MouseEvent('mouseup', { button: 1, clientX: cx, clientY: cy, bubbles: true }));
+          ok('…and letting go ends the pan', !B._panning);
+          state.activeCombatantId = 'r507c'; save(); await sleep(300); }
         // A hidden token is still the DM's to see: it's gone to.
         B._tokens[0].hidden = true; B._renderTokens(); await sleep(60);
         state.activeCombatantId = 'r507a'; save(); await sleep(1200);
