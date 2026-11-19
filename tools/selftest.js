@@ -26260,7 +26260,7 @@ for (const cls of Object.keys(rule)) for (let L = 1; L <= 20; L++) for (const sc
     }
     // -- Round 516: picking a tool whose controls need a second toolbar row (Draw, Build) doesn't jump the map down a row — the picture stays where it was on screen --
     if (!PLAYER){
-      const B = panelDefs.battlemap, T0 = JSON.stringify(B._tokens || []), V0 = B._viewScale;
+      const B = panelDefs.battlemap, T0 = JSON.stringify(B._tokens || []), V0 = B._viewScale, S0 = B._tplShape;   // (Build leaves its own shape set: put back, or the next Area is a Build)
       let w = null, W0 = '';
       try {
         openPanel('battlemap'); await sleep(300);
@@ -26283,7 +26283,7 @@ for (const cls of Object.keys(rule)) for (let L = 1; L <= 20; L++) for (const sc
           ok('…and put down again: still put', Math.abs(p2[0] - p0[0]) <= 1 && Math.abs(p2[1] - p0[1]) <= 1 && tbh() === h0, JSON.stringify({ toolbar: tbh(), token: p2 }));
         }
       } catch(e){ ok('round 516 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
-      finally { B._tool = ''; if (w) w.style.width = W0; B._tokens = JSON.parse(T0); save(); B._applyViewScale(V0 || 1); B._render(); await sleep(100); }
+      finally { B._tool = ''; B._tplShape = S0; if (w) w.style.width = W0; B._tokens = JSON.parse(T0); save(); B._applyViewScale(V0 || 1); B._render(); await sleep(100); }
     }
     // -- Class features: represented, not just text ------------------------
     {
