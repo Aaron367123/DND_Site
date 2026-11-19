@@ -26486,6 +26486,70 @@ for (const cls of Object.keys(rule)) for (let L = 1; L <= 20; L++) for (const sc
         closePanel('battlemap');
       }
     }
+    // -- Round 521: an upload over 20 MB is taken (players get a 2560 px copy; 100 MB is the most), and the map is shown from the file, not from it as text — a 10 MB upload in the stage's style made every redraw 350 ms instead of 15; a shared copy the same, and the last upload's file let go --
+    if (!PLAYER){
+      const B = panelDefs.battlemap;
+      const S0 = localStorage.getItem('skt-battlemap-v1'), P0 = B._bgMapPath, I0 = _mapBgImage, W0 = B._bgMapNaturalW, H0 = B._bgMapNaturalH;
+      const putReal = window.sktMapBlobPut, readyReal = window.sktMapBlobReady, retireReal = B._retireBlob, refsReal = window.sktMapBlobRefs, fetchReal = B._fetchBlob, maxReal = B._UPLOAD_MAX_MB;
+      const keep = { ft: B._ftPerCell, cs: B._cellSize, ox: B._gridOffsetX, oy: B._gridOffsetY, cols: B._cols, rows: B._rows, sc: B._bgMapScale, lts: B._lastTokenScale, size: B._bgMapSize };
+      let keepT = null, keepD = null, keepF, fogSaved = false;
+      try {
+        openPanel('battlemap'); await sleep(400);
+        keepT = B._tokens.slice(); keepD = B._drawings.slice(); keepF = B._fog; fogSaved = true;
+        B._tokens = []; B._drawings = []; B._fog = null;
+        B._retireBlob = () => {};
+        window.sktMapBlobPut = () => Promise.resolve(true); window.sktMapBlobReady = () => true; window.sktMapBlobRefs = () => Promise.resolve({});
+        const toasts = () => [...document.querySelectorAll('#toast-host .toast-item')].map(t => t.textContent).join(' / ');
+        const noisy = async (W, H) => {
+          const c = document.createElement('canvas'); c.width = W; c.height = H;
+          const g = c.getContext('2d'), id = g.createImageData(W, H);
+          let seed = 11; const rnd = () => (seed = (seed * 16807) % 2147483647) / 2147483647 * 255;
+          for (let i = 0; i < id.data.length; i += 4){ id.data[i] = rnd(); id.data[i + 1] = rnd(); id.data[i + 2] = rnd(); id.data[i + 3] = 255; }
+          g.putImageData(id, 0, 0);
+          return await new Promise(r => c.toBlob(r, 'image/png'));
+        };
+        const up = async (blob, W) => {
+          document.querySelectorAll('#toast-host .toast-item').forEach(t => t.remove());
+          B._useImageFile(new File([blob], 'big.png', { type: 'image/png' }));
+          for (let i = 0; i < 80; i++){ await sleep(100); if (B._bgMapNaturalW === W || /MB|Could not/.test(toasts())) break; }
+        };
+        const big = await noisy(3200, 2400);
+        await up(big, 3200);
+        const src1 = _mapBgImage && _mapBgImage.src, stage = () => B._body.querySelector('#map-stage');
+        ok('a ' + Math.round(big.size / 1048576) + ' MB picture: taken (the most was 20 MB)', big.size > 21 * 1048576 && B._bgMapNaturalW === 3200 && !/the most is/.test(toasts()), Math.round(big.size / 1048576) + ' MB ' + B._bgMapNaturalW + ' ' + toasts());
+        B._render();
+        ok('…shown from the file, not from it as text in the stage’s style', /^blob:/.test(src1 || '') && stage().style.backgroundImage.length < 300, (src1 || '').slice(0, 30) + ' style ' + stage().style.backgroundImage.length);
+        // Another upload: the last one's file let go.
+        await up(await noisy(900, 700), 900);
+        let gone = false; try { await fetch(src1); } catch(e){ gone = true; }
+        ok('…and let go when the next one replaces it', gone && _mapBgImage.src !== src1);
+        // Over the most: said, in MB, with what to do.
+        B._UPLOAD_MAX_MB = 1;
+        await up(await noisy(800, 800), -1);
+        ok('a picture over the most: says its size and what to do', /\d+ MB: the most is 1 MB\. Save it smaller/.test(toasts()), toasts());
+        B._UPLOAD_MAX_MB = maxReal;
+        // A shared copy (a data URL from the database): shown from a Blob too.
+        const c = document.createElement('canvas'); c.width = 400; c.height = 300; c.getContext('2d').fillRect(0, 0, 400, 300);
+        const data = c.toDataURL('image/webp', 0.8);
+        B._fetchBlob = () => Promise.resolve(data);
+        B._bgMapPath = 'sktblob:r521'; B._bgMapSize = { w: 400, h: 300 };
+        B._loadBgFromPath('sktblob:r521', false);
+        for (let i = 0; i < 40 && !(_mapBgImage && _mapBgImage.naturalWidth === 400); i++) await sleep(50);
+        B._render();
+        ok('a shared copy: shown from a Blob of it too', _mapBgImage.naturalWidth === 400 && /^blob:/.test(_mapBgImage.src) && stage().style.backgroundImage.length < 300, _mapBgImage.src.slice(0, 30) + ' style ' + stage().style.backgroundImage.length);
+      } catch(e){ ok('round 521 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
+      finally {
+        document.querySelectorAll('#toast-host .toast-item, .ctx-menu, .modal-backdrop').forEach(t => t.remove());
+        window.sktMapBlobPut = putReal; window.sktMapBlobReady = readyReal; B._retireBlob = retireReal; window.sktMapBlobRefs = refsReal; B._fetchBlob = fetchReal; B._UPLOAD_MAX_MB = maxReal;
+        if (fogSaved) B._fog = keepF;
+        B._ftPerCell = keep.ft; B._cellSize = keep.cs; B._gridOffsetX = keep.ox; B._gridOffsetY = keep.oy; B._cols = keep.cols; B._rows = keep.rows; B._bgMapScale = keep.sc; B._lastTokenScale = keep.lts; B._bgMapSize = keep.size;
+        _mapBgImage = I0; B._bgMapPath = P0; B._bgMapNaturalW = W0; B._bgMapNaturalH = H0;
+        if (keepT){ B._tokens = keepT; B._drawings = keepD; }
+        if (S0 != null) localStorage.setItem('skt-battlemap-v1', S0);
+        try { B._render(); } catch(e){}
+        closePanel('battlemap');
+      }
+    }
     // -- Class features: represented, not just text ------------------------
     {
       try {

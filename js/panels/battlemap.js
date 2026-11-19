@@ -1732,14 +1732,24 @@ registerPanel('battlemap',{
   // A picture from this computer as the map: shown here at once, then
   // shared (_shareUploadedMap). From the map menu's Upload, or dropped on
   // the map.
+  // The most a picture can be. Players only ever get a copy of it at most
+  // 2560 px (_encodeForShare), so this is only this device's memory: what a
+  // picture costs there is its pixels, not its file. 20 MB turned away the
+  // big exports map-making programs write.
+  _UPLOAD_MAX_MB: 100,
   _useImageFile(file, done){
     if (!file) return;
-    if (file.size > 20*1024*1024){ showToast('Image too large (max 20MB)'); return; }
+    if (file.size > this._UPLOAD_MAX_MB * 1048576){ showToast('That picture is ' + Math.round(file.size / 1048576) + ' MB: the most is ' + this._UPLOAD_MAX_MB + ' MB. Save it smaller (as a JPG or WebP) and upload that.'); return; }
     showToast('Loading image…');
-    const reader = new FileReader();
-    reader.onload = ev => {
+    // Shown from the file itself (an object URL), not read into a data URL:
+    // the picture as text went into the stage's style on every redraw — a
+    // 10 MB upload made each one take 350 ms instead of 15, every token
+    // moved, until the next map.
+    const src = URL.createObjectURL(file);
+    {
       const img = new Image();
       img.onload = () => {
+        this._keepObjUrl(src, img);
         // Clear any stale stage background NOW so we don't see the old map
         // peek through while the new natural-size calculation runs. Without
         // this, replacing a 5etools map with an upload sometimes leaves the
@@ -1781,13 +1791,32 @@ registerPanel('battlemap',{
         setTimeout(() => this._autoGrid(img, file.name), 60);
       };
       // An iPhone's photos are HEIC, which Chrome and Edge can't open.
-      img.onerror = () => showToast(/\.(heic|heif)$/i.test(file.name || '')
+      img.onerror = () => { URL.revokeObjectURL(src); showToast(/\.(heic|heif)$/i.test(file.name || '')
         ? 'This browser can’t open iPhone (HEIC) pictures: save it as a JPG or PNG first.'
-        : 'Could not open that picture: is it a PNG, JPG or WebP?');
-      img.src = ev.target.result;
-    };
-    reader.onerror = () => showToast('Could not read file');
-    reader.readAsDataURL(file);
+        // (a phone can refuse a picture that big, where a computer opens it)
+        : file.size > 20 * 1048576 ? 'Could not open that picture: it may be too big for this device. Save it smaller (as a JPG or WebP) and upload that.'
+        : 'Could not open that picture: is it a PNG, JPG or WebP?'); };
+      img.src = src;
+    }
+  },
+  // Object URLs for the map's picture: the one on screen is kept, the ones
+  // before it let go (each holds its whole file in memory until it is).
+  _objUrls: [],
+  _keepObjUrl(src, img){
+    _mapBgImage = img;
+    this._objUrls = this._objUrls.filter(u => { if (u === src) return false; try { URL.revokeObjectURL(u); } catch(e){} return false; });
+    this._objUrls.push(src);
+  },
+  // A shared upload arrives as a data URL; shown from a Blob of it for the
+  // same reason (3.6 MB of text in the style on each of a phone's redraws).
+  _objUrlOfData(data){
+    const s = String(data), i = s.indexOf(','), head = s.slice(5, i);
+    if (i < 0 || !/;base64$/.test(head)) return s;
+    try {
+      const bin = atob(s.slice(i + 1)), a = new Uint8Array(bin.length);
+      for (let k = 0; k < bin.length; k++) a[k] = bin.charCodeAt(k);
+      return URL.createObjectURL(new Blob([a], { type: head.replace(/;base64$/, '') || 'image/webp' }));
+    } catch(e){ return s; }
   },
   // The new map's squares: from its file name, or found on the picture —
   // applied at once, so the DM sees whether they line up, with Undo. If
@@ -1931,7 +1960,7 @@ registerPanel('battlemap',{
   },
   // Re-encode an uploaded image small enough to share.
   //
-  // The file the DM picks can be 20MB, and it has to travel as a base64
+  // The file the DM picks can be 100MB, and it has to travel as a base64
   // string, which is a third bigger again. A battle map is looked at from
   // across the table at a fraction of its native size, so the resolution is
   // not doing any work — 2560px on the long edge is still more than a 4K
@@ -2031,12 +2060,14 @@ registerPanel('battlemap',{
     const inline = String(url || '').indexOf('data:') === 0;
     const plan = inline ? { cors: false, evict: false, bust: false }
                         : this._BG_ATTEMPTS[n];
+    const objUrl = inline ? this._objUrlOfData(url) : null, own = objUrl && objUrl.indexOf('blob:') === 0;
     const img = new Image();
     img.onload = () => {
       // A newer pick started while this one was in flight — drop it on the
       // floor rather than overwriting the map the DM actually chose.
-      if (seq !== this._bgLoadSeq) return;
+      if (seq !== this._bgLoadSeq){ if (own) URL.revokeObjectURL(objUrl); return; }
       this._bgFailedUrl = null;
+      if (own) this._keepObjUrl(objUrl, img);
       _mapBgImage = img;
       this._bgLoadedPath = this._bgMapPath;
       // A shared upload is a shrunk copy: lay it out at the original's size.
@@ -2069,6 +2100,7 @@ registerPanel('battlemap',{
       this._render();
     };
     img.onerror = () => {
+      if (own) URL.revokeObjectURL(objUrl);
       if (seq !== this._bgLoadSeq) return;
       if (!inline && n + 1 < this._BG_ATTEMPTS.length){
         this._bgAttempt(url, autoFit, seq, n + 1);
@@ -2086,7 +2118,7 @@ registerPanel('battlemap',{
     if (plan.cors) img.crossOrigin = 'anonymous';
     const go = () => {
       if (seq !== this._bgLoadSeq) return;
-      img.src = plan.bust ? url + (url.indexOf('?') === -1 ? '?' : '&') + 'cb=' + seq : url;
+      img.src = inline ? objUrl : plan.bust ? url + (url.indexOf('?') === -1 ? '?' : '&') + 'cb=' + seq : url;
     };
     if (plan.evict) this._evictCached(url).then(go, go);
     else go();
@@ -7522,7 +7554,7 @@ registerPanel('battlemap',{
 
     // Upload a custom image as the battlemap background. Session-only —
     // the image lives in `_mapBgImage` and is intentionally never persisted
-    // to localStorage (data URLs of 5–20 MB images would blow the quota).
+    // to localStorage (a picture of up to 100 MB would blow the quota).
     const uploadBtn = backdrop.querySelector('#mapsel-upload-btn');
     const uploadInput = backdrop.querySelector('#mapsel-upload-input');
     uploadBtn.addEventListener('click', ()=>uploadInput.click());
