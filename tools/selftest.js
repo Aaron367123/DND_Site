@@ -26258,6 +26258,33 @@ for (const cls of Object.keys(rule)) for (let L = 1; L <= 20; L++) for (const sc
       } catch(e){ ok('round 515 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
       finally { if (w){ w.style.width = W0; } await sleep(150); }
     }
+    // -- Round 516: picking a tool whose controls need a second toolbar row (Draw, Build) doesn't jump the map down a row — the picture stays where it was on screen --
+    if (!PLAYER){
+      const B = panelDefs.battlemap, T0 = JSON.stringify(B._tokens || []), V0 = B._viewScale;
+      let w = null, W0 = '';
+      try {
+        openPanel('battlemap'); await sleep(300);
+        w = B._body.closest('.window'); W0 = w.style.width; w.style.width = '680px'; await sleep(200);
+        const cs = B._csScreen();
+        B._tokens = [{ id: 'tk_r516', label: 'Marker', x: 8.5 * cs, y: 8.5 * cs, size: 1 }];
+        B._tool = ''; B._render(); await sleep(100);
+        B._applyViewScale(1.6); await sleep(100);
+        const sc = () => B._body.querySelector('#map-scroll');
+        sc().scrollLeft = 200; sc().scrollTop = 200; await sleep(100);
+        const at = () => { const r = B._body.querySelector('.map-token[data-tid="tk_r516"]').getBoundingClientRect(); return [Math.round(r.left), Math.round(r.top)]; };
+        const tbh = () => B._body.querySelector('.map-toolbar').offsetHeight;
+        const p0 = at(), h0 = tbh();
+        for (const tool of ['tool-draw', 'tool-build']){
+          B._body.querySelector('[data-mact="' + tool + '"]').click(); await sleep(150);
+          const p1 = at(), h1 = tbh();
+          ok(tool.slice(5) + ' picked: the toolbar ' + (h1 !== h0 ? 'grew a row' : 'kept its row') + ', and the map stayed put', Math.abs(p1[0] - p0[0]) <= 1 && Math.abs(p1[1] - p0[1]) <= 1, JSON.stringify({ toolbar: [h0, h1], token: [p0, p1] }));
+          B._body.querySelector('[data-mact="' + tool + '"]').click(); await sleep(150);
+          const p2 = at();
+          ok('…and put down again: still put', Math.abs(p2[0] - p0[0]) <= 1 && Math.abs(p2[1] - p0[1]) <= 1 && tbh() === h0, JSON.stringify({ toolbar: tbh(), token: p2 }));
+        }
+      } catch(e){ ok('round 516 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
+      finally { B._tool = ''; if (w) w.style.width = W0; B._tokens = JSON.parse(T0); save(); B._applyViewScale(V0 || 1); B._render(); await sleep(100); }
+    }
     // -- Class features: represented, not just text ------------------------
     {
       try {

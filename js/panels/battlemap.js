@@ -5745,6 +5745,10 @@ registerPanel('battlemap',{
     const oldScroll = b.querySelector('#map-scroll');
     const savedSx = oldScroll ? oldScroll.scrollLeft : 0;
     const savedSy = oldScroll ? oldScroll.scrollTop  : 0;
+    // …and where the map's view sat on screen: a tool's own controls can put
+    // the toolbar on a second row (Draw's colour, Build's fittings), and the
+    // map jumped down a row as it was picked and up as it was put down.
+    const oldViewTop = oldScroll && oldScroll.isConnected ? oldScroll.getBoundingClientRect().top : null;
     // Same trick for the settings drawer — clicking a tile (grid/fog/etc.)
     // forces a full re-render of the panel, which otherwise yanks the
     // drawer's scrollTop back to 0 every time. Snapshot + restore below.
@@ -6000,7 +6004,12 @@ registerPanel('battlemap',{
     // Restore scroll on the freshly-mounted #map-scroll so cursor-centered
     // wheel-zoom doesn't reset to top-left when the debounced re-render fires.
     const newScroll = b.querySelector('#map-scroll');
-    if (newScroll){ newScroll.scrollLeft = savedSx; newScroll.scrollTop = savedSy; }
+    if (newScroll){
+      newScroll.scrollLeft = savedSx; newScroll.scrollTop = savedSy;
+      // (the view's top moved by d: scrolled by d too, the picture stays put)
+      const d = oldViewTop == null ? 0 : newScroll.getBoundingClientRect().top - oldViewTop;
+      if (d && Math.abs(d) < 200) newScroll.scrollTop = savedSy + d;
+    }
     // Restore the settings drawer scroll position after the rebuild so
     // clicking tiles deep in the drawer doesn't fling the user back to the
     // MAP section every time.
