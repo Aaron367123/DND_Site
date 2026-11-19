@@ -22904,7 +22904,7 @@ for (const cls of Object.keys(rule)) for (let L = 1; L <= 20; L++) for (const sc
         B._drawings = [{ k: 'tpl', id: 'r403n', shape: 'note', x: 5 * cs, y: 5 * cs, title: 'r403 Under the ogre', text: 'trapdoor' }];
         B._tool = ''; B._render(); await sleep(200);
         const st = B._body.querySelector('#map-stage').getBoundingClientRect(), z = B._screenScale();
-        const px = Math.round(st.left + 5 * cs * z), py = Math.round(st.top + 5 * cs * z);
+        let px = Math.round(st.left + 5 * cs * z), py = Math.round(st.top + 5 * cs * z);
         const top = document.elementFromPoint(px, py);
         ok('a note under a monster: its pin is on top', !!top && !!top.closest('#note-layer [data-note="r403n"]'), top && top.outerHTML.slice(0, 80));
         top.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, cancelable: true, clientX: px, clientY: py, button: 0 }));
@@ -22915,6 +22915,8 @@ for (const cls of Object.keys(rule)) for (let L = 1; L <= 20; L++) for (const sc
         document.querySelectorAll('.map-note-card').forEach(c => c.remove());
         // Build → Note: the press goes through the pin, and finds the note
         B._tool = 'area'; B._tplShape = 'note'; B._render(); await sleep(150);
+        // (where the note is now: the toolbar's row count can change with the tool, and the map with it)
+        { const s2 = B._body.querySelector('#map-stage').getBoundingClientRect(); px = Math.round(s2.left + 5 * cs * z); py = Math.round(s2.top + 5 * cs * z); }
         const under = document.elementFromPoint(px, py);
         ok('…with a tool up, the pin lets the press through', !!under && !under.closest('#note-layer'));
         under.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, cancelable: true, clientX: px, clientY: py, button: 0 }));
