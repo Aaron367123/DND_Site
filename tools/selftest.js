@@ -26035,6 +26035,40 @@ for (const cls of Object.keys(rule)) for (let L = 1; L <= 20; L++) for (const sc
       } catch(e){ ok('round 506 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
       finally { B._group && B._group.clear(); B._hoverStage = HS; B._hoverAt = null; B._clip = null; B._selected = null; B._closePanel && B._closePanel(); B._tokens = JSON.parse(T0); state.combatants = JSON.parse(K0); save(); B._render(); }
     }
+    // -- Round 507: the map goes to whose turn it is — the creature whose turn came up was off the screen on a big map, and the DM went looking for it --
+    if (!PLAYER){
+      const B = panelDefs.battlemap, T0 = JSON.stringify(B._tokens || []), K0 = JSON.stringify(state.combatants || []);
+      const R0 = state.combatRound, A0 = state.activeCombatantId, V0 = B._viewScale, C0 = B._cols, W0 = B._rows;
+      try {
+        openPanel('battlemap'); await sleep(300);
+        B._cols = 40; B._rows = 30;
+        const cs = B._csScreen();
+        state.combatants = [
+          { id: 'r507a', name: 'Near Goblin', hp: 7, hpMax: 7, ac: 15, init: 15, conditions: [] },
+          { id: 'r507b', name: 'Far Ogre', hp: 59, hpMax: 59, ac: 11, init: 10, conditions: [] },
+          { id: 'r507c', name: 'Ogre Friend', hp: 59, hpMax: 59, ac: 11, init: 5, conditions: [] }];
+        B._tokens = [
+          { id: 'tk_r507a', cid: 'r507a', label: 'Near Goblin', x: 1.5 * cs, y: 1.5 * cs, size: 1 },
+          { id: 'tk_r507b', cid: 'r507b', label: 'Far Ogre', x: 36.5 * cs, y: 26.5 * cs, size: 1 },
+          { id: 'tk_r507c', cid: 'r507c', label: 'Ogre Friend', x: 35.5 * cs, y: 25.5 * cs, size: 1 }];
+        state.combatRound = 1; state.activeCombatantId = 'r507a';
+        save(); B._render(); await sleep(150);
+        B._applyViewScale(1.5); await sleep(100);
+        const sc = B._body.querySelector('#map-scroll'); sc.scrollLeft = 0; sc.scrollTop = 0; await sleep(100);
+        const inView = id => { const r = B._body.querySelector('.map-token[data-tid="' + id + '"]').getBoundingClientRect(), v = sc.getBoundingClientRect(); return r.left >= v.left && r.right <= v.right && r.top >= v.top && r.bottom <= v.bottom; };
+        ok('(zoomed in at the top corner: the ogre is off the screen)', inView('tk_r507a') && !inView('tk_r507b'));
+        state.activeCombatantId = 'r507b'; save(); await sleep(1200);
+        ok('the turn comes to the ogre: the map goes to it', inView('tk_r507b'), JSON.stringify([sc.scrollLeft, sc.scrollTop]));
+        const s1 = [sc.scrollLeft, sc.scrollTop];
+        state.activeCombatantId = 'r507c'; save(); await sleep(800);
+        ok('…the next one already in view: the map stays put', sc.scrollLeft === s1[0] && sc.scrollTop === s1[1], JSON.stringify([s1, [sc.scrollLeft, sc.scrollTop]]));
+        // A hidden token is still the DM's to see: it's gone to.
+        B._tokens[0].hidden = true; B._renderTokens(); await sleep(60);
+        state.activeCombatantId = 'r507a'; save(); await sleep(1200);
+        ok('…back round to the goblin (hidden from the players): the DM’s map goes to it', inView('tk_r507a'), JSON.stringify([sc.scrollLeft, sc.scrollTop]));
+      } catch(e){ ok('round 507 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
+      finally { B._tokens = JSON.parse(T0); state.combatants = JSON.parse(K0); state.combatRound = R0; state.activeCombatantId = A0; B._cols = C0; B._rows = W0; save(); B._applyViewScale(V0 || 1); B._render(); }
+    }
     // -- Class features: represented, not just text ------------------------
     {
       try {
@@ -30509,6 +30543,36 @@ for (const cls of Object.keys(rule)) for (let L = 1; L <= 20; L++) for (const sc
         ok('…the TV: just “Hold to ping”', hint() === 'Hold to ping', hint());
       } catch(e){ ok('round 493 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
       finally { if (me0) paSetPc(me0); paTab = keepTab; paRender(); }
+    }
+    // -- Round 508: on a player's phone the map goes to their own creature when their turn comes — not to everyone else's --
+    if (PLAYER && typeof paPc === 'function' && paPc()){
+      const B = panelDefs.battlemap, me = paPc(), T0 = JSON.stringify(B._tokens || []), K0 = JSON.stringify(state.combatants || []);
+      const FG = B._fog, R0 = state.combatRound, A0 = state.activeCombatantId, V0 = B._viewScale, C0 = B._cols, W0 = B._rows;
+      try {
+        if (typeof paSetTab === 'function') paSetTab('map'); else { const tb = [...document.querySelectorAll('button')].find(x => /^\s*map\s*$/i.test(x.textContent)); tb && tb.click(); }
+        await sleep(600);
+        B._cols = 40; B._rows = 30; B._fog = null;   // (no fog: the ogre is in sight)
+        const cs = B._csScreen();
+        state.combatants = [
+          { id: me.id, name: me.name, isPC: true, hp: 20, hpMax: 20, ac: 14, init: 15, conditions: [] },
+          { id: 'r508o', name: 'Far Ogre', hp: 59, hpMax: 59, ac: 11, init: 10, conditions: [] }];
+        B._tokens = [
+          { id: 'tk_r508me', cid: me.id, label: me.name, isPC: true, x: 36.5 * cs, y: 26.5 * cs, size: 1 },
+          { id: 'tk_r508o', cid: 'r508o', label: 'Far Ogre', x: 30.5 * cs, y: 26.5 * cs, size: 1 }];
+        state.combatRound = 1; state.activeCombatantId = 'r508o';
+        B._render(); B._syncFromCombat(); await sleep(2500);
+        // (the player has had their hands on the map: it isn't settling onto them any more, as it does at opening)
+        { const box = document.querySelector('.pa-mount'); box && box.dispatchEvent(new Event('touchstart')); }
+        B._applyViewScale(1.5); await sleep(600);
+        const SC = () => B._body.querySelector('#map-scroll'); SC().scrollLeft = 0; SC().scrollTop = 0; await sleep(100);
+        const inView = id => { const e = B._body.querySelector('.map-token[data-tid="' + id + '"]'); if (!e) return false; const r = e.getBoundingClientRect(), v = SC().getBoundingClientRect(); return r.left >= v.left && r.right <= v.right && r.top >= v.top && r.bottom <= v.bottom; };
+        ok('(zoomed in at the corner: both off the screen, both drawn)', !inView('tk_r508me') && !inView('tk_r508o') && !!B._body.querySelector('.map-token[data-tid="tk_r508o"]'), JSON.stringify({ fog: B._fog === null ? 'off' : B._fog.size, light: B._light }));
+        state.activeCombatantId = 'r508o'; state.combatRound = 2; B._syncFromCombat(); await sleep(900);
+        ok('the ogre’s turn: a player’s map stays where they had it', SC().scrollLeft === 0 && SC().scrollTop === 0, JSON.stringify([SC().scrollLeft, SC().scrollTop]));
+        state.activeCombatantId = me.id; B._syncFromCombat(); await sleep(1200);
+        ok('…their own turn: it goes to them', inView('tk_r508me'), JSON.stringify([SC().scrollLeft, SC().scrollTop]));
+      } catch(e){ ok('round 508 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
+      finally { B._fog = FG; B._tokens = JSON.parse(T0); state.combatants = JSON.parse(K0); state.combatRound = R0; state.activeCombatantId = A0; B._cols = C0; B._rows = W0; B._applyViewScale(V0 || 1); B._render(); }
     }
   }
 

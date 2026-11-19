@@ -1266,6 +1266,13 @@ registerPanel('battlemap',{
     // and whose turn it is (the ring).
     const face = p => { const f = String(p.portrait || p.icon || ''); return f.length + f.slice(-24); };
     const turn = '@' + (+state.combatRound || 0) + ':' + (state.activeCombatantId == null ? '' : state.activeCombatantId);
+    // The turn moved on: the map goes to whose it is (see _followTurn). Not
+    // the first look — opening the map mid-fight keeps its own view.
+    if (turn !== this._turnSeen){
+      const first = this._turnSeen === undefined;
+      this._turnSeen = turn;
+      if (!first) setTimeout(() => this._followTurn(), 0);
+    }
     const sig = (state.combatants || [])
       .map(c => c.id + ':' + (c.hp || 0) + ':' + (c.hpMax || 0) + ':' + (c.dead ? 1 : 0) + ':' + face(c)).join('|')
       + '#' + (state.party || []).map(p => p.id + ':' + face(p)).join('|') + turn;
@@ -3009,6 +3016,35 @@ registerPanel('battlemap',{
     clearTimeout(this._tokCardT);
     if (this._tokCardAway){ document.removeEventListener('pointerdown', this._tokCardAway, true); this._tokCardAway = null; }
     this._body && this._body.querySelectorAll('.bm-tok-card').forEach(x => x.remove());
+  },
+  // ─── The map goes to whose turn it is ─────────────────────────────────────
+  // On a big map the creature whose turn came up was often off the screen,
+  // and the DM went looking for it. When the turn moves on and its token is
+  // out of view (or at the very edge), the view slides over to put it in the
+  // middle; one already in view stays where it is. A player's phone does it
+  // for their own turn only — the DM's map, and the TV's, for every turn. A
+  // token this screen doesn't draw (hidden from the players, on another
+  // floor) isn't gone to.
+  _followTurn(){
+    const b = this._body; if (!b || this._drag) return false;
+    if (typeof state === 'undefined' || !(+state.combatRound > 0) || state.activeCombatantId == null) return false;
+    if (document.body.classList.contains('player-mode') && typeof paPc === 'function'){
+      const me = paPc();
+      if (me && me.id !== state.activeCombatantId) return false;
+    }
+    const c = (state.combatants || []).find(x => x && x.id === state.activeCombatantId);
+    const t = c && sktTokenForCombatant(this._tokens || [], c);
+    const el = t && b.querySelector('#map-stage .map-token[data-tid="' + CSS.escape(String(t.id)) + '"]');
+    const sc = b.querySelector('#map-scroll');
+    if (!el || !sc || !el.offsetParent) return false;
+    const r = el.getBoundingClientRect(), v = sc.getBoundingClientRect();
+    if (!v.width || !v.height) return false;
+    const m = Math.min(40, v.width / 6, v.height / 6);
+    if (r.left >= v.left + m && r.right <= v.right - m && r.top >= v.top + m && r.bottom <= v.bottom - m) return false;
+    const dx = (r.left + r.width / 2) - (v.left + v.width / 2), dy = (r.top + r.height / 2) - (v.top + v.height / 2);
+    const reduce = typeof matchMedia === 'function' && matchMedia('(prefers-reduced-motion: reduce)').matches;
+    sc.scrollBy({ left: Math.round(dx), top: Math.round(dy), behavior: reduce ? 'auto' : 'smooth' });
+    return true;
   },
   // Whose turn it is, in a fight that's under way: their token wears a ring.
   _isTurn(t){
