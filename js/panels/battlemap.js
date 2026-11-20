@@ -247,6 +247,17 @@ const SKT_ADV_PRINTED = {
   'adventure/SKT/096-skt10-maelstrom2.webp': [2, 10], 'adventure/SKT/097-1002.webp': [2, 10],          // Maelstrom, Level 3
   'adventure/SKT/108-skt12-lair.webp': [2, 10], 'adventure/SKT/109-1201.webp': [2, 10],                // Iymrith's Lair
 };
+// Maps whose listed square proved several printed ones (_advFit) and whose
+// legend isn't 10 ft a printed square (_advFt).
+const SKT_ADV_LEGEND_FT = {
+  'adventure/LoX/035-map-11.001-vocaths-base.webp': 20, 'adventure/LoX/036-map-11.01-vocaths-base-player.webp': 20,   // "1 Square = 20 Feet"
+  'adventure/RoT/028-map-17-1-well-of-dragons.webp': 20, 'adventure/RoT/029-map-17-1-well-of-dragons-player.webp': 20,  // "Equals 20 feet"
+};
+// Folders of adventure pictures that aren't one adventure's (see _advIdsOf).
+const SKT_SHARED_ADV_FOLDERS = {
+  DrDe: ['DrDe-DaS', 'DrDe-BD', 'DrDe-TWoO', 'DrDe-FWtVC', 'DrDe-TDoN', 'DrDe-TFV', 'DrDe-BtS', 'DrDe-SD', 'DrDe-ACfaS', 'DrDe-DotSC'],
+  FRAiF: ['FRAiF-TLLoL'], MOT: ['MOT-NSS'], ToD: ['HotDQ', 'RoT'],
+};
 // The adventures whose maps are a book's pictures (see _advIdsOf).
 const SKT_BOOK_ART_ADVS = { EGW: ['DD', 'FS', 'ToR', 'US'], SCC: ['SCC-CK', 'SCC-HfMT', 'SCC-TMM', 'SCC-ARiR'], VRGR: ['HoL'], GGR: ['AZfyT'] };
 // ─── The walls drawn on a map picture ───────────────────────────────────────
@@ -1980,7 +1991,7 @@ registerPanel('battlemap',{
     this._advGrid(path).then(g => {
       if (_mapBgImage !== img) return;
       if (g && g.hex){ this._applyAdvHex(g); this._fitGridToBg(); this._saveMap(); this._render(); showToast('Hexes matched to the map’s, from the adventure’s map.'); return; }
-      if (g){ const sc = g.w ? this._bgMapNaturalW / g.w : 1, fit = this._advFit(g, img); this._ftPerCell = g.ft || 5; this._applyGrid({ size: fit.size * sc / (g.split || 1), ox: fit.ox * sc, oy: fit.oy * sc }, 'from the adventure’s map'); return; }
+      if (g){ const sc = g.w ? this._bgMapNaturalW / g.w : 1, fit = this._advFit(g, img); this._ftPerCell = this._advFt(g, fit); this._applyGrid({ size: fit.size * sc / (g.split || 1), ox: fit.ox * sc, oy: fit.oy * sc }, 'from the adventure’s map'); return; }
       let f = null; try { f = sktDetectGrid(img); } catch(e){}
       if (!f){ showToast('No squares found on this map. Use Align and click two corners of a printed square.'); return; }
       const k = img.naturalWidth ? (this._bgMapNaturalW || img.naturalWidth) / img.naturalWidth : 1;
@@ -2034,7 +2045,7 @@ registerPanel('battlemap',{
       // draw: none, as before.
       if (g && /^hexCols(Odd|Even)$/.test(g.type) && +g.size > 0) return { hex: true, odd: g.type === 'hexColsOdd', size: +g.size, gs, ox: (+g.offsetX || 0) / gs, oy: (+g.offsetY || 0) / gs, w: +e.w || 0, ft };
       const pr = SKT_ADV_PRINTED[path];
-      return g && g.type === 'square' && +g.size > 0 ? { size: +g.size, alt: gs !== 1 ? +g.size / gs : null, ox: (+g.offsetX || 0) / gs, oy: (+g.offsetY || 0) / gs, w: +e.w || 0, ft: pr ? pr[1] : ft, split: pr ? pr[0] : 1 } : null;
+      return g && g.type === 'square' && +g.size > 0 ? { size: +g.size, alt: gs !== 1 ? +g.size / gs : null, ox: (+g.offsetX || 0) / gs, oy: (+g.offsetY || 0) / gs, w: +e.w || 0, ft: pr ? pr[1] : ft, split: pr ? pr[0] : 1, dist: +g.distance > 0, path } : null;
     });
   },
   // The adventures a map's picture may be from, to read its grid and its
@@ -2043,12 +2054,14 @@ registerPanel('battlemap',{
   // Ravenloft's, Ravnica's), which had no grid at all — the adventure whose
   // list has it, else the ones that borrow that book's.
   _advIdsOf(path){
-    const p = String(path || ''), m = /^adventure\/([^/]+)\//.exec(p);
-    if (m) return [m[1]];
-    const by = this._mapsByAdv || {};
+    const p = String(path || ''), by = this._mapsByAdv || {};
     for (const id in by) if ((by[id] || []).some(x => x.path === p)) return [id];
-    const b = /^book\/([^/]+)\//.exec(p);
-    return (b && SKT_BOOK_ART_ADVS[b[1]]) || [];
+    const m = /^(adventure|book)\/([^/]+)\//.exec(p);
+    if (!m) return [];
+    // (an anthology's adventures share one folder: Dragon Delves' ten keep
+    // their 42 maps in adventure/DrDe/ — none had a grid either)
+    if (m[1] === 'adventure') return SKT_SHARED_ADV_FOLDERS[m[2]] || [m[2]];
+    return SKT_BOOK_ART_ADVS[m[2]] || [];
   },
   // Once the picked map's picture is in (its size is what the grid scales
   // by): our squares on its squares. Not if another map has been picked.
@@ -2134,7 +2147,28 @@ registerPanel('battlemap',{
     }
     const found = f.size / sc;
     const size = g.alt && Math.abs(found - g.alt) < Math.abs(found - g.size) && Math.abs(found - g.alt) / g.alt < 0.06 ? g.alt : g.size;
-    return Math.abs(found - size) / size < 0.04 ? { size: found, ox: f.ox / sc, oy: f.oy / sc } : { size, ox: g.ox, oy: g.oy };
+    if (Math.abs(found - size) / size < 0.04) return { size: found, ox: f.ox / sc, oy: f.oy / sc };
+    // The printed squares a half, third or quarter of the listed one, and
+    // the picture's lines at each of those parts of it too: the listed
+    // square is several printed ones (Dungeon of the Mad Mage's levels,
+    // Quests from the Infinite Staircase, ~50 maps of 1,267 swept — every
+    // one confirmed by its lines; their legends say 10 ft a printed square).
+    // Not where SKT_ADV_PRINTED already says so (split).
+    if (!(g.split > 1)) for (const m of [2, 3, 4]){
+      if (Math.abs(found * m - g.size) / g.size >= 0.04) continue;
+      let c = null; try { c = sktSubLines(img, g.size * sc, g.ox * sc, g.oy * sc, m); } catch(e){}
+      if (c != null && c >= 0.4) return { size: found, ox: f.ox / sc, oy: f.oy / sc, parts: m };
+    }
+    return { size, ox: g.ox, oy: g.oy };
+  },
+  // How far a square is, once the fit's chosen: the data's distance — or,
+  // where the listed square proved several printed ones (fit.parts), the
+  // legend's: a distance given is the listed square's, shared out; none
+  // given, 10 ft (49 of the 51 legends read), 20 for the two that say so.
+  _advFt(g, fit){
+    if (!(fit && fit.parts > 1)) return g.ft || 5;
+    if (g.dist) return g.ft / fit.parts;
+    return SKT_ADV_LEGEND_FT[g.path] || 10;
   },
   _useAdvGrid(path, g, tries){
     if (this._bgMapPath !== path) return;
@@ -2149,7 +2183,7 @@ registerPanel('battlemap',{
       // (the printed squares, where the listed one is several: SKT_ADV_PRINTED)
       const sc = g.w ? this._bgMapNaturalW / g.w : 1, sz = Math.max(8, fit.size * sc / (g.split || 1));
       this._cellSize = sz; this._gridOffsetX = this._wrapOff(fit.ox * sc, sz); this._gridOffsetY = this._wrapOff(fit.oy * sc, sz);
-      this._ftPerCell = g.ft || 5;
+      this._ftPerCell = this._advFt(g, fit);
     }
     this._fitGridToBg(); this._pullTokensOnto(); this._saveSettling(); this._render(); if (g) this._fitMapToView();
   },

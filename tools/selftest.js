@@ -26806,6 +26806,55 @@ for (const cls of Object.keys(rule)) for (let L = 1; L <= 20; L++) for (const sc
         closePanel('battlemap');
       }
     }
+    // -- Round 526: an adventure map whose listed square proves 2-4 printed ones (the squares found, and the lines at each part) gets the printed squares and its legend's feet — Dungeon of the Mad Mage's levels read 5 ft for three 10 ft squares; and Dragon Delves' maps (one folder, ten adventures) get their grid at all --
+    if (!PLAYER){
+      const B = panelDefs.battlemap;
+      const S0 = localStorage.getItem('skt-battlemap-v1'), P0 = B._bgMapPath, I0 = _mapBgImage, W0 = B._bgMapNaturalW, H0 = B._bgMapNaturalH;
+      const keep = { ft: B._ftPerCell, cs: B._cellSize, ox: B._gridOffsetX, oy: B._gridOffsetY, cols: B._cols, rows: B._rows, gt: B._gridType, sg: B._showGrid, lp: B._bgLoadedPath, sc: B._bgMapScale, ga: B._gridAuto };
+      try {
+        const SD = 'adventure/DrDe/146-map-08.01-shivering-deaths-lair-dm.webp';
+        ok('Dragon Delves’ pictures: read in its adventures’ data (Shivering Death is DrDe-SD’s)', B._advIdsOf(SD).indexOf('DrDe-SD') >= 0, JSON.stringify(B._advIdsOf(SD)));
+        const gsd = await B._advGrid(SD);
+        ok('…and its grid found there', !!gsd && gsd.size === 138, JSON.stringify(gsd && { size: gsd.size }));
+        // a picture printed in squares of 20, its data listing 60
+        const lined = (step) => { const c = document.createElement('canvas'); c.width = 900; c.height = 900; const x = c.getContext('2d'); x.fillStyle = '#e8e2d0'; x.fillRect(0, 0, 900, 900); x.strokeStyle = '#555'; x.lineWidth = 2; for (let v = 0; v <= 900; v += step){ x.beginPath(); x.moveTo(v, 0); x.lineTo(v, 900); x.moveTo(0, v); x.lineTo(900, v); x.stroke(); } const i = new Image(); return new Promise(r => { i.onload = () => r(i); i.src = c.toDataURL('image/png'); }); };
+        const p20 = await lined(20);
+        const g60 = { size: 60, alt: null, ox: 0, oy: 0, w: 900, ft: 5, split: 1, dist: false, path: 'adventure/WDMM/x.webp' };
+        const fit = B._advFit(g60, p20);
+        ok('Squares of 20 found where 60 is listed, lines at each third: three printed squares a listed one', fit.parts === 3 && Math.abs(fit.size - 20) < 0.5, JSON.stringify(fit));
+        ok('…10 ft each (49 of 51 legends), not 5', B._advFt(g60, fit) === 10, B._advFt(g60, fit));
+        ok('…20 where the legend says so (Vocath’s Base)', B._advFt(Object.assign({}, g60, { path: 'adventure/LoX/035-map-11.001-vocaths-base.webp' }), fit) === 20, '');
+        ok('…a listed square with its own distance shares it out (30 ft → 10 a printed square)', B._advFt(Object.assign({}, g60, { dist: true, ft: 30 }), fit) === 10, '');
+        const SL = window.sktSubLines;
+        let noLines;
+        try { window.sktSubLines = () => 0.1; noLines = B._advFit(g60, p20); } finally { window.sktSubLines = SL; }
+        ok('…squares of 20 found but no lines at the thirds of the listed square: as listed', !noLines.parts && noLines.size === 60, JSON.stringify(noLines));
+        ok('…not again where Storm King’s Thunder’s table already splits it', !B._advFit(Object.assign({}, g60, { split: 3 }), p20).parts, '');
+        const p60 = await lined(60);
+        const f60 = B._advFit(g60, p60);
+        ok('A picture printed in the listed 60s: as listed, its 5 ft', !f60.parts && Math.abs(f60.size - 60) < 1 && B._advFt(g60, f60) === 5, JSON.stringify(f60));
+        // picked: the grid and the footer
+        openPanel('battlemap'); await sleep(300);
+        const PATH = 'adventure/LoX/035-map-11.001-vocaths-base.webp';
+        _mapBgImage = p20; B._bgMapNaturalW = 900; B._bgMapNaturalH = 900; B._bgMapScale = 1;
+        B._bgMapPath = PATH; B._bgLoadedPath = PATH; B._gridType = 'square'; B._showGrid = true;
+        B._useAdvGrid(PATH, Object.assign({}, g60, { path: PATH }), 0); await sleep(150);
+        const foot = (B._body.querySelector('.map-footer') || B._body).textContent;
+        ok('…picked: squares of 20, and the footer says 1 sq = 20 ft', Math.abs(B._cellSize - 20) < 0.5 && /1 sq = 20 ft/.test(foot), B._cellSize + ' · ' + foot.slice(0, 60));
+        B._cellSize = 60; B._ftPerCell = 5;
+        const realAdv = B._advGrid; B._advGrid = () => Promise.resolve(Object.assign({}, g60, { path: PATH }));
+        try { B._matchGrid(); await sleep(400); } finally { B._advGrid = realAdv; }
+        ok('…Match gives the same', Math.abs(B._cellSize - 20) < 0.5 && B._ftPerCell === 20, B._cellSize + ' px, ' + B._ftPerCell + ' ft');
+      } catch(e){ ok('round 526 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
+      finally {
+        document.querySelectorAll('#toast-host .toast-item').forEach(t => t.remove());
+        B._ftPerCell = keep.ft; B._cellSize = keep.cs; B._gridOffsetX = keep.ox; B._gridOffsetY = keep.oy; B._cols = keep.cols; B._rows = keep.rows; B._gridType = keep.gt; B._showGrid = keep.sg; B._bgLoadedPath = keep.lp; B._bgMapScale = keep.sc; B._gridAuto = keep.ga;
+        _mapBgImage = I0; B._bgMapPath = P0; B._bgMapNaturalW = W0; B._bgMapNaturalH = H0;
+        if (S0 != null) localStorage.setItem('skt-battlemap-v1', S0);
+        try { B._render(); } catch(e){}
+        closePanel('battlemap');
+      }
+    }
     // -- Class features: represented, not just text ------------------------
     {
       try {
