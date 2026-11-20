@@ -3367,13 +3367,15 @@
           d._loadBgFromPath('sktblob:e2etest', false);
           await sleep(500);
           ok('map: the player fetches the blob the path names', askedFor === 'e2etest', String(askedFor));
+          // (shown from a Blob of it, not the text itself: see _objUrlOfData)
+          const shownType = _mapBgImage && /^blob:/.test(_mapBgImage.src) ? (await (await fetch(_mapBgImage.src)).blob()).type : null;
           ok('map: and the fetched image becomes the map background',
-             !!_mapBgImage && String(_mapBgImage.src).indexOf('data:image/gif') === 0,
-             _mapBgImage ? String(_mapBgImage.src).slice(0, 40) : 'no image');
+             !!_mapBgImage && _mapBgImage.naturalWidth === 1 && shownType === 'image/gif',
+             _mapBgImage ? String(_mapBgImage.src).slice(0, 40) + ' ' + shownType : 'no image');
           const st = document.createElement('div');
           d._applyBg(st, 100, 100);
           ok('map: which is what the stage ends up showing',
-             st.style.backgroundImage.indexOf('data:image/gif') !== -1,
+             !!_mapBgImage && st.style.backgroundImage.indexOf(_mapBgImage.src) !== -1,
              st.style.backgroundImage.slice(0, 80));
         } finally {
           window.sktMapBlobGet = realGet;
@@ -3464,7 +3466,7 @@
           document.querySelectorAll('.modal-backdrop').forEach(b => b.remove());
           ok('map: loading the saved map restores its background',
              d._bgMapPath === 'sktblob:' + c && !!_mapBgImage
-             && String(_mapBgImage.src).indexOf('data:image/gif') === 0,
+             && _mapBgImage.naturalWidth === 1 && /^blob:/.test(String(_mapBgImage.src)),
              String(d._bgMapPath));
 
           // Deleting the saved map releases its upload — once it is no
