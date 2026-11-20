@@ -10944,7 +10944,7 @@
         ok('settings: an old "hide the dock" choice can\u2019t hide Settings', !document.body.classList.contains('hide-dock') && id('settings-btn').getClientRects().length > 0);
         applyUiHide(state.settings.uiHide || {});
         const groups = [...document.querySelectorAll('#settings-drawer details.drawer-group')];
-        ok('settings: Data starts closed, the rest open', groups.length >= 4 && groups.every(g => g.open === !/Data/.test(g.querySelector('.drawer-group-title').textContent)));
+        ok('settings: Data and Table rules start closed, the rest open', groups.length >= 4 && groups.every(g => g.open === !/Data|Table rules/.test(g.querySelector('.drawer-group-title').textContent)));
         ok('settings: the about box no longer offers a changelog', (openAbout(), await sleep(30), !document.querySelector('#onb-about-backdrop #about-open-changelog')));
         document.getElementById('onb-about-backdrop')?.remove();
         // Copy player link: this campaign's link.
@@ -13488,8 +13488,9 @@ for (const cls of Object.keys(rule)) for (let L = 1; L <= 20; L++) for (const sc
         document.querySelector('#cs-root [data-cs-tab="actions"]').click(); await sleep(250);
         const a1 = arrows(); await shoot();
         ok('ammunition: with the campaign setting off, it doesn’t — and the row says the arrows aren’t counted', !sktAmmoOn() && arrows() === a1 && /not counted/.test(document.querySelector('#cs-root').textContent), a1 + ' → ' + arrows());
-        delete state.settings.useAmmunition; save(); csRender(); await sleep(150);
-        ok('ammunition: and back on with the setting cleared', sktAmmoOn() && !/not counted/.test(document.querySelector('#cs-root').textContent));
+        // (switched back on as Settings → Table rules does — the rule is kept there now)
+        sktSetRule('ammo', true); csRender(); await sleep(150);
+        ok('ammunition: and back on with the setting cleared', state.settings.useAmmunition === undefined && sktAmmoOn() && !/not counted/.test(document.querySelector('#cs-root').textContent));
         // Potions: the magic catalogue loads for them, and Drink heals and uses one up.
         let g = 0; while (!CS.magic && g++ < 40) await sleep(100);
         csRender(); await sleep(200);
