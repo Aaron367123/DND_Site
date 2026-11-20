@@ -208,7 +208,30 @@ function focusPanel(id){
 // at top 0 — it ALWAYS intersected the toolbar and the fade was permanently
 // on, leaving the toolbar ghosted at 20% forever. Only the buttons need
 // protecting; the title text underneath is not interactive.
+// The zoom buttons in the corner: kept off the windows. They sat over the
+// Battle Map's footer — its hint, the fight's "Moved 15 / 30 ft" and its
+// Take back button — and the fade meant for that never ran (it came after
+// the floating toolbar's check, which returns early with the tools in the
+// dock). A window under the bottom-right corner: they move to the
+// bottom-left, beside the dock; under both: faint, and clicks go through
+// them to the window.
+function _updateZoomCorner(){
+  const zc = document.querySelector('.zoom-controls'); if (!zc) return;
+  zc.style.left = ''; zc.style.right = '';
+  const wins = [...document.querySelectorAll('.window:not(.minimized)')].map(w => w.getBoundingClientRect());
+  const hit = z => z.width > 0 && wins.some(b => b.right > z.left && b.left < z.right && b.bottom > z.top && b.top < z.bottom);
+  let under = hit(zc.getBoundingClientRect());
+  if (under){
+    const dock = document.querySelector('.panel-dock'), d = dock ? dock.getBoundingClientRect() : null;
+    zc.style.left = ((d && d.width ? d.right : 0) + 14) + 'px'; zc.style.right = 'auto';
+    under = hit(zc.getBoundingClientRect());
+    if (under){ zc.style.left = ''; zc.style.right = ''; }
+  }
+  document.body.classList.toggle('zoom-occluded', under);
+}
+window._updateZoomCorner = _updateZoomCorner;
 function _updateToolbarOcclusion(){
+  _updateZoomCorner();
   const tb = document.getElementById('float-toolbar');
   if (!tb) return;
   const r = tb.getBoundingClientRect();
@@ -232,18 +255,6 @@ function _updateToolbarOcclusion(){
     }
   });
   document.body.classList.toggle('toolbar-occluded', occluded);
-  // The zoom buttons in the corner the same way: faded while a window sits
-  // under them (they covered the Battle Map's and the Encounter Builder's
-  // bottom lines), back on hover.
-  const zc = document.querySelector('.zoom-controls');
-  if (zc){
-    const z = zc.getBoundingClientRect();
-    const under = z.width > 0 && [...document.querySelectorAll('.window:not(.minimized)')].some(w => {
-      const b = w.getBoundingClientRect();
-      return b.right > z.left && b.left < z.right && b.bottom > z.top && b.top < z.bottom;
-    });
-    document.body.classList.toggle('zoom-occluded', under);
-  }
 }
 window._updateToolbarOcclusion = _updateToolbarOcclusion;
 

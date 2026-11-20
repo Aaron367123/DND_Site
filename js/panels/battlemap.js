@@ -6378,6 +6378,13 @@ registerPanel('battlemap',{
     // outside the scrollable map area so the map keeps panning/zooming without
     // affecting the controls.
     html+='<div class="bm-main" style="flex:1;display:flex;min-height:0;overflow:hidden;position:relative">'
+      // No map yet (a new campaign, a map removed): say where one comes from.
+      // It was a blank grid and an icon-only button among fifteen. The DM's;
+      // gone once a map is on, or for this visit once they'd rather the grid.
+      + (!this._bgMapPath && !_mapBgImage && !document.body.classList.contains('player-mode') && !this._noMapHintOff
+        ? '<div class="bm-nomap" role="note"><strong>No map yet</strong><span>An adventure’s map, one you’ve saved, or a picture of your own.</span>'
+          + '<div class="bm-nomap-acts"><button class="btn primary" data-mact="pick-map">Choose a map…</button><button class="btn" data-nomap-off>Play on the grid</button></div></div>'
+        : '')
       +'<div id="map-scroll" style="flex:1;overflow:auto;background:#111;position:relative;'
         + (this._tokensVisible?'':'--bm-hide-tokens:1;')+'">'
       // Two wrappers, deliberately. #map-sizer carries the SCALED layout size
@@ -6598,6 +6605,8 @@ registerPanel('battlemap',{
     if(this._tool==='move') this._tool='';
 
     // Toolbar actions
+    // (the no-map note's "Play on the grid": gone for this visit)
+    const nmo = b.querySelector('[data-nomap-off]'); if (nmo) nmo.addEventListener('click', () => { this._noMapHintOff = true; this._render(); });
     b.querySelectorAll('[data-mact]').forEach(btn=>btn.addEventListener('click',e=>{
       e.stopPropagation();
       const act=btn.dataset.mact;

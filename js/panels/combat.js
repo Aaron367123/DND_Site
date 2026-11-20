@@ -647,7 +647,7 @@ registerPanel('combat',{
       ${inCombat
         ? `<div class="combatant-list${compact?' compact':''}${grouped?' grouped':''}${(state.settings&&state.settings.combatHpBar===false)?' no-hp-bar':''}" id="combat-list">`+this._renderCombatants()+'</div>'
         : emptyState({ icon:'i-combat', title:'No one in the fight yet',
-            hint:'Drag a party member or a monster here, or use the + and paw buttons above.' })}
+            hint:'＋ Add above brings in the party and the monsters — or drag them in from the Party Tracker and the Bestiary.' })}
 
       ${inCombat ? this._renderLog() : ''}
 
@@ -1509,9 +1509,11 @@ registerPanel('combat',{
     const r = anchor ? anchor.getBoundingClientRect() : { left: 100, bottom: 100 };
     const inFight = new Set(state.combatants.map(c => c.id));
     const items = [{ label: '🐾 Monsters…', onClick: () => this._openMonsterPicker() }];
-    state.party.forEach((p, pi) => {
-      if (!p.foe && !inFight.has(p.id)) items.push({ label: '＋ ' + p.name, onClick: () => this._addPartyToCombat(pi) });
-    });
+    // The party, all at once: a fight's start was one trip to this menu
+    // for each of them.
+    const out = state.party.map((p, pi) => (!p.foe && !inFight.has(p.id)) ? pi : -1).filter(pi => pi >= 0);
+    if (out.length > 1) items.push({ label: '＋ The whole party (' + out.length + ')', onClick: () => { out.forEach(pi => { if (state.party[pi] && !state.combatants.some(c => c.isPC && c.id === state.party[pi].id)) this._addPartyToCombat(pi); }); showToast(out.length + ' joined the fight'); } });
+    out.forEach(pi => items.push({ label: '＋ ' + state.party[pi].name, onClick: () => this._addPartyToCombat(pi) }));
     items.push({ label: '＋ Other — no stat block…', onClick: () => this._addPrompt() });
     if (typeof showContextMenu === 'function') showContextMenu(r.left, r.bottom + 4, items);
   },

@@ -27211,6 +27211,77 @@ for (const cls of Object.keys(rule)) for (let L = 1; L <= 20; L++) for (const sc
         save();
       }
     }
+    // -- Round 530: the walk-through — the zoom buttons move off a window (they sat on the Battle Map's footer and its Moved/Take back, and the fade meant for that never ran); a map-less battle map says where a map comes from; ＋ Add brings in the whole party at once --
+    if (!PLAYER){
+      const K0 = JSON.stringify(state.combatants), RD0 = state.combatRound, B = panelDefs.battlemap;
+      const P0 = B._bgMapPath, I0 = _mapBgImage, NH0 = B._noMapHintOff;
+      const zc = document.querySelector('.zoom-controls');
+      const wins = () => [...document.querySelectorAll('.window:not(.minimized)')].map(w => w.getBoundingClientRect());
+      const over = r => wins().some(b => b.right > r.left && b.left < r.right && b.bottom > r.top && b.top < r.bottom);
+      try {
+        // the zoom buttons
+        if (zc && zc.getClientRects().length){
+          const w = document.createElement('div'); w.className = 'window'; w.style.cssText = 'position:fixed;right:0;bottom:0;width:400px;height:200px;z-index:1';
+          document.body.appendChild(w);
+          try {
+            _updateToolbarOcclusion(); await sleep(50);
+            const r = zc.getBoundingClientRect();
+            ok('a window under the zoom buttons’ corner: they move to the free one', !over(r) && r.left < innerWidth / 2 && !document.body.classList.contains('zoom-occluded'), JSON.stringify([Math.round(r.left), Math.round(r.top)]));
+            w.style.display = 'none'; _updateToolbarOcclusion(); await sleep(50);
+            const rb = zc.getBoundingClientRect();
+            ok('…that window gone: back in their corner', rb.right > innerWidth - 40, JSON.stringify([Math.round(rb.right), innerWidth]));
+            w.style.display = ''; _updateToolbarOcclusion(); await sleep(50);
+            const w2 = document.createElement('div'); w2.className = 'window'; w2.style.cssText = 'position:fixed;left:0;bottom:0;width:' + (innerWidth / 2) + 'px;height:200px;z-index:1';
+            document.body.appendChild(w2);
+            try {
+              _updateToolbarOcclusion(); await sleep(50);
+              ok('…windows under both: faint, and clicks go through to the window', document.body.classList.contains('zoom-occluded') && getComputedStyle(zc).pointerEvents === 'none', getComputedStyle(zc).pointerEvents);
+            } finally { w2.remove(); }
+          } finally { w.remove(); _updateToolbarOcclusion(); }
+          const r = zc.getBoundingClientRect();
+          ok('…no window under the corner: back in it', r.right > innerWidth - 40 && !document.body.classList.contains('zoom-occluded'), JSON.stringify([Math.round(r.right), innerWidth]));
+        } else ok('the zoom buttons (hidden on this screen)', true);
+        // no map
+        openPanel('battlemap'); await sleep(300);
+        B._bgMapPath = null; _mapBgImage = null; B._noMapHintOff = false; B._render(); await sleep(100);
+        const nm = () => B._body.querySelector('.bm-nomap');
+        ok('no map: the battle map says where one comes from', !!nm() && /No map yet/.test(nm().textContent) && !!nm().querySelector('[data-mact="pick-map"]'), nm() && nm().textContent);
+        let picked = 0; const OP = B._openMapPicker; B._openMapPicker = () => { picked++; };
+        try { nm().querySelector('[data-mact="pick-map"]').click(); await sleep(50); } finally { B._openMapPicker = OP; }
+        ok('…Choose a map… opens the picker', picked === 1, picked);
+        nm().querySelector('[data-nomap-off]').click(); await sleep(80);
+        ok('…Play on the grid: gone', !nm(), '');
+        B._noMapHintOff = false; B._bgMapPath = 'adventure/SKT/073-skt07-svardborg.webp'; B._render(); await sleep(80);
+        ok('…and never with a map on', !nm(), '');
+        document.body.classList.add('player-mode'); B._bgMapPath = null; B._render(); await sleep(80);
+        const plSees = !!nm(); document.body.classList.remove('player-mode');
+        ok('…nor on a player’s screen', !plSees, '');
+        // the whole party
+        state.combatants = []; state.combatRound = 0;
+        openPanel('combat'); await sleep(200); const C = panelDefs.combat; C._render(); await sleep(80);
+        const add = C._body.querySelector('[data-act="add-menu"]'); add.click(); await sleep(150);
+        const it = [...document.querySelectorAll('.ctx-menu .ctx-menu-item')].find(x => /The whole party/.test(x.textContent));
+        const n = state.party.filter(p => !p.foe).length;
+        ok('＋ Add: “The whole party (' + n + ')”', !!it && it.textContent.includes('(' + n + ')'), it && it.textContent);
+        if (it) it.click(); await sleep(150);
+        ok('…all of them in the fight, once each', state.combatants.filter(c => c.isPC).length === n && new Set(state.combatants.map(c => c.id)).size === state.combatants.length, state.combatants.length);
+        document.querySelectorAll('.ctx-menu').forEach(m => m.remove());
+        add.click(); await sleep(150);
+        ok('…not offered again with everyone in', ![...document.querySelectorAll('.ctx-menu .ctx-menu-item')].some(x => /The whole party/.test(x.textContent)), '');
+        document.querySelectorAll('.ctx-menu').forEach(m => m.remove());
+        state.combatants = []; C._render(); await sleep(50);
+        ok('the empty fight points at ＋ Add (there are no paw buttons)', /＋ Add above/.test(C._body.textContent) && !/paw buttons/.test(C._body.textContent), '');
+      } catch(e){ ok('round 530 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
+      finally {
+        document.body.classList.remove('player-mode');
+        document.querySelectorAll('.ctx-menu').forEach(m => m.remove());
+        document.querySelectorAll('#toast-host .toast-item').forEach(t => t.remove());
+        state.combatants = JSON.parse(K0); state.combatRound = RD0;
+        B._bgMapPath = P0; _mapBgImage = I0; B._noMapHintOff = NH0;
+        try { B._render(); panelDefs.combat._render(); } catch(e){}
+        save();
+      }
+    }
     // -- Class features: represented, not just text ------------------------
     {
       try {
