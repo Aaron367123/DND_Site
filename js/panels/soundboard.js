@@ -233,7 +233,9 @@ registerPanel('soundboard', {
           +'<div class="sb-tile-pct">'+pct+'%</div>'
           +'<input type="range" class="sb-tile-vol" data-vol="'+s.id+'" min="0" max="1" step="0.01" value="'+tv+'">'
           +'<div class="sb-tile-foot">'
-            +'<span class="sb-loop-icon" title="Looping">∞</span>'
+            // Loop it: a button on every sound. It was only a right-click (or
+            // a held finger) — and Scenes appear only once something loops.
+            +'<button class="sb-loop-icon" data-loop="'+s.id+'" aria-pressed="'+(isLoop?'true':'false')+'" title="'+(isLoop?'Looping — click to stop':'Play it on a loop (or right-click the sound)')+'">∞</button>'
             +'<span class="sb-source-badge sb-'+s.source+'">'+(s.source==='shared'?'shared':'yours')+'</span>'
             +(s.source==='personal' ? '<button class="sb-x" data-del="'+s.id+'" title="Remove">×</button>' : '<span class="sb-foot-spacer"></span>')
           +'</div>'
@@ -280,6 +282,7 @@ registerPanel('soundboard', {
         // toggle) — those have their own handlers above.
         if(e.target.dataset.del) return;
         if(e.target.closest('[data-ambient]')) return;
+        if(e.target.closest('[data-loop]')) return;
         const sid=btn.dataset.sid;
         if(_sb.playing[sid]){ this._stop(sid); this._render(); }
         else this._play(sid,false);
@@ -331,6 +334,14 @@ registerPanel('soundboard', {
 
     // Ambient toggle per tile — flips the ambient flag and persists. Doesn't
     // open/close the tile or interfere with click-to-play.
+    // ∞: on a loop, or off it (a sound playing once starts over looping).
+    b.querySelectorAll('[data-loop]').forEach(el => el.addEventListener('click', e => {
+      e.stopPropagation();
+      const sid = el.dataset.loop, p = _sb.playing[sid];
+      if (p && p.loop){ this._stop(sid); this._render(); return; }
+      if (p) this._stop(sid);
+      this._play(sid, true);
+    }));
     b.querySelectorAll('[data-ambient]').forEach(el => el.addEventListener('click', e => {
       e.stopPropagation();
       const id = el.dataset.ambient;

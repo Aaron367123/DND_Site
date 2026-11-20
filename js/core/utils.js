@@ -769,8 +769,20 @@ function showHelpOverlay(){
       ['Ctrl + V',         'Paste a copy where the pointer is (again for more)'],
       ['Delete',           'Remove the selected token, or the group'],
       ['Alt + drop',       'Stack a token on another'],
+      ['Shift + drop',     'Snap the other way for this drop (on the grid, or off it)'],
       ['Esc',              'Put the tool down, let go of the token or group'],
       ['Hold on the map',  'Ping a spot for everyone'],
+    ]},
+    // The menus a right-click (or a held finger) opens — each has a ⋯ or a
+    // button too now, but a DM who knows the click is faster.
+    { group: 'Right-click (or hold) for more', items: [
+      ['A combat card',    'Conditions, surprised, exhaustion, legendary and lair actions, max HP'],
+      ['A token on the map', 'Its hit points, conditions, hide, copy, delete'],
+      ['A door’s handle',  'Open or close, lock or unlock it, make it a wall'],
+      ['A sound',          'Play it on a loop'],
+      ['A loot row',       'Sell it, split one off, move it'],
+      ['A bestiary card',  'Edit its HP, AC or CR, move it to a folder'],
+      ['Inspiration’s Grant', 'Award it with a reason'],
     ]},
     { group: 'Workspace zoom', items: [
       ['Ctrl + Wheel',     'Zoom centered on cursor'],

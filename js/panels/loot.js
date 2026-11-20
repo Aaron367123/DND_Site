@@ -938,6 +938,7 @@ registerPanel('loot',{
       <input type="text" class="loot-val" value="${esc(item.value||'')}" data-lfield="value" data-li="${i}" placeholder="gp val" title="Value">
       ${weightInp}
       ${this._assignSelect(item, i)}
+      <button class="btn icon-btn loot-more" data-lact="menu" data-li="${i}" title="Sell, split or move it…" aria-label="Sell, split or move ${esc(item.name)}">⋯</button>
       <button class="btn icon-btn danger" data-lact="del" data-li="${i}" title="Remove">×</button>
     </div>`;
   },
@@ -1366,6 +1367,11 @@ registerPanel('loot',{
         this._undoable('Removed ' + it.name + (it.qty > 1 ? ' ×' + it.qty : ''), () => { this._loot.items.splice(i,1); });
       } else if (el.dataset.lact==='info'){
         this._openItemDetail(i);
+      } else if (el.dataset.lact==='menu'){
+        // (the row's menu: right-click or a held finger reached it, and only
+        // a tooltip said so — which a phone never shows)
+        const r = el.getBoundingClientRect();
+        this._rowMenu(i, r.left, r.bottom + 2);
       }
     }));
 

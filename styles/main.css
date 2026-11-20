@@ -3255,6 +3255,10 @@ body.player-mode #campaign-btn{display:none !important}
 /* Removal X — visible at low opacity by default so it's discoverable on touch
    devices that lack a hover state; brightens on card hover for desktop. */
 .bestiary-card-x{position:absolute;top:3px;right:3px;width:18px;height:18px;border-radius:50%;background:rgba(0,0,0,.55);border:none;color:#fff;cursor:pointer;font-size:var(--fs-md);line-height:1;display:flex;align-items:center;justify-content:center;opacity:.35;transition:opacity .12s,background .12s;padding:0}
+.bestiary-card-more{position:absolute;top:3px;left:3px;width:18px;height:18px;border-radius:50%;background:rgba(0,0,0,.55);border:none;color:#fff;cursor:pointer;font-size:var(--fs-md);line-height:1;display:flex;align-items:center;justify-content:center;opacity:.35;transition:opacity .12s,background .12s;padding:0}
+.bestiary-card:hover .bestiary-card-more{opacity:1}
+@media (hover:none){ .bestiary-card-more{opacity:.85} }
+.bestiary-card-more:hover{background:rgba(0,0,0,.8)}
 .bestiary-card:hover .bestiary-card-x{opacity:1}
 @media (hover:none){ .bestiary-card-x{opacity:.85} }
 .bestiary-card-x:hover{background:rgba(194,84,80,.85)}
@@ -3642,8 +3646,9 @@ body.player-mode .loot-sumbar > span[style*="flex:1"]{display:none}
 .sb-tile-pct{font-size:var(--fs-xs);color:var(--text-dim);line-height:1}
 .sb-tile-vol{width:100%;margin:6px 0 8px;cursor:pointer}
 .sb-tile-foot{display:flex;align-items:center;justify-content:space-between;gap:6px;margin-top:auto}
-.sb-loop-icon{font-size:var(--fs-xl);color:var(--text-dim);visibility:hidden;line-height:1}
-.sb-btn.loop-on .sb-loop-icon{visibility:visible;color:var(--success)}
+.sb-loop-icon{font-size:var(--fs-xl);color:var(--text-dim);line-height:1;background:none;border:0;padding:0 4px;cursor:pointer;opacity:.45}
+.sb-loop-icon:hover,.sb-loop-icon:focus-visible{opacity:1;color:var(--text)}
+.sb-btn.loop-on .sb-loop-icon{opacity:1;color:var(--success)}
 .sb-foot-spacer{width:14px;height:14px}
 .sb-source-badge{font-size:var(--fs-2xs);padding:1px 5px;border-radius:var(--r-sm);font-weight:600;letter-spacing:.05em;text-transform:uppercase;opacity:.85;flex-shrink:0;position:static;top:auto;left:auto}
 .sb-source-badge.sb-shared{background:rgba(212,165,116,.25);color:var(--accent)}

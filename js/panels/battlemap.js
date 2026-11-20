@@ -5318,6 +5318,14 @@ registerPanel('battlemap',{
       return false;
     });
   },
+  // A tip shown once on this device (localStorage), the first time it's
+  // wanted — what a gesture does, where nothing on screen says so.
+  _tipOnce(key, text){
+    const k = 'skt-tip-' + key + '-v1';
+    try { if (localStorage.getItem(k)) return false; localStorage.setItem(k, '1'); } catch(e){ return false; }
+    if (typeof showToast === 'function') showToast(text, { aside: true });
+    return true;
+  },
   // The menu of the door whose handle is under the screen point (cx, cy):
   // open or close, lock or unlock, make it a wall, remove it. The DM's
   // (a player's right-click or hold stays a ping). → whether there was one.
@@ -6414,7 +6422,7 @@ registerPanel('battlemap',{
       +'<span class="map-foot-hint" style="font-size:var(--fs-2xs);color:var(--text-dim)">'+(!document.body.classList.contains('player-mode') ? 'Drag tokens · Right-click for options · Hold to ping'
           : (typeof paPc === 'function' && paPc()) ? 'Drag your token · Click a token to see it · Hold to ping' : 'Hold to ping')+'</span>'
       // …and the one a phone can do, which nobody would find on their own.
-      +'<span class="map-foot-touch" style="font-size:var(--fs-2xs);color:var(--text-dim)">Hold a finger on the map to ping</span>'
+      +'<span class="map-foot-touch" style="font-size:var(--fs-2xs);color:var(--text-dim)">'+(!document.body.classList.contains('player-mode') ? 'Hold a token for its options · the map to ping' : 'Hold a finger on the map to ping')+'</span>'
     +'</div>';
 
     html+='<div id="token-panel" style="position:absolute;right:8px;top:52px;width:196px;background:var(--panel);border:1px solid var(--border);border-radius:5px;padding:10px;font-size:var(--fs-sm);z-index:20;display:none;box-shadow:0 4px 16px rgba(0,0,0,.5)">'
@@ -9093,6 +9101,10 @@ registerPanel('battlemap',{
             }
           }
           // Left-click no longer opens the options panel — right-click does.
+          // The DM's first click on a token on this computer says so, once:
+          // the footer's hint is gone in a fight (the move readout takes its
+          // place), and a click that only selects looks like nothing works.
+          if (!moved && !isPlayer) this._tipOnce('token-menu', 'Right-click a token for its hit points, conditions and more.');
           // Clear the drag flag AFTER the synthesized click event has had its
           // turn to fire, so canvas-click bail logic still works for the
           // immediate drag-release click. Without this defer, every future

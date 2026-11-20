@@ -27122,6 +27122,94 @@ for (const cls of Object.keys(rule)) for (let L = 1; L <= 20; L++) for (const sc
         save();
       }
     }
+    // -- Round 529: what was only a right-click or a held finger gets a way in you can see — the combat card's ⋯ (conditions, surprised, legendary, lair…), a sound's ∞, a loot row's ⋯, a bestiary card's ⋯; the DM's first click on a token says right-click; the phone's footer says hold a token; the ? list names the menus --
+    if (!PLAYER){
+      const K0 = JSON.stringify(state.combatants), TIP0 = localStorage.getItem('skt-tip-token-menu-v1');
+      const B = panelDefs.battlemap, T0 = B._tokens;
+      const menuItems = () => { const m = document.querySelector('.ctx-menu'); return m ? [...m.querySelectorAll('.ctx-menu-item')].map(x => x.textContent.trim()) : []; };
+      const closeMenus = () => document.querySelectorAll('.ctx-menu').forEach(m => m.remove());
+      try {
+        // combat card ⋯
+        state.combatants = [{ id: 'r529m', name: 'R529 Ogre', isPC: false, hp: 30, hpMax: 30, ac: 11, init: 8, conditions: [] }];
+        openPanel('combat'); await sleep(300); panelDefs.combat._render(); await sleep(100);
+        const card = panelDefs.combat._body.querySelector('.combatant-card');
+        const more = card && card.querySelector('[data-act="card-menu"]');
+        ok('a combat card has a ⋯ beside reaction, concentration and buff', !!more && more.getClientRects().length > 0 && /Conditions/.test(more.title), more && more.title);
+        if (more) more.click(); await sleep(150);
+        ok('…it opens the card’s menu: surprised, conditions, legendary, lair', menuItems().some(s => /Surprised/.test(s)) && menuItems().some(s => /Poisoned/i.test(s)) && menuItems().some(s => /lair/i.test(s)), menuItems().slice(0, 6).join(' | '));
+        const pz = menuItems().findIndex(s => /Poisoned/i.test(s));
+        if (pz >= 0){ document.querySelectorAll('.ctx-menu .ctx-menu-item')[pz].click(); await sleep(150); }
+        ok('…and a condition picked there is on the creature', (state.combatants[0].conditions || []).some(c => /poisoned/i.test(c)), JSON.stringify(state.combatants[0].conditions));
+        closeMenus(); closePanel('combat');
+        // the DM's first click on a token: the tip, once
+        localStorage.removeItem('skt-tip-token-menu-v1');
+        openPanel('battlemap'); await sleep(400);
+        B._tokens = (T0 || []).concat([{ id: 'r529t', label: 'R529 Tok', x: 120, y: 120, size: 1, color: '#844' }]); B._tool = null; B._render(); await sleep(150);
+        const tel = () => B._body.querySelector('.map-token[data-tid="r529t"]');
+        const clickTok = async () => { const r = tel().getBoundingClientRect(), x = Math.round(r.left + r.width / 2), y = Math.round(r.top + r.height / 2);
+          tel().dispatchEvent(new MouseEvent('mousedown', { bubbles: true, button: 0, buttons: 1, clientX: x, clientY: y }));
+          document.dispatchEvent(new MouseEvent('mouseup', { bubbles: true, button: 0, clientX: x, clientY: y })); await sleep(120); };
+        const tips = () => [...document.querySelectorAll('#toast-host .toast-item')].filter(t => /Right-click a token/.test(t.textContent)).length;
+        document.querySelectorAll('#toast-host .toast-item').forEach(t => t.remove());
+        await clickTok();
+        ok('the DM’s first click on a token: “Right-click a token for its hit points, conditions and more”', tips() === 1, tips());
+        document.querySelectorAll('#toast-host .toast-item').forEach(t => t.remove());
+        await clickTok();
+        ok('…once only', tips() === 0 && localStorage.getItem('skt-tip-token-menu-v1') === '1', tips());
+        const touch = B._body.querySelector('.map-foot-touch');
+        ok('the DM’s phone footer: hold a token for its options', !!touch && /Hold a token for its options/.test(touch.textContent), touch && touch.textContent);
+        closePanel('battlemap');
+        // a sound's ∞
+        const SB = panelDefs.soundboard, P0 = _sb.personal, PL0 = SB._play;
+        let played = null;
+        try {
+          _sb.personal = [{ id: 'r529s', name: 'R529 Rain', source: 'personal', url: 'data:audio/wav;base64,' }];
+          SB._play = (id, loop) => { played = [id, loop]; };
+          openPanel('soundboard'); await sleep(300); SB._render(); await sleep(100);
+          const lp = SB._body.querySelector('[data-loop="r529s"]');
+          ok('a sound has a ∞ you can see, to play it on a loop', !!lp && lp.getClientRects().length > 0 && getComputedStyle(lp).visibility === 'visible' && +getComputedStyle(lp).opacity > 0.3 && /loop/i.test(lp.title), lp && lp.title);
+          if (lp) lp.click(); await sleep(60);
+          ok('…clicked: played on a loop', JSON.stringify(played) === '["r529s",true]', JSON.stringify(played));
+        } finally { SB._play = PL0; _sb.personal = P0; try { SB._render(); } catch(e){} closePanel('soundboard'); }
+        // a loot row's ⋯
+        const L = panelDefs.loot, LL0 = L._loot, LS0 = localStorage.getItem('skt-loot-v1');
+        try {
+          L._loot = { cp: 0, sp: 0, ep: 0, gp: 0, pp: 0, items: [{ id: 'r529i', name: 'R529 Gem', qty: 2, value: '50 gp', assignedTo: null }], tabGroups: [] };
+          openPanel('loot'); await sleep(300); L._render(); await sleep(100);
+          const lm = L._body.querySelector('.loot-item [data-lact="menu"]');
+          ok('a loot row has a ⋯ (sell, split, move)', !!lm && lm.getClientRects().length > 0, '');
+          if (lm) lm.click(); await sleep(150);
+          ok('…it opens the row’s menu: sell it', menuItems().some(s => /^Sell .*for half/.test(s)), menuItems().join(' | '));
+          closeMenus();
+        } finally { L._loot = LL0; if (LS0 != null) localStorage.setItem('skt-loot-v1', LS0); try { L._render(); } catch(e){} closePanel('loot'); }
+        // a bestiary card's ⋯
+        const Bs = panelDefs.bestiary;
+        openPanel('bestiary'); await sleep(500);
+        const BM0 = Bs._data && Bs._data.monsters;
+        if (Bs._data){ Bs._data.monsters = (BM0 || []).concat([{ id: 'r529b', name: 'R529 Goblin', hp: 7, ac: 15, cr: '1/4' }]); Bs._render(); await sleep(100); }
+        const bm = Bs._body && Bs._body.querySelector('[data-bmenu]');
+        if (bm){
+          const opened = []; const OS0 = Bs._openStatBlock; Bs._openStatBlock = id => opened.push(id);
+          try { bm.click(); await sleep(150); } finally { Bs._openStatBlock = OS0; }
+          ok('a bestiary card’s ⋯ opens its menu (edit HP / AC / CR), not its stat block', menuItems().some(s => /Edit HP/.test(s)) && !opened.length, menuItems().join(' | ') + ' opened ' + opened.length);
+          closeMenus();
+        } else ok('a bestiary card’s ⋯', false, 'no card');
+        if (Bs._data){ Bs._data.monsters = BM0; Bs._render(); }
+        closePanel('bestiary');
+        // the ? list
+        showHelpOverlay && showHelpOverlay(); await sleep(100);
+        const ho = document.getElementById('help-overlay');
+        ok('the ? list names what right-click (or hold) opens', !!ho && /Right-click \(or hold\) for more/.test(ho.textContent) && /A combat card/.test(ho.textContent), '');
+        if (ho) ho.remove();
+      } catch(e){ ok('round 529 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
+      finally {
+        closeMenus();
+        document.querySelectorAll('#toast-host .toast-item').forEach(t => t.remove());
+        state.combatants = JSON.parse(K0); B._tokens = T0;
+        if (TIP0 == null) localStorage.removeItem('skt-tip-token-menu-v1'); else localStorage.setItem('skt-tip-token-menu-v1', TIP0);
+        save();
+      }
+    }
     // -- Class features: represented, not just text ------------------------
     {
       try {

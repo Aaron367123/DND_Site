@@ -141,6 +141,7 @@ registerPanel('bestiary', {
       : esc(_bestInitials(m.name));
     return `<div class="bestiary-card" data-mid="${esc(m.id)}" draggable="true" title="Click for stat block · Drag to combat tracker">
       <button class="bestiary-card-x" data-rmid="${esc(m.id)}" title="Remove from bestiary">×</button>
+      <button class="bestiary-card-more" data-bmenu="${esc(m.id)}" title="Edit its HP, AC or CR, or move it to a folder… (or right-click the card)" aria-label="More for ${esc(m.name)}">⋯</button>
       <div class="bestiary-card-avatar">${img}</div>
       <div class="bestiary-card-name">${esc(m.name)}</div>
       <div class="bestiary-card-stats">
@@ -221,6 +222,9 @@ registerPanel('bestiary', {
     b.querySelectorAll('.bestiary-card').forEach(card=>{
       card.addEventListener('click', e=>{
         // Skip if the user clicked the × button (handled separately).
+        // ⋯: the card's menu (it was only a right-click or a held finger).
+        const more = e.target.closest('[data-bmenu]');
+        if (more){ e.stopPropagation(); const r = more.getBoundingClientRect(); this._showCardMenu(r.left, r.bottom + 2, card.dataset.mid); return; }
         if (e.target.closest('.bestiary-card-x')) return;
         this._openStatBlock(card.dataset.mid);
       });

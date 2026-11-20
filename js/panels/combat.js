@@ -971,7 +971,11 @@ registerPanel('combat',{
     const ctrls =
         `<button class="status-ctrl react-toggle${c.reactionUsed?' spent':''}" data-act="toggle-reaction" data-idx="${i}" aria-pressed="${c.reactionUsed?'true':'false'}" title="${c.reactionUsed?'Reaction used this round — click to refund':'Reaction available — click to mark used'}">↩</button>`
       + `<button class="status-ctrl conc-ctrl${conc?' on':''}" data-act="set-conc" data-idx="${i}" title="${conc?('Concentrating on '+esc(conc)+' — click to change'):'Set concentration spell'}">${ICO('i-conc')}</button>`
-      + `<button class="status-ctrl buff-ctrl" data-act="add-buff" data-idx="${i}" title="Add a buff (AC / HP / duration)">✦</button>`;
+      + `<button class="status-ctrl buff-ctrl" data-act="add-buff" data-idx="${i}" title="Add a buff (AC / HP / duration)">✦</button>`
+      // The card's menu — conditions, Surprised, exhaustion, legendary
+      // actions and resistance, its lair, max HP — was only a right-click or
+      // a held finger away, and nothing on the card said so.
+      + `<button class="status-ctrl more-ctrl" data-act="card-menu" data-idx="${i}" title="Conditions, surprised, exhaustion, legendary and lair actions… (or right-click the card)" aria-label="More for ${esc(c.name)}">⋯</button>`;
     const statusRow = (mode === 'show')
       ? `<div class="combat-status-row">${chips.join('')}<span class="status-ctrls">${ctrls}</span></div>`
       : '';
@@ -1051,6 +1055,10 @@ registerPanel('combat',{
         save(); this._render();
       }
       else if(act==='set-conc')      this._promptConcentration(parseInt(el.dataset.idx));
+      else if(act==='card-menu'){
+        const card = el.closest('.combatant-card'), r = el.getBoundingClientRect();
+        if (card && typeof card._openMenu === 'function') card._openMenu(r.left, r.bottom + 2);
+      }
       else if(act==='clear-conc'){
         const i = parseInt(el.dataset.idx);
         this._setConcentration(i, null);
@@ -1352,6 +1360,7 @@ registerPanel('combat',{
           }}));
         showContextMenu(x, y, items);
       };
+      card._openMenu = openMenu;   // (the card's ⋯ button)
       card.addEventListener('contextmenu',e=>{
         if(e.target.matches('input,textarea,select')) return;
         e.preventDefault(); e.stopPropagation();
