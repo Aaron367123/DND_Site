@@ -3246,6 +3246,8 @@
            probe.naturalWidth + 'x' + probe.naturalHeight);
       }
 
+      // (as an upload leaves it: the picture on screen, no path yet)
+      _mapBgImage = img; bm._bgMapPath = null;
       await bm._shareUploadedMap(img);
       await sleep(200);
       ok('map upload: it is stored once', puts === 1, String(puts));
@@ -3266,7 +3268,9 @@
          bm._bgMapNaturalW > 0, String(bm._bgMapNaturalW));
 
       // A second upload replaces the first rather than piling up.
-      await bm._shareUploadedMap(img);
+      const firstPath = bm._bgMapPath;
+      _mapBgImage = img; bm._bgMapPath = null;
+      await bm._shareUploadedMap(img, firstPath);
       await sleep(200);
       ok('map upload: only one image is kept on the server',
          Object.keys(server).length === 1, String(Object.keys(server).length));
@@ -3418,7 +3422,11 @@
 
         // A shared upload on screen, the way _shareUploadedMap leaves it.
         const share = async (replaced) => {
-          await d._shareUploadedMap({ naturalWidth: 1, naturalHeight: 1 }, replaced);
+          // (as an upload leaves it: its picture on screen, no path yet)
+          const im = { naturalWidth: 1, naturalHeight: 1 }, was = _mapBgImage;
+          _mapBgImage = im; d._bgMapPath = null;
+          await d._shareUploadedMap(im, replaced);
+          _mapBgImage = was;
           await sleep(60);
           return d._blobIdOf(d._bgMapPath);
         };
@@ -3610,7 +3618,9 @@
           window.sktMapBlobPut = () => Promise.resolve(true);
           window.sktMapBlobRefs = () => Promise.resolve(null);
           try {
-            await d._shareUploadedMap({ naturalWidth: 1, naturalHeight: 1 }, null);
+            const im = { naturalWidth: 1, naturalHeight: 1 };
+            _mapBgImage = im; d._bgMapPath = null;
+            await d._shareUploadedMap(im, null);
             _mapBgImage = null; d._bgMapNaturalW = 0;
             d._loadBgFromPath(d._bgMapPath, false, false);
             await sleep(300);
