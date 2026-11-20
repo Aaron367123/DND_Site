@@ -535,7 +535,11 @@ registerPanel('bestiary', {
         (m.ac != null && +m.ac !== (raw.armor_class && raw.armor_class[0] && raw.armor_class[0].value)) ||
         (m.cr != null && String(m.cr) !== String(raw.challenge_rating ?? ''));
       if (edited){
+        // (the top-level hp / ac too: "+ Add to combat" reads those — the
+        // edit showed in the stat block and never reached the fight)
         const clone = { ...entry, _raw: { ...raw } };
+        if (m.hp != null && !isNaN(+m.hp)) clone.hp = +m.hp;
+        if (m.ac != null && !isNaN(+m.ac)) clone.ac = +m.ac;
         // Use !isNaN, not a truthy check — an edited HP/AC of 0 is valid and
         // must still override (the old `&& +m.ac` skipped 0).
         if (m.hp != null && !isNaN(+m.hp)) clone._raw.hit_points = +m.hp;

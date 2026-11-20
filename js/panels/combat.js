@@ -1471,7 +1471,9 @@ registerPanel('combat',{
         // without it a slug-only lookup drops a different book's stat block
         // into combat for any of the 273 colliding pairs — see sktFindMonster.
         const entry = (_5eLoaded ? sktFindMonster(m.slug, m.source) : null);
-        if (entry) this.addMonster(entry);
+        // …with the bestiary card's own HP and AC (Edit HP / AC / CR — an
+        // elite goblin): they never reached the fight.
+        if (entry) this.addMonster(Object.assign({}, entry, m.hp != null && !isNaN(+m.hp) ? { hp: +m.hp } : {}, m.ac != null && !isNaN(+m.ac) ? { ac: +m.ac } : {}));
         else       this.addMonster({name:m.name, hp:m.hp||10, ac:m.ac||10, dex:10, _img:m.img||null});
       } else if (pi !== ''){
         e.preventDefault();
@@ -3325,7 +3327,9 @@ registerPanel('combat',{
         || '<div class="as-empty">No one standing to roll for.</div>';
     };
     paintTargets();
-    $('#as-ab').addEventListener('change', () => { picked().forEach(id => want.add(id)); paintTargets(); });
+    // (who's ticked as it stands: unticked stays unticked — the ally out of
+    // the fireball was ticked again, and rolled and hurt)
+    $('#as-ab').addEventListener('change', () => { want.clear(); picked().forEach(id => want.add(id)); paintTargets(); });
     // Changed after the roll: the row's total moves with it.
     $('#as-targets').addEventListener('change', e => {
       const sel = e.target.closest && e.target.closest('[data-cov]'); if (!sel) return;

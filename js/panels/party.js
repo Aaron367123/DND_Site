@@ -3335,8 +3335,10 @@ registerPanel('party',{
             label: c.inspiration ? '✨ Spend Heroic Inspiration' : '✨ Grant Heroic Inspiration',
             onClick: () => {
               const r = resolve(); if (!r) return;
-              state.party[r.idx] = {...r.c, inspiration: !r.c.inspiration};
+              const giving = !r.c.inspiration;
+              state.party[r.idx] = {...r.c, inspiration: giving};
               save(); this._render();
+              if (giving) sktInspLog(state.party[r.idx]);
             }
           });
           const bardsHere = (typeof sktBards === 'function') ? sktBards().filter(b => b.id !== c.id) : [];

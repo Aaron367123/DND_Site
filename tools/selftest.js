@@ -27373,6 +27373,99 @@ for (const cls of Object.keys(rule)) for (let L = 1; L <= 20; L++) for (const sc
         save();
       }
     }
+    // -- Round 533: controls that did less than they said — a bestiary card's edited HP and AC reach the fight; the area save keeps who's unticked when the ability changes; Ask to roll keeps the DC, ability and who through a change of kind; a half-typed reply stays with its own conversation; the compact card's Grant logs; the soundboard's volumes are kept and go in a scene --
+    if (!PLAYER){
+      const C = panelDefs.combat, K0 = JSON.stringify(state.combatants), PA0 = JSON.stringify(state.party), LG0 = localStorage.getItem(SKT_LOG_KEY), MS0 = localStorage.getItem('skt-msgs-v1');
+      const VOL0 = localStorage.getItem('skt-sb-vol-v1');
+      try {
+        // 1. the bestiary's edited HP and AC, dragged into the fight
+        const Bs = panelDefs.bestiary; openPanel('bestiary'); await sleep(300);
+        for (let i = 0; i < 120 && !(typeof _5eLoaded !== 'undefined' && _5eLoaded); i++) await sleep(250);
+        const any = typeof _5eData !== 'undefined' && _5eData.find(r => r && r.cat === 'monster' && /^goblin$/i.test(r.name));
+        if (any && Bs._data){
+          const BM0 = Bs._data.monsters;
+          Bs._data.monsters = BM0.concat([{ id: 'r533b', name: any.name, slug: any._slug, source: any._source, hp: 31, ac: 17, cr: '1' }]);
+          try {
+            state.combatants = [];
+            openPanel('combat'); await sleep(200);
+            const dt = new DataTransfer(); dt.setData('application/x-skt-bestiary-mid', 'r533b');
+            const tgt = C._body.querySelector('.combat-list, .combatants, .window-body') || C._body;
+            C._body.dispatchEvent(new DragEvent('drop', { bubbles: true, cancelable: true, dataTransfer: dt }));
+            await sleep(150);
+            const g = state.combatants.find(c => /goblin/i.test(c.name));
+            ok('a bestiary goblin edited to 31 HP, AC 17: dragged into the fight with them', !!g && g.hp === 31 && g.hpMax === 31 && g.ac === 17, JSON.stringify(g && { hp: g.hp, ac: g.ac }));
+            // …and its stat block's "+ Add to combat" (it adds what it was handed)
+            let shown = null; const POD = window.popOutDetail; window.popOutDetail = d => { shown = d; };
+            try { Bs._openStatBlock('r533b'); await sleep(50); } finally { window.popOutDetail = POD; }
+            ok('…its stat block hands “+ Add to combat” the 31 HP and AC 17 too', !!shown && shown.hp === 31 && shown.ac === 17, JSON.stringify(shown && { hp: shown.hp, ac: shown.ac }));
+          } finally { Bs._data.monsters = BM0; }
+        } else ok('a bestiary goblin edited', false, 'no goblin: the monster data never loaded');
+        closePanel('bestiary');
+        // 2. the area save
+        state.combatants = [{ id: 'r533x', name: 'R533 Ally', isPC: false, hp: 20, hpMax: 20, conditions: [] }, { id: 'r533y', name: 'R533 Foe', isPC: false, hp: 20, hpMax: 20, conditions: [] }];
+        C.openAreaSave({ name: 'Fireball', ab: 'DEX', dc: 15, parts: [{ dice: '8d6', type: 'fire' }], half: true, targets: ['r533x', 'r533y'] }); await sleep(200);
+        const box = id => document.querySelector('#as-targets input[value="' + id + '"]');
+        box('r533x').checked = false; box('r533x').dispatchEvent(new Event('change', { bubbles: true }));
+        const ab = document.querySelector('#as-ab'); ab.value = 'CON'; ab.dispatchEvent(new Event('change', { bubbles: true })); await sleep(80);
+        ok('the area save: the ally unticked stays unticked when DEX becomes CON', box('r533x') && !box('r533x').checked && box('r533y').checked, JSON.stringify([box('r533x') && box('r533x').checked, box('r533y') && box('r533y').checked]));
+        document.querySelectorAll('.modal-backdrop').forEach(m => { if (m.querySelector('#as-ab')) m.remove(); });
+        // 3. Ask the players to roll
+        sktOpenAskRoll({ kind: 'save', ab: 'DEX' }); await sleep(150);
+        const rb = () => document.getElementById('rr-ask-back');
+        rb().querySelector('#rr-dc').value = '14';
+        rb().querySelector('#rr-ab').value = 'WIS';
+        const first = rb().querySelector('.rr-who input'); if (first) first.checked = false;
+        const firstId = first && first.value;
+        rb().querySelector('[data-rk="check"]').click(); await sleep(80);
+        const kept = [rb().querySelector('#rr-dc').value, rb().querySelector('#rr-ab').value, firstId ? rb().querySelector('.rr-who input[value="' + CSS.escape(firstId) + '"]').checked : false];
+        ok('Ask to roll: Saving throw → Ability or skill check keeps the DC, the ability and who’s unticked', kept[0] === '14' && kept[1] === 'WIS' && kept[2] === false, JSON.stringify(kept));
+        rb().remove();
+        // 4. messages: a half-typed reply stays with its conversation
+        state.party = [{ id: 'r533a', name: 'R533 Ann', hp: 9, hpMax: 9 }, { id: 'r533c', name: 'R533 Cal', hp: 9, hpMax: 9 }];
+        openPanel('messages'); await sleep(200);
+        const M = panelDefs.messages; M._thread = 'r533a'; M._render(); await sleep(60);
+        M._body.querySelector('[data-msg-input]').value = 'for Ann only';
+        M._body.querySelector('[data-msg-who="r533c"]').click(); await sleep(60);
+        const inCal = M._body.querySelector('[data-msg-input]').value;
+        M._body.querySelector('[data-msg-who="r533a"]').click(); await sleep(60);
+        const inAnn = M._body.querySelector('[data-msg-input]').value;
+        ok('a reply half-typed to Ann: not in Cal’s box, back in Ann’s', inCal === '' && inAnn === 'for Ann only', JSON.stringify([inCal, inAnn]));
+        closePanel('messages');
+        // 5. the compact card's Grant
+        localStorage.setItem(SKT_LOG_KEY, '[]');
+        state.party = [{ id: 'r533a', name: 'R533 Ann', hp: 9, hpMax: 9, inspiration: false }];
+        const P = panelDefs.party; openPanel('party'); await sleep(200);
+        const cf0 = state.settings.partyCompact; state.settings.partyCompact = true; P._render(); await sleep(80);
+        try {
+          const card = P._body.querySelector('.char-card');
+          card.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true, clientX: 200, clientY: 200 })); await sleep(120);
+          const gi = [...document.querySelectorAll('.ctx-menu .ctx-menu-item')].find(e => /Grant Heroic Inspiration/.test(e.textContent));
+          if (gi) gi.click(); await sleep(100);
+          const lg = JSON.parse(localStorage.getItem(SKT_LOG_KEY) || '[]');
+          ok('a compact card’s Grant Heroic Inspiration: in the game log too', !!gi && state.party[0].inspiration === true && lg.some(e => e.label === 'Heroic Inspiration'), JSON.stringify([!!gi, lg.length]));
+        } finally { state.settings.partyCompact = cf0; document.querySelectorAll('.ctx-menu').forEach(m => m.remove()); }
+        // 6. the soundboard's volumes
+        localStorage.removeItem('skt-sb-vol-v1');
+        const v0 = _sb.vol, vs0 = _sb.volumes;
+        try {
+          _sb.vol = 0.4; _sb.volumes = { r533s: 0.25 }; _sbSaveVolumes();
+          _sb.vol = 0.7; _sb.volumes = {}; _sbLoadVolumes();
+          ok('the soundboard’s volumes kept through a reload', _sb.vol === 0.4 && _sb.volumes.r533s === 0.25, JSON.stringify([_sb.vol, _sb.volumes]));
+          ok('…a scene saves each sound’s volume', /vol: _sb\.volumes\[id\] != null/.test(String(panelDefs.soundboard._wire)) && /_sb\.volumes\[s\.id\] = s\.vol/.test(String(panelDefs.soundboard._wire)), '');
+        } finally { _sb.vol = v0; _sb.volumes = vs0; }
+      } catch(e){ ok('round 533 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
+      finally {
+        document.querySelectorAll('.ctx-menu').forEach(m => m.remove());
+        document.getElementById('rr-ask-back')?.remove();
+        document.querySelectorAll('.modal-backdrop').forEach(m => { if (m.querySelector('#as-ab')) m.remove(); });
+        state.combatants = JSON.parse(K0); state.party = JSON.parse(PA0);
+        if (LG0 == null) localStorage.removeItem(SKT_LOG_KEY); else localStorage.setItem(SKT_LOG_KEY, LG0);
+        if (MS0 == null) localStorage.removeItem('skt-msgs-v1'); else localStorage.setItem('skt-msgs-v1', MS0);
+        if (VOL0 == null) localStorage.removeItem('skt-sb-vol-v1'); else localStorage.setItem('skt-sb-vol-v1', VOL0);
+        try { panelDefs.party._render(); panelDefs.combat._render(); } catch(e){}
+        save();
+      }
+    }
     // -- Class features: represented, not just text ------------------------
     {
       try {

@@ -111,7 +111,12 @@ registerPanel('messages', {
       const last = sktMsgs().filter(m => m.from !== 'dm' || m.to).sort((a, c) => (c.at || 0) - (a.at || 0))[0];
       this._thread = last ? (last.from === 'dm' ? last.to : last.from) : (people[0] && people[0].id);
     }
-    const typed = b.querySelector('[data-msg-input]'), keep = typed ? typed.value : '', focused = typed && document.activeElement === typed;
+    // A reply half-typed stays with the conversation it was for: it followed
+    // the DM into the next one ("Reply to B…"), and Enter sent it to B.
+    const drafts = this._drafts || (this._drafts = {});
+    const typed = b.querySelector('[data-msg-input]'), focused = typed && document.activeElement === typed;
+    if (typed && this._shownThread) drafts[this._shownThread] = typed.value;
+    const keep = drafts[this._thread] || '';
     if (this._thread) sktMsgMarkRead(this._thread);   // it's on screen: read
     const list = people.map(p => {
       const n = sktMsgUnread(p.id).length, last = sktMsgThread(p.id).slice(-1)[0];
@@ -125,7 +130,8 @@ registerPanel('messages', {
     b.querySelectorAll('[data-msg-who]').forEach(x => x.addEventListener('click', () => { this._thread = x.dataset.msgWho; this._render(); }));
     sktMsgWire(b, () => this._thread);
     const th = b.querySelector('.msg-thread'); if (th) th.scrollTop = th.scrollHeight;
-    const i2 = b.querySelector('[data-msg-input]'); if (i2){ if (keep) i2.value = keep; if (focused) i2.focus(); }
+    const i2 = b.querySelector('[data-msg-input]'); if (i2){ if (keep) i2.value = keep; if (focused && this._shownThread === this._thread) i2.focus(); }
+    this._shownThread = i2 ? this._thread : null;
     this._badge();
   },
   // Unread messages from players, on the dock button.

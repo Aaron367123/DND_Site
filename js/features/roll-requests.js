@@ -187,6 +187,17 @@ function sktOpenAskRoll(preset){
     : party.map(p => p.id);
   const back = document.createElement('div');
   back.className = 'modal-backdrop'; back.id = 'rr-ask-back';
+  // What's been set so far, kept through a change of kind (Saving throw ↔
+  // check): the DC, the ability and skill, who's unticked, "tell them the DC".
+  const off = new Set(); let showDc = null;
+  const keep = () => {
+    const ab = back.querySelector('#rr-ab'), sk = back.querySelector('#rr-skill'), dc = back.querySelector('#rr-dc'), sd = back.querySelector('#rr-showdc');
+    if (ab) preset.ab = ab.value;
+    if (sk) preset.skill = sk.value;
+    if (dc) preset.dc = dc.value;
+    if (sd) showDc = sd.checked;
+    back.querySelectorAll('.rr-who input').forEach(i => { if (i.checked) off.delete(i.value); else off.add(i.value); });
+  };
   const paint = () => {
     const who = pickWho(kind);
     const people = kind === 'init' ? (state.combatants || []).filter(c => c.isPC && !c.dead) : party;
@@ -198,9 +209,9 @@ function sktOpenAskRoll(preset){
         ? '<div class="rr-row2"><label>Ability <select id="rr-ab">' + Object.keys(SKT_RR_ABS).map(a => '<option' + ((preset.ab || 'DEX') === a ? ' selected' : '') + '>' + a + '</option>').join('') + '</select></label>'
           + (kind === 'check' ? '<label>Skill <select id="rr-skill"><option value="">— just the ability —</option>' + skills.map(k => '<option value="' + k + '"' + (preset.skill === k ? ' selected' : '') + '>' + (SKT_SKILL_LABEL[k] || k) + '</option>').join('') + '</select></label>' : '')
           + '<label>DC <input id="rr-dc" type="number" min="1" placeholder="—" value="' + (preset.dc || '') + '"></label></div>'
-          + '<label class="as-showdc"><input type="checkbox" id="rr-showdc"' + (((state.settings || {}).saveShowDc !== false) ? ' checked' : '') + '> tell them the DC</label>'
+          + '<label class="as-showdc"><input type="checkbox" id="rr-showdc"' + ((showDc != null ? showDc : (state.settings || {}).saveShowDc !== false) ? ' checked' : '') + '> tell them the DC</label>'
         : '')
-      + '<div class="rr-who"><b>Who</b>' + (people.length ? people.map(p => '<label><input type="checkbox" value="' + esc(p.id) + '" checked> ' + esc(p.name) + '</label>').join('') : '<span class="dim">No one to ask.</span>') + '</div>'
+      + '<div class="rr-who"><b>Who</b>' + (people.length ? people.map(p => '<label><input type="checkbox" value="' + esc(p.id) + '"' + (off.has(p.id) ? '' : ' checked') + '> ' + esc(p.name) + '</label>').join('') : '<span class="dim">No one to ask.</span>') + '</div>'
       + '<div class="modal-actions"><button class="btn" data-rr-go="cancel">Cancel</button><button class="btn primary" data-rr-go="ask"' + (who.length ? '' : ' disabled') + '>Ask</button></div></div>';
   };
   paint();
@@ -213,7 +224,7 @@ function sktOpenAskRoll(preset){
   });
   back.addEventListener('click', e => {
     const k = e.target.closest('[data-rk]');
-    if (k && !k.disabled){ kind = k.dataset.rk; paint(); return; }
+    if (k && !k.disabled){ keep(); kind = k.dataset.rk; paint(); return; }
     const g = e.target.closest('[data-rr-go]'); if (!g) return;
     if (g.dataset.rrGo === 'cancel'){ back.remove(); return; }
     const pcs = [...back.querySelectorAll('.rr-who input:checked')].map(i => i.value);

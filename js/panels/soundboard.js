@@ -37,6 +37,20 @@ function _sbLoadAmbient(){
     _sb.ambient = new Set(Array.isArray(arr) ? arr : []);
   } catch(e){ _sb.ambient = new Set(); }
 }
+// The master volume and each sound's: this device's, kept through a reload
+// (they reset to 70% and 100% every time).
+function _sbSaveVolumes(){
+  saveJson('skt-sb-vol-v1', { vol: _sb.vol, volumes: _sb.volumes }, 'soundboard volumes');
+}
+function _sbLoadVolumes(){
+  try {
+    const v = JSON.parse(localStorage.getItem('skt-sb-vol-v1') || 'null');
+    if (v && typeof v === 'object'){
+      if (typeof v.vol === 'number' && v.vol >= 0 && v.vol <= 1) _sb.vol = v.vol;
+      if (v.volumes && typeof v.volumes === 'object') _sb.volumes = Object.assign({}, v.volumes);
+    }
+  } catch(e){}
+}
 function _sbSaveScenes(){
   saveJson('skt-sb-scenes-v1', _sb.scenes, 'soundboard scenes');
 }
@@ -95,6 +109,7 @@ registerPanel('soundboard', {
     this._body = body;
     _sbLoadAmbient();
     _sbLoadScenes();
+    _sbLoadVolumes();
     this._render();
 
     // Load shared list from manifest (one-time per page load)
@@ -265,6 +280,7 @@ registerPanel('soundboard', {
       b.querySelector('#sb-mpct').textContent=Math.round(_sb.vol*100)+'%';
       Object.entries(_sb.playing).forEach(([id,p])=>{ if(p.audio) p.audio.volume=this._volumeFor(id); });
     });
+    b.querySelector('#sb-mvol')?.addEventListener('change', () => _sbSaveVolumes());
 
     b.querySelector('#sb-stop-all')?.addEventListener('click',e=>{
       e.stopPropagation(); this._stopAll(); this._render();
@@ -309,6 +325,7 @@ registerPanel('soundboard', {
         const id = e.target.dataset.vol;
         const v  = parseFloat(e.target.value);
         _sb.volumes[id] = v;
+        clearTimeout(this._volSaveT); this._volSaveT = setTimeout(_sbSaveVolumes, 400);
         const p = _sb.playing[id];
         if (p && p.audio) p.audio.volume = this._volumeFor(id);
         const tile = e.target.closest('.sb-btn');
@@ -358,7 +375,7 @@ registerPanel('soundboard', {
     b.querySelector('#sb-save-scene')?.addEventListener('click', () => {
       const looping = Object.entries(_sb.playing)
         .filter(([id, p]) => p && p.loop)
-        .map(([id]) => ({ id, loop: true, ambient: _sb.ambient.has(id) }));
+        .map(([id]) => ({ id, loop: true, ambient: _sb.ambient.has(id), vol: _sb.volumes[id] != null ? _sb.volumes[id] : 1 }));
       if (!looping.length) return;
       const suggested = 'Scene ' + (_sb.scenes.length + 1);
       const promptIt = (defaultName, applyFn) => {
@@ -405,8 +422,9 @@ registerPanel('soundboard', {
       (sc.sounds || []).forEach(s => {
         if (s.ambient) _sb.ambient.add(s.id);
         else _sb.ambient.delete(s.id);
+        if (typeof s.vol === 'number') _sb.volumes[s.id] = s.vol;
       });
-      _sbSaveAmbient();
+      _sbSaveAmbient(); _sbSaveVolumes();
       // Play each sound. The first play kicks the audio context so
       // subsequent ones don't get blocked.
       (sc.sounds || []).forEach(s => this._play(s.id, !!s.loop));
