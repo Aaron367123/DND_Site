@@ -22340,10 +22340,12 @@ for (const cls of Object.keys(rule)) for (let L = 1; L <= 20; L++) for (const sc
         ok('…and another shuts it', !door.open && h().getAttribute('data-state') === 'closed');
         await press(4.5 * cs, 6 * cs, 90);
         ok('a click elsewhere on the map leaves it', !door.open);
-        // Held: a ping, not a door
+        // Held (the DM's): the door's menu, with its lock — not a ping (round 527)
         B._body.querySelectorAll('.map-ping').forEach(e => e.remove());
         await press(4.5 * cs, 4 * cs, 750);
-        ok('held on the handle: a ping, and the door stays as it was', !door.open && !!B._body.querySelector('.map-ping'));
+        ok('held on the handle: the door’s menu, not a ping, and the door stays as it was', !door.open && !B._body.querySelector('.map-ping')
+          && [...document.querySelectorAll('.ctx-menu-item')].some(e => /Lock the door/.test(e.textContent)));
+        document.querySelectorAll('.ctx-menu').forEach(m => m.remove());
         // The DM locks it
         B._fixtureMenu(door, 300, 300, door.pts[0], door.pts[1]); await sleep(60);
         const lockIt = [...document.querySelectorAll('.ctx-menu-item')].find(e => /Lock the door/.test(e.textContent));
@@ -26887,7 +26889,9 @@ for (const cls of Object.keys(rule)) for (let L = 1; L <= 20; L++) for (const sc
         ok('…a right-drag (panning) that ends on it: no menu', !document.querySelector('.ctx-menu'), menuItems().join(' | '));
         closeMenus();
         // a right-click on the bare map: no menu
-        rclick({ x: p.x, y: Math.round(p.y + 3 * cs * z) }); await sleep(150);
+        // (a fixed distance on screen: three squares of a zoomed-out map are
+        // still within the handle's reach)
+        rclick({ x: p.x, y: p.y + 90 }); await sleep(150);
         ok('…a right-click away from any door: no menu', !document.querySelector('.ctx-menu'), menuItems().join(' | '));
         closeMenus();
         // with another tool up too
