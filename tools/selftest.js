@@ -26659,6 +26659,59 @@ for (const cls of Object.keys(rule)) for (let L = 1; L <= 20; L++) for (const sc
         closePanel('battlemap');
       }
     }
+    // -- Round 523: an adventure's hex map gets its hexes — 37 of the books' 43 (Barovia, the Sword Coast…) had no grid at all; the size read flat side to flat side or corner to corner and over its scale or not, as its picture's printed hexes say; "odd" maps half a hex lower; squares again on the next square map --
+    if (!PLAYER){
+      const B = panelDefs.battlemap;
+      const S0 = localStorage.getItem('skt-battlemap-v1'), P0 = B._bgMapPath, I0 = _mapBgImage, W0 = B._bgMapNaturalW, H0 = B._bgMapNaturalH;
+      const keep = { ft: B._ftPerCell, cs: B._cellSize, ox: B._gridOffsetX, oy: B._gridOffsetY, cols: B._cols, rows: B._rows, gt: B._gridType, sg: B._showGrid, auto: B._gridAuto, lp: B._bgLoadedPath };
+      try {
+        // A picture of hexes: flat-topped, 60 px flat side to flat side, odd columns lower, the first column's centre at (101, 37).
+        const CS = 120 / Math.sqrt(3), s = CS / 2, h = 60, colStep = 1.5 * s, OX = 101, OY = 37, W = 1600, H = 1200;
+        const c = document.createElement('canvas'); c.width = W; c.height = H;
+        const g2 = c.getContext('2d'); g2.fillStyle = '#c9c0a0'; g2.fillRect(0, 0, W, H); g2.strokeStyle = '#3a3020'; g2.lineWidth = 2;
+        for (let col = -2; col * colStep < W + CS; col++){ const cx = OX + col * colStep, ys = (col & 1) ? h / 2 : 0;
+          for (let r = -2; r * h < H + h; r++){ const cy = OY + ys + r * h + h / 2; g2.beginPath(); for (let i = 0; i <= 6; i++){ const a = i * Math.PI / 3; g2[i ? 'lineTo' : 'moveTo'](cx + s * Math.cos(a), cy + s * Math.sin(a)); } g2.stroke(); } }
+        const img = new Image(); await new Promise(r => { img.onload = r; img.src = c.toDataURL('image/png'); });
+        const same = (a, b) => { const n = B._hexNormOff(a.ox, a.oy, a.cs), m = B._hexNormOff(b.ox, b.oy, b.cs); return Math.abs(a.cs - b.cs) < 0.5 && Math.abs(n.x - m.x) < 2 && Math.abs(n.y - m.y) < 2; };
+        const truth = { cs: CS, ox: OX, oy: OY };
+        ok('a hex grid on its printed hexes scores well above the same half a hex off', sktHexScore(img, CS, OX, OY) > 2, sktHexScore(img, CS, OX, OY).toFixed(2));
+        // The book's ways of saying it ("odd": the box of its first hex, half a hex higher than ours).
+        const odd = { hex: true, odd: true, size: 60, gs: 1, ox: OX - s, oy: OY - h / 2, w: W };
+        ok('"odd", the size flat to flat: the printed hexes', same(B._hexFit(odd, img), truth), JSON.stringify(B._hexFit(odd, img)));
+        const even = { hex: true, odd: false, size: 60, gs: 1, ox: OX - s + colStep, oy: OY + h / 2, w: W };
+        ok('"even" (a column over): the same hexes', same(B._hexFit(even, img), truth), JSON.stringify(B._hexFit(even, img)));
+        const corner = { hex: true, odd: true, size: CS, gs: 1, ox: OX - s, oy: OY - h / 2, w: W };
+        ok('the size corner to corner: read as that, by the picture', same(B._hexFit(corner, img), truth), JSON.stringify(B._hexFit(corner, img)));
+        const scaled = { hex: true, odd: true, size: 60 * 3, gs: 3, ox: OX - s, oy: OY - h / 2, w: W };
+        ok('a size over its scale: read as that, by the picture', same(B._hexFit(scaled, img), truth), JSON.stringify(B._hexFit(scaled, img)));
+        // Offsets kept within one column step: the grid's own wrap (one hex's width) can't move them.
+        // (three columns over and half a hex down is the same grid)
+        const n = B._hexNormOff(OX + 3 * colStep, OY + h / 2 + 2 * h, CS);
+        const centre = (x, y, ox, oy) => { const q = sktHexAt(x, y, CS, ox, oy); return [ox + q.q * colStep, oy + ((q.q & 1) ? h / 2 : 0) + q.r * h + h / 2]; };
+        ok('an offset kept within a column step names the same hexes', n.x < colStep && n.y < h && [[300, 200], [777, 555], [1210, 905]].every(([x, y]) => { const a = centre(x, y, OX, OY), b = centre(x, y, n.x, n.y); return Math.hypot(a[0] - b[0], a[1] - b[1]) < 1; }), JSON.stringify(n));
+        // Put on, as a pick does: hexes, their size and place, and how far one is.
+        openPanel('battlemap'); await sleep(300);
+        _mapBgImage = img; B._bgMapNaturalW = W; B._bgMapNaturalH = H; B._bgMapPath = 'adventure/R523/hexes.webp'; B._bgLoadedPath = B._bgMapPath; B._bgMapScale = 1;
+        B._gridType = 'square'; B._showGrid = true; B._gridAuto = null;
+        B._useAdvGrid(B._bgMapPath, Object.assign({}, odd, { ft: 1320 }), 0); await sleep(150);
+        const o = B._gridOffPx();
+        ok('picked: a hex grid on the picture’s hexes, a quarter mile each', B._gridType === 'hex' && Math.abs(B._cellSize - CS) < 0.5 && B._ftPerCell === 1320 && sktHexScore(img, B._cellSize, o.x, o.y) > 2, B._gridType + ' ' + B._cellSize.toFixed(1) + ' ' + JSON.stringify(o) + ' ' + B._ftPerCell);
+        // The next map with squares in its data: squares again.
+        B._useAdvGrid(B._bgMapPath, { size: 50, ox: 0, oy: 0, w: W, ft: 5 }, 0); await sleep(100);
+        ok('…and the next map with squares: squares again', B._gridType === 'square' && Math.abs(B._cellSize - 50) < 0.5, B._gridType + ' ' + B._cellSize);
+        // Hexes the DM chose themselves stay theirs.
+        B._gridType = 'hex'; B._gridAuto = null;
+        B._useAdvGrid(B._bgMapPath, null, 0); await sleep(100);
+        ok('…but hexes the DM chose stay', B._gridType === 'hex');
+      } catch(e){ ok('round 523 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
+      finally {
+        B._ftPerCell = keep.ft; B._cellSize = keep.cs; B._gridOffsetX = keep.ox; B._gridOffsetY = keep.oy; B._cols = keep.cols; B._rows = keep.rows; B._gridType = keep.gt; B._showGrid = keep.sg; B._gridAuto = keep.auto; B._bgLoadedPath = keep.lp;
+        _mapBgImage = I0; B._bgMapPath = P0; B._bgMapNaturalW = W0; B._bgMapNaturalH = H0;
+        if (S0 != null) localStorage.setItem('skt-battlemap-v1', S0);
+        try { B._render(); } catch(e){}
+        closePanel('battlemap');
+      }
+    }
     // -- Class features: represented, not just text ------------------------
     {
       try {

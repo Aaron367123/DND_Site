@@ -143,6 +143,54 @@ function _sktDetectGridIn(img, sx, sy, sw, sh, k){
   const S = size / k, md = v => ((v % S) + S) % S;
   return { size: S, ox: md(ax.ph / k + sx), oy: md(ay.ph / k + sy) };
 }
+// How well a hex grid lies on the hexes printed on a picture: how strongly
+// the picture holds a thin line along its edges, over the same half a hex
+// off (> 1: on the printed lines). Flat-topped, odd columns half a hex lower
+// (_drawHexGrid); cs, offX, offY in the picture's own pixels. Read once per
+// picture, shrunk by a whole number to at most 2400 px (see sktDetectGrid).
+const _sktHexLum = new WeakMap();
+function sktHexScore(img, cs, offX, offY){
+  let m = _sktHexLum.get(img);
+  if (!m){
+    const W0 = img.naturalWidth, H0 = img.naturalHeight;
+    if (!W0 || !H0) return 0;
+    const N = Math.max(1, Math.ceil(Math.max(W0, H0) / 2400)), W = Math.round(W0 / N), H = Math.round(H0 / N);
+    const c = document.createElement('canvas'); c.width = W; c.height = H;
+    const g = c.getContext('2d', { willReadFrequently: true }); g.drawImage(img, 0, 0, W, H);
+    let d; try { d = g.getImageData(0, 0, W, H).data; } catch(e){ _sktHexLum.set(img, m = { L: null }); return 0; }
+    const L = new Float32Array(W * H);
+    for (let i = 0, j = 0; i < L.length; i++, j += 4) L[i] = 0.299 * d[j] + 0.587 * d[j + 1] + 0.114 * d[j + 2];
+    _sktHexLum.set(img, m = { L, W, H, N });
+  }
+  if (!m.L) return 0;
+  const { L, W, H, N } = m;
+  const at = (x, y) => { const xi = x | 0, yi = y | 0; return (xi < 0 || yi < 0 || xi >= W || yi >= H) ? NaN : L[yi * W + xi]; };
+  // (the middle of the picture: a map's frame and legend aren't hexes)
+  const x0 = W * 0.12, x1 = W * 0.88, y0 = H * 0.12, y1 = H * 0.88;
+  const sum = (c2, ox, oy) => {
+    const s = c2 / 2, h = s * Math.sqrt(3), colStep = 1.5 * s;
+    if (!(s > 2)) return 0;
+    let on = 0, n = 0;
+    for (let col = Math.ceil((x0 - ox) / colStep), c1 = Math.floor((x1 - ox) / colStep); col <= c1; col++){
+      const cx = ox + col * colStep, ys = (col & 1) ? h / 2 : 0;
+      for (let r = Math.ceil((y0 - oy - ys - h / 2) / h), r1 = Math.floor((y1 - oy - ys - h / 2) / h); r <= r1; r++){
+        const cy = oy + ys + r * h + h / 2;
+        for (const e of [4, 5, 0]){          // three edges a hex: the others are its neighbours'
+          const a0 = e * Math.PI / 3, a1 = a0 + Math.PI / 3, na = a0 + Math.PI / 6, nx = Math.cos(na) * 2, ny = Math.sin(na) * 2;
+          for (const t of [0.3, 0.5, 0.7]){
+            const px = cx + s * ((1 - t) * Math.cos(a0) + t * Math.cos(a1)), py = cy + s * ((1 - t) * Math.sin(a0) + t * Math.sin(a1));
+            const v = Math.abs(2 * at(px, py) - at(px + nx, py + ny) - at(px - nx, py - ny));
+            if (v === v){ on += v; n++; }
+          }
+        }
+      }
+    }
+    return n ? on / n : 0;
+  };
+  const c2 = cs / N, ox = offX / N, oy = offY / N, s = c2 / 2;
+  const on = sum(c2, ox, oy), off = sum(c2, ox + s * 0.75, oy + s * Math.sqrt(3) / 4);
+  return off > 0 ? on / off : 0;
+}
 // ─── The walls drawn on a map picture ───────────────────────────────────────
 // Walls for line of sight without drawing each one: Build → Find walls.
 // Two ways to read a map, because maps are drawn two ways:
@@ -1856,6 +1904,7 @@ registerPanel('battlemap',{
   _applyGrid(found, how, settling){
     const img = _mapBgImage, was = { cs: this._cellSize, ox: this._gridOffsetX, oy: this._gridOffsetY };
     const sz = Math.max(8, found.size);
+    this._autoSquare();
     this._cellSize = sz; this._gridOffsetX = this._wrapOff(found.ox, sz); this._gridOffsetY = this._wrapOff(found.oy, sz);
     this._fitGridToBg(); const n = this._pullTokensOnto(true); if (settling) this._saveSettling(); else this._saveMap(); this._render();
     showToast('Grid matched to the map’s squares, ' + how + '.' + this._movedNote(n), { action: { label: 'Undo', run: () => {
@@ -1872,6 +1921,7 @@ registerPanel('battlemap',{
     const path = this._bgMapPath;
     this._advGrid(path).then(g => {
       if (_mapBgImage !== img) return;
+      if (g && g.hex){ this._applyAdvHex(g); this._fitGridToBg(); this._saveMap(); this._render(); showToast('Hexes matched to the map’s, from the adventure’s map.'); return; }
       if (g){ const sc = g.w ? this._bgMapNaturalW / g.w : 1, fit = this._advFit(g, img); this._ftPerCell = g.ft || 5; this._applyGrid({ size: fit.size * sc, ox: fit.ox * sc, oy: fit.oy * sc }, 'from the adventure’s map'); return; }
       let f = null; try { f = sktDetectGrid(img); } catch(e){}
       if (!f){ showToast('No squares found on this map. Use Align and click two corners of a printed square.'); return; }
@@ -1911,6 +1961,11 @@ registerPanel('battlemap',{
       const per = { ft: 1, feet: 1, yd: 3, yard: 3, yards: 3, mi: 5280, mile: 5280, miles: 5280 }[String(g.units || 'ft').toLowerCase()];
       const ft = +g.distance > 0 && per ? +g.distance * per : 5;
       const gs = +g.scale > 0 ? +g.scale : 1;
+      // Hexes in columns (flat-topped), as the battle map draws them: 37 of
+      // the adventures' 43 hex maps (Barovia, the Sword Coast, Chult…). They
+      // had no grid at all. Hexes in rows are pointy-topped, which it doesn't
+      // draw: none, as before.
+      if (g && /^hexCols(Odd|Even)$/.test(g.type) && +g.size > 0) return { hex: true, odd: g.type === 'hexColsOdd', size: +g.size, gs, ox: (+g.offsetX || 0) / gs, oy: (+g.offsetY || 0) / gs, w: +e.w || 0, ft };
       return g && g.type === 'square' && +g.size > 0 ? { size: +g.size, alt: gs !== 1 ? +g.size / gs : null, ox: (+g.offsetX || 0) / gs, oy: (+g.offsetY || 0) / gs, w: +e.w || 0, ft } : null;
     });
   },
@@ -1922,6 +1977,57 @@ registerPanel('battlemap',{
   // the picture's printed squares are: found on it, the other if that's
   // nearer, the data's own `size` if nothing's found. In the data's pixels.
   _advSize(g, img){ return this._advFit(g, img).size; },
+  // An adventure's hexes on its picture — { cs, ox, oy } as _drawHexGrid
+  // takes them (cs corner to corner; the offset the first column's centre),
+  // in the listed picture's pixels. Read against the printed hexes of 12
+  // maps of 10 books:
+  //   the size is mostly the hex's height, flat side to flat side (Barovia's
+  //   69 is a hex 79.7 across), but some give it corner to corner (Phandelver's
+  //   player Sword Coast: 143 across); with a `scale`, sometimes over it
+  //   (Bigby's Phandalin region: 240 ÷ 3);
+  //   the offset is the first hex's box's corner, and "odd" maps sit half a
+  //   hex lower than ours (Barovia, Out of the Abyss, Princes of the
+  //   Apocalypse), "even" ones as ours (Stormwreck Isle, Dragon Delve).
+  // So each reading is tried on the picture and the one on its lines kept;
+  // the first if the picture can't say.
+  _hexFit(g, img){
+    const k = img && img.naturalWidth && g.w ? img.naturalWidth / g.w : 1;
+    const sizes = [g.size * 2 / Math.sqrt(3), g.size];
+    if (g.gs && g.gs !== 1) sizes.push(sizes[0] / g.gs, sizes[1] / g.gs);
+    let best = null;
+    for (const cs of sizes){
+      const s = cs / 2, h = s * Math.sqrt(3);
+      const c = { cs, ox: g.ox + s, oy: g.oy + (g.odd ? h / 2 : 0) };
+      let v = 0; try { v = img ? sktHexScore(img, cs * k, c.ox * k, c.oy * k) : 0; } catch(e){}
+      if (!best || v > best.v + 0.02) best = Object.assign(c, { v });
+    }
+    return best;
+  },
+  // A hex offset into the first column step (and the first row): the grid
+  // wraps its offsets into one hex's width, and hexes repeat every TWO
+  // columns — a column over is the same grid half a hex lower.
+  _hexNormOff(ox, oy, cs){
+    const colStep = cs * 0.75, h = cs / 2 * Math.sqrt(3), n = Math.floor(ox / colStep);
+    ox -= n * colStep; if (n & 1) oy += h / 2;
+    return { x: ox, y: ((oy % h) + h) % h };
+  },
+  // The adventure's hexes, put on: the hex grid, its size and place, and how
+  // far a hex is (Barovia's a quarter mile).
+  _applyAdvHex(g){
+    const f = this._hexFit(g, _mapBgImage), sc = g.w ? this._bgMapNaturalW / g.w : 1;
+    const cs = Math.max(8, f.cs * sc), o = this._hexNormOff(f.ox * sc, f.oy * sc, cs);
+    this._cellSize = cs; this._gridOffsetX = o.x; this._gridOffsetY = o.y;
+    this._ftPerCell = g.ft || 5;
+    if (this._gridType !== 'none'){ this._gridType = 'hex'; this._showGrid = true; }
+    this._gridAuto = 'hex';
+  },
+  // Squares again where hexes were only an adventure map's own (not the
+  // DM's choice): the next map's squares, found or in its data.
+  _gridAuto: null,
+  _autoSquare(){
+    if (this._gridType === 'hex' && this._gridAuto === 'hex'){ this._gridType = 'square'; this._showGrid = true; }
+    this._gridAuto = null;
+  },
   // …and where its lines are: the picture's own when what's found there
   // agrees with the size chosen (a few books' offsets are simply off — a
   // Curse of Strahd map's lines fell mid-square across the page), the data's
@@ -1942,7 +2048,9 @@ registerPanel('battlemap',{
       if (tries < 150) setTimeout(() => this._useAdvGrid(path, g, tries + 1), 200);
       return;
     }
-    if (g){
+    if (g && g.hex) this._applyAdvHex(g);
+    else this._autoSquare();
+    if (g && !g.hex){
       const fit = this._advFit(g, _mapBgImage);
       const sc = g.w ? this._bgMapNaturalW / g.w : 1, sz = Math.max(8, fit.size * sc);
       this._cellSize = sz; this._gridOffsetX = this._wrapOff(fit.ox * sc, sz); this._gridOffsetY = this._wrapOff(fit.oy * sc, sz);
@@ -6433,7 +6541,7 @@ registerPanel('battlemap',{
       else if(act==='toggle-grid'){
         // Cycle square → hex → none → square
         const next = this._gridType === 'square' ? 'hex' : (this._gridType === 'hex' ? 'none' : 'square');
-        this._gridType = next; this._showGrid = next !== 'none';
+        this._gridType = next; this._showGrid = next !== 'none'; this._gridAuto = null;
         this._saveMap(); this._render();
       }
       else if(act==='toggle-snap'){this._snapToGrid=!this._snapToGrid;this._saveMap();this._render();}
@@ -7389,7 +7497,7 @@ registerPanel('battlemap',{
         return;
       }
       if (k === 'grid-square' || k === 'grid-hex' || k === 'grid-none'){
-        this._gridType = k.slice(5); this._showGrid = this._gridType !== 'none';
+        this._gridType = k.slice(5); this._showGrid = this._gridType !== 'none'; this._gridAuto = null;
         this._saveMap();
         // Same lightweight repaint the remote-update path uses — the grid
         // canvas redraws in place; nothing else on the stage changes.
