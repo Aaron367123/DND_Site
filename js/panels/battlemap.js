@@ -191,6 +191,32 @@ function sktHexScore(img, cs, offX, offY){
   const on = sum(c2, ox, oy), off = sum(c2, ox + s * 0.75, oy + s * Math.sqrt(3) / 4);
   return off > 0 ? on / off : 0;
 }
+// Storm King's Thunder's maps whose listed square is several of the printed
+// ones, with no distance in the data — so a square stood for 5 ft where the
+// picture's legend says 10 or 20 ft a printed square, and each held 2 or 3 of
+// them: Svardborg's "1 square = 20 feet", read as 5 ft for three, put every
+// ruler, reach and move at a twelfth. [printed squares a listed one is, the
+// legend's feet a printed square]. Read on each picture: the printed lines
+// at each half or third of the listed square (folded line strength, found
+// squares, and by eye at 2×), and the legend. Maps where the three didn't
+// agree (the Dragon Cult Airship, the Grand Dame, the Morkoth, the Old Tower,
+// the Tower of Zephyros, Lyn Armaal's first level) are left as listed.
+const SKT_ADV_PRINTED = {
+  'adventure/SKT/006-skt01-02-1.webp': [2, 10], 'adventure/SKT/007-101.webp': [2, 10],                 // Nightstone
+  'adventure/SKT/010-drippingcaves.webp': [2, 5], 'adventure/SKT/011-102.webp': [2, 5],                // Dripping Caves
+  'adventure/SKT/056-skt04-eye.webp': [2, 20], 'adventure/SKT/057-401.webp': [2, 20],                  // Eye of the All-Father
+  'adventure/SKT/064-skt05-gruddhaug.webp': [3, 10], 'adventure/SKT/065-501.webp': [3, 10],            // Grudd Haug
+  'adventure/SKT/068-skt06-deadstone.webp': [3, 10], 'adventure/SKT/069-601.webp': [2, 10],            // Deadstone Cleft
+  'adventure/SKT/073-skt07-svardborg.webp': [3, 20], 'adventure/SKT/074-701.webp': [3, 20],            // Svardborg
+  'adventure/SKT/075-skt07-lodges.webp': [3, 10], 'adventure/SKT/076-799.webp': [3, 10],               // Svardborg Lodges
+  'adventure/SKT/077-skt07-04.webp': [3, 5], 'adventure/SKT/078-702.webp': [3, 5],                     // Krigvind
+  'adventure/SKT/080-skt08-ironslag1.webp': [3, 10], 'adventure/SKT/081-801.webp': [3, 10],            // Ironslag
+  'adventure/SKT/082-skt08-ironslag2.webp': [3, 10], 'adventure/SKT/083-802.webp': [3, 10],            // Ironslag, Lower Level
+  'adventure/SKT/089-skt09-lyn2.webp': [3, 10], 'adventure/SKT/090-902.webp': [3, 10],                 // Lyn Armaal, Levels 2–6
+  'adventure/SKT/093-skt10-maelstrom1.webp': [3, 10], 'adventure/SKT/094-1001.webp': [3, 10],          // Maelstrom, Levels 1 and 2
+  'adventure/SKT/096-skt10-maelstrom2.webp': [2, 10], 'adventure/SKT/097-1002.webp': [2, 10],          // Maelstrom, Level 3
+  'adventure/SKT/108-skt12-lair.webp': [2, 10], 'adventure/SKT/109-1201.webp': [2, 10],                // Iymrith's Lair
+};
 // ─── The walls drawn on a map picture ───────────────────────────────────────
 // Walls for line of sight without drawing each one: Build → Find walls.
 // Two ways to read a map, because maps are drawn two ways:
@@ -1922,7 +1948,7 @@ registerPanel('battlemap',{
     this._advGrid(path).then(g => {
       if (_mapBgImage !== img) return;
       if (g && g.hex){ this._applyAdvHex(g); this._fitGridToBg(); this._saveMap(); this._render(); showToast('Hexes matched to the map’s, from the adventure’s map.'); return; }
-      if (g){ const sc = g.w ? this._bgMapNaturalW / g.w : 1, fit = this._advFit(g, img); this._ftPerCell = g.ft || 5; this._applyGrid({ size: fit.size * sc, ox: fit.ox * sc, oy: fit.oy * sc }, 'from the adventure’s map'); return; }
+      if (g){ const sc = g.w ? this._bgMapNaturalW / g.w : 1, fit = this._advFit(g, img); this._ftPerCell = g.ft || 5; this._applyGrid({ size: fit.size * sc / (g.split || 1), ox: fit.ox * sc, oy: fit.oy * sc }, 'from the adventure’s map'); return; }
       let f = null; try { f = sktDetectGrid(img); } catch(e){}
       if (!f){ showToast('No squares found on this map. Use Align and click two corners of a printed square.'); return; }
       const k = img.naturalWidth ? (this._bgMapNaturalW || img.naturalWidth) / img.naturalWidth : 1;
@@ -1966,7 +1992,8 @@ registerPanel('battlemap',{
       // had no grid at all. Hexes in rows are pointy-topped, which it doesn't
       // draw: none, as before.
       if (g && /^hexCols(Odd|Even)$/.test(g.type) && +g.size > 0) return { hex: true, odd: g.type === 'hexColsOdd', size: +g.size, gs, ox: (+g.offsetX || 0) / gs, oy: (+g.offsetY || 0) / gs, w: +e.w || 0, ft };
-      return g && g.type === 'square' && +g.size > 0 ? { size: +g.size, alt: gs !== 1 ? +g.size / gs : null, ox: (+g.offsetX || 0) / gs, oy: (+g.offsetY || 0) / gs, w: +e.w || 0, ft } : null;
+      const pr = SKT_ADV_PRINTED[path];
+      return g && g.type === 'square' && +g.size > 0 ? { size: +g.size, alt: gs !== 1 ? +g.size / gs : null, ox: (+g.offsetX || 0) / gs, oy: (+g.offsetY || 0) / gs, w: +e.w || 0, ft: pr ? pr[1] : ft, split: pr ? pr[0] : 1 } : null;
     });
   },
   // Once the picked map's picture is in (its size is what the grid scales
@@ -2052,7 +2079,8 @@ registerPanel('battlemap',{
     else this._autoSquare();
     if (g && !g.hex){
       const fit = this._advFit(g, _mapBgImage);
-      const sc = g.w ? this._bgMapNaturalW / g.w : 1, sz = Math.max(8, fit.size * sc);
+      // (the printed squares, where the listed one is several: SKT_ADV_PRINTED)
+      const sc = g.w ? this._bgMapNaturalW / g.w : 1, sz = Math.max(8, fit.size * sc / (g.split || 1));
       this._cellSize = sz; this._gridOffsetX = this._wrapOff(fit.ox * sc, sz); this._gridOffsetY = this._wrapOff(fit.oy * sc, sz);
       this._ftPerCell = g.ft || 5;
     }

@@ -26712,6 +26712,43 @@ for (const cls of Object.keys(rule)) for (let L = 1; L <= 20; L++) for (const sc
         closePanel('battlemap');
       }
     }
+    // -- Round 524: Storm King's Thunder maps whose listed square is 2 or 3 printed ones get the printed squares and their legend's feet — Svardborg ("1 square = 20 feet") read 5 ft for three printed squares, every ruler, reach and move at a twelfth --
+    if (!PLAYER){
+      const B = panelDefs.battlemap;
+      const S0 = localStorage.getItem('skt-battlemap-v1'), P0 = B._bgMapPath, I0 = _mapBgImage, W0 = B._bgMapNaturalW, H0 = B._bgMapNaturalH;
+      const keep = { ft: B._ftPerCell, cs: B._cellSize, ox: B._gridOffsetX, oy: B._gridOffsetY, cols: B._cols, rows: B._rows, gt: B._gridType, sg: B._showGrid, lp: B._bgLoadedPath, sc: B._bgMapScale };
+      try {
+        const SV = 'adventure/SKT/073-skt07-svardborg.webp', MM = 'adventure/SKT/039-skt03-morgursmound.webp';
+        const g = await B._advGrid(SV);
+        ok('Svardborg: three printed squares a listed one, 20 ft each (its legend)', !!g && g.split === 3 && g.ft === 20, JSON.stringify(g && { split: g.split, ft: g.ft }));
+        // Put on, as a pick does (a blank stand-in: nothing found on it, so the data's own size).
+        const pic = (w, h) => { const c = document.createElement('canvas'); c.width = w; c.height = h; const x = c.getContext('2d'); x.fillStyle = '#cdd'; x.fillRect(0, 0, w, h); const i = new Image(); return new Promise(r => { i.onload = () => r(i); i.src = c.toDataURL('image/png'); }); };
+        openPanel('battlemap'); await sleep(300);
+        _mapBgImage = await pic(2182, 3000); B._bgMapNaturalW = 2182; B._bgMapNaturalH = 3000; B._bgMapScale = 1;
+        B._bgMapPath = SV; B._bgLoadedPath = SV; B._gridType = 'square'; B._showGrid = true;
+        B._useAdvGrid(SV, g, 0); await sleep(150);
+        ok('…picked: a square of 79 ÷ 3 px, 20 ft', Math.abs(B._cellSize - 79 / 3) < 0.3 && B._ftPerCell === 20, B._cellSize + ' px, ' + B._ftPerCell + ' ft');
+        const foot = (B._body.querySelector('.map-footer') || B._body).textContent;
+        ok('…and the footer says so', /1 sq = 20 ft/.test(foot), foot.slice(0, 80));
+        // Grid settings → Match: the same.
+        B._cellSize = 79; B._ftPerCell = 5;
+        B._matchGrid(); await sleep(400);
+        ok('…Match gives the same', Math.abs(B._cellSize - 79 / 3) < 0.3 && B._ftPerCell === 20, B._cellSize + ' px, ' + B._ftPerCell + ' ft');
+        // A map whose listed square is its printed one, with its own distance: as listed.
+        const g2 = await B._advGrid(MM);
+        _mapBgImage = await pic(1600, 2200); B._bgMapNaturalW = 1600; B._bgMapNaturalH = 2200; B._bgMapPath = MM; B._bgLoadedPath = MM;
+        B._useAdvGrid(MM, g2, 0); await sleep(150);
+        ok('Morgur’s Mound (its square the printed one, 50 ft in its data): as listed', g2.split === 1 && Math.abs(B._cellSize - 108) < 0.5 && B._ftPerCell === 50, B._cellSize + ' px, ' + B._ftPerCell + ' ft');
+      } catch(e){ ok('round 524 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
+      finally {
+        document.querySelectorAll('#toast-host .toast-item').forEach(t => t.remove());
+        B._ftPerCell = keep.ft; B._cellSize = keep.cs; B._gridOffsetX = keep.ox; B._gridOffsetY = keep.oy; B._cols = keep.cols; B._rows = keep.rows; B._gridType = keep.gt; B._showGrid = keep.sg; B._bgLoadedPath = keep.lp; B._bgMapScale = keep.sc;
+        _mapBgImage = I0; B._bgMapPath = P0; B._bgMapNaturalW = W0; B._bgMapNaturalH = H0;
+        if (S0 != null) localStorage.setItem('skt-battlemap-v1', S0);
+        try { B._render(); } catch(e){}
+        closePanel('battlemap');
+      }
+    }
     // -- Class features: represented, not just text ------------------------
     {
       try {
