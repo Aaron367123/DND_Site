@@ -1020,7 +1020,7 @@ registerPanel('battlemap',{
     if (nd) wf.gaps.forEach(s => this._drawings.push({ k: 'tpl', id: id(), shape: 'wall', door: true, pts: s.map(v => Math.round(v * 10) / 10) }));
     this._endWallFind();
     this._saveMap(); this._render();
-    if (typeof showToast === 'function') showToast(n + ' wall' + (n === 1 ? '' : 's') + (nd ? ' and ' + nd + ' door' + (nd === 1 ? '' : 's') : '') + ' added. Click one with Build → Wall up to change or remove it.');
+    if (typeof showToast === 'function') showToast(n + ' wall' + (n === 1 ? '' : 's') + (nd ? ' and ' + nd + ' door' + (nd === 1 ? '' : 's') : '') + ' added.' + (nd ? ' Click a door’s handle to open it; right-click it to lock it.' : ' Click one with Build → Wall up to change or remove it.'));
   },
   _endWallFind(){
     const wf = this._wallFind; if (!wf) return;
@@ -5285,7 +5285,12 @@ registerPanel('battlemap',{
       // a door: solid when shut, an empty frame when open
       : '<rect x="' + bx.toFixed(1) + '" y="' + by.toFixed(1) + '" width="' + bw.toFixed(1) + '" height="' + bh.toFixed(1) + '" fill="' + (d.open ? 'none' : wood) + '" stroke="' + wood + '" stroke-width="' + sw + '"/>';
     const what = d.locked ? 'locked' : d.open ? 'open' : 'closed';
-    return '<g data-door-h="' + d.id + '" data-state="' + what + '"><title>Door, ' + what + '</title>'
+    // (what it does, said on it: the lock was only in Build's menu on the
+    // door's line, and a DM looking for it didn't find it)
+    const how = document.body.classList.contains('player-mode')
+      ? (d.locked ? '' : ' — tap to ' + (d.open ? 'close' : 'open') + ' it when you’re next to it')
+      : ' — click to ' + (d.open ? 'close' : 'open') + ', right-click (or hold) to ' + (d.locked ? 'unlock' : 'lock');
+    return '<g data-door-h="' + d.id + '" data-state="' + what + '"><title>Door, ' + what + how + '</title>'
       + '<circle cx="' + m.x.toFixed(1) + '" cy="' + m.y.toFixed(1) + '" r="' + r.toFixed(1) + '" fill="#211a14" fill-opacity=".88" stroke="' + wood + '" stroke-width="' + sw + '"/>'
       + glyph + '</g>';
   },
@@ -5310,6 +5315,17 @@ registerPanel('battlemap',{
       for (let i = 0; i + 3 < d.pts.length; i += 2) if (seg(t.x, t.y, +d.pts[i], +d.pts[i + 1], +d.pts[i + 2], +d.pts[i + 3]) <= reach) return true;
       return false;
     });
+  },
+  // The menu of the door whose handle is under the screen point (cx, cy):
+  // open or close, lock or unlock, make it a wall, remove it. The DM's
+  // (a player's right-click or hold stays a ping). → whether there was one.
+  _doorMenuAt(cx, cy){
+    if (document.body.classList.contains('player-mode') || this._wallFind || this._wallErasing || this._movingEntry) return false;
+    const st = this._body && this._body.querySelector('#map-stage'); if (!st) return false;
+    const p = this._stagePoint(cx, cy, st), d = p && this._doorAt(p.x, p.y);
+    if (!d) return false;
+    this._fixtureMenu(d, cx, cy, p.x, p.y);
+    return true;
   },
   // A tap on the map with no tool up. Only a door's handle answers it.
   _tapMap(x, y, cx, cy){
@@ -7285,8 +7301,16 @@ registerPanel('battlemap',{
       // Left-click pan only when no other tool wants the click
       if (e.button === 0 && !this._tool && !this._fogTool){ panStart(e); }
     });
-    // Suppress browser context menu so right-click drag is usable
-    scrollEl.addEventListener('contextmenu', e => e.preventDefault());
+    // Suppress browser context menu so right-click drag is usable — but a
+    // right-click on a door's handle (not a drag) is the door's menu, with
+    // its lock, whatever tool is up. The DM's.
+    scrollEl.addEventListener('mousedown', e => { if (e.button === 2) this._rcAt = { x: e.clientX, y: e.clientY }; }, true);
+    scrollEl.addEventListener('contextmenu', e => {
+      e.preventDefault();
+      const r0 = this._rcAt; this._rcAt = null;
+      if (r0 && Math.hypot(e.clientX - r0.x, e.clientY - r0.y) > 6) return;
+      this._doorMenuAt(e.clientX, e.clientY);
+    });
     // Where the pointer is on the map, for Ctrl+V (none once it's left).
     // (kept on screen and turned into the map's place when it's wanted, so a
     // scroll under a still pointer doesn't leave it stale)
@@ -7325,6 +7349,7 @@ registerPanel('battlemap',{
       if (touch) document.addEventListener('touchcancel', stop);
       this._holdT = setTimeout(() => {
         stop();
+        if (this._doorMenuAt(cx, cy)) return;
         this._ping(at.x, at.y);
       }, 550);
     };

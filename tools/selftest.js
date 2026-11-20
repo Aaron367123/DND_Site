@@ -26855,6 +26855,67 @@ for (const cls of Object.keys(rule)) for (let L = 1; L <= 20; L++) for (const sc
         closePanel('battlemap');
       }
     }
+    // -- Round 527: a door's lock, where the DM looks for it — right-click (or hold) its handle, any tool: its menu; the handle says so. It was only in Build's menu on the door's line, and the DM didn't find it --
+    if (!PLAYER){
+      const B = panelDefs.battlemap;
+      const S0 = localStorage.getItem('skt-battlemap-v1'), D0 = B._drawings, T0 = B._tool;
+      const pings = []; const P0 = B._ping;
+      try {
+        openPanel('battlemap'); await sleep(400);
+        B._tool = null;
+        const cs = B._csScreen() || 50, sc = B._body.querySelector('#map-scroll'), z = B._screenScale();
+        const st = B._body.querySelector('#map-stage'), sr = st.getBoundingClientRect(), vr = sc.getBoundingClientRect();
+        // a door across the middle of what's on screen
+        const mx = (vr.left + vr.width / 2 - sr.left) / z, my = (vr.top + vr.height / 2 - sr.top) / z;
+        const d = { k: 'tpl', id: 'r527_door', shape: 'wall', door: true, pts: [mx - cs, my, mx + cs, my] };
+        B._drawings = (D0 || []).concat([d]); B._render(); await sleep(200);
+        B._ping = (x, y) => pings.push([x, y]);
+        const h = () => B._body.querySelector('[data-door-h="r527_door"]');
+        ok('The door’s handle says how: click to open, right-click (or hold) to lock', !!h() && /right-click \(or hold\) to lock/.test(h().querySelector('title').textContent), h() && h().querySelector('title').textContent);
+        const scr = () => { const r = h().getBoundingClientRect(); return { x: Math.round(r.left + r.width / 2), y: Math.round(r.top + r.height / 2) }; };
+        const menuItems = () => { const m = document.querySelector('.ctx-menu'); return m ? [...m.querySelectorAll('*')].filter(x => !x.children.length).map(x => x.textContent.trim()).filter(Boolean) : []; };
+        const closeMenus = () => document.querySelectorAll('.ctx-menu').forEach(m => m.remove());
+        const rclick = (p, q) => { q = q || p; const t = document.elementFromPoint(p.x, p.y); t.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, button: 2, buttons: 2, clientX: p.x, clientY: p.y })); document.dispatchEvent(new MouseEvent('mouseup', { bubbles: true, button: 2, clientX: q.x, clientY: q.y })); document.elementFromPoint(q.x, q.y).dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true, button: 2, clientX: q.x, clientY: q.y })); };
+        let p = scr(); rclick(p); await sleep(150);
+        ok('…right-click it: its menu, with the lock', menuItems().some(s => /Lock the door/.test(s)), menuItems().join(' | '));
+        const lk = [...document.querySelectorAll('.ctx-menu *')].find(x => !x.children.length && /Lock the door/.test(x.textContent)); if (lk) lk.click(); await sleep(150);
+        ok('…Lock: locked, the handle a padlock that says unlock', d.locked === true && h().dataset.state === 'locked' && /to unlock/.test(h().querySelector('title').textContent), JSON.stringify({ locked: d.locked, st: h() && h().dataset.state }));
+        closeMenus();
+        // a right-drag (a pan) that ends on it: no menu
+        p = scr(); { const a = { x: p.x - 40, y: p.y - 25 }; document.elementFromPoint(a.x, a.y).dispatchEvent(new MouseEvent('mousedown', { bubbles: true, button: 2, buttons: 2, clientX: a.x, clientY: a.y })); document.dispatchEvent(new MouseEvent('mouseup', { bubbles: true, button: 2, clientX: p.x, clientY: p.y })); document.elementFromPoint(p.x, p.y).dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true, button: 2, clientX: p.x, clientY: p.y })); }
+        await sleep(150); p = scr();
+        ok('…a right-drag (panning) that ends on it: no menu', !document.querySelector('.ctx-menu'), menuItems().join(' | '));
+        closeMenus();
+        // a right-click on the bare map: no menu
+        rclick({ x: p.x, y: Math.round(p.y + 3 * cs * z) }); await sleep(150);
+        ok('…a right-click away from any door: no menu', !document.querySelector('.ctx-menu'), menuItems().join(' | '));
+        closeMenus();
+        // with another tool up too
+        B._tool = 'ruler'; B._render(); await sleep(150);
+        p = scr(); rclick(p); await sleep(150);
+        ok('…with the ruler up, the same', menuItems().some(s => /Unlock the door/.test(s)), menuItems().join(' | '));
+        closeMenus(); B._tool = null; B._render(); await sleep(150);
+        // held: the menu, not a ping
+        p = scr(); document.elementFromPoint(p.x, p.y).dispatchEvent(new MouseEvent('mousedown', { bubbles: true, button: 0, buttons: 1, clientX: p.x, clientY: p.y }));
+        await sleep(700);
+        document.dispatchEvent(new MouseEvent('mouseup', { bubbles: true, button: 0, clientX: p.x, clientY: p.y })); await sleep(100);
+        ok('…held: the menu, not a ping', menuItems().some(s => /Unlock the door/.test(s)) && !pings.length, menuItems().join(' | ') + ' pings ' + pings.length);
+        closeMenus();
+        // a player's screen: a right-click or hold is never the DM's menu
+        document.body.classList.add('player-mode');
+        const F0 = B._isFogged; B._isFogged = () => false;
+        let pm; try { pm = B._doorMenuAt(p.x, p.y); } finally { document.body.classList.remove('player-mode'); B._isFogged = F0; }
+        ok('…never on a player’s screen', pm === false, String(pm));
+      } catch(e){ ok('round 527 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
+      finally {
+        document.querySelectorAll('.ctx-menu').forEach(m => m.remove());
+        document.querySelectorAll('#toast-host .toast-item').forEach(t => t.remove());
+        B._ping = P0; B._drawings = D0; B._tool = T0;
+        if (S0 != null) localStorage.setItem('skt-battlemap-v1', S0);
+        try { B._render(); } catch(e){}
+        closePanel('battlemap');
+      }
+    }
     // -- Class features: represented, not just text ------------------------
     {
       try {
