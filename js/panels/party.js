@@ -2899,12 +2899,15 @@ registerPanel('party',{
       const openInspMenu = (x, y) => {
         const idx = +card.dataset.cidx;
         const reasons = state.settings?.inspirationReasons || [];
+        // (the reason went nowhere: it granted Inspiration exactly as Grant
+        // does. Now it's in the game log, for the table to see why.)
         const items = reasons.map(r => ({
           label: r,
           onClick: () => {
             state.party[idx] = {...state.party[idx], inspiration: true};
             save();
             this._render();
+            sktInspLog(state.party[idx], r);
           },
         }));
         items.push({ label: '✏ Edit reasons…', onClick: () => this._manageInspirationReasons() });
@@ -3108,7 +3111,7 @@ registerPanel('party',{
       if(act==='party-compact'){ if (!state.settings) state.settings = {}; state.settings.partyCompact = !state.settings.partyCompact; save(); this._render(); return; }
       if(act==='party-rest'){ this._openRestMenu(el); return; }
       if(act==='party-ask'){ if (typeof sktOpenAskRoll === 'function') sktOpenAskRoll((state.combatants || []).some(c => c.isPC) ? { kind: 'init' } : {}); return; }
-      if(act==='insp'){state.party[i]={...state.party[i],inspiration:!state.party[i].inspiration};save();this._render();}
+      if(act==='insp'){const giving=!state.party[i].inspiration;state.party[i]={...state.party[i],inspiration:giving};save();this._render();if(giving)sktInspLog(state.party[i]);}
       // The recipient uses their die: clear it.
       else if(act==='bardic-insp'){
         if (state.party[i].bardicInspiration){ state.party[i]={...state.party[i],bardicInspiration:false,bardicFrom:null}; save(); this._render(); }
@@ -3967,6 +3970,11 @@ function sktHdLongRest(pc){
 // the party slot between fights), at 0 HP, so the card says Dead and a long
 // rest leaves them be. Setting level 6 used to toast "dies" and change nothing.
 // Returns true when it killed them.
+// Heroic Inspiration given: in the game log, with why when the DM said.
+function sktInspLog(pc, why){
+  if (!pc || typeof sktLogAdd !== 'function') return;
+  sktLogAdd({ who: pc.name, pcId: pc.id, from: 'dm', kind: 'note', label: 'Heroic Inspiration', total: '✦', text: why ? String(why) : 'from the DM' });
+}
 function sktExhaustionDeath(pc){
   if (!pc || (+pc.exhaustion || 0) < 6 || !sktRuleOn('exhaustion')) return false;
   const h = sktDeathSaveHolder(pc);

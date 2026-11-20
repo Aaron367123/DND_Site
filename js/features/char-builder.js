@@ -620,14 +620,17 @@ function cbShell(main, side){
   const todo = cbTodo();
   const count = id => todo.filter(t => t.step === id && !t.soft).length;
   const vis0 = cbVisibleSteps();
+  // With no class yet, what's still to choose can't be read past it: the
+  // background, abilities and skills showed ✓ before anything was picked.
+  const open = id => !CB.build.cls && !['basics', 'class', 'species', 'review', 'details'].includes(id);
   const steps = vis0.map((s, i) => {
-    const n = count(s.id), done = !n && s.id !== 'review' && s.id !== 'details';
+    const n = count(s.id), done = !n && s.id !== 'review' && s.id !== 'details' && !open(s.id);
     return '<button class="cb-step' + (CB.step === s.id ? ' on' : '') + (done ? ' done' : '') + '" data-cb-step="' + s.id + '">'
       + '<span class="cb-step-i">' + (n ? '' : done ? '✓' : i + 1) + '</span>' + cbEsc(s.label)
       + (n ? '<span class="cb-step-n" title="' + n + ' still to choose">' + n + '</span>' : '') + '</button>';
   }).join('');
   const need = vis0.filter(s => s.id !== 'review' && s.id !== 'details');
-  const pct = need.length ? Math.round(100 * need.filter(s => !count(s.id)).length / need.length) : 100;
+  const pct = need.length ? Math.round(100 * need.filter(s => !count(s.id) && !open(s.id)).length / need.length) : 100;
   const title = CB.mode === 'levelup' ? 'Level up — ' + cbEsc(CB.build.name || 'character') + ' to level ' + CB.build.level
               : CB.mode === 'edit' ? 'Edit ' + cbEsc(CB.build.name || 'character') : 'New character';
   const vis = cbVisibleSteps(), at = vis.findIndex(s => s.id === CB.step);

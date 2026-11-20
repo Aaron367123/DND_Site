@@ -27334,6 +27334,45 @@ for (const cls of Object.keys(rule)) for (let L = 1; L <= 20; L++) for (const sc
         B._drawings = D0; save();
       }
     }
+    // -- Round 532: the character builder doesn't tick steps it can't judge yet (Background ✓ before a class was picked); Heroic Inspiration given goes in the game log, with the reason the DM picked (the reason was thrown away) --
+    if (!PLAYER){
+      const PA0 = JSON.stringify(state.party), LG0 = localStorage.getItem(SKT_LOG_KEY);
+      try {
+        // the builder, new, no class
+        openCharBuilder({}); await sleep(1500);
+        const tick = id => { const b = document.querySelector('.cb-step[data-cb-step="' + id + '"]'); return b ? b.classList.contains('done') : null; };
+        ok('a new character: Background, Abilities and Skills not ticked before a class', tick('background') === false && tick('abilities') === false && tick('skills') === false, JSON.stringify([tick('background'), tick('abilities'), tick('skills')]));
+        const cardCls = document.querySelector('[data-cb-step="class"]'); if (cardCls) cardCls.click(); await sleep(300);
+        const fighter = document.querySelector('[data-cb-cls="Fighter"]'); if (fighter) fighter.click(); await sleep(500);
+        ok('…a class picked: the steps it settles are ticked (Abilities, as built)', tick('abilities') === true, JSON.stringify([tick('abilities'), tick('background')]));
+        const x = document.querySelector('.cb-modal [data-cb="close"], .cb-close, .cb-head .btn-x, [data-cb="cancel"]');
+        if (typeof cbClose === 'function') cbClose(); else if (x) x.click();
+        document.querySelectorAll('.cb-backdrop, .modal-backdrop').forEach(m => { if (m.querySelector('.cb-step')) m.remove(); });
+        CB = null;
+        // Heroic Inspiration, with a reason
+        localStorage.setItem(SKT_LOG_KEY, '[]');
+        state.party = [Object.assign({}, JSON.parse(PA0)[0] || { id: 'r532p', name: 'R532 Hero', hp: 10, hpMax: 10 }, { inspiration: false })];
+        openPanel('party'); await sleep(300); panelDefs.party._render(); await sleep(100);
+        const g = panelDefs.party._body.querySelector('[data-act="insp"]');
+        g.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true, clientX: 200, clientY: 200 })); await sleep(150);
+        const it = [...document.querySelectorAll('.ctx-menu .ctx-menu-item')].find(e => /Clever idea/.test(e.textContent));
+        if (it) it.click(); await sleep(150);
+        const log = () => JSON.parse(localStorage.getItem(SKT_LOG_KEY) || '[]');
+        ok('Inspiration for a reason: given, and in the game log with it', state.party[0].inspiration === true && log().some(e => e.label === 'Heroic Inspiration' && e.text === 'Clever idea' && e.who === state.party[0].name), JSON.stringify(log().slice(-1)));
+        // plain Grant: logged too (it shows only while there's none to take back)
+        state.party[0].inspiration = false; localStorage.setItem(SKT_LOG_KEY, '[]'); panelDefs.party._render(); await sleep(80);
+        panelDefs.party._body.querySelector('[data-act="insp"]').click(); await sleep(100);
+        ok('…Grant: in the log too ("from the DM")', state.party[0].inspiration === true && log().length === 1 && log()[0].text === 'from the DM', JSON.stringify(log()));
+        document.querySelectorAll('.ctx-menu').forEach(m => m.remove());
+      } catch(e){ ok('round 532 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
+      finally {
+        document.querySelectorAll('.ctx-menu').forEach(m => m.remove());
+        state.party = JSON.parse(PA0);
+        if (LG0 == null) localStorage.removeItem(SKT_LOG_KEY); else localStorage.setItem(SKT_LOG_KEY, LG0);
+        try { panelDefs.party._render(); } catch(e){}
+        save();
+      }
+    }
     // -- Class features: represented, not just text ------------------------
     {
       try {
