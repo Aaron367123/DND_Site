@@ -26936,8 +26936,8 @@ for (const cls of Object.keys(rule)) for (let L = 1; L <= 20; L++) for (const sc
         state.settings.rules = {}; delete state.settings.useAmmunition; delete state.settings.circleMagic;
         // the list
         const keys = SKT_TABLE_RULES.map(r => r.key);
-        ok('34 table rules, each named, said and grouped once', keys.length === 34 && new Set(keys).size === 34 && SKT_TABLE_RULES.every(r => r.name && r.what && SKT_TABLE_RULE_GROUPS[r.group]), keys.length);
-        ok('…all on by default, as the app has always played — but Circle Magic (a book’s optional rule)', SKT_TABLE_RULES.every(r => sktRuleOn(r.key) === (r.key !== 'circleMagic')), SKT_TABLE_RULES.filter(r => sktRuleOn(r.key) !== (r.key !== 'circleMagic')).map(r => r.key).join());
+        ok('36 table rules, each named, said and grouped once', keys.length === 36 && new Set(keys).size === 36 && SKT_TABLE_RULES.every(r => r.name && r.what && SKT_TABLE_RULE_GROUPS[r.group]), keys.length);
+        ok('…all on by default, as the app has always played — but Circle Magic (a book’s optional rule) and the DM’s walls', SKT_TABLE_RULES.every(r => sktRuleOn(r.key) === !['circleMagic', 'wallsDM'].includes(r.key)), SKT_TABLE_RULES.filter(r => sktRuleOn(r.key) === ['circleMagic', 'wallsDM'].includes(r.key)).map(r => r.key).join());
         state.settings.useAmmunition = false; state.settings.circleMagic = true;
         ok('…the ammunition and Circle Magic settings from before still count', !sktRuleOn('ammo') && sktRuleOn('circleMagic') && !sktAmmoOn() && sktCircleMagicOn());
         sktSetRule('ammo', true); sktSetRule('circleMagic', false);
@@ -27102,13 +27102,13 @@ for (const cls of Object.keys(rule)) for (let L = 1; L <= 20; L++) for (const sc
         const drawer = document.getElementById('settings-drawer');
         sktRenderTableRules();
         const rows = drawer.querySelectorAll('#table-rules-body .tr-row');
-        ok('Settings → Table rules: a switch for each, checked as it plays', rows.length === 34 && [...rows].every(x => x.querySelector('input').checked === sktRuleOn(x.dataset.rule)), rows.length);
+        ok('Settings → Table rules: a switch for each, checked as it plays', rows.length === 36 && [...rows].every(x => x.querySelector('input').checked === sktRuleOn(x.dataset.rule)), rows.length);
         const terr = drawer.querySelector('#table-rules-body .tr-row[data-rule="terrain"] input');
         terr.checked = false; terr.dispatchEvent(new Event('change', { bubbles: true }));
         ok('…unticked: off for the table, and the heading counts it', sktRuleOn('terrain') === false && state.settings.rules.terrain === false && /1 changed/.test(document.getElementById('table-rules-meta').textContent), document.getElementById('table-rules-meta').textContent);
         const rs = drawer.querySelector('#table-rules-reset'); if (rs) rs.click();
         ok('…Back to the usual rules: every one as it was', !!rs && SKT_TABLE_RULES.every(x => sktRuleOn(x.key) === x.def), '');
-        ok('…House rule and Optional marked', drawer.querySelectorAll('#table-rules-body .tr-tag').length === 3, drawer.querySelectorAll('#table-rules-body .tr-tag').length);
+        ok('…House rule and Optional marked', drawer.querySelectorAll('#table-rules-body .tr-tag').length === 4, drawer.querySelectorAll('#table-rules-body .tr-tag').length);
       } catch(e){ ok('round 528 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
       finally {
         while (stubs.length){ const s = stubs.pop(); s[0][s[1]] = s[2]; }
@@ -27280,6 +27280,58 @@ for (const cls of Object.keys(rule)) for (let L = 1; L <= 20; L++) for (const sc
         B._bgMapPath = P0; _mapBgImage = I0; B._noMapHintOff = NH0;
         try { B._render(); panelDefs.combat._render(); } catch(e){}
         save();
+      }
+    }
+    // -- Round 531: two more table rules — prepared and known spell limits (off: as many as the player likes, never trimmed; spells above the highest slot still can't be), and walls stopping the DM's drags too (off by default; Alt goes through) --
+    if (!PLAYER){
+      const B = panelDefs.battlemap, R0 = JSON.stringify(state.settings.rules || null), D0 = B._drawings;
+      const both = (key, f) => { sktSetRule(key, true); const on = f(); sktSetRule(key, false); const off = f(); return [on, off]; };
+      try {
+        state.settings.rules = {};
+        ok('the spell limits on by default; the DM’s walls off', sktRuleOn('spellLimits') === true && sktRuleOn('wallsDM') === false);
+        // builder picker (with the rules it reads, as the builder has them)
+        const R = await sktRulesLoad('2024');
+        const CB0 = CB; if (!CB) CB = {}; const CBR0 = CB.R; CB.R = R;
+        let r;
+        try { r = both('spellLimits', () => (cbSpellChecks(['R531 A', 'R531 B', 'R531 C'], ['R531 A', 'R531 B'], 2, 'cb-spell').match(/disabled/g) || []).length);
+        } finally { CB.R = CBR0; CB = CB0; }
+        ok('spellLimits: two of two chosen, the third greyed out — off, open', r[0] === 1 && r[1] === 0, JSON.stringify(r));
+        // the to-do's excess
+        r = both('spellLimits', () => sktSpellExcess({ cantrips: ['Light', 'Mending', 'Message'], spells: ['Bless', 'Cure Wounds'] }, { cantrips: 2, prepared: 1, maxSpellLevel: 1 }, R).length);
+        ok('…one cantrip and one spell too many: two to-dos — off, none', r[0] === 2 && r[1] === 0, JSON.stringify(r));
+        r = both('spellLimits', () => sktSpellExcess({ cantrips: [], spells: ['Fireball'] }, { cantrips: 2, prepared: 5, maxSpellLevel: 1 }, R).length);
+        ok('…a 3rd-level spell at 1st level: still too high either way', r[0] === 1 && r[1] === 1, JSON.stringify(r));
+        // the sheet's prepare list
+        ok('…the sheet’s prepare list asks too', /max != null && \(chosen \|\| \[\]\)\.length >= max && sktRuleOn\('spellLimits'\)/.test(String(csManageSpellsHtml)), '');
+        ok('…and going down a level trims only when it’s on', /a\.length > n && sktRuleOn\('spellLimits'\)/.test(String(cbTrimToLevel)), '');
+        // walls for the DM
+        const cs = B._csScreen() || 50;
+        B._drawings = [{ k: 'tpl', id: 'r531w', shape: 'wall', pts: [2 * cs, 0, 2 * cs, 6 * cs] }];
+        const tryIt = alt => B._wallStop({ id: 'r531t' }, { x: 3 * cs, y: 2 * cs }, { x: 1 * cs, y: 2 * cs }, null, alt ? { altKey: true } : null);
+        r = both('wallsDM', () => !!tryIt(false));
+        ok('wallsDM: on, the DM’s drag stops at the wall — off, through', r[0] === true && r[1] === false, JSON.stringify(r));
+        sktSetRule('wallsDM', true);
+        ok('…Alt held: through anyway', tryIt(true) === null, '');
+        sktSetRule('walls', false);
+        ok('…walls off altogether: the DM’s too', tryIt(false) === null, '');
+        sktSetRule('walls', true); sktSetRule('wallsDM', false);
+        document.body.classList.add('player-mode');
+        try { ok('…a player’s drag stops whatever the DM’s setting', !!B._wallStop({ id: 'r531t' }, { x: 3 * cs, y: 2 * cs }, { x: 1 * cs, y: 2 * cs }, null, { altKey: true }), ''); }
+        finally { document.body.classList.remove('player-mode'); }
+        sktSetRule('wallsDM', true);
+        const path = { ox: cs / 2, oy: cs / 2, hex: false, cells: [] }; path.cells.push(B._pathCell(path, cs / 2, cs / 2));
+        B._drawings = [{ k: 'tpl', id: 'r531w2', shape: 'wall', pts: [cs, -20 * cs, cs, 20 * cs] }];
+        B._pathTo(path, { id: 'r531t' }, 3.5 * cs, cs / 2);
+        ok('…the DM’s path waits at the wall too', path.cells.length === 1, path.cells.length);
+        sktSetRule('wallsDM', false);
+        const path2 = { ox: cs / 2, oy: cs / 2, hex: false, cells: [] }; path2.cells.push(B._pathCell(path2, cs / 2, cs / 2));
+        B._pathTo(path2, { id: 'r531t' }, 3.5 * cs, cs / 2);
+        ok('…off: the DM’s path goes through it', path2.cells.length === 4, path2.cells.length);
+      } catch(e){ ok('round 531 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
+      finally {
+        document.body.classList.remove('player-mode');
+        state.settings.rules = JSON.parse(R0) || undefined; if (!state.settings.rules) delete state.settings.rules;
+        B._drawings = D0; save();
       }
     }
     // -- Class features: represented, not just text ------------------------

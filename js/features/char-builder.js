@@ -927,7 +927,7 @@ function cbTrimToLevel(b){
   const fit = (lst, key, n, maxLv) => {
     let a = (lst[key] || []).slice(), before = a.length, out = [];
     if (maxLv != null) a = a.filter(x => { const ok = lvlOf(x) <= maxLv; if (!ok) out.push(x); return ok; });
-    if (n != null && a.length > n){ out.push(...a.slice(n)); a = a.slice(0, n); }
+    if (n != null && a.length > n && sktRuleOn('spellLimits')){ out.push(...a.slice(n)); a = a.slice(0, n); }
     if (a.length !== before){ lst[key] = a; gone.push(...out); }
   };
   const sc = sktBuildSpellcasting(b, R, sktBuildAbilities(b, R));
@@ -2103,7 +2103,8 @@ function cbSpellChecks(options, chosen, max, attr, valueOf, block){
   valueOf = valueOf || (n => n);
   const shown = options.filter(n => cbSpellPass(n, chosen.map ? chosen.map(x => String(x).split('|').pop()) : []));
   const vals = chosen;
-  const full = max != null && vals.length >= max;
+  // (Table rules: the limits off — as many as the player likes.)
+  const full = max != null && vals.length >= max && sktRuleOn('spellLimits');
   if (!shown.length) return '<div class="cb-dim">No spells match.</div>';
   // A spell's text opens right under it, across the list (it opened above
   // the whole list, and the step scrolled up to it — away from your place).

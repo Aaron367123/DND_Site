@@ -3768,9 +3768,12 @@ function _sktCantripDice(s, level){
 function sktSpellExcess(lst, s, R){
   const out = [], n = k => (lst[k] || []).length, pl = (c, w) => c + ' ' + w + (c === 1 ? '' : 's');
   const want = s.prepared || s.known;
+  // (Table rules: the limits off — only spells above what can be cast.)
+  if (typeof sktRuleOn !== 'function' || sktRuleOn('spellLimits')){
   if (n('cantrips') > s.cantrips) out.push('remove ' + pl(n('cantrips') - s.cantrips, 'cantrip') + ' (' + s.cantrips + ' allowed)');
   if (s.spellbook && n('spellbook') > s.spellbook) out.push('remove ' + pl(n('spellbook') - s.spellbook, 'spell') + ' from the spellbook (' + s.spellbook + ' allowed)');
   if (want && n('spells') > want) out.push('remove ' + pl(n('spells') - want, 'spell') + ' (' + want + ' allowed)');
+  }
   const high = [].concat(lst.spells || [], lst.spellbook || []).filter((x, i, a) => a.indexOf(x) === i && ((sktRulesSpell(R, x) || {}).level || 0) > (s.maxSpellLevel || 0));
   if (high.length) out.push('remove ' + pl(high.length, 'spell') + ' above level ' + (s.maxSpellLevel || 0) + ' (' + high.join(', ') + ')');
   return out;

@@ -2826,6 +2826,7 @@ function sktCircleMagicOn(){ return sktRuleOn('circleMagic'); }
 // [group, key, name, what it does, default, kind ('house' | 'optional')]
 const SKT_TABLE_RULES = [
   ['move', 'walls', 'Walls and closed doors stop players', 'A player can’t drag their token through a wall or a shut door. The DM always can.'],
+  ['move', 'wallsDM', 'Walls stop the DM’s drags too', 'The DM’s token drags stop at walls and shut doors as the players’ do (hold Alt to go through anyway).', false, 'optional'],
   ['move', 'fear', 'Frightened creatures can’t move closer', 'A player can’t move a frightened creature nearer to what frightens it.'],
   ['move', 'spaces', 'One creature to a space', 'A token dropped on another creature slides to the nearest free square.'],
   ['move', 'speedLimit', 'Movement counted against Speed', 'Feet moved each turn are counted against Speed (and Dash), red when over.'],
@@ -2849,6 +2850,7 @@ const SKT_TABLE_RULES = [
   ['combat', 'condSaves', 'Saves to end conditions', 'A condition that ends on a save asks for the save at the end of each of the creature’s turns.'],
   ['combat', 'skipDead', 'Defeated monsters’ turns are skipped', 'A monster at 0 hit points (without regeneration to bring it back) loses its turn.'],
   ['combat', 'massive', 'Massive damage', 'Damage that leaves a creature at 0 with as much again as its maximum kills it outright.'],
+  ['spells', 'spellLimits', 'Prepared and known spell limits', 'A character prepares or knows only as many spells and cantrips as their class allows.'],
   ['spells', 'slots', 'Casting uses a spell slot', 'A spell cast from the sheet uses a slot, and can’t be cast with none left.'],
   ['spells', 'concOne', 'One concentration spell at a time', 'Starting a concentration spell ends the one already going.'],
   ['spells', 'concSave', 'Concentration saves', 'Damage while concentrating asks for a Constitution save (DC 10 or half the damage).'],

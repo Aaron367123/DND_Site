@@ -2131,7 +2131,7 @@ function csManageSpellsHtml(pc){
     // A 2014 Eldritch Knight or Arcane Trickster: two schools, and a few from any.
     const lim = typeof sktSchoolLimit === 'function' ? sktSchoolLimit(Object.assign({}, view, { spells: lst.spells || [] }), R) : null;
     const box = (opts, chosen, max, kind) => '<div class="cs-preplist">' + opts.map(n => {
-      const on = (chosen || []).includes(n), full = (max != null && (chosen || []).length >= max) || (kind === 'spells' && lim && lim.off >= lim.free && lim.outside(n));
+      const on = (chosen || []).includes(n), full = (max != null && (chosen || []).length >= max && sktRuleOn('spellLimits')) || (kind === 'spells' && lim && lim.off >= lim.free && lim.outside(n));
       const s = csSpell(n), ok = 'pp:' + kind + ':' + n, open = CS.open[ok];
       const tags = (s && s.concentration ? '<i class="cs-tag" title="Concentration">C</i>' : '') + (s && s.ritual ? '<i class="cs-tag" title="Ritual">R</i>' : '') + csSpellVerTag(pc, n);
       return '<div class="cs-spell cs-prep' + (on ? ' on' : '') + '">'

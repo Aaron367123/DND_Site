@@ -3001,8 +3001,12 @@ registerPanel('battlemap',{
   // The way the drag went, square by square: at the first step that crosses
   // a wall it stops, on the square before — and the turn's count stops there
   // too. The DM's moves are their own. → where it stops, or null (clear).
-  _wallStop(t, to, from, path){
-    if (!document.body.classList.contains('player-mode') || !to || !from || !sktRuleOn('walls')) return null;
+  _wallStop(t, to, from, path, ev){
+    // (Table rules: walls for players; for the DM too when that's on — Alt
+    // held is the DM's way through: a creature that can phase, a door the
+    // map hasn't been told is open.)
+    const pl = document.body.classList.contains('player-mode');
+    if (!to || !from || !sktRuleOn('walls') || (!pl && (!sktRuleOn('wallsDM') || (ev && ev.altKey)))) return null;
     const S = sktSightSrc({ drawings: this._drawings, cs: this._csScreen() || 50, ftPerCell: this._ftPerCell, gridType: this._gridType, light: 'bright' });
     if (!S.walls.length) return null;
     const cs = this._csScreen() || 50, pts = [[from.x, from.y]];
@@ -4152,7 +4156,7 @@ registerPanel('battlemap',{
     // that would is refused — a diagonal tries its two sides first — and the
     // path waits at the wall till the finger goes somewhere it can follow.
     // So the ruler shows the way the creature can actually walk.
-    const pl = document.body.classList.contains('player-mode') && sktRuleOn('walls');
+    const pl = sktRuleOn('walls') && (document.body.classList.contains('player-mode') || sktRuleOn('wallsDM'));
     if (pl && !path.walls) path.walls = sktSightSrc({ drawings: this._drawings, cs: this._csScreen() || 50, ftPerCell: this._ftPerCell, gridType: this._gridType, light: 'bright' });
     const W = pl && path.walls.walls.length ? path.walls : null, cs0 = this._csScreen() || 50;
     const ctr = c => path.hex ? this._hexCentre(c) : [path.ox + c[0] * cs0, path.oy + c[1] * cs0];
@@ -9092,7 +9096,7 @@ registerPanel('battlemap',{
             const half = size * this._tokenUnitScreen() / 2;
             const land = this._landing(t, Math.max(half, Math.min(stageW - half, nx)), Math.max(half, Math.min(stageH - half, ny)), _oaFrom, !!(ev && ev.altKey) && !document.body.classList.contains('player-mode'));
             if (this._fearBlocks(t, land, _oaFrom)){ land.x = _oaFrom.x; land.y = _oaFrom.y; land.moved = false; }
-            { const ws = this._wallStop(t, land, _oaFrom, this._drag && this._drag.path); if (ws){ land.x = ws.x; land.y = ws.y; land.moved = false; } }
+            { const ws = this._wallStop(t, land, _oaFrom, this._drag && this._drag.path, ev); if (ws){ land.x = ws.x; land.y = ws.y; land.moved = false; } }
             t.x = land.x; t.y = land.y;
             // The group: each where it stood, moved as far as this one went (on the map).
             if (grp){ const ddx = t.x - _oaFrom.x, ddy = t.y - _oaFrom.y; grp.forEach(m => { const mh = (m.t.size || 1) * this._tokenUnitScreen() / 2; m.t.x = Math.max(mh, Math.min(stageW - mh, m.sx + ddx)); m.t.y = Math.max(mh, Math.min(stageH - mh, m.sy + ddy)); }); }
