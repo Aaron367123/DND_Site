@@ -279,8 +279,11 @@ registerPanel('notes', {
     // surface a banner so the user can review and choose a winner.
     if (typeof ns.onConflict === 'function'){
       ns.onConflict(list => {
+        // (every sync reports, conflicts or none — every 8 s with a folder
+        // vault: the window was redrawn under a title being renamed)
+        const was = JSON.stringify(this._pendingConflicts || []), now = JSON.stringify(list || []);
         this._pendingConflicts = list || [];
-        if (this._body) this._render();
+        if (this._body && was !== now) this._render();
       });
     }
     ns.startPolling(() => this._data);

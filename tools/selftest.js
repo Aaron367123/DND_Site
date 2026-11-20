@@ -27466,6 +27466,55 @@ for (const cls of Object.keys(rule)) for (let L = 1; L <= 20; L++) for (const sc
         save();
       }
     }
+    // -- Round 534: typing survives a redraw — a monster half-renamed in the Combat Tracker, a character in the Party Tracker, kept (text, focus, cursor) when a phone's change redraws the window; the shop keeps its choices; the Notes window isn't redrawn by a sync with no conflicts --
+    if (!PLAYER){
+      const K0 = JSON.stringify(state.combatants), PA0 = JSON.stringify(state.party), SH0 = JSON.stringify(state.shop || null);
+      try {
+        // the Combat Tracker: rename, a phone's change arrives
+        state.combatants = [{ id: 'r534m', name: 'R534 Ogre', baseName: 'Ogre', isPC: false, hp: 30, hpMax: 30, ac: 11, conditions: [] }];
+        openPanel('combat'); await sleep(250); panelDefs.combat._render(); await sleep(60);
+        const nameIn = () => panelDefs.combat._body.querySelector('input.card-name-input');
+        let el = nameIn(); el.focus(); el.value = 'R534 Ogre Chie'; el.setSelectionRange(9, 9);
+        _reloadPanel('combat'); await sleep(30);
+        el = nameIn();
+        ok('Combat Tracker: a name half-typed survives a phone’s change (the window redrawn)', el.value === 'R534 Ogre Chie' && document.activeElement === el && el.selectionStart === 9, JSON.stringify([el.value, document.activeElement === el, el.selectionStart]));
+        el.dispatchEvent(new Event('change', { bubbles: true })); await sleep(60);
+        ok('…and still saves when done', state.combatants[0].name === 'R534 Ogre Chie', state.combatants[0].name);
+        el.blur();
+        // the Party Tracker
+        openPanel('party'); await sleep(250); panelDefs.party._render(); await sleep(60);
+        const pIn = () => panelDefs.party._body.querySelector('input.char-name');
+        if (pIn()){
+          const was = pIn().value; pIn().focus(); pIn().value = was + ' the Bol';
+          _reloadPanel('party'); await sleep(30);
+          ok('Party Tracker: a character’s name half-typed survives it too', pIn().value === was + ' the Bol' && document.activeElement === pIn(), JSON.stringify([pIn().value]));
+          pIn().value = was; pIn().blur();
+        } else ok('Party Tracker: a character’s name (no name field on this card style)', true);
+        // nothing being typed: a redraw doesn't grab focus
+        document.activeElement && document.activeElement.blur && document.activeElement.blur();
+        _reloadPanel('combat'); await sleep(30);
+        ok('…nothing being typed: the redraw focuses nothing', !panelDefs.combat._body.contains(document.activeElement), document.activeElement && document.activeElement.tagName);
+        // the shop: choices made, then a redraw (a phone's change; or Generate itself)
+        openPanel('shop'); await sleep(300); const S = panelDefs.shop; S._render(); await sleep(60);
+        const sel = id => S._body.querySelector(id);
+        sel('#shop-price').value = 'Expensive'; sel('#shop-price').dispatchEvent(new Event('change', { bubbles: true }));
+        sel('#shop-assort').value = 'Abundant'; sel('#shop-assort').dispatchEvent(new Event('change', { bubbles: true }));
+        S._render(); await sleep(60);
+        ok('Shop: Expensive and Abundant picked, kept through a redraw', sel('#shop-price').value === 'Expensive' && sel('#shop-assort').value === 'Abundant', JSON.stringify([sel('#shop-price').value, sel('#shop-assort').value]));
+        S._generate(); await sleep(150);
+        ok('…and through Generate (it went back to Average), with the shop made that way', sel('#shop-price').value === 'Expensive' && state.shop && state.shop.meta.price === 'Expensive', JSON.stringify([sel('#shop-price').value, state.shop && state.shop.meta]));
+        S._pick = null;
+        // the Notes window: a sync with no conflicts doesn't redraw it
+        ok('Notes: a sync reporting no conflicts doesn’t redraw the window (every 8 s with a folder vault)', /was !== now\) this\._render\(\)/.test(String(panelDefs.notes._initLocalSync)), '');
+      } catch(e){ ok('round 534 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
+      finally {
+        try { document.activeElement && document.activeElement.blur && document.activeElement.blur(); } catch(e){}
+        state.combatants = JSON.parse(K0); state.party = JSON.parse(PA0); state.shop = JSON.parse(SH0);
+        if (panelDefs.shop) panelDefs.shop._pick = null;
+        try { panelDefs.combat._render(); panelDefs.party._render(); } catch(e){}
+        save();
+      }
+    }
     // -- Class features: represented, not just text ------------------------
     {
       try {

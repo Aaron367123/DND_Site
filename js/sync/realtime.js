@@ -1527,13 +1527,13 @@ function _applyRemoteKey(key, fbVal) {
     try { sktSavedMapsChanged(); } catch(e){ _diag('saved maps', e); }
   }
   if (key === 'skt-quests-v1' && typeof sktQuestsChanged === 'function'){
-    try { sktQuestsChanged(); } catch(e){ _diag('quests', e); }
+    try { _sktKeep(() => sktQuestsChanged()); } catch(e){ _diag('quests', e); }
   }
   if (key === 'skt-factions-v1' && typeof sktFactionsChanged === 'function'){
-    try { sktFactionsChanged(); } catch(e){ _diag('factions', e); }
+    try { _sktKeep(() => sktFactionsChanged()); } catch(e){ _diag('factions', e); }
   }
   if (key === 'skt-homebrew-v1' && typeof sktHomebrewApply === 'function'){
-    try { sktHomebrewApply(); } catch(e){ _diag('homebrew', e); }
+    try { _sktKeep(() => sktHomebrewApply()); } catch(e){ _diag('homebrew', e); }
   }
   // A handout reaching a phone pops up there (player-app.js).
   if (key === 'skt-handouts-v1' && typeof paOnHandouts === 'function'){
@@ -1546,15 +1546,21 @@ function _applyRemoteKey(key, fbVal) {
     // A closed Loot window kept its old copy and showed it on the next open.
     const L = panelDefs && panelDefs.loot; if (L && !L._body) L._loot = null;
     // The sheet's Inventory tab lists each character's share of it.
-    if (typeof CS !== 'undefined' && CS && typeof csRender === 'function'){ try { csRender(); } catch(e){ _diag('sheet loot', e); } }
+    if (typeof CS !== 'undefined' && CS && typeof csRender === 'function'){ try { _sktKeep(() => csRender()); } catch(e){ _diag('sheet loot', e); } }
   }
 }
 
+// What's being typed survives the redraw (utils.js sktKeepTyping).
+function _sktKeep(fn){ return typeof sktKeepTyping === 'function' ? sktKeepTyping(fn) : fn(); }
 // Per-panel reload. Panels that cache data into their own property need a
 // remount; panels that read straight from `state` just need a re-render.
 function _reloadPanel(id) {
   const def = panelDefs[id];
   if (!def || !def._body) return;
+  if (id !== 'battlemap') return _sktKeep(() => _reloadPanelNow(id, def));
+  return _reloadPanelNow(id, def);
+}
+function _reloadPanelNow(id, def) {
 
   if (id === 'battlemap') {
     // One applier, shared with the same-browser BroadcastChannel route (see

@@ -2813,6 +2813,43 @@ function sktAskBardic(opts){
 // per caster. Filtered where shown, so switching it is instant both ways.
 // Whether a ranged attack takes a piece of ammunition from the inventory: one
 // setting for the whole table (the Party menu), on unless the DM turns it off.
+// ─── Typing through a redraw ─────────────────────────────────────────────────
+// A window drawn again while someone types in it (a phone's change arriving,
+// a timer) lost what was typed and the cursor: a monster's name half-renamed
+// in the Combat Tracker went back the moment a player's hit points changed.
+// sktKeepTyping(fn): fn redraws; the field being typed in — found again by
+// what it is (its id, its data- and name attributes, its place among those
+// alike) — gets its text, focus and cursor back. Its change hasn't fired, so
+// it still saves when the person is done, as before.
+function _sktFieldKey(el){
+  let sel = el.tagName.toLowerCase();
+  if (el.id) sel += '#' + CSS.escape(el.id);
+  else {
+    const attrs = [...el.attributes].filter(a => /^data-|^name$|^aria-label$/.test(a.name));
+    attrs.forEach(a => { sel += '[' + a.name + '="' + CSS.escape(a.value) + '"]'; });
+    if (!attrs.length && el.classList.length) sel += '.' + [...el.classList].map(c => CSS.escape(c)).join('.');
+  }
+  return { sel, i: Math.max(0, [...document.querySelectorAll(sel)].indexOf(el)) };
+}
+function _sktTyping(a){
+  return !!a && a !== document.body && (a.tagName === 'TEXTAREA' || a.tagName === 'SELECT' || a.isContentEditable
+    || (a.tagName === 'INPUT' && !/^(checkbox|radio|button|submit|reset|range|color|file|image)$/i.test(a.type || '')));
+}
+function sktKeepTyping(fn){
+  const a = document.activeElement;
+  if (!_sktTyping(a)) return fn();
+  let key = null; try { key = _sktFieldKey(a); } catch(e){}
+  const ce = a.isContentEditable, val = ce ? a.innerHTML : a.value;
+  let ss = null, se = null; try { ss = a.selectionStart; se = a.selectionEnd; } catch(e){}
+  const out = fn();
+  if (!key || document.activeElement === a && a.isConnected) return out;
+  let b = null; try { b = document.querySelectorAll(key.sel)[key.i] || null; } catch(e){}
+  if (!b || b === a || !_sktTyping(b)) return out;
+  if (ce){ if (b.innerHTML !== val) b.innerHTML = val; } else if (b.value !== val) b.value = val;
+  try { b.focus({ preventScroll: true }); } catch(e){ try { b.focus(); } catch(e2){} }
+  try { if (ss != null) b.setSelectionRange(ss, se); } catch(e){}
+  return out;
+}
 function sktAmmoOn(){ return sktRuleOn('ammo'); }
 function sktCircleMagicOn(){ return sktRuleOn('circleMagic'); }
 // ─── Table rules ─────────────────────────────────────────────────────────────

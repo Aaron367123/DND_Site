@@ -30,6 +30,11 @@ registerPanel('shop',{
   _render(){
     const b=this._body;if(!b)return;
     const types=Object.keys(ITEM_CATALOG);
+    // The choices as made: what's been picked here (kept through a redraw —
+    // a phone's change arriving, or Generate itself, put them back to
+    // Average), else the shop on screen's, else the usual.
+    const sm = (state.shop && state.shop.meta) || {};
+    const pick = Object.assign({ type: state.shop && state.shop.type, price: sm.price || 'Average', economy: sm.economy || 'Average', assortment: sm.assortment || 'Standard' }, this._pick || {});
     // .shop-root is only there to be measured: the layout follows the
     // window's width (a container query in main.css), and a container can't
     // restyle itself.
@@ -39,10 +44,10 @@ registerPanel('shop',{
           <span class="field-label" style="margin:0">Shop</span>
           <button class="btn icon-btn" data-act="settings" title="Pricing settings (currency, jitter, rounding)" style="padding:2px 6px;font-size:var(--fs-lg);line-height:1">${ICO('i-gear')}</button>
         </div>
-        <div><label class="field-label">Shop Type</label><select id="shop-type">${types.map(t=>`<option ${state.shop?.type===t?'selected':''}>${t}</option>`).join('')}</select></div>
-        <div><label class="field-label">Shop Price</label><select id="shop-price"><option>Cheap</option><option selected>Average</option><option>Expensive</option><option>Premium</option></select></div>
-        <div><label class="field-label">Town Economy</label><select id="shop-economy"><option>Poor</option><option selected>Average</option><option>Wealthy</option></select></div>
-        <div><label class="field-label">Assortment</label><select id="shop-assort"><option>Sparse</option><option selected>Standard</option><option>Abundant</option></select></div>
+        <div><label class="field-label">Shop Type</label><select id="shop-type">${types.map(t=>`<option ${pick.type===t?'selected':''}>${t}</option>`).join('')}</select></div>
+        <div><label class="field-label">Shop Price</label><select id="shop-price">${['Cheap','Average','Expensive','Premium'].map(v=>`<option${pick.price===v?' selected':''}>${v}</option>`).join('')}</select></div>
+        <div><label class="field-label">Town Economy</label><select id="shop-economy">${['Poor','Average','Wealthy'].map(v=>`<option${pick.economy===v?' selected':''}>${v}</option>`).join('')}</select></div>
+        <div><label class="field-label">Assortment</label><select id="shop-assort">${['Sparse','Standard','Abundant'].map(v=>`<option${pick.assortment===v?' selected':''}>${v}</option>`).join('')}</select></div>
         <button class="btn primary" data-act="gen" style="margin-top:4px">Generate Shop</button>
         <div style="display:flex;gap:6px;margin-top:8px">
           <button class="btn small" data-act="save-shop" style="flex:1" ${!state.shop?'disabled title="Generate a shop first"':''}>${ICO('i-save')} Save</button>
@@ -52,6 +57,11 @@ registerPanel('shop',{
       <div class="shop-display"><div class="shop-display-scroll" id="shop-display">${this._renderDisplay()}</div></div>
     </div></div>`;
     b.querySelector('[data-act="gen"]').addEventListener('click',e=>{e.stopPropagation();this._invLimit=20;this._generate();});
+    // (a choice made, not yet generated: kept for the next redraw)
+    ['#shop-type', '#shop-price', '#shop-economy', '#shop-assort'].forEach(id => b.querySelector(id)?.addEventListener('change', () => {
+      const v = s => (b.querySelector(s) || {}).value;
+      this._pick = { type: v('#shop-type'), price: v('#shop-price'), economy: v('#shop-economy'), assortment: v('#shop-assort') };
+    }));
     b.querySelector('[data-act="settings"]').addEventListener('click',e=>{e.stopPropagation();this._openSettings();});
     b.querySelector('[data-act="save-shop"]')?.addEventListener('click', () => this._saveCurrentShop());
     b.querySelectorAll('[data-act="load-shop"]').forEach(btn => btn.addEventListener('click', () => {
@@ -941,6 +951,7 @@ registerPanel('shop',{
   _generate(){
     const b=this._body;if(!b)return;
     const type=b.querySelector('#shop-type').value,price=b.querySelector('#shop-price').value,economy=b.querySelector('#shop-economy').value,assortment=b.querySelector('#shop-assort').value;
+    this._pick = { type, price, economy, assortment };
     const pm={Cheap:.7,Average:1,Expensive:1.3,Premium:1.6}[price];
     const em={Poor:.85,Average:1,Wealthy:1.15}[economy];
     // Catalog now comes from the full 5e dataset when loaded; falls back to
