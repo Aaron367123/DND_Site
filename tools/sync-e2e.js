@@ -514,6 +514,21 @@ const window = {};
       if (t2 == null) return { ok: false, why: 'phone after reload: ' + await pl.ev(geo) + ' (was ' + g0 + ')' };
       return { ok: true, lat: t1 + t2 };
     });
+    await step('DM picks another map by mistake → Undo puts the uploaded map back, fog and all — on the phone too', async () => {
+      const path = await dm.ev("return panelDefs.battlemap._bgMapPath || ''");
+      if (!/^sktblob:/.test(path)) return { ok: false, why: 'no uploaded map on screen (' + path + ')' };
+      await dm.ev("const B = panelDefs.battlemap; B._fog = new Set(['1,1','2,2']); B._saveMap(); return 1");
+      const seen = "const B = panelDefs.battlemap; return !!B && B._bgMapPath === " + JSON.stringify(path) + " && !!B._fog && B._fog.has('2,2')";
+      if (await W(pl, seen) == null) return { ok: false, why: 'the phone never had the fog to lose' };
+      const ADV = 'adventure/AUD/041-map-03-07.two-plateaus-shipping-company.webp';
+      await dm.ev("panelDefs.battlemap._pickAdvMap(" + JSON.stringify(ADV) + "); return 1");
+      if (await W(pl, "const B = panelDefs.battlemap; return B._bgMapPath === " + JSON.stringify(ADV) + " && !B._fog") == null) return { ok: false, why: 'the phone never got the other map' };
+      await dm.ev("sktUndo(); return 1");
+      const t = await W(pl, seen + " && !!_mapBgImage && _mapBgImage.naturalWidth > 0", 30000);
+      if (t == null) return { ok: false, why: 'phone after Undo: ' + await pl.ev("const B = panelDefs.battlemap; return B._bgMapPath + ' fog ' + (B._fog ? [...B._fog].join(',') : 'none')") };
+      const d = await dm.ev("const B = panelDefs.battlemap; return B._bgMapPath + ' ' + (!!B._fog && B._fog.has('2,2'))");
+      return d === path + ' true' ? { ok: true, lat: t } : { ok: false, why: 'DM after Undo: ' + d };
+    });
 
     // ── Handouts, roll requests, reactions ──────────────────────────────────
     await step('DM sends a handout → phone pops it up', async () => {

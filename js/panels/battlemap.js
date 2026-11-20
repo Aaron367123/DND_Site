@@ -938,6 +938,7 @@ registerPanel('battlemap',{
     const id = this._blobIdOf(path);
     if (!id) return false;
     if (id === this._blobIdOf(this._bgMapPath)) return false;
+    if (id === this._blobIdOf(this._swapHeldPath)) return false;   // an undo would bring it back
     if (this._localSavedBlobIds().has(id)) return false;
     if (typeof window.sktMapBlobRefs !== 'function'
         || typeof window.sktMapBlobDelete !== 'function') return false;
@@ -1331,6 +1332,16 @@ registerPanel('battlemap',{
   _redoStack: [],
   _lastCommitted: null,   // state as of the last save = the next undo target
   _undoRestoring: false,
+  // A save that is part of a map swap settling in — the new map's grid fitted,
+  // tokens past its edge pulled on — and so part of the swap's one Undo, not
+  // a step of its own. As one, it sat on top: the first Undo only moved two
+  // tokens back, and once a phone's update made it stale it refused, and the
+  // swap under it couldn't be reached.
+  _saveSettling(){
+    const was = this._undoRestoring;
+    this._undoRestoring = true;
+    try { this._saveMap(); } finally { this._undoRestoring = was; }
+  },
   _UNDO_MAX: 30,
 
   _undoSnapshot(){
@@ -1749,6 +1760,7 @@ registerPanel('battlemap',{
     {
       const img = new Image();
       img.onload = () => {
+        const before = this._snapshotMap();
         this._keepObjUrl(src, img);
         // Clear any stale stage background NOW so we don't see the old map
         // peek through while the new natural-size calculation runs. Without
@@ -1781,6 +1793,7 @@ registerPanel('battlemap',{
         // fit-to-view call sizes it sensibly.
         this._render();
         this._fitMapToView();
+        this._recordSwap(before, 'New map');
         if (done) done();
         // Show it here first, share it second. Encoding and uploading a
         // few megabytes takes a moment, and the DM should not be looking
@@ -1830,21 +1843,21 @@ registerPanel('battlemap',{
     const align = { label: 'Align', run: () => { this._tool = 'align'; this._alignFirstClick = null; this._render(); showToast('Align: click two grid intersections. Span MULTIPLE cells for accuracy.'); } };
     if (!found){
       const n = this._pullTokensOnto(true);
-      if (n){ this._saveMap(); this._render(); }
+      if (n){ this._saveSettling(); this._render(); }
       showToast('No squares found on this map. To line the grid up with it, use Align and click two corners of a printed square.' + this._movedNote(n), { action: align });
       return;
     }
-    this._applyGrid(found, how);
+    this._applyGrid(found, how, true);
   },
   // (Said in the grid's own message: a note of its own would be replaced by it at once.)
   _movedNote(n){ return n ? ' ' + (n === 1 ? 'A token past its edge is on it now.' : n + ' tokens past its edge are on it now.') : ''; },
   // Our squares on found's — { size, ox, oy } in the map's own pixels —
   // said, with Undo.
-  _applyGrid(found, how){
+  _applyGrid(found, how, settling){
     const img = _mapBgImage, was = { cs: this._cellSize, ox: this._gridOffsetX, oy: this._gridOffsetY };
     const sz = Math.max(8, found.size);
     this._cellSize = sz; this._gridOffsetX = this._wrapOff(found.ox, sz); this._gridOffsetY = this._wrapOff(found.oy, sz);
-    this._fitGridToBg(); const n = this._pullTokensOnto(true); this._saveMap(); this._render();
+    this._fitGridToBg(); const n = this._pullTokensOnto(true); if (settling) this._saveSettling(); else this._saveMap(); this._render();
     showToast('Grid matched to the map’s squares, ' + how + '.' + this._movedNote(n), { action: { label: 'Undo', run: () => {
       if (_mapBgImage !== img) return;
       this._cellSize = was.cs; this._gridOffsetX = was.ox; this._gridOffsetY = was.oy;
@@ -1935,7 +1948,7 @@ registerPanel('battlemap',{
       this._cellSize = sz; this._gridOffsetX = this._wrapOff(fit.ox * sc, sz); this._gridOffsetY = this._wrapOff(fit.oy * sc, sz);
       this._ftPerCell = g.ft || 5;
     }
-    this._fitGridToBg(); this._pullTokensOnto(); this._saveMap(); this._render(); if (g) this._fitMapToView();
+    this._fitGridToBg(); this._pullTokensOnto(); this._saveSettling(); this._render(); if (g) this._fitMapToView();
   },
   // A new map smaller than the last left tokens past its edge — drawn
   // nowhere, and no way to reach them. Each comes onto the map at the
@@ -2189,6 +2202,14 @@ registerPanel('battlemap',{
     }
     const id = 'u' + Date.now().toString(36);
     const stored = await window.sktMapBlobPut(id, data);
+    // Another map since (picked while this one was on its way up, or the
+    // upload undone): the players' map is that one, not this. It used to
+    // land anyway — the players got the upload, the DM's screen showed the
+    // other map.
+    if (_mapBgImage !== img || this._bgMapPath){
+      if (stored && typeof window.sktMapBlobDelete === 'function') window.sktMapBlobDelete(id);
+      return;
+    }
     if (!stored){
       // A dropped connection shouldn't cost the players the map: one press
       // tries again (while it's still the map on screen).
@@ -3439,6 +3460,58 @@ registerPanel('battlemap',{
   // Snapshot the full per-map state into a plain JSON object suitable for
   // long-term storage. Deliberately omits the uploaded-image data URL (too
   // big for localStorage) and any session-only flags (visibility toggles).
+  // A map swap, undone as one step: the whole map before it back — its
+  // picture, grid, tokens, walls, doors, areas, drawings and fog. Picking a
+  // map from the list (or uploading one there, or loading a saved one, or
+  // removing the picture) cleared all of that without a word, and nothing
+  // brought it back; only a dropped picture asked first. Good until the next
+  // swap, here or on another DM screen (a player's token moved since is on
+  // the map being undone, so it doesn't stop it).
+  _swapSeq: 0,
+  _swapHeldPath: null,
+  _recordSwap(before, label){
+    let mine = ++this._swapSeq, after = null;
+    this._holdSwapBlob(before && before.bgMapPath);
+    if (typeof sktUndoRecordCustom !== 'function') return;
+    sktUndoRecordCustom(label, () => {
+      after = this._snapshotMap();
+      this._restoreMapSnapshot(before);
+      mine = ++this._swapSeq;
+      this._holdSwapBlob(after.bgMapPath);
+    }, () => {
+      this._restoreMapSnapshot(after);
+      mine = ++this._swapSeq;
+      this._holdSwapBlob(before.bgMapPath);
+    }, { valid: () => this._swapSeq === mine });
+  },
+  // The upload the latest swap's undo (or redo) would bring back is kept on
+  // the server, not retired; the one it held before is let go now, if
+  // nothing else wants it (_retireBlob says).
+  _holdSwapBlob(path){
+    const was = this._swapHeldPath;
+    this._swapHeldPath = this._isSharedUpload(path) ? path : null;
+    if (was && was !== this._swapHeldPath) this._retireBlob(was);
+  },
+  // An adventure's map, picked from the list (its grid or its starred strip).
+  _pickAdvMap(path){
+    const before = this._snapshotMap();
+    this._bgMapPath = path;
+    // Bake token rescale + clear stale drawings/fog BEFORE clobbering
+    // scale fields. See _resetMapScene comment for the full rationale.
+    this._resetMapScene();
+    this._bgMapScale = 1;
+    this._lastTokenScale = 1;
+    // Different maps have different printed grids — reset any previous
+    // alignment so the new map starts at the canonical origin.
+    this._gridOffsetX = 0;
+    this._gridOffsetY = 0;
+    this._saveMap();
+    this._loadBgFromPath(path, /*autoFit=*/true);
+    // The adventure's own data says where its map's squares are; the
+    // previous map's grid stayed, and the DM lined it up by hand.
+    this._advGrid(path).then(g => this._useAdvGrid(path, g, 0));
+    this._recordSwap(before, 'Changed the map');
+  },
   _snapshotMap(){
     return {
       bgMapPath:    this._bgMapPath || null,
@@ -5525,6 +5598,7 @@ registerPanel('battlemap',{
     if ('pcsVisible' in src)    this._pcsVisible    = src.pcsVisible    !== false;
     if ('npcsVisible' in src)   this._npcsVisible   = src.npcsVisible   !== false;
     const looksChanged = looks() !== looksBefore;
+    if (nextPath !== prevPath) this._swapSeq++;
     this._bgMapPath = nextPath;
 
     this._turnTokMoved(turnWas);
@@ -6317,13 +6391,13 @@ registerPanel('battlemap',{
           this._tokens=[]; this._selected=null; this._closePanel(); this._saveMap(); this._render();
         });
       }
-      else if(act==='clear-img'){_mapBgImage=null;this._bgMapPath=null;this._saveMap();this._applyBg(stage,W,H);this._render();}
+      else if(act==='clear-img'){const before=this._snapshotMap();_mapBgImage=null;this._bgMapPath=null;this._saveMap();this._applyBg(stage,W,H);this._render();this._recordSwap(before,'Removed the map picture');}
       else if(act==='pick-map'){this._openMapPicker();}
       else if(act==='map-menu'){
         const r = btn.getBoundingClientRect();
         const items = [{ label: 'Choose a map…', onClick: () => this._openMapPicker() }];
         if (this._uploadUnkept()) items.push({ label: 'Keep this map…', onClick: () => this._saveCurrentAs() });
-        if (_mapBgImage) items.push({ label: 'Remove this map image', onClick: () => { _mapBgImage = null; this._bgMapPath = null; this._saveMap(); this._render(); } });
+        if (_mapBgImage) items.push({ label: 'Remove this map image', onClick: () => { const before = this._snapshotMap(); _mapBgImage = null; this._bgMapPath = null; this._saveMap(); this._render(); this._recordSwap(before, 'Removed the map picture'); } });
         items.push({ label: 'Grid, snapping and alignment…', onClick: () => { this._settingsOpen = true; this._render(); } });
         // Floors: a tower's storeys, a ship's decks — one map each, one on
         // everyone's screen at a time.
@@ -7516,7 +7590,9 @@ registerPanel('battlemap',{
       const id = btn.dataset.savedmapLoad;
       const entry = this._savedMaps.find(s => s.id === id);
       if (!entry) return;
+      const before = this._snapshotMap();
       this._restoreMapSnapshot(entry.snapshot);
+      this._recordSwap(before, 'Loaded “' + entry.name + '”');
       close();
     }));
     backdrop.querySelectorAll('[data-savedmap-del]').forEach(btn => btn.addEventListener('click', e => {
@@ -7566,12 +7642,14 @@ registerPanel('battlemap',{
     });
 
     backdrop.querySelector('#mapsel-clear')?.addEventListener('click', ()=>{
+      const before = this._snapshotMap();
       _mapBgImage = null;
       this._bgMapPath = null;
       this._saveMap();
       const stage = this._body?.querySelector('#map-stage');
       if (stage){ const cs=this._csScreen(); this._applyBg(stage, this._cols*cs, this._rows*cs); }
       this._render();
+      this._recordSwap(before, 'Removed the map picture');
       close();
     });
     backdrop.addEventListener('mousedown', e=>{ if (e.target===backdrop) close(); });
@@ -7686,22 +7764,7 @@ registerPanel('battlemap',{
           // Star toggle has its own click handler that stops propagation;
           // anything else on the card opens the map.
           if (e.target.closest('.mapsel-star')) return;
-          const path = card.dataset.path;
-          this._bgMapPath = path;
-          // Bake token rescale + clear stale drawings/fog BEFORE clobbering
-          // scale fields. See _resetMapScene comment for the full rationale.
-          this._resetMapScene();
-          this._bgMapScale = 1;
-          this._lastTokenScale = 1;
-          // Different maps have different printed grids — reset any previous
-          // alignment so the new map starts at the canonical origin.
-          this._gridOffsetX = 0;
-          this._gridOffsetY = 0;
-          this._saveMap();
-          this._loadBgFromPath(path, /*autoFit=*/true);
-          // The adventure's own data says where its map's squares are; the
-          // previous map's grid stayed, and the DM lined it up by hand.
-          this._advGrid(path).then(g => this._useAdvGrid(path, g, 0));
+          this._pickAdvMap(card.dataset.path);
           close();
         });
       });
@@ -7753,20 +7816,7 @@ registerPanel('battlemap',{
       backdrop.querySelectorAll('#mapsel-starred-host .mapsel-card').forEach(card => {
         card.addEventListener('click', e => {
           if (e.target.closest('.mapsel-star')) return;
-          const path = card.dataset.path;
-          this._bgMapPath = path;
-          // Bake token rescale + clear stale drawings/fog BEFORE clobbering
-          // scale fields. See _resetMapScene comment for the full rationale.
-          this._resetMapScene();
-          this._bgMapScale = 1;
-          this._lastTokenScale = 1;
-          this._gridOffsetX = 0;
-          this._gridOffsetY = 0;
-          this._saveMap();
-          this._loadBgFromPath(path, /*autoFit=*/true);
-          // The adventure's own data says where its map's squares are; the
-          // previous map's grid stayed, and the DM lined it up by hand.
-          this._advGrid(path).then(g => this._useAdvGrid(path, g, 0));
+          this._pickAdvMap(card.dataset.path);
           close();
         });
       });

@@ -26552,6 +26552,103 @@ for (const cls of Object.keys(rule)) for (let L = 1; L <= 20; L++) for (const sc
         closePanel('battlemap');
       }
     }
+    // -- Round 522: a map swap is one step of Undo — picking another map from the list (or loading a saved one, uploading, removing the picture) cleared the old one's walls, drawings and fog with no word and no way back; an upload landing after the map changed no longer becomes the players' map; the upload an Undo would bring back is kept on the server till the next swap --
+    if (!PLAYER && typeof sktUndo === 'function'){
+      const B = panelDefs.battlemap;
+      const S0 = localStorage.getItem('skt-battlemap-v1'), P0 = B._bgMapPath, I0 = _mapBgImage, W0 = B._bgMapNaturalW, H0 = B._bgMapNaturalH;
+      const real = { put: window.sktMapBlobPut, ready: window.sktMapBlobReady, refs: window.sktMapBlobRefs, del: window.sktMapBlobDelete, get: window.sktMapBlobGet };
+      const keep = { ft: B._ftPerCell, cs: B._cellSize, ox: B._gridOffsetX, oy: B._gridOffsetY, cols: B._cols, rows: B._rows, sc: B._bgMapScale, lts: B._lastTokenScale, size: B._bgMapSize, held: B._swapHeldPath };
+      let keepT = null, keepD = null, keepF, fogSaved = false;
+      const store = {}, deleted = [];
+      let putDelay = 0;
+      try {
+        openPanel('battlemap'); await sleep(400);
+        keepT = B._tokens.slice(); keepD = B._drawings.slice(); keepF = B._fog; fogSaved = true;
+        _sktUndoStack.length = 0; _sktRedoStack.length = 0;
+        window.sktMapBlobReady = () => true; window.sktMapBlobRefs = () => Promise.resolve({});
+        window.sktMapBlobPut = (id, data) => new Promise(r => setTimeout(() => { store[id] = data; r(true); }, putDelay));
+        window.sktMapBlobGet = id => Promise.resolve(store[id] || null);
+        window.sktMapBlobDelete = id => { deleted.push(id); delete store[id]; return Promise.resolve(true); };
+        const toasts = () => [...document.querySelectorAll('#toast-host .toast-item')].map(t => t.textContent).join(' / ');
+        const pic = async (W, H, color) => { const c = document.createElement('canvas'); c.width = W; c.height = H; const g = c.getContext('2d'); g.fillStyle = color; g.fillRect(0, 0, W, H); return new File([await new Promise(r => c.toBlob(r, 'image/png'))], color.slice(1) + '.png', { type: 'image/png' }); };
+        const upload = async (W, H, color) => {
+          document.querySelectorAll('#toast-host .toast-item').forEach(t => t.remove());
+          B._useImageFile(await pic(W, H, color));
+          // (shared, and its grid looked for — or that says so later, over what comes next)
+          for (let i = 0; i < 60; i++){ await sleep(100); if (/^sktblob:/.test(B._bgMapPath || '') && B._bgMapNaturalW === W && /Grid matched|No squares/.test(toasts())) break; }
+        };
+        const until = async (f, n) => { for (let i = 0; i < (n || 80) && !f(); i++) await sleep(100); return f(); };
+        // A map with work on it: an upload, a wall, fog, a token.
+        await upload(1200, 900, '#335544');
+        const upA = B._bgMapPath;
+        B._drawings = [{ type: 'wall', pts: [[100, 100], [400, 100]], id: 'r522w' }];
+        B._fog = new Set(['2,2', '3,3']);
+        B._tokens = [{ id: 'tk_r522', label: 'Scout', x: 175, y: 175, size: 1 }, { id: 'tk_r522b', label: 'Far', x: 60000, y: 60000, size: 1 }];
+        B._saveMap(); B._render();
+        document.querySelectorAll('#toast-host .toast-item').forEach(t => t.remove());
+        // Another map from the list.
+        const ADV = 'adventure/AUD/041-map-03-07.two-plateaus-shipping-company.webp';
+        B._pickAdvMap(ADV);
+        await sleep(150);
+        ok('a map picked from the list: says so, with Undo', /Changed the map/.test(toasts()) && /Undo/.test(toasts()) && B._drawings.length === 0, toasts());
+        await until(() => B._bgLoadedPath === ADV, 150);
+        await sleep(600);
+        // (the new map settling in — its grid, a token pulled onto it — is the swap's, not a step on top)
+        ok('…the map settling in is part of it: Undo’s next step is the swap', sktUndoLabel() === 'Changed the map', sktUndoLabel());
+        // Undo: the old map whole.
+        sktUndo();
+        await until(() => B._bgMapNaturalW === 1200 && _mapBgImage && _mapBgImage.naturalWidth > 0);
+        const tk = B._tokens.find(t => t.id === 'tk_r522');
+        ok('Undo: the upload back, with its wall, fog and token', B._bgMapPath === upA && B._bgMapNaturalW === 1200 && B._drawings.some(d => d.id === 'r522w') && !!B._fog && B._fog.has('3,3') && !!tk, B._bgMapPath + ' ' + B._bgMapNaturalW + ' d' + B._drawings.length + ' fog ' + (B._fog && B._fog.size) + ' tk ' + !!tk);
+        sktRedo();
+        await until(() => B._bgMapPath === ADV && B._bgLoadedPath === ADV, 150);
+        ok('…and Redo: the list’s map again, bare', B._bgMapPath === ADV && B._drawings.length === 0, B._bgMapPath + ' d' + B._drawings.length);
+        // Another DM screen changes the map: this one's Undo stands down (it
+        // would put the upload back over the other screen's choice).
+        const ADV2 = 'adventure/AUD/023-map-03-01.bazaar-bridge.webp';
+        B.applyMapState(Object.assign(JSON.parse(localStorage.getItem('skt-battlemap-v1')), { bgMapPath: ADV2 }));
+        await sleep(200);
+        sktUndo();
+        await sleep(300);
+        ok('another screen changed the map since: Undo doesn’t swap it back', B._bgMapPath === ADV2, B._bgMapPath);
+        // An upload still on its way up when another map is picked: not the players' map.
+        B._pickAdvMap(ADV); await sleep(100);
+        putDelay = 900;
+        B._useImageFile(await pic(800, 600, '#552233'));
+        await until(() => B._bgMapNaturalW === 800, 40);
+        B._pickAdvMap('adventure/AUD/041-map-03-07.two-plateaus-shipping-company.webp');
+        await sleep(1400);
+        putDelay = 0;
+        ok('an upload landing after the map changed: not the players’ map, and gone from the server', B._bgMapPath === ADV && deleted.length >= 1 && !Object.keys(store).some(k => k === deleted[deleted.length - 1]), B._bgMapPath + ' deleted ' + JSON.stringify(deleted));
+        // An upload replacing an unkept upload: the old one kept while Undo could bring it back, let go at the next swap.
+        await upload(1000, 700, '#223355');
+        const upB = B._bgMapPath, idB = upB.slice(8);
+        deleted.length = 0;
+        await upload(900, 600, '#445566');
+        await sleep(300);
+        ok('an upload over an unkept one: the old one kept while Undo can bring it back', !deleted.includes(idB) && store[idB] != null, JSON.stringify(deleted));
+        sktUndo();
+        await until(() => B._bgMapPath === upB && B._bgMapNaturalW === 1000);
+        ok('…and Undo brings it back', B._bgMapPath === upB && B._bgMapNaturalW === 1000, B._bgMapPath + ' ' + B._bgMapNaturalW);
+        sktRedo(); await until(() => B._bgMapNaturalW === 900);
+        B._pickAdvMap(ADV); await sleep(400);
+        ok('…let go once a later swap means it can’t come back', deleted.includes(idB), JSON.stringify(deleted));
+      } catch(e){ ok('round 522 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
+      finally {
+        document.querySelectorAll('#toast-host .toast-item, .ctx-menu, .modal-backdrop').forEach(t => t.remove());
+        window.sktMapBlobPut = real.put; window.sktMapBlobReady = real.ready; window.sktMapBlobRefs = real.refs; window.sktMapBlobDelete = real.del; window.sktMapBlobGet = real.get;
+        _sktUndoStack.length = 0; _sktRedoStack.length = 0;
+        B._swapSeq++; B._swapHeldPath = keep.held;
+        B._bgLoadSeq++;
+        if (fogSaved) B._fog = keepF;
+        B._ftPerCell = keep.ft; B._cellSize = keep.cs; B._gridOffsetX = keep.ox; B._gridOffsetY = keep.oy; B._cols = keep.cols; B._rows = keep.rows; B._bgMapScale = keep.sc; B._lastTokenScale = keep.lts; B._bgMapSize = keep.size;
+        _mapBgImage = I0; B._bgMapPath = P0; B._bgMapNaturalW = W0; B._bgMapNaturalH = H0;
+        if (keepT){ B._tokens = keepT; B._drawings = keepD; }
+        if (S0 != null) localStorage.setItem('skt-battlemap-v1', S0);
+        try { B._render(); } catch(e){}
+        closePanel('battlemap');
+      }
+    }
     // -- Class features: represented, not just text ------------------------
     {
       try {
