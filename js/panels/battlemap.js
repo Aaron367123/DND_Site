@@ -149,20 +149,24 @@ function _sktDetectGridIn(img, sx, sy, sw, sh, k){
 // (_drawHexGrid); cs, offX, offY in the picture's own pixels. Read once per
 // picture, shrunk by a whole number to at most 2400 px (see sktDetectGrid).
 const _sktHexLum = new WeakMap();
-function sktHexScore(img, cs, offX, offY){
+function _sktLum(img){
   let m = _sktHexLum.get(img);
   if (!m){
     const W0 = img.naturalWidth, H0 = img.naturalHeight;
-    if (!W0 || !H0) return 0;
+    if (!W0 || !H0) return null;
     const N = Math.max(1, Math.ceil(Math.max(W0, H0) / 2400)), W = Math.round(W0 / N), H = Math.round(H0 / N);
     const c = document.createElement('canvas'); c.width = W; c.height = H;
     const g = c.getContext('2d', { willReadFrequently: true }); g.drawImage(img, 0, 0, W, H);
-    let d; try { d = g.getImageData(0, 0, W, H).data; } catch(e){ _sktHexLum.set(img, m = { L: null }); return 0; }
+    let d; try { d = g.getImageData(0, 0, W, H).data; } catch(e){ _sktHexLum.set(img, m = { L: null }); return m; }
     const L = new Float32Array(W * H);
     for (let i = 0, j = 0; i < L.length; i++, j += 4) L[i] = 0.299 * d[j] + 0.587 * d[j + 1] + 0.114 * d[j + 2];
     _sktHexLum.set(img, m = { L, W, H, N });
   }
-  if (!m.L) return 0;
+  return m;
+}
+function sktHexScore(img, cs, offX, offY){
+  const m = _sktLum(img);
+  if (!m || !m.L) return 0;
   const { L, W, H, N } = m;
   const at = (x, y) => { const xi = x | 0, yi = y | 0; return (xi < 0 || yi < 0 || xi >= W || yi >= H) ? NaN : L[yi * W + xi]; };
   // (the middle of the picture: a map's frame and legend aren't hexes)
@@ -191,6 +195,32 @@ function sktHexScore(img, cs, offX, offY){
   const on = sum(c2, ox, oy), off = sum(c2, ox + s * 0.75, oy + s * Math.sqrt(3) / 4);
   return off > 0 ? on / off : 0;
 }
+// Is a square of cs (lines at offX, offY; the picture's own pixels) printed
+// as k squares a side? The picture's line signal folded onto one square,
+// both ways: how strong the lines at each 1/k of it are, between the main
+// lines' strength (1) and the strength midway between them (0). null when
+// the main lines themselves barely show (nothing to tell by). Measured on 64
+// adventure maps whose squares were found: the listed square the printed one
+// scored 0.16 or less, k of them 0.62 or more (see _advFit).
+function sktSubLines(img, cs, offX, offY, k){
+  const m = _sktLum(img);
+  if (!m || !m.L || !(k >= 2)) return null;
+  const { L, W, H, N } = m, c2 = cs / N, ox = offX / N, oy = offY / N;
+  if (!(c2 / k >= 3)) return null;
+  const BN = Math.max(8, Math.round(c2 * 2)), prof = new Float64Array(BN), cnt = new Float64Array(BN);
+  const x0 = Math.max(1, Math.round(W * 0.08)), x1 = Math.min(W - 1, W * 0.92), y0 = Math.max(1, Math.round(H * 0.08)), y1 = Math.min(H - 1, H * 0.92);
+  const bin = (v, o) => Math.floor((((v - o) / c2 % 1) + 1) % 1 * BN) % BN;
+  for (let y = y0; y < y1; y += 2) for (let x = x0; x < x1; x++){ const i = y * W + x, k2 = bin(x, ox); prof[k2] += Math.abs(2 * L[i] - L[i - 1] - L[i + 1]); cnt[k2]++; }
+  for (let x = x0; x < x1; x += 2) for (let y = y0; y < y1; y++){ const i = y * W + x, k2 = bin(y, oy); prof[k2] += Math.abs(2 * L[i] - L[i - W] - L[i + W]); cnt[k2]++; }
+  for (let i = 0; i < BN; i++) prof[i] = cnt[i] ? prof[i] / cnt[i] : 0;
+  const w = Math.max(1, Math.round(BN / c2 * 1.5));
+  const peak = f => { const c0 = Math.round(f * BN); let v = 0; for (let t = -w; t <= w; t++) v = Math.max(v, prof[((c0 + t) % BN + BN) % BN]); return v; };
+  const main = peak(0); let sub = Infinity, mid = Infinity;
+  for (let q = 1; q < k; q++) sub = Math.min(sub, peak(q / k));
+  for (let q = 0; q < k; q++) mid = Math.min(mid, peak((q + 0.5) / k));
+  if (!(main > mid * 1.15)) return null;
+  return (sub - mid) / (main - mid);
+}
 // Storm King's Thunder's maps whose listed square is several of the printed
 // ones, with no distance in the data — so a square stood for 5 ft where the
 // picture's legend says 10 or 20 ft a printed square, and each held 2 or 3 of
@@ -217,6 +247,8 @@ const SKT_ADV_PRINTED = {
   'adventure/SKT/096-skt10-maelstrom2.webp': [2, 10], 'adventure/SKT/097-1002.webp': [2, 10],          // Maelstrom, Level 3
   'adventure/SKT/108-skt12-lair.webp': [2, 10], 'adventure/SKT/109-1201.webp': [2, 10],                // Iymrith's Lair
 };
+// The adventures whose maps are a book's pictures (see _advIdsOf).
+const SKT_BOOK_ART_ADVS = { EGW: ['DD', 'FS', 'ToR', 'US'], SCC: ['SCC-CK', 'SCC-HfMT', 'SCC-TMM', 'SCC-ARiR'], VRGR: ['HoL'], GGR: ['AZfyT'] };
 // ─── The walls drawn on a map picture ───────────────────────────────────────
 // Walls for line of sight without drawing each one: Build → Find walls.
 // Two ways to read a map, because maps are drawn two ways:
@@ -1958,17 +1990,21 @@ registerPanel('battlemap',{
   // The grid an adventure's own data gives one of its maps — { size, ox, oy,
   // w } in the listed picture's pixels — or null (no grid, or hexes).
   _advGrid(path){
-    const m = /^adventure\/([^/]+)\//.exec(path || '');
-    if (!m) return Promise.resolve(null);
-    const id = m[1].toLowerCase(), cache = this._advGridCache || (this._advGridCache = {});
-    if (!cache[id]) cache[id] = fetch('data/adventure/adventure-' + id + '.json').then(r => r.ok ? r.json() : null).then(j => {
+    const ids = this._advIdsOf(path);
+    if (!ids.length) return Promise.resolve(null);
+    const cache = this._advGridCache || (this._advGridCache = {});
+    const table = id => cache[id] || (cache[id] = fetch('data/adventure/adventure-' + id + '.json').then(r => r.ok ? r.json() : null).then(j => {
       const out = {};
       const walk = o => { if (Array.isArray(o)) return o.forEach(walk); if (o && typeof o === 'object'){ if (o.href && o.href.path && o.grid) out[o.href.path] = { grid: o.grid, w: o.width }; for (const k in o) walk(o[k]); } };
       walk(j);
       return out;
-    }).catch(() => ({}));
-    return cache[id].then(all => {
-      const e = all && all[path], g = e && e.grid;
+    }).catch(() => ({})));
+    const find = i => i >= ids.length ? Promise.resolve(null) : table(ids[i].toLowerCase()).then(all => all && all[path] || find(i + 1));
+    return find(0).then(e => {
+      // (12 maps have no grid entry at all: none — reading on threw, and the
+      // pick never brought the tokens onto the new map or fitted it)
+      const g = e && e.grid;
+      if (!g) return null;
       // `scale` (two in three of the adventures' square grids carry one):
       // read against the pictures' own printed lines, found on 22 maps of 20
       // adventures —
@@ -1985,7 +2021,12 @@ registerPanel('battlemap',{
       // Saltmarsh's Abbey Isle 500 (48 maps aren't 5): the ruler and every
       // reach read a tenth or less. In feet, from yards or miles too.
       const per = { ft: 1, feet: 1, yd: 3, yard: 3, yards: 3, mi: 5280, mile: 5280, miles: 5280 }[String(g.units || 'ft').toLowerCase()];
-      const ft = +g.distance > 0 && per ? +g.distance * per : 5;
+      // A hex map in miles with no distance (14 pictures: Phandelver's Sword
+      // Coast and the Icespire Peak books', Phandalin's region, the Snout of
+      // Omgar) is 5 miles a hex — every one's legend
+      // says "1 hex = 5 miles"; 5 ft made a day's ride read 120 ft.
+      const hexMi = /^hex/.test(g && g.type) && per === 5280;
+      const ft = +g.distance > 0 && per ? +g.distance * per : hexMi ? 5 * 5280 : 5;
       const gs = +g.scale > 0 ? +g.scale : 1;
       // Hexes in columns (flat-topped), as the battle map draws them: 37 of
       // the adventures' 43 hex maps (Barovia, the Sword Coast, Chult…). They
@@ -1995,6 +2036,19 @@ registerPanel('battlemap',{
       const pr = SKT_ADV_PRINTED[path];
       return g && g.type === 'square' && +g.size > 0 ? { size: +g.size, alt: gs !== 1 ? +g.size / gs : null, ox: (+g.offsetX || 0) / gs, oy: (+g.offsetY || 0) / gs, w: +e.w || 0, ft: pr ? pr[1] : ft, split: pr ? pr[0] : 1 } : null;
     });
+  },
+  // The adventures a map's picture may be from, to read its grid and its
+  // name in: its folder's (adventure/SKT/…), or — for the 62 that are a
+  // book's art (the Wildemount one-shots' EGW pictures, Strixhaven's,
+  // Ravenloft's, Ravnica's), which had no grid at all — the adventure whose
+  // list has it, else the ones that borrow that book's.
+  _advIdsOf(path){
+    const p = String(path || ''), m = /^adventure\/([^/]+)\//.exec(p);
+    if (m) return [m[1]];
+    const by = this._mapsByAdv || {};
+    for (const id in by) if ((by[id] || []).some(x => x.path === p)) return [id];
+    const b = /^book\/([^/]+)\//.exec(p);
+    return (b && SKT_BOOK_ART_ADVS[b[1]]) || [];
   },
   // Once the picked map's picture is in (its size is what the grid scales
   // by): our squares on its squares. Not if another map has been picked.
@@ -2064,8 +2118,21 @@ registerPanel('battlemap',{
     const data = { size: g.size, ox: g.ox, oy: g.oy };
     if (!img) return data;
     let f = null; try { f = sktDetectGrid(img); } catch(e){}
-    if (!f) return data;
-    const sc = g.w && img.naturalWidth ? img.naturalWidth / g.w : 1, found = f.size / sc;
+    const sc = g.w && img.naturalWidth ? img.naturalWidth / g.w : 1;
+    if (!f){
+      // No squares found (painted art, faint lines): whether the picture's
+      // lines also fall at each 1/scale of the listed square. 45 of 107
+      // scaled maps sampled weren't found; the Doomvault, Stahlmast's Lair,
+      // Fort Venture, A Zib for Your Thoughts read as the smaller squares
+      // and are; Kollema Hall, Curse of Strahd as the listed ones, and are.
+      const k = g.alt ? g.size / g.alt : 0;
+      if (k >= 1.98 && Math.abs(k - Math.round(k)) < 0.02){
+        let c = null; try { c = sktSubLines(img, g.size * sc, g.ox * sc, g.oy * sc, Math.round(k)); } catch(e){}
+        if (c != null && c >= 0.4) return { size: g.alt, ox: g.ox, oy: g.oy };
+      }
+      return data;
+    }
+    const found = f.size / sc;
     const size = g.alt && Math.abs(found - g.alt) < Math.abs(found - g.size) && Math.abs(found - g.alt) / g.alt < 0.06 ? g.alt : g.size;
     return Math.abs(found - size) / size < 0.04 ? { size: found, ox: f.ox / sc, oy: f.oy / sc } : { size, ox: g.ox, oy: g.oy };
   },
@@ -8513,11 +8580,13 @@ registerPanel('battlemap',{
   _mapTitle(path){
     if (this._isSharedUpload(path)) return 'Uploaded map';
     const file = String(path || '').split('/').pop().replace(/\.(webp|jpg|jpeg|png)$/i, '');
-    const m = /^adventure\/([^/]+)\//.exec(path || '');
-    if (!m) return file;
-    const id = m[1], have = (this._mapsByAdv || {})[id];
-    if (have){ const hit = have.find(x => x.path === path); return hit && hit.title ? hit.title + (hit.type === 'mapPlayer' ? ' (players\u2019)' : '') : file; }
-    this._advMapsFor(id).then(() => { if (this._settingsOpen && this._body) this._render(); });
+    const by = this._mapsByAdv || {};
+    for (const id of this._advIdsOf(path)){
+      const have = by[id];
+      if (!have){ this._advMapsFor(id).then(() => { if (this._settingsOpen && this._body) this._render(); }); return file; }
+      const hit = have.find(x => x.path === path);
+      if (hit) return hit.title ? hit.title + (hit.type === 'mapPlayer' ? ' (players\u2019)' : '') : file;
+    }
     return file;
   },
   // An adventure's maps, read once (the picker shares the cache).
@@ -8534,8 +8603,7 @@ registerPanel('battlemap',{
   // …and once it's there: for what's asked for straight away (the name a
   // save suggests), not just what's drawn again when it comes.
   _mapTitleAsync(path){
-    const m = /^adventure\/([^/]+)\//.exec(path || '');
-    return (m ? this._advMapsFor(m[1]) : Promise.resolve()).then(() => this._mapTitle(path), () => this._mapTitle(path));
+    return Promise.all(this._advIdsOf(path).map(id => this._advMapsFor(id))).then(() => this._mapTitle(path), () => this._mapTitle(path));
   },
 
   // Right-side Settings drawer. Renders only when this._settingsOpen.

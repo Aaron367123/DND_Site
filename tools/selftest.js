@@ -26749,6 +26749,63 @@ for (const cls of Object.keys(rule)) for (let L = 1; L <= 20; L++) for (const sc
         closePanel('battlemap');
       }
     }
+    // -- Round 525: an overland hex map in miles with no distance is 5 miles a hex (its legend's), not 5 ft; and the adventures' maps that are a book's pictures (Wildemount, Strixhaven, Ravenloft, Ravnica) get their grid and their names --
+    if (!PLAYER){
+      const B = panelDefs.battlemap;
+      const S0 = localStorage.getItem('skt-battlemap-v1'), P0 = B._bgMapPath, I0 = _mapBgImage, W0 = B._bgMapNaturalW, H0 = B._bgMapNaturalH;
+      const keep = { ft: B._ftPerCell, cs: B._cellSize, ox: B._gridOffsetX, oy: B._gridOffsetY, cols: B._cols, rows: B._rows, gt: B._gridType, sg: B._showGrid, lp: B._bgLoadedPath, sc: B._bgMapScale, ga: B._gridAuto };
+      try {
+        const SC = 'adventure/LMoP/The Sword Coast.webp', BAR = 'adventure/CoS/007-001.webp';
+        const g = await B._advGrid(SC);
+        ok('Phandelver’s Sword Coast: hexes of 5 miles (its legend; no distance in its data)', !!g && g.hex && g.ft === 5 * 5280, JSON.stringify(g && { hex: g.hex, ft: g.ft }));
+        const gb = await B._advGrid(BAR);
+        ok('…a hex map whose data has its distance keeps it (Barovia: a quarter mile)', !!gb && gb.hex && gb.ft === 1320, JSON.stringify(gb && { hex: gb.hex, ft: gb.ft }));
+        const pic = (w, h) => { const c = document.createElement('canvas'); c.width = w; c.height = h; const x = c.getContext('2d'); x.fillStyle = '#cdd'; x.fillRect(0, 0, w, h); const i = new Image(); return new Promise(r => { i.onload = () => r(i); i.src = c.toDataURL('image/png'); }); };
+        openPanel('battlemap'); await sleep(300);
+        _mapBgImage = await pic(1650, 2250); B._bgMapNaturalW = 1650; B._bgMapNaturalH = 2250; B._bgMapScale = 1;
+        B._bgMapPath = SC; B._bgLoadedPath = SC; B._gridType = 'square'; B._showGrid = true;
+        B._useAdvGrid(SC, g, 0); await sleep(150);
+        const foot = (B._body.querySelector('.map-footer') || B._body).textContent;
+        ok('…picked: the footer says 1 hex = 5 mi', B._gridType === 'hex' && /1 hex = 5 mi/.test(foot), B._gridType + ' · ' + foot.slice(0, 80));
+        // A book's picture in an adventure: its grid from that adventure's data.
+        const SF = 'book/EGW/116-5.7-silver-falls-cavern.webp', CC = 'book/EGW/118-5.9-croaker-cave.webp';
+        const gs = await B._advGrid(SF);
+        ok('Dangerous Designs’ Silver Falls Cavern (an EGW picture): its grid from the adventure', !!gs && !gs.hex && gs.size > 0 && gs.ft === 5, JSON.stringify(gs));
+        const gc = await B._advGrid(CC);
+        ok('…Frozen Sick’s Croaker Cave too (the second adventure tried)', !!gc && gc.size > 0, JSON.stringify(gc));
+        ok('…a book picture no adventure has: none', (await B._advGrid('book/EGW/999-nowhere.webp')) === null, '');
+        const t = await B._mapTitleAsync(CC);
+        ok('…and its name, not its file', t === 'Map 5.9: Croaker Cave', t);
+        // …as the settings drawer asks for it after a reload: nothing read yet,
+        // each ask reads the next adventure that might have it.
+        const MB = B._mapsByAdv; B._mapsByAdv = {};
+        let t2 = B._mapTitle(CC);
+        try { for (let i = 0; i < 40 && t2 !== 'Map 5.9: Croaker Cave'; i++){ await sleep(150); t2 = B._mapTitle(CC); } }
+        finally { B._mapsByAdv = MB; }
+        ok('…its name after a reload too (the second adventure it might be in)', t2 === 'Map 5.9: Croaker Cave', t2);
+        // Squares not found on a picture: its lines decide between the data's
+        // two readings (a square of 40 at scale 2 is 40, or 20).
+        const lined = (step) => { const c = document.createElement('canvas'); c.width = 800; c.height = 800; const x = c.getContext('2d'); x.fillStyle = '#e8e2d0'; x.fillRect(0, 0, 800, 800); x.strokeStyle = '#776'; x.lineWidth = 1; for (let v = 0.5; v < 800; v += step){ x.beginPath(); x.moveTo(v, 0); x.lineTo(v, 800); x.moveTo(0, v); x.lineTo(800, v); x.stroke(); } const i = new Image(); return new Promise(r => { i.onload = () => r(i); i.src = c.toDataURL('image/png'); }); };
+        const p20 = await lined(20), p40 = await lined(40);
+        const s20 = sktSubLines(p20, 40, 0, 0, 2), s40 = sktSubLines(p40, 40, 0, 0, 2);
+        ok('A picture printed in squares of 20: lines at each half of a 40 (near 1); in 40s: none (near 0)', s20 > 0.8 && s40 < 0.2, s20 + ' / ' + s40);
+        const DG = window.sktDetectGrid;
+        try {
+          window.sktDetectGrid = () => null;
+          const gg = { size: 40, alt: 20, ox: 0, oy: 0, w: 800 };
+          const a = B._advFit(gg, p20), b = B._advFit(gg, p40);
+          ok('…nothing found on either: the 20s read as 20, the 40s as 40', a.size === 20 && b.size === 40, a.size + ' / ' + b.size);
+        } finally { window.sktDetectGrid = DG; }
+      } catch(e){ ok('round 525 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
+      finally {
+        document.querySelectorAll('#toast-host .toast-item').forEach(t => t.remove());
+        B._ftPerCell = keep.ft; B._cellSize = keep.cs; B._gridOffsetX = keep.ox; B._gridOffsetY = keep.oy; B._cols = keep.cols; B._rows = keep.rows; B._gridType = keep.gt; B._showGrid = keep.sg; B._bgLoadedPath = keep.lp; B._bgMapScale = keep.sc; B._gridAuto = keep.ga;
+        _mapBgImage = I0; B._bgMapPath = P0; B._bgMapNaturalW = W0; B._bgMapNaturalH = H0;
+        if (S0 != null) localStorage.setItem('skt-battlemap-v1', S0);
+        try { B._render(); } catch(e){}
+        closePanel('battlemap');
+      }
+    }
     // -- Class features: represented, not just text ------------------------
     {
       try {
