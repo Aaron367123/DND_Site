@@ -11494,7 +11494,8 @@
           sktAtkLabel({ name: 'Psychic Blades', damage: '1d4+4 Psychic' }) === 'Psychic Blades (bonus action)'
           && sktAtkLabel({ name: 'Psychic Blades', damage: '1d6+4 Psychic' }) === 'Psychic Blades'
           && sktAtkLabel({ name: 'Dagger', damage: '1d4+2 piercing' }) === 'Dagger');
-        const card = cr => panelDefs.bestiary._renderCard({ id: 't', name: 'T', hp: 9, ac: 11, cr });
+        // (the card's words, not its tooltips — its ⋯ says "edit HP, AC or CR")
+        const card = cr => panelDefs.bestiary._renderCard({ id: 't', name: 'T', hp: 9, ac: 11, cr }).replace(/<[^>]*>/g, ' ');
         ok('bestiary: no "CR None" under a named NPC', !/CR/.test(card('None')) && !/CR/.test(card(null)) && /CR 1\/2/.test(card('1/2')));
         localStorage.setItem(SKT_LOG_KEY, '[]'); localStorage.setItem(SKT_LOG_PRIVATE_KEY, '[]');
         openPanel('gamelog'); await sleep(200);
