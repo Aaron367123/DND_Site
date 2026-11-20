@@ -2513,13 +2513,15 @@ const SKT_SPEED_ZERO = ['grappled', 'restrained', 'paralyzed', 'petrified', 'unc
 function sktSpeedNow(pc, mode){
   if (!pc) return { ft: 0, base: 0, why: '' };
   const base = mode && mode !== 'walk' && pc.speeds && pc.speeds[mode] != null ? +pc.speeds[mode] : (pc.spd ?? 30);
-  const ed = (pc.build && pc.build.edition) || pc.rules || '2024', exh = +pc.exhaustion || 0;
+  const ed = (pc.build && pc.build.edition) || pc.rules || '2024', exh0 = +pc.exhaustion || 0;
   const co = (typeof state !== 'undefined' && state.combatants || []).find(x => x && x.id === pc.id);
   const conds = [...new Set([...(pc.conditions || []), ...((co && co.conditions) || [])])].map(c => String(c).toLowerCase());
-  const held = SKT_SPEED_ZERO.concat(ed === '2014' ? ['stunned'] : []).find(c => conds.some(x => x === c || x.startsWith(c + ' ')));
+  // (Table rules: conditions and Slow, exhaustion — each can be off.)
+  const cOn = sktRuleOn('speedConds'), exh = sktRuleOn('exhaustion') ? exh0 : 0;
+  const held = cOn && SKT_SPEED_ZERO.concat(ed === '2014' ? ['stunned'] : []).find(c => conds.some(x => x === c || x.startsWith(c + ' ')));
   if (held) return { ft: 0, base, why: held[0].toUpperCase() + held.slice(1) };
   // Slow (a weapon mastery): 10 ft less until the start of the attacker's next turn.
-  const slow = co && co.slowed ? 10 : 0;
+  const slow = cOn && co && co.slowed ? 10 : 0;
   if (!exh) return { ft: Math.max(0, base - slow), base, why: slow ? 'Slowed' : '' };
   const ft = Math.max(0, (ed === '2024' ? Math.max(0, base - 5 * exh) : exh >= 5 ? 0 : exh >= 2 ? Math.floor(base / 2) : base) - slow);
   return { ft, base, why: ft !== base ? (slow ? 'Exhaustion, slowed' : 'Exhaustion') : '' };
@@ -2799,8 +2801,75 @@ function sktAskBardic(opts){
 // per caster. Filtered where shown, so switching it is instant both ways.
 // Whether a ranged attack takes a piece of ammunition from the inventory: one
 // setting for the whole table (the Party menu), on unless the DM turns it off.
-function sktAmmoOn(){ return !(typeof state !== 'undefined' && state.settings && state.settings.useAmmunition === false); }
-function sktCircleMagicOn(){ return !!(typeof state !== 'undefined' && state.settings && state.settings.circleMagic); }
+function sktAmmoOn(){ return sktRuleOn('ammo'); }
+function sktCircleMagicOn(){ return sktRuleOn('circleMagic'); }
+// ─── Table rules ─────────────────────────────────────────────────────────────
+// Every rule the app plays by itself that a table might play otherwise, each
+// one switchable for the whole campaign (Settings → Table rules). Stored in
+// state.settings.rules {key: true/false}, which syncs, so the players'
+// phones follow the DM's choice. Unset is the default — on, as the app has
+// always played, except Circle Magic (a book's optional rule). Ammunition and
+// Circle Magic kept their own settings before this; those still count until
+// a choice is made here.
+// [group, key, name, what it does, default, kind ('house' | 'optional')]
+const SKT_TABLE_RULES = [
+  ['move', 'walls', 'Walls and closed doors stop players', 'A player can’t drag their token through a wall or a shut door. The DM always can.'],
+  ['move', 'fear', 'Frightened creatures can’t move closer', 'A player can’t move a frightened creature nearer to what frightens it.'],
+  ['move', 'spaces', 'One creature to a space', 'A token dropped on another creature slides to the nearest free square.'],
+  ['move', 'speedLimit', 'Movement counted against Speed', 'Feet moved each turn are counted against Speed (and Dash), red when over.'],
+  ['move', 'speedConds', 'Conditions change Speed', 'Grappled, restrained, paralyzed and the like make Speed 0; Slow takes 10 ft.'],
+  ['move', 'terrain', 'Difficult terrain', 'Each foot in difficult terrain costs an extra foot (not when flying).'],
+  ['move', 'crawl', 'Crawling and dragging cost double', 'Moving while prone, or dragging a grappled creature, costs twice the feet.'],
+  ['move', 'grapple', 'Grapples carried along', 'A grappled creature moves with its grappler, and the grapple ends by itself when the grappler drops, can’t act, or is out of reach.'],
+  ['move', 'standUp', 'Standing up costs half your Speed', 'Standing from prone uses half your Speed, and can’t be done with less left.'],
+  ['combat', 'oa', 'Opportunity attacks', 'Leaving an enemy’s reach asks whether it takes its opportunity attack.'],
+  ['combat', 'sight', 'Players see only what their characters see', 'On players’ screens, darkness, walls and magical darkness hide the map and the monsters in them.'],
+  ['combat', 'unseen', 'Unseen attackers and targets', 'Attacking what you can’t see has disadvantage; attacking what can’t see you has advantage.'],
+  ['combat', 'cover', 'Cover from the map', 'Creatures and walls in the way give half, three-quarters or total cover by themselves. The DM can still set it.'],
+  ['combat', 'condRolls', 'Conditions change rolls', 'Poisoned, prone, restrained, blinded, invisible and the rest give advantage, disadvantage or failed saves.'],
+  ['combat', 'range', 'Long range and close quarters', 'A ranged attack at long range, or with an enemy within 5 ft, has disadvantage.'],
+  ['combat', 'charm', 'Charmed can’t attack the charmer', 'An attack on the creature that charmed the attacker is refused.'],
+  ['combat', 'economy', 'One action, bonus action and reaction a turn', 'A feature is refused once its action, bonus action or reaction is used this turn.'],
+  ['combat', 'surprise', 'Surprise', '2014: a surprised creature can’t move or act on its first turn. 2024: it rolls initiative with disadvantage.'],
+  ['combat', 'recharge', 'Monsters roll to recharge', 'A spent “Recharge 5–6” ability rolls its d6 at the start of the monster’s turn.'],
+  ['combat', 'legendary', 'Legendary action limit', 'A legendary action that costs more than the monster has left is refused.'],
+  ['combat', 'lair', 'Lair action reminder', 'A reminder at initiative 20 for a monster with lair actions.'],
+  ['combat', 'condSaves', 'Saves to end conditions', 'A condition that ends on a save asks for the save at the end of each of the creature’s turns.'],
+  ['combat', 'skipDead', 'Defeated monsters’ turns are skipped', 'A monster at 0 hit points (without regeneration to bring it back) loses its turn.'],
+  ['combat', 'massive', 'Massive damage', 'Damage that leaves a creature at 0 with as much again as its maximum kills it outright.'],
+  ['spells', 'slots', 'Casting uses a spell slot', 'A spell cast from the sheet uses a slot, and can’t be cast with none left.'],
+  ['spells', 'concOne', 'One concentration spell at a time', 'Starting a concentration spell ends the one already going.'],
+  ['spells', 'concSave', 'Concentration saves', 'Damage while concentrating asks for a Constitution save (DC 10 or half the damage).'],
+  ['spells', 'circleMagic', 'Circle Magic', 'Heroes of Faerûn: spellcasters’ sheets show the actions for casting a spell together.', false, 'optional'],
+  ['chars', 'ammo', 'Ammunition', 'Each ranged attack takes a piece of ammunition from the inventory.'],
+  ['chars', 'exhaustion', 'Exhaustion’s penalties', 'Exhaustion lowers d20 rolls and Speed, and level 6 kills.'],
+  ['chars', 'attune', 'Three attuned items', 'No more than three magic items attuned at once (more for an artificer).'],
+  ['chars', 'multiclass', 'Multiclassing needs 13s', 'Taking a new class needs 13 in the main abilities of both classes.'],
+  ['chars', 'hdMin1', 'Hit dice heal at least 1', 'A hit die spent on a short rest heals at least 1, even with a low Constitution.', true, 'house'],
+  ['chars', 'shopCoins', 'Buying takes the party’s coins', 'A purchase in the shop takes the price from the party’s coins, and is refused when they can’t pay.', true, 'house'],
+].map(r => ({ group: r[0], key: r[1], name: r[2], what: r[3], def: r[4] !== false, kind: r[5] || '' }));
+const SKT_TABLE_RULE_GROUPS = { move: 'Movement', combat: 'Combat', spells: 'Spells and concentration', chars: 'Characters and items' };
+// Whether a table rule is in play. (An unknown key: on — a typo never
+// switches a rule off.)
+function sktRuleOn(key){
+  const s = (typeof state !== 'undefined' && state && state.settings) || {};
+  const r = s.rules;
+  if (r && typeof r[key] === 'boolean') return r[key];
+  if (key === 'ammo') return s.useAmmunition !== false;
+  if (key === 'circleMagic') return !!s.circleMagic;
+  const d = SKT_TABLE_RULES.find(x => x.key === key);
+  return d ? d.def : true;
+}
+// Switch one, for everyone (saved, so it syncs).
+function sktSetRule(key, on){
+  if (typeof state === 'undefined' || !state) return;
+  if (!state.settings) state.settings = {};
+  state.settings.rules = Object.assign({}, state.settings.rules || {}, { [key]: !!on });
+  // (the settings these two had before, kept in step)
+  if (key === 'ammo'){ if (on) delete state.settings.useAmmunition; else state.settings.useAmmunition = false; }
+  if (key === 'circleMagic') state.settings.circleMagic = !!on;
+  if (typeof save === 'function') save();
+}
 function sktShownActivations(list){
   const a = Array.isArray(list) ? list : [];
   // The same list back when there's nothing to hide (the Turn View and the
@@ -2959,7 +3028,8 @@ function sktInitCondMode(own, conditions, edition){
   if (edition !== '2014'){
     const cs = (conditions || []).map(x => String(x).toLowerCase());
     if (cs.some(x => /^invisible\b/.test(x))) up = true;
-    if (cs.some(x => /^(incapacitated|paralyzed|petrified|stunned|unconscious|surprised)\b/.test(x))) down = true;
+    if (cs.some(x => /^(incapacitated|paralyzed|petrified|stunned|unconscious)\b/.test(x))) down = true;
+    if (sktRuleOn('surprise') && cs.some(x => /^surprised\b/.test(x))) down = true;
   }
   return up && !down ? 'adv' : down && !up ? 'dis' : '';
 }
@@ -3033,7 +3103,7 @@ function sktSpellSaveCond(s){
 // 2024, −2 a level on every d20 test; 2014, disadvantage on ability checks
 // from level 1 and on attacks and saves from level 3. → { lvl, bonus, dis }
 function sktMonsterExh(c, kind){
-  const lvl = c && !c.isPC ? Math.max(0, Math.min(6, +c.exhaustion || 0)) : 0;
+  const lvl = c && !c.isPC && sktRuleOn('exhaustion') ? Math.max(0, Math.min(6, +c.exhaustion || 0)) : 0;
   if (!lvl) return { lvl: 0, bonus: 0, dis: false };
   const ed = (typeof state !== 'undefined' && state.settings && state.settings.builderEdition) || '2024';
   if (ed === '2014') return { lvl, bonus: 0, dis: kind === 'check' ? lvl >= 1 : lvl >= 3 };
@@ -3127,6 +3197,7 @@ function sktSizeRank(c){
 function sktMoveCost(c){
   const why = [];
   let mult = 1;
+  if (!sktRuleOn('crawl')) return { mult, why: '' };
   if (sktProne(c)){ mult++; why.push('crawling'); }
   const held = sktHeldBy(c);
   if (held.length){
@@ -3144,7 +3215,7 @@ function sktMoveCost(c){
 // The grappler moved (dx, dy) on the map: the creatures it holds come with it.
 // → the tokens moved.
 function sktDragHeld(tokens, tok, dx, dy, dz){
-  if (!tok || !(dx || dy || dz) || !Array.isArray(tokens)) return [];
+  if (!tok || !(dx || dy || dz) || !Array.isArray(tokens) || !sktRuleOn('grapple')) return [];
   const c = (state.combatants || []).find(x => { const m = x && sktTokenForCombatant(tokens, x); return m && (m === tok || (m.id != null && m.id === tok.id)); });
   const out = [];
   sktHeldBy(c).forEach(o => { const ot = sktTokenForCombatant(tokens, o); if (ot && ot !== tok){ ot.x += dx || 0; ot.y += dy || 0;
@@ -3230,7 +3301,7 @@ function sktSightSrc(src){
   (src.tokens || []).forEach(t => {
     if (t && t.lt && t.x != null && (+t.lt.b > 0 || +t.lt.d > 0)) lights.push({ x: t.x, y: t.y, z: +t.elev || 0, b: +t.lt.b || 0, d: +t.lt.d || 0 });
   });
-  return { on: amb < 2 || walls.length > 0 || darks.length > 0, amb, unit, ppf, walls, lights, darks };
+  return { on: (amb < 2 || walls.length > 0 || darks.length > 0) && sktRuleOn('sight'), amb, unit, ppf, walls, lights, darks };
 }
 // Does the line from (ax,ay) to (bx,by) pass through a wall? (Touching a
 // wall's end doesn't count: a line along a corner isn't stopped by it.)
@@ -3315,6 +3386,8 @@ function sktCanSee(S, v, t, vSenses){
 
 // How far it may go this turn: its Speed, once more for each Dash.
 function sktMoveBudget(speed, c){
+  // (Table rules: movement not counted — no budget at all.)
+  if (!sktRuleOn('speedLimit')) return null;
   // Steady Aim: Speed 0 until the end of the turn it was used in.
   if (speed != null && c && c.aimed && c.aimed.k && c.aimed.k === sktMoveKey()) return 0;
   // Sentinel's Halt: an opportunity attack hit it — Speed 0 for the rest of the turn.

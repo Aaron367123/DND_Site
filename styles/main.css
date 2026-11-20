@@ -2369,6 +2369,14 @@ input.card-name-input.clickable:hover{background:rgba(212,165,116,.08)}
 .drawer .toggle-group button.active{color:var(--accent);background:rgba(212,165,116,.12);font-weight:600}
 /* Notes — small ℹ tip row */
 .drawer-note{font-size:var(--fs-sm);color:var(--text-dim);line-height:1.5;margin:8px 0 0;padding-left:18px;position:relative}
+/* Settings → Table rules: a rule, what it does, its switch */
+.tr-row{display:flex;align-items:flex-start;justify-content:space-between;gap:10px;padding:6px 0;border-bottom:1px solid color-mix(in srgb,var(--border) 55%,transparent);cursor:pointer}
+.tr-row:last-of-type{border-bottom:0}
+.tr-row input{width:auto;flex:0 0 auto;margin-top:3px}
+.tr-text{display:flex;flex-direction:column;gap:2px;min-width:0}
+.tr-name{font-size:var(--fs-md);color:var(--text);font-weight:500}
+.tr-what{font-size:var(--fs-sm);color:var(--text-dim);line-height:1.4}
+.tr-tag{margin-left:6px;font-size:var(--fs-xs);color:var(--text-muted);border:1px solid var(--border);border-radius:3px;padding:0 4px;vertical-align:1px;font-weight:500}
 .drawer-note::before{content:'ℹ';position:absolute;left:2px;top:0;color:var(--text-muted);font-style:normal;font-size:var(--fs-sm);font-weight:600}
 /* Display section: slider + number + % as one cluster */
 .font-scale-controls{display:flex;align-items:center;gap:8px;flex:1;min-width:0}

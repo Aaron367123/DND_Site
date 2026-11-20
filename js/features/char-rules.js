@@ -1119,6 +1119,7 @@ function _sktMcNeeds(R, clsName){
   return pa.length ? { all: [], anyAll: pa } : null;
 }
 function sktMulticlassOk(R, clsName, ab){
+  if (typeof sktRuleOn === 'function' && !sktRuleOn('multiclass')) return true;
   const n = _sktMcNeeds(R, clsName); if (!n) return true;
   const ge = ([k, v]) => (ab[k] || 0) >= v;
   return n.all.every(g => g.every(ge)) && (n.any || []).every(g => g.some(ge)) && (!n.anyAll || n.anyAll.some(g => g.every(ge)));

@@ -562,6 +562,7 @@ registerPanel('combat',{
   // grapple ends". → true when something changed.
   _releaseGrapples(){
     if (document.body.classList.contains('player-mode')) return false;   // the DM's to change
+    if (!sktRuleOn('grapple')) return false;
     const INC = ['incapacitated', 'paralyzed', 'petrified', 'stunned', 'unconscious'];
     const lc = a => (a || []).map(x => String(x).toLowerCase());
     let changed = false, noted = false;
@@ -1938,7 +1939,7 @@ registerPanel('combat',{
   // a troll at 0 still has one: it "dies only if it starts its turn with 0
   // hit points and doesn't regenerate" (Regeneration that works at 0).
   _noTurn(c){
-    if (!c || c.isPC) return false;
+    if (!c || c.isPC || !sktRuleOn('skipDead')) return false;
     if (c.dead) return true;
     if ((c.hp || 0) > 0) return false;
     const r = this._regenFor(c);
@@ -2393,7 +2394,7 @@ registerPanel('combat',{
           // is why this is computed here and not off the raw delta.
           const overflow = damageDealt - Math.max(0, hpBefore);
           const cap = c.hpMax || 0;
-          if (cap > 0 && overflow >= cap){
+          if (cap > 0 && overflow >= cap && sktRuleOn('massive')){
             c.deathSaves = null; c.stable = false; c.dead = true;
             this._log(`${c.name} — massive damage (${overflow} past 0 vs ${cap} max): dies instantly`);
             showToast(`💀 ${c.name} dies instantly — massive damage`, { alert: true });
@@ -2457,7 +2458,7 @@ registerPanel('combat',{
       // Use damageForConc (after resist/vuln math, before absorption) so
       // the check fires even when the beast pool / temp HP ate everything.
       // damageDealt is post-absorption and would show 0 in that case.
-      else if (conc && damageForConc > 0){
+      else if (conc && damageForConc > 0 && sktRuleOn('concSave')){
         const dc = sktConcDc(damageForConc, partySlot);
         // On a player's phone the save itself pops up; no reminder on top of it.
         // A monster's save can be rolled from the reminder itself (its bonus,
@@ -2592,6 +2593,7 @@ registerPanel('combat',{
   // The lair acts on initiative 20. Kept on the panel, not in synced state:
   // it is a reminder for whoever is running the turn order.
   _lairCheck(){
+    if (!sktRuleOn('lair')) return;
     const who = state.combatants.filter(c => c.lair && !c.dead && (c.hp || 0) > 0);
     if (!who.length) return;
     this._lairDue = { round: state.combatRound || 1, names: who.map(c => c.name) };
@@ -2647,8 +2649,10 @@ registerPanel('combat',{
       const fx = csRollEffects(p, 'save:' + ab);
       adv.push(...fx.adv); dis.push(...fx.dis); extra = fx.bonus || 0; auto = fx.autoFail || '';
     } else {
-      if (ab === 'str' || ab === 'dex') auto = ['paralyzed', 'stunned', 'unconscious', 'petrified'].find(has) || '';
-      if (ab === 'dex' && has('restrained')) dis.push('restrained');
+      if (sktRuleOn('condRolls')){
+        if (ab === 'str' || ab === 'dex') auto = ['paralyzed', 'stunned', 'unconscious', 'petrified'].find(has) || '';
+        if (ab === 'dex' && has('restrained')) dis.push('restrained');
+      }
       if (opts && opts.spell && this._hasTrait(c, /^Magic Resistance\b/i)) adv.push('Magic Resistance');
       if (typeof sktMonsterExh === 'function'){ const ex = sktMonsterExh(c, 'save'); extra += ex.bonus; if (ex.dis) dis.push('exhaustion'); }
     }
@@ -3014,7 +3018,7 @@ registerPanel('combat',{
       if (phase === 'start' && t.kind === 'start-next' && !ownTurnJustSet(t)){ ended.push(cond); delete timers[cond]; return; }
       if (phase !== 'end') return;
       const skip = ownTurnJustSet(t);
-      if (t.save && !skip) this._queueCondSave(c, cond, t.save);
+      if (t.save && !skip && sktRuleOn('condSaves')) this._queueCondSave(c, cond, t.save);
       if (t.kind === 'end-next' && !skip){ ended.push(cond); delete timers[cond]; return; }
       if (t.kind === 'rounds' && !skip){
         t.left = (t.left || 1) - 1;

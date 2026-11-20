@@ -67,6 +67,7 @@ function initSettings(){
   settingsBtn.addEventListener('mousedown',e=>{
     e.stopPropagation();
     drawer.classList.toggle('open');
+    if (drawer.classList.contains('open')) sktRenderTableRules();
   });
   // Enter / Space on the focused button arrive as a click with no mouse
   // behind it (detail 0) — and only as a click, so the mousedown above never
@@ -75,6 +76,7 @@ function initSettings(){
     if (e.detail !== 0) return;
     e.stopPropagation();
     drawer.classList.toggle('open');
+    if (drawer.classList.contains('open')) sktRenderTableRules();
     if (drawer.classList.contains('open')) drawer.querySelector('button, input, select')?.focus();
   });
   document.getElementById('close-drawer').addEventListener('click',()=>drawer.classList.remove('open'));
@@ -514,6 +516,49 @@ function initSettings(){
 } // end initSettings
 
 // The link this campaign's players open, for this device to hand out.
+// ─── Table rules ─────────────────────────────────────────────────────────────
+// Settings → Table rules: every rule in SKT_TABLE_RULES with its switch, by
+// group. A switch is for the whole campaign (it syncs to the players'
+// phones). Drawn again whenever the drawer opens, so a change made on
+// another screen shows.
+function sktRenderTableRules(){
+  const body = document.getElementById('table-rules-body');
+  if (!body || typeof SKT_TABLE_RULES === 'undefined') return;
+  const off = SKT_TABLE_RULES.filter(r => sktRuleOn(r.key) !== r.def);
+  const meta = document.getElementById('table-rules-meta');
+  if (meta) meta.textContent = off.length ? off.length + ' changed from the usual' : 'The rules the app plays by';
+  const tag = r => r.kind === 'house' ? '<span class="tr-tag">House rule</span>' : r.kind === 'optional' ? '<span class="tr-tag">Optional</span>' : '';
+  body.innerHTML = '<p class="drawer-note" style="margin-top:0">What the app does by itself in play. Switch one off and nobody’s screen does it any more — the players’ phones follow. A rule off is yours to run by hand.</p>'
+    + Object.keys(SKT_TABLE_RULE_GROUPS).map(g => '<h4 class="drawer-subhead">' + esc(SKT_TABLE_RULE_GROUPS[g]) + '</h4>'
+      + SKT_TABLE_RULES.filter(r => r.group === g).map(r => '<label class="tr-row" data-rule="' + r.key + '">'
+        + '<span class="tr-text"><span class="tr-name">' + esc(r.name) + tag(r) + '</span><span class="tr-what">' + esc(r.what) + '</span></span>'
+        + '<input type="checkbox"' + (sktRuleOn(r.key) ? ' checked' : '') + ' aria-label="' + esc(r.name) + '"></label>').join('')).join('')
+    + (off.length ? '<div class="drawer-data-row" style="margin-top:10px"><button class="btn small" id="table-rules-reset" title="Every rule back to how the app plays it by default">Back to the usual rules</button></div>' : '');
+  body.querySelectorAll('.tr-row input').forEach(inp => inp.addEventListener('change', () => {
+    const key = inp.closest('.tr-row').dataset.rule, r = SKT_TABLE_RULES.find(x => x.key === key);
+    sktSetRule(key, inp.checked);
+    if (typeof showToast === 'function') showToast(r.name + (inp.checked ? ': on' : ': off') + ' — for the whole table');
+    sktTableRulesChanged();
+  }));
+  const reset = body.querySelector('#table-rules-reset');
+  if (reset) reset.addEventListener('click', () => {
+    const before = JSON.parse(JSON.stringify(state.settings.rules || {})), legacy = { a: state.settings.useAmmunition, c: state.settings.circleMagic };
+    SKT_TABLE_RULES.forEach(r => sktSetRule(r.key, r.def));
+    sktTableRulesChanged();
+    if (typeof showToast === 'function') showToast('Every table rule back to the usual', { action: { label: 'Undo', run: () => {
+      state.settings.rules = before;
+      if (legacy.a === undefined) delete state.settings.useAmmunition; else state.settings.useAmmunition = legacy.a;
+      if (legacy.c === undefined) delete state.settings.circleMagic; else state.settings.circleMagic = legacy.c;
+      save(); sktTableRulesChanged();
+    } } });
+  });
+}
+// After a switch: this list, and what shows the rules' effects.
+function sktTableRulesChanged(){
+  sktRenderTableRules();
+  ['party', 'combat', 'turnview', 'battlemap'].forEach(k => { const P = typeof panelDefs !== 'undefined' && panelDefs[k]; try { if (P && P._body && typeof P._render === 'function') P._render(); } catch(e){} });
+}
+
 function _sktJoinLink(){ return typeof sktPlayerLink === 'function' ? sktPlayerLink() : location.origin + location.pathname + '?player=1'; }
 function sktCopyPlayerLink(){
   const url = _sktJoinLink(), done = () => showToast('Player link copied — send it to your players');

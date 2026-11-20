@@ -540,7 +540,7 @@ registerPanel('turnview', {
     // "In place of one attack of the Attack action" (2024 Breath Weapon): it
     // comes after the Action is already being spent on attacks.
     const inAttack = flag === 'actionUsed' && /^In place of one attack of the Attack action/i.test(String(a.desc || ''));
-    if (flag && c[flag] && !inAttack){
+    if (flag && c[flag] && !inAttack && sktRuleOn('economy')){
       return flag === 'reactionUsed' ? 'already reacted'
            : flag === 'bonusUsed'    ? 'bonus action already used'
            : 'action already used';
@@ -1170,25 +1170,27 @@ registerPanel('turnview', {
   _condMods(attacker, target){
     const adv = [], dis = [];
     let autoCrit = false;
-    this._COND_ATTACKER_DIS.forEach(n => {
+    // (Table rules: conditions off — each condition's line below asks this.)
+    const cr = sktRuleOn('condRolls');
+    if (cr) this._COND_ATTACKER_DIS.forEach(n => {
       if (this._hasCond(attacker, n)) dis.push(n);
     });
     // Frightened is disadvantage only "while the source of your fear is
     // within line of sight", and nothing here records what frightened them.
     // Applied, because the thing you are swinging at usually IS the source,
     // and labelled, because sometimes it is not.
-    if (this._hasCond(attacker, "frightened")) dis.push("frightened (if the source is in sight)");
-    this._COND_TARGET_ADV.forEach(n => {
+    if (cr && this._hasCond(attacker, "frightened")) dis.push("frightened (if the source is in sight)");
+    if (cr) this._COND_TARGET_ADV.forEach(n => {
       if (this._hasCond(target, n)) adv.push("target " + n);
     });
     // Prone cuts both ways: advantage in melee, disadvantage at range.
-    if (this._hasCond(target, "prone")){
+    if (cr && this._hasCond(target, "prone")){
       const ft = this._ftBetween(attacker, target);
       if (ft == null) adv.push("target prone (assuming melee — no tokens to measure)");
       else if (ft <= 5) adv.push("target prone, within 5 ft");
       else dis.push("target prone, " + ft + " ft away");
     }
-    if (this._COND_AUTOCRIT.some(n => this._hasCond(target, n))){
+    if (cr && this._COND_AUTOCRIT.some(n => this._hasCond(target, n))){
       const ft = this._ftBetween(attacker, target);
       if (ft != null && ft <= 5) autoCrit = true;
     }
@@ -1200,8 +1202,8 @@ registerPanel('turnview', {
     // Invisible: "attack rolls against the creature have disadvantage, and
     // the creature's attack rolls have advantage" — unless the other one can
     // see it anyway: blindsight or truesight that reaches.
-    if (this._hasCond(attacker, 'invisible') && !this._seesUnseen(target, attacker)) adv.push('invisible');
-    if (this._hasCond(target, 'invisible') && !this._seesUnseen(attacker, target)) dis.push('target invisible');
+    if (cr && this._hasCond(attacker, 'invisible') && !this._seesUnseen(target, attacker)) adv.push('invisible');
+    if (cr && this._hasCond(target, 'invisible') && !this._seesUnseen(attacker, target)) dis.push('target invisible');
     // 2024 Grappled: "disadvantage on attack rolls against any target other
     // than the grappler" — known when the grapple came from a hit here, and
     // over when the grappler is gone or can't act.
@@ -1209,7 +1211,7 @@ registerPanel('turnview', {
     if (attacker && attacker.isPC && target && target.grappledBy && target.grappledBy.id === attacker.id && this._hasCond(target, 'grappled')
         && (((this._partyOf(attacker) || {}).sheet || {}).featureList || []).some(f => f && f.name === 'Grappler' && !f.info)) adv.push('grappling it (Grappler)');
     const gb = attacker && attacker.grappledBy;
-    if (gb && target && this._hasCond(attacker, 'grappled') && gb.id !== target.id && this._edOf(attacker) !== '2014'){
+    if (cr && gb && target && this._hasCond(attacker, 'grappled') && gb.id !== target.id && this._edOf(attacker) !== '2014'){
       const g = this._order().find(o => o.id === gb.id);
       if (g && (g.hp || 0) > 0 && !this._incap(g)) dis.push('grappled by ' + g.name);
     }
@@ -1274,7 +1276,7 @@ registerPanel('turnview', {
   // Who sees whom on the map ({aSeesT, tSeesA, why}), or null when the map
   // has nothing to hide in (bright light, no walls) or either has no token.
   _sightBetween(a, t){
-    if (typeof sktSightSrc !== 'function' || !a || !t) return null;
+    if (typeof sktSightSrc !== 'function' || !a || !t || !sktRuleOn('unseen')) return null;
     const S = sktSightSrc(this._map());
     if (!S.on) return null;
     const ta = this._tokenFor(a), tt = this._tokenFor(t);
@@ -1291,14 +1293,14 @@ registerPanel('turnview', {
   // abilities or magical effects" — refused, and said why.
   _charmBlocks(c, t){
     const by = c && c.charmedBy;
-    if (!by || !t || by.id !== t.id || !this._hasCond(c, 'charmed')) return false;
+    if (!sktRuleOn('charm') || !by || !t || by.id !== t.id || !this._hasCond(c, 'charmed')) return false;
     this._setResult(`<span class="dim"><strong>${esc(c.name)}</strong> is charmed by ${esc(t.name)} — it can’t attack ${esc(t.name)} or target it with harmful effects.</span>`, true);
     this._render();
     return true;
   },
   // 2014 surprise: no move, action or reaction until its first turn ends
   // (2024's is only initiative at disadvantage).
-  _surprisedNow(c){ return !!(c && c.surprised) && this._edOf(c) === '2014'; },
+  _surprisedNow(c){ return !!(c && c.surprised) && this._edOf(c) === '2014' && sktRuleOn('surprise'); },
   _incapNote(c){
     if (!this._incap(c) && this._surprisedNow(c))
       return `<div class="tv-incap" role="note">⚠ Surprised — ${esc(c.name)} can’t move or take an action this turn, or a reaction until it ends</div>`;
@@ -1308,7 +1310,7 @@ registerPanel('turnview', {
   // A ranged attack with an enemy within 5 ft who can see you (and isn't
   // incapacitated): disadvantage. The nearest such enemy, or null.
   _rangedThreat(attacker){
-    if (!attacker) return null;
+    if (!attacker || !sktRuleOn('range')) return null;
     return this._order().find(o => o !== attacker && this._sideOf(o) !== this._sideOf(attacker) && (o.hp || 0) > 0 && !this._incap(o)
       && !this._hasCond(o, 'blinded') && (f => f != null && f <= 5)(this._ftBetween(o, attacker))) || null;
   },
@@ -1355,7 +1357,7 @@ registerPanel('turnview', {
     if (reach != null && ft <= reach) return null;
     if (rng){
       if (ft <= rng[0]) return null;
-      if (ft <= rng[1]) return { dis: 'long range, ' + ft + ' ft', ft };
+      if (ft <= rng[1]) return sktRuleOn('range') ? { dis: 'long range, ' + ft + ' ft', ft } : null;
       return { out: ft + ' ft away — its range is ' + (rng[1] > rng[0] ? rng[0] + '/' + rng[1] : rng[0]) + ' ft', ft };
     }
     return { out: ft + ' ft away — its reach is ' + reach + ' ft', ft };
@@ -2431,7 +2433,7 @@ registerPanel('turnview', {
     const a = acts[ai]; if (!a) return;
     const cost = this._legendaryCost(a.name);
     const left = (c.legendaryMax || 0) - (c.legendaryUsed || 0);
-    if (cost > left) return;
+    if (cost > left && sktRuleOn('legendary')) return;
     if (this._legendaryOnceUsed(c, a)) return;
     this._snapshot(`${c.name} · ${this._legendaryBare(a.name)}`);
     c.legendaryUsed = (c.legendaryUsed || 0) + cost;
@@ -2583,7 +2585,7 @@ registerPanel('turnview', {
     if (!c || !t) return { ac: 0 };
     const set = this._covers[this._coverKey(c, t)];
     let v = set, why = '', auto = false;
-    if (set == null){
+    if (set == null && sktRuleOn('cover')){
       // The map's own say: a creature in the way (half), walls (by the lines) — the more of the two.
       const o = this._coverAuto(c, t), w = this._wallCover(c, t);
       if (w === 'total') return { ac: 0, total: true, why: 'a wall in the way', auto: true };
@@ -4198,8 +4200,8 @@ registerPanel('turnview', {
     const B = this._bm(), tok = this._tokenFor(c);
     const sp = B && typeof B._tokenSpeed === 'function' ? B._tokenSpeed(tok || { cid: c.id, isPC: c.isPC, label: c.name }) : null;
     const mi = this._moveNow(c);
-    const cost = sp != null ? Math.floor(sp / 2) : null;
-    if (sp === 0){ this._setResult(`<strong>${esc(c.name)}</strong> can&rsquo;t stand up &mdash; its Speed is 0.`, true); this._render(); return; }
+    const cost = sp != null && sktRuleOn('standUp') ? Math.floor(sp / 2) : null;
+    if (sp === 0 && cost != null){ this._setResult(`<strong>${esc(c.name)}</strong> can&rsquo;t stand up &mdash; its Speed is 0.`, true); this._render(); return; }
     if (mi && mi.budget != null && cost != null && mi.budget - mi.moved < cost){
       this._setResult(`<strong>${esc(c.name)}</strong> can&rsquo;t stand up &mdash; it takes ${cost} ft of movement and ${Math.max(0, mi.budget - mi.moved)} ft are left.`, true); this._render(); return;
     }
@@ -5195,7 +5197,7 @@ registerPanel('turnview', {
     if (!c.rechargeSpent.includes(name)) c.rechargeSpent.push(name);
   },
   _rollRecharges(c){
-    if (!c) return;
+    if (!c || !sktRuleOn('recharge')) return;
     if (c._rechRound === state.combatRound) return;
     // Stamp the round BEFORE the has-anything-spent check, not after. With the
     // check first, the first render of the turn returned early without
@@ -5438,7 +5440,7 @@ registerPanel('turnview', {
   // `from.elev`: its height before, when the move was up or down — flying
   // straight up out of a giant's reach provokes like walking away does.
   _checkProvoke(tok, from){
-    if (!this._body || !tok || !from) return;
+    if (!this._body || !tok || !from || !sktRuleOn('oa')) return;
     const dz = from.elev != null ? Math.abs((+tok.elev || 0) - (+from.elev || 0)) : 0;
     if (tok.x === from.x && tok.y === from.y && !dz) return;
     if (this._pending) return;

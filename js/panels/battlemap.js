@@ -2985,6 +2985,7 @@ registerPanel('battlemap',{
   // player's drag closer is refused (→ true); the DM's is allowed, with a
   // warning — the DM may be setting things right.
   _fearBlocks(t, to, from){
+    if (!sktRuleOn('fear')) return false;
     const c = this._combatantFor(t);
     const by = c && c.frightenedBy;
     if (!by || !(c.conditions || []).some(k => String(k).toLowerCase() === 'frightened') || !to || !from) return false;
@@ -3001,7 +3002,7 @@ registerPanel('battlemap',{
   // a wall it stops, on the square before — and the turn's count stops there
   // too. The DM's moves are their own. → where it stops, or null (clear).
   _wallStop(t, to, from, path){
-    if (!document.body.classList.contains('player-mode') || !to || !from) return null;
+    if (!document.body.classList.contains('player-mode') || !to || !from || !sktRuleOn('walls')) return null;
     const S = sktSightSrc({ drawings: this._drawings, cs: this._csScreen() || 50, ftPerCell: this._ftPerCell, gridType: this._gridType, light: 'bright' });
     if (!S.walls.length) return null;
     const cs = this._csScreen() || 50, pts = [[from.x, from.y]];
@@ -4073,10 +4074,11 @@ registerPanel('battlemap',{
     // As it stands, like a character's: 0 grappled, restrained… (2014: stunned too), 10 less slowed.
     const conds = ((c && c.conditions) || []).map(x => String(x).toLowerCase());
     const ed = (state.settings && state.settings.builderEdition) || '2024';
-    if (typeof SKT_SPEED_ZERO !== 'undefined' && SKT_SPEED_ZERO.concat(ed === '2014' ? ['stunned'] : []).some(z => conds.some(x => x === z || x.startsWith(z + ' ')))) return 0;
+    const cOn = sktRuleOn('speedConds');
+    if (cOn && typeof SKT_SPEED_ZERO !== 'undefined' && SKT_SPEED_ZERO.concat(ed === '2014' ? ['stunned'] : []).some(z => conds.some(x => x === z || x.startsWith(z + ' ')))) return 0;
     // Its exhaustion: 2024, 5 ft less a level; 2014, halved from level 2, 0 at 5.
     const ex = typeof sktMonsterExh === 'function' ? sktMonsterExh(c, 'speed') : { lvl: 0 };
-    let sp = Math.max(0, v - (c && c.slowed ? 10 : 0));
+    let sp = Math.max(0, v - (cOn && c && c.slowed ? 10 : 0));
     if (ex.lvl){ sp = ed === '2014' ? (ex.lvl >= 5 ? 0 : ex.lvl >= 2 ? Math.floor(sp / 2) : sp) : Math.max(0, sp - 5 * ex.lvl); }
     return sp;
   },
@@ -4150,7 +4152,7 @@ registerPanel('battlemap',{
     // that would is refused — a diagonal tries its two sides first — and the
     // path waits at the wall till the finger goes somewhere it can follow.
     // So the ruler shows the way the creature can actually walk.
-    const pl = document.body.classList.contains('player-mode');
+    const pl = document.body.classList.contains('player-mode') && sktRuleOn('walls');
     if (pl && !path.walls) path.walls = sktSightSrc({ drawings: this._drawings, cs: this._csScreen() || 50, ftPerCell: this._ftPerCell, gridType: this._gridType, light: 'bright' });
     const W = pl && path.walls.walls.length ? path.walls : null, cs0 = this._csScreen() || 50;
     const ctr = c => path.hex ? this._hexCentre(c) : [path.ox + c[0] * cs0, path.oy + c[1] * cs0];
@@ -4436,7 +4438,7 @@ registerPanel('battlemap',{
     const unit = this._tokenUnitScreen(), cs = this._csScreen(), size = t.size || 1;
     const stageW = this._cols * cs, stageH = this._rows * cs, half = size * unit / 2;
     const others = (this._tokens || []).filter(o => o && o !== t && o.id !== t.id && !o.dead && (o.size || 1) >= 1 && o.x != null);
-    if (stack || t.dead || size < 1 || !others.length) return { x, y, moved: false };
+    if (stack || t.dead || size < 1 || !others.length || !sktRuleOn('spaces')) return { x, y, moved: false };
     const clash = (px, py) => others.some(o => Math.hypot(o.x - px, o.y - py) < (size + (o.size || 1)) / 2 * unit * 0.75);
     if (!clash(x, y)) return { x, y, moved: false };
     const inside = (px, py) => px >= half - 0.5 && px <= stageW - half + 0.5 && py >= half - 0.5 && py <= stageH - half + 0.5;
@@ -4617,7 +4619,7 @@ registerPanel('battlemap',{
   // The extra feet a move from (x0,y0) to (x1,y1) costs `tok` in difficult
   // terrain: a square at a time along the way, its whole space at each.
   _terrainExtra(tok, x0, y0, x1, y1, one){
-    if (!tok || +tok.elev > 0 || !this._terrain().length) return 0;
+    if (!tok || +tok.elev > 0 || !this._terrain().length || !sktRuleOn('terrain')) return 0;
     if (one){ const s = Math.max(1, Math.round(+tok.size || 1)), u = this._tokenUnitScreen() || this._csScreen() || 50;
       for (let a = 0; a < s; a++) for (let b = 0; b < s; b++) if (this._inTerrain(x1 + (a - (s - 1) / 2) * u, y1 + (b - (s - 1) / 2) * u)) return this._ftPerCell || 5;
       return 0; }

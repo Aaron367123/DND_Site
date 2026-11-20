@@ -145,8 +145,7 @@ registerPanel('party',{
     const circleOn = typeof sktCircleMagicOn === 'function' && sktCircleMagicOn();
     if (circleOn || state.party.some(c => ((c.sheet || {}).activations || []).some(a => a && a.feature === 'Circle Magic'))){
       items.push({ label: 'Circle Magic (Heroes of Faerûn): ' + (circleOn ? 'on — turn off' : 'off — turn on'), icon: 'i-sparkle', run: () => {
-        if (!state.settings) state.settings = {};
-        state.settings.circleMagic = !circleOn; save(); this._render();
+        sktSetRule('circleMagic', !circleOn); this._render();
         showToast('Circle Magic ' + (circleOn ? 'off: the Circle spell actions are hidden from the sheets' : 'on: spellcasters’ sheets show the Circle spell actions'));
       } });
     }
@@ -154,9 +153,7 @@ registerPanel('party',{
     if (state.party.some(c => ((c.sheet || {}).attacks || []).some(a => (a.props || []).includes('A')))){
       const ammoOn = typeof sktAmmoOn !== 'function' || sktAmmoOn();
       items.push({ label: 'Ranged attacks use ammunition: ' + (ammoOn ? 'on — turn off' : 'off — turn on'), icon: 'i-target', run: () => {
-        if (!state.settings) state.settings = {};
-        if (ammoOn) state.settings.useAmmunition = false; else delete state.settings.useAmmunition;
-        save(); this._render();
+        sktSetRule('ammo', !ammoOn); this._render();
         showToast(ammoOn ? 'Ammunition off: ranged attacks no longer take arrows or bolts from anyone’s inventory' : 'Ammunition on: each ranged attack takes a piece from the inventory');
       } });
     }
@@ -1691,7 +1688,7 @@ registerPanel('party',{
       // beast pool soak their share, as the combat tracker does. This path
       // let a PC on 5 of 20 who took 30 from a trap between fights go down
       // and start death saves.
-      if (taken > 0 && !c.dead && (+c.hpMax || 0) > 0 && taken - hpBefore >= +c.hpMax){
+      if (taken > 0 && !c.dead && (+c.hpMax || 0) > 0 && taken - hpBefore >= +c.hpMax && sktRuleOn('massive')){
         c.dead = true; c.deathSaves = null; c.stable = false;
         if (typeof showToast === 'function') showToast('💀 ' + c.name + ' dies instantly — massive damage', { alert: true });
       }
@@ -1718,7 +1715,7 @@ registerPanel('party',{
         if (typeof showToast === 'function') showToast('🌀 ' + spell + ' ends — ' + c.name + ' is down', { alert: true });
       }
       // Concentration save reminder — 5e rule. Toast only; don't auto-roll.
-      else if (c.concentration && damageForConc > 0){
+      else if (c.concentration && damageForConc > 0 && sktRuleOn('concSave')){
         const dc = sktConcDc(damageForConc, c);
         // The player's phone asks them to roll it (player-app.js).
         c.concCheck = { id: uid(), dc, spell: c.concentration, at: Date.now() };
@@ -2760,7 +2757,8 @@ registerPanel('party',{
     // where it can never fire at all.
     // Recorded rather than left as a bare "house rule" note so the next
     // pass over the rest rules does not raise it again.
-    const heal = Math.max(1, roll + conMod);
+    // (Table rules: the house rule off — the book's minimum, 0.)
+    const heal = Math.max(sktRuleOn('hdMin1') ? 1 : 0, roll + conMod);
     pool.current -= 1; sktHdSetPools(c, pools);
     // Same cap expression as the heal path in _applyHpDelta. This used
     // c.hpMax directly, so a character with no hpMax recorded got
@@ -3970,7 +3968,7 @@ function sktHdLongRest(pc){
 // rest leaves them be. Setting level 6 used to toast "dies" and change nothing.
 // Returns true when it killed them.
 function sktExhaustionDeath(pc){
-  if (!pc || (+pc.exhaustion || 0) < 6) return false;
+  if (!pc || (+pc.exhaustion || 0) < 6 || !sktRuleOn('exhaustion')) return false;
   const h = sktDeathSaveHolder(pc);
   if (h.dead) return false;
   pc.hp = 0; pc.concentration = null; pc.rage = false; pc.rageRounds = null;

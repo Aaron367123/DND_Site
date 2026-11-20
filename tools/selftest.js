@@ -26920,6 +26920,207 @@ for (const cls of Object.keys(rule)) for (let L = 1; L <= 20; L++) for (const sc
         closePanel('battlemap');
       }
     }
+    // -- Round 528: Table rules — every rule the app plays by itself switchable for the whole table (Settings → Table rules); each one's switch, on and off --
+    if (!PLAYER){
+      const B = panelDefs.battlemap, TV = panelDefs.turnview, C = panelDefs.combat, P = panelDefs.party, L = panelDefs.loot;
+      const R0 = JSON.stringify(state.settings.rules || null), A0 = state.settings.useAmmunition, CM0 = state.settings.circleMagic;
+      const PA0 = JSON.stringify(state.party), K0 = JSON.stringify(state.combatants), AC0 = state.activeCombatantId, RD0 = state.combatRound;
+      const D0 = B._drawings, T0 = B._tokens, LOOT0 = localStorage.getItem('skt-loot-v1'), LL0 = L && L._loot;
+      const stubs = [];
+      const stub = (o, k, f) => { stubs.push([o, k, o[k]]); o[k] = f; };
+      const both = (key, f) => { sktSetRule(key, true); const on = f(); sktSetRule(key, false); const off = f(); sktSetRule(key, true); return [on, off]; };
+      const pl = f => { document.body.classList.add('player-mode'); try { return f(); } finally { document.body.classList.remove('player-mode'); } };
+      try {
+        state.settings.rules = {}; delete state.settings.useAmmunition; delete state.settings.circleMagic;
+        // the list
+        const keys = SKT_TABLE_RULES.map(r => r.key);
+        ok('34 table rules, each named, said and grouped once', keys.length === 34 && new Set(keys).size === 34 && SKT_TABLE_RULES.every(r => r.name && r.what && SKT_TABLE_RULE_GROUPS[r.group]), keys.length);
+        ok('…all on by default, as the app has always played — but Circle Magic (a book’s optional rule)', SKT_TABLE_RULES.every(r => sktRuleOn(r.key) === (r.key !== 'circleMagic')), SKT_TABLE_RULES.filter(r => sktRuleOn(r.key) !== (r.key !== 'circleMagic')).map(r => r.key).join());
+        state.settings.useAmmunition = false; state.settings.circleMagic = true;
+        ok('…the ammunition and Circle Magic settings from before still count', !sktRuleOn('ammo') && sktRuleOn('circleMagic') && !sktAmmoOn() && sktCircleMagicOn());
+        sktSetRule('ammo', true); sktSetRule('circleMagic', false);
+        ok('…a choice here wins, and keeps them in step', sktAmmoOn() && !sktCircleMagicOn() && state.settings.useAmmunition === undefined && state.settings.circleMagic === false);
+        ok('…an unknown rule is never off', sktRuleOn('no-such-rule') === true);
+        // Movement
+        const cs = B._csScreen() || 50;
+        B._drawings = [{ k: 'tpl', id: 'r528w', shape: 'wall', pts: [2 * cs, 0, 2 * cs, 6 * cs] }];
+        let r = both('walls', () => pl(() => B._wallStop({ id: 'r528t' }, { x: 3 * cs, y: 2 * cs }, { x: 1 * cs, y: 2 * cs }, null)));
+        ok('walls: a player stopped at a wall — off, walks through', !!r[0] && r[1] === null, JSON.stringify(r));
+        state.combatants = [{ id: 'r528a', name: 'R528 Scared', isPC: false, hp: 9, hpMax: 9, conditions: ['frightened'], frightenedBy: { id: 'r528b', name: 'R528 Scary' } }, { id: 'r528b', name: 'R528 Scary', isPC: false, hp: 9, hpMax: 9, conditions: [] }];
+        B._tokens = [{ id: 'r528ta', cid: 'r528a', label: 'R528 Scared', x: 100, y: 100, size: 1 }, { id: 'r528tb', cid: 'r528b', label: 'R528 Scary', x: 400, y: 100, size: 1 }];
+        r = both('fear', () => pl(() => B._fearBlocks(B._tokens[0], { x: 250, y: 100 }, { x: 100, y: 100 })));
+        ok('fear: frightened, not closer — off, closer', r[0] === true && r[1] === false, JSON.stringify(r));
+        r = both('spaces', () => B._landing(B._tokens[0], 400, 100, { x: 100, y: 100 }, false));
+        ok('spaces: dropped on another, slides off — off, stays', r[0].moved === true && r[1].moved === false && r[1].x === 400, JSON.stringify(r));
+        r = both('speedLimit', () => sktMoveBudget(30, { dashes: 1 }));
+        ok('speedLimit: 60 ft with a Dash — off, no count', r[0] === 60 && r[1] === null, JSON.stringify(r));
+        r = both('speedConds', () => sktSpeedNow({ spd: 30, conditions: ['grappled'] }).ft);
+        ok('speedConds: grappled, Speed 0 — off, 30', r[0] === 0 && r[1] === 30, JSON.stringify(r));
+        B._drawings = [{ k: 'tpl', id: 'r528ter', shape: 'terrain', x: 0, y: 0, x2: 4 * cs, y2: 4 * cs }];
+        r = both('terrain', () => B._terrainExtra({ size: 1 }, cs / 2, cs / 2, cs * 1.5, cs / 2, true));
+        ok('terrain: a square of it costs extra — off, nothing', r[0] > 0 && r[1] === 0, JSON.stringify(r));
+        r = both('crawl', () => sktMoveCost({ conditions: ['prone'] }).mult);
+        ok('crawl: prone, double — off, single', r[0] === 2 && r[1] === 1, JSON.stringify(r));
+        state.combatants = [{ id: 'r528g', name: 'R528 Grappler', isPC: false, hp: 9, hpMax: 9, conditions: [] }, { id: 'r528h', name: 'R528 Held', isPC: false, hp: 9, hpMax: 9, conditions: ['grappled'], grappledBy: { id: 'r528g', name: 'R528 Grappler' } }];
+        const gtoks = () => [{ id: 'r528tg', cid: 'r528g', label: 'R528 Grappler', x: 100, y: 100 }, { id: 'r528th', cid: 'r528h', label: 'R528 Held', x: 150, y: 100 }];
+        r = both('grapple', () => { const ts = gtoks(); sktDragHeld(ts, ts[0], 50, 0); return ts[1].x; });
+        ok('grapple: the held creature carried along — off, left', r[0] === 200 && r[1] === 150, JSON.stringify(r));
+        // stand up at Speed 0: refused; off, stands
+        r = both('standUp', () => {
+          state.combatants = [{ id: 'r528s', name: 'R528 Prone', isPC: false, hp: 9, hpMax: 9, conditions: ['prone'] }]; state.activeCombatantId = 'r528s';
+          stub(B, '_tokenSpeed', () => 0); stub(TV, '_render', () => {}); stub(TV, '_setResult', () => {}); stub(TV, '_snapshot', () => {});
+          try { TV._standUp(state.combatants[0]); } finally { for (let k = 0; k < 4; k++){ const s = stubs.pop(); s[0][s[1]] = s[2]; } }
+          return (state.combatants[0].conditions || []).some(x => /^prone/.test(x));
+        });
+        ok('standUp: at Speed 0, still prone — off, stands', r[0] === true && r[1] === false, JSON.stringify(r));
+        // Combat
+        let calls = 0;
+        stub(TV, '_order', () => { calls++; return []; }); const TB = TV._body; if (!TV._body) TV._body = document.createElement('div');
+        r = both('oa', () => { calls = 0; TV._checkProvoke({ x: 9, y: 9 }, { x: 0, y: 0 }); return calls; });
+        TV._body = TB; { const s = stubs.pop(); s[0][s[1]] = s[2]; }
+        ok('oa: a move is checked for opportunity attacks — off, not', r[0] > 0 && r[1] === 0, JSON.stringify(r));
+        r = both('sight', () => sktSightSrc({ light: 'dim' }).on);
+        ok('sight: a dim map shades the players’ view — off, it doesn’t', r[0] === true && r[1] === false, JSON.stringify(r));
+        calls = 0; stub(TV, '_map', () => ({ light: 'dim', tokens: [], drawings: [] })); stub(TV, '_tokenFor', () => { calls++; return null; });
+        r = both('unseen', () => { calls = 0; TV._sightBetween({ id: 1 }, { id: 2 }); return calls; });
+        for (let k = 0; k < 2; k++){ const s = stubs.pop(); s[0][s[1]] = s[2]; }
+        ok('unseen: who sees whom is worked out — off, not', r[0] > 0 && r[1] === 0, JSON.stringify(r));
+        stub(TV, '_coverAuto', () => ({ name: 'R528 Ogre' })); stub(TV, '_wallCover', () => 0); const CV0 = TV._covers; TV._covers = {};
+        r = both('cover', () => TV._coverFor({ id: 'r528x', isPC: false }, { id: 'r528y', isPC: false }, null).ac);
+        TV._covers = CV0; for (let k = 0; k < 2; k++){ const s = stubs.pop(); s[0][s[1]] = s[2]; }
+        ok('cover: a creature in the way, half cover — off, none unless set', r[0] === 2 && r[1] === 0, JSON.stringify(r));
+        r = both('condRolls', () => TV._condMods({ id: 'r528p', conditions: ['poisoned'] }, { id: 'r528q', conditions: [] }).dis.length);
+        ok('condRolls: poisoned attacks at disadvantage — off, plain', r[0] >= 1 && r[1] === 0, JSON.stringify(r));
+        r = both('condRolls', () => csRollEffects({ name: 'R528', conditions: ['poisoned', 'paralyzed'], sheet: {} }, 'save:dex').autoFail);
+        ok('…a paralyzed character fails a DEX save — off, rolls it', !!r[0] && !r[1], JSON.stringify(r));
+        stub(TV, '_ftBetween', () => 100);
+        r = both('range', () => TV._rangeCheck({ id: 'r528c' }, { id: 'r528d' }, { range: [80, 320] }));
+        { const s = stubs.pop(); s[0][s[1]] = s[2]; }
+        ok('range: long range, disadvantage — off, none', !!(r[0] && r[0].dis) && r[1] === null, JSON.stringify(r));
+        stub(TV, '_setResult', () => {}); stub(TV, '_render', () => {});
+        r = both('charm', () => TV._charmBlocks({ id: 'r528e', conditions: ['charmed'], charmedBy: { id: 'r528f' } }, { id: 'r528f' }));
+        for (let k = 0; k < 2; k++){ const s = stubs.pop(); s[0][s[1]] = s[2]; }
+        ok('charm: no attack on the charmer — off, allowed', r[0] === true && r[1] === false, JSON.stringify(r));
+        r = both('economy', () => TV._actProblem({ id: 'r528e', actionUsed: true }, { name: 'R528 Swing', action: 'action' }));
+        ok('economy: a second action refused — off, allowed', /action already used/.test(r[0] || '') && r[1] == null, JSON.stringify(r));
+        stub(TV, '_edOf', () => '2014');
+        r = both('surprise', () => TV._surprisedNow({ surprised: true }));
+        { const s = stubs.pop(); s[0][s[1]] = s[2]; }
+        const r2 = both('surprise', () => sktInitCondMode('', ['surprised'], '2024'));
+        ok('surprise: 2014 can’t act, 2024 initiative at disadvantage — off, neither', r[0] === true && r[1] === false && r2[0] === 'dis' && r2[1] === '', JSON.stringify([r, r2]));
+        state.combatRound = 3;
+        r = both('recharge', () => { const c = { id: 'r528r', name: 'R528 Dragon' }; TV._rollRecharges(c); return c._rechRound; });
+        ok('recharge: rolled at its turn — off, not', r[0] === 3 && r[1] === undefined, JSON.stringify(r));
+        state.combatants = [{ id: 'r528l', name: 'R528 Lich', isPC: false, hp: 9, hpMax: 9, lair: true, conditions: [] }];
+        r = both('lair', () => { C._lairDue = null; stub(C, '_log', () => {}); try { C._lairCheck(); } finally { const s = stubs.pop(); s[0][s[1]] = s[2]; } return !!C._lairDue; });
+        C._lairDue = null;
+        ok('lair: the initiative-20 reminder — off, none', r[0] === true && r[1] === false, JSON.stringify(r));
+        let qs = 0; stub(C, '_queueCondSave', () => { qs++; });
+        r = both('condSaves', () => { qs = 0; state.combatRound = 5; const c = { id: 'r528z', name: 'R528 Held', conditions: ['paralyzed'], condTimers: { paralyzed: { kind: 'save', save: { ab: 'con', dc: 13 }, setActive: 'other', setRound: 1 } } }; C._tickCondTimers(c, 'end'); return qs; });
+        { const s = stubs.pop(); s[0][s[1]] = s[2]; }
+        ok('condSaves: the end-of-turn save asked for — off, not', r[0] === 1 && r[1] === 0, JSON.stringify(r));
+        r = both('skipDead', () => C._noTurn({ id: 'r528k', name: 'R528 Down', isPC: false, hp: 0, hpMax: 9 }));
+        ok('skipDead: a monster at 0 skipped — off, it keeps its turn', r[0] === true && r[1] === false, JSON.stringify(r));
+        // party: massive damage, a concentration save, a hit die
+        const pc = () => ({ id: 'r528pc', name: 'R528 Hero', hp: 5, hpMax: 20, abilities: { con: 3 }, concentration: 'Bless', hitDice: { max: 2, current: 2, dieType: 'd8' }, conditions: [] });
+        stub(C, '_queueConcSave', () => {});
+        r = both('massive', () => { state.party = [pc()]; state.combatants = []; P._applyHpDelta(0, -30); return !!state.party[0].dead; });
+        ok('massive: 25 past 0 of 20 kills — off, down and dying', r[0] === true && r[1] === false, JSON.stringify(r));
+        r = both('concSave', () => { const p = pc(); p.hp = 20; state.party = [p]; P._applyHpDelta(0, -4); return !!state.party[0].concCheck; });
+        { const s = stubs.pop(); s[0][s[1]] = s[2]; }
+        ok('concSave: hurt while concentrating, a save — off, none', r[0] === true && r[1] === false, JSON.stringify(r));
+        r = both('hdMin1', () => { state.party = [pc()]; const x = P._rollHitDie(0, 1, 'd8'); return x && x.heal; });
+        ok('hdMin1 (house rule): CON 3 on a 1 heals 1 — off, 0', r[0] === 1 && r[1] === 0, JSON.stringify(r));
+        r = both('exhaustion', () => [sktSpeedNow({ spd: 30, exhaustion: 2, rules: '2024' }).ft, csRollEffects({ name: 'R528', exhaustion: 2, rules: '2024', sheet: {} }, 'attack').bonus, sktMonsterExh({ isPC: false, exhaustion: 2 }, 'save').lvl]);
+        ok('exhaustion: 2 levels, 10 ft and −4 (a monster’s too) — off, none', JSON.stringify(r[0]) === '[20,-4,2]' && JSON.stringify(r[1]) === '[30,0,0]', JSON.stringify(r));
+        r = both('exhaustion', () => { const p = Object.assign(pc(), { exhaustion: 6, hp: 20 }); state.party = [p]; return sktExhaustionDeath(p); });
+        ok('…level 6 kills — off, it doesn’t', r[0] === true && r[1] === false, JSON.stringify(r));
+        // spells
+        r = both('concOne', () => csConcOn('Bless', 'Haste'));
+        ok('concOne: a new concentration spell ends the old — off, both held', r[0] === 'Haste' && r[1] === 'Bless + Haste', JSON.stringify(r));
+        ok('slots: the switch is asked where a spell is cast', /&& sktRuleOn\('slots'\)\)\{\s*const slot = p\.sheet\.spellSlots/.test(String(csSpellsClick)), '');
+        // characters and items
+        r = both('attune', () => csAttuneMax({ sheet: {} }));
+        ok('attune: three — off, no limit', r[0] === 3 && r[1] === Infinity, JSON.stringify(r));
+        let R24 = null; try { R24 = await sktRulesLoad('2024'); } catch(e){}
+        ok('…the rules read for the multiclass check', !!R24, '');
+        if (R24){ r = both('multiclass', () => sktMulticlassOk(R24, 'Wizard', { str: 8, dex: 8, con: 8, int: 8, wis: 8, cha: 8 })); ok('multiclass: 8 Intelligence, no Wizard — off, allowed', r[0] === false && r[1] === true, JSON.stringify(r)); }
+        if (L){
+          r = both('shopCoins', () => { L._loot = { cp: 0, sp: 0, ep: 0, gp: 0, pp: 0, items: [], tabGroups: [] }; return sktLootBuy('R528 Rope', 1000).ok; });
+          ok('shopCoins (house rule): no coins, no rope — off, bought', r[0] === false && r[1] === true, JSON.stringify(r));
+        }
+        // Each rule where it's applied a second time
+        // speedConds: a monster's Speed on the map
+        const md = typeof _5eData !== 'undefined' && Array.isArray(_5eData) ? _5eData : null;
+        if (md){
+          md.push({ cat: 'monster', _slug: 'r528-mon', name: 'R528 Mon', _raw: { speed: { walk: 30 } } });
+          try {
+            r = both('speedConds', () => { state.combatants = [{ id: 'r528m', name: 'R528 Mon', _slug: 'r528-mon', isPC: false, hp: 9, hpMax: 9, conditions: ['restrained'] }]; return B._tokenSpeed({ cid: 'r528m', label: 'R528 Mon' }); });
+            ok('…a restrained monster’s Speed on the map 0 — off, 30', r[0] === 0 && r[1] === 30, JSON.stringify(r));
+          } finally { md.splice(md.findIndex(x => x && x._slug === 'r528-mon'), 1); }
+        }
+        // walls: a player's path waits at the wall
+        B._drawings = [{ k: 'tpl', id: 'r528w2', shape: 'wall', pts: [cs, -20 * cs, cs, 20 * cs] }];
+        r = both('walls', () => pl(() => { const path = { ox: cs / 2, oy: cs / 2, hex: false, cells: [] }; path.cells.push(B._pathCell(path, cs / 2, cs / 2)); B._pathTo(path, { id: 'r528t' }, 3.5 * cs, cs / 2); return path.cells.length; }));
+        ok('…a player’s path waits at the wall — off, it goes on', r[0] === 1 && r[1] === 4, JSON.stringify(r));
+        // range: a foe within 5 ft
+        stub(TV, '_order', () => [{ id: 'r528u', hp: 9 }, { id: 'r528v', hp: 9 }]); stub(TV, '_sideOf', o => o.id); stub(TV, '_incap', () => false); stub(TV, '_ftBetween', () => 5);
+        r = both('range', () => !!TV._rangedThreat({ id: 'r528u' }));
+        for (let k = 0; k < 4; k++){ const s = stubs.pop(); s[0][s[1]] = s[2]; }
+        ok('…a ranged attack with a foe 5 ft off — off, no matter', r[0] === true && r[1] === false, JSON.stringify(r));
+        // legendary: a 2-action one with 1 left
+        r = both('legendary', () => {
+          const c = { id: 'r528lg', name: 'R528 Dragon', isPC: false, legendaryMax: 1, legendaryUsed: 0 };
+          stub(TV, '_order', () => [c]); stub(TV, '_entryOf', () => ({ _raw: {} })); stub(TV, '_rawList', () => [{ name: 'Wing Attack (Costs 2 Actions)', desc: '' }]); stub(TV, '_snapshot', () => {}); stub(TV, '_render', () => {});
+          try { TV._useLegendary('r528lg', 0); } catch(e){} finally { for (let k = 0; k < 5; k++){ const s = stubs.pop(); s[0][s[1]] = s[2]; } }
+          return c.legendaryUsed;
+        });
+        ok('…legendary: 2 actions with 1 left refused — off, taken', r[0] === 0 && r[1] === 2, JSON.stringify(r));
+        // grapple: the grappler gone, the grapple ends
+        r = both('grapple', () => { state.combatants = [{ id: 'r528gh', name: 'R528 Held', isPC: false, hp: 9, hpMax: 9, conditions: ['grappled'], grappledBy: { id: 'r528gone', name: 'R528 Gone' } }]; C._releaseGrapples(); return !!state.combatants[0].grappledBy; });
+        ok('…grapple: its grappler gone, it ends — off, it stays', r[0] === false && r[1] === true, JSON.stringify(r));
+        // massive, concSave: the combat tracker's damage
+        let cq = 0; stub(C, '_queueConcSave', () => { cq++; }); stub(C, '_render', () => {});
+        r = both('massive', () => { state.party = [pc()]; state.combatants = [{ id: 'r528pc', name: 'R528 Hero', isPC: true, hp: 5, hpMax: 20, conditions: [] }]; C._applyHpDelta(0, -30); return !!state.combatants[0].dead; });
+        ok('…a character’s massive damage in the combat tracker — off, not dead', r[0] === true && r[1] === false, JSON.stringify(r));
+        r = both('concSave', () => { cq = 0; state.combatants = [{ id: 'r528cc', name: 'R528 Mage', isPC: false, hp: 20, hpMax: 20, concentration: 'Fly', conditions: [] }]; C._applyHpDelta(0, -4); return cq; });
+        for (let k = 0; k < 2; k++){ const s = stubs.pop(); s[0][s[1]] = s[2]; }
+        ok('…a monster’s concentration save on damage — off, none', r[0] === 1 && r[1] === 0, JSON.stringify(r));
+        // condRolls: a monster's save
+        stub(C, 'saveBonus', () => 0);
+        r = both('condRolls', () => C.rollSave({ id: 'r528sv', name: 'R528 Orc', isPC: false, conditions: ['paralyzed'] }, 'dex', 10).auto);
+        { const s = stubs.pop(); s[0][s[1]] = s[2]; }
+        ok('…a paralyzed monster fails a DEX save — off, rolls it', !!r[0] && !r[1], JSON.stringify(r));
+        // concSave on the sheet; concOne's message
+        ok('…concSave asked where the sheet takes damage', /pc\.concentration && !CS\.embed && sktRuleOn\('concSave'\)\) CS\.conc/.test(String(csOnClick)), '');
+        const T0s = []; const ST0 = window.showToast; window.showToast = m => T0s.push(String(m));
+        try { r = both('concOne', () => { T0s.length = 0; csConcOn('Bless', 'Haste'); return T0s.length; }); } finally { window.showToast = ST0; }
+        ok('…concOne: the old one’s end said — off, nothing ends, nothing said', r[0] === 1 && r[1] === 0, JSON.stringify(r));
+        // Settings → Table rules
+        const drawer = document.getElementById('settings-drawer');
+        sktRenderTableRules();
+        const rows = drawer.querySelectorAll('#table-rules-body .tr-row');
+        ok('Settings → Table rules: a switch for each, checked as it plays', rows.length === 34 && [...rows].every(x => x.querySelector('input').checked === sktRuleOn(x.dataset.rule)), rows.length);
+        const terr = drawer.querySelector('#table-rules-body .tr-row[data-rule="terrain"] input');
+        terr.checked = false; terr.dispatchEvent(new Event('change', { bubbles: true }));
+        ok('…unticked: off for the table, and the heading counts it', sktRuleOn('terrain') === false && state.settings.rules.terrain === false && /1 changed/.test(document.getElementById('table-rules-meta').textContent), document.getElementById('table-rules-meta').textContent);
+        const rs = drawer.querySelector('#table-rules-reset'); if (rs) rs.click();
+        ok('…Back to the usual rules: every one as it was', !!rs && SKT_TABLE_RULES.every(x => sktRuleOn(x.key) === x.def), '');
+        ok('…House rule and Optional marked', drawer.querySelectorAll('#table-rules-body .tr-tag').length === 3, drawer.querySelectorAll('#table-rules-body .tr-tag').length);
+      } catch(e){ ok('round 528 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
+      finally {
+        while (stubs.length){ const s = stubs.pop(); s[0][s[1]] = s[2]; }
+        document.body.classList.remove('player-mode');
+        document.querySelectorAll('#toast-host .toast-item').forEach(t => t.remove());
+        state.settings.rules = JSON.parse(R0) || undefined; if (!state.settings.rules) delete state.settings.rules;
+        if (A0 === undefined) delete state.settings.useAmmunition; else state.settings.useAmmunition = A0;
+        if (CM0 === undefined) delete state.settings.circleMagic; else state.settings.circleMagic = CM0;
+        state.party = JSON.parse(PA0); state.combatants = JSON.parse(K0); state.activeCombatantId = AC0; state.combatRound = RD0;
+        B._drawings = D0; B._tokens = T0;
+        if (L){ L._loot = LL0; if (LOOT0 != null) localStorage.setItem('skt-loot-v1', LOOT0); }
+        save();
+      }
+    }
     // -- Class features: represented, not just text ------------------------
     {
       try {

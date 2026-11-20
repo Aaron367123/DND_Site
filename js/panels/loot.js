@@ -36,7 +36,8 @@ function sktLootBuy(name, priceGp, opts){
   if (!cur || typeof cur !== 'object') cur = { cp: 0, sp: 0, ep: 0, gp: 0, pp: 0, items: [], tabGroups: [] };
   if (!Array.isArray(cur.items)) cur.items = [];
   const cost = Math.max(0, Math.round((+priceGp || 0) * 100));
-  const paid = sktLootPay(cur, cost);
+  // (Table rules: the house rule off — the shop's Buy takes no coins, as before it.)
+  const paid = sktRuleOn('shopCoins') ? sktLootPay(cur, cost) : { cp: +cur.cp || 0, sp: +cur.sp || 0, ep: +cur.ep || 0, gp: +cur.gp || 0, pp: +cur.pp || 0 };
   const coins = c => ['pp', 'gp', 'ep', 'sp', 'cp'].filter(k => +c[k]).map(k => (+c[k]).toLocaleString() + ' ' + k).join(' ') || 'nothing';
   if (!paid) return { ok: false, why: 'The party has ' + coins(cur) + ' — not enough for ' + name + ' (' + (opts.value || sktGp(cost / 100) + ' gp') + ')' };
   const value = opts.value || (cost ? sktGp(cost / 100) + ' gp' : '');

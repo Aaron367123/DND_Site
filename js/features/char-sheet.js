@@ -687,7 +687,8 @@ function csRollEffects(pc, kind){
   const conds = _csConditions(pc).map(c => String(c).toLowerCase());
   const has = c => conds.some(x => x === c || x.startsWith(c + ' '));
   const ed = (pc.build && pc.build.edition) || pc.rules || '2024';
-  const exh = +pc.exhaustion || 0;
+  const exh = sktRuleOn('exhaustion') ? +pc.exhaustion || 0 : 0;
+  const cr = sktRuleOn('condRolls');
   const isCheck = kind === 'check' || kind === 'init' || /^(ab)?check:/.test(kind), isAtk = /^attack/.test(kind), save = /^save:/.test(kind) ? kind.slice(5) : kind === 'conc' ? 'con' : '';
   const skill = /^check:/.test(kind) ? kind.slice(6) : '';
   const adv = [], dis = []; let bonus = 0, autoFail = '';
@@ -695,19 +696,19 @@ function csRollEffects(pc, kind){
     if (ed === '2024') bonus -= 2 * exh;
     else { if (isCheck) dis.push('exhaustion'); if (exh >= 3 && (isAtk || save)) dis.push('exhaustion'); }
   }
-  if (has('poisoned') && (isAtk || isCheck)) dis.push('poisoned');
-  if (has('frightened') && (isAtk || isCheck)) dis.push('frightened');
-  ['blinded', 'prone', 'restrained'].forEach(c => { if (has(c) && isAtk) dis.push(c); });
-  if (has('restrained') && save === 'dex') dis.push('restrained');
-  if (has('invisible') && isAtk) adv.push('invisible');
+  if (cr && has('poisoned') && (isAtk || isCheck)) dis.push('poisoned');
+  if (cr && has('frightened') && (isAtk || isCheck)) dis.push('frightened');
+  if (cr) ['blinded', 'prone', 'restrained'].forEach(c => { if (has(c) && isAtk) dis.push(c); });
+  if (cr && has('restrained') && save === 'dex') dis.push('restrained');
+  if (cr && has('invisible') && isAtk) adv.push('invisible');
   // 2024: Invisible rolls initiative with advantage, Incapacitated with disadvantage.
-  if (kind === 'init' && ed !== '2014'){
+  if (cr && kind === 'init' && ed !== '2014'){
     if (has('invisible')) adv.push('invisible');
     if (['incapacitated', 'paralyzed', 'petrified', 'stunned', 'unconscious'].some(has)) dis.push('incapacitated');
   }
   // Armour that's loud (chain mail, plate…): Stealth at disadvantage.
   if (skill === 'stealth' && pc.sheet && pc.sheet.stealthDis) dis.push('armour');
-  if (save === 'str' || save === 'dex') ['paralyzed', 'stunned', 'petrified', 'unconscious'].forEach(c => { if (has(c) && !autoFail) autoFail = c; });
+  if (cr && (save === 'str' || save === 'dex')) ['paralyzed', 'stunned', 'petrified', 'unconscious'].forEach(c => { if (has(c) && !autoFail) autoFail = c; });
   // Rage, Haste, Bladesong…
   const tags = csRollTags(kind);
   ((pc.sheet || {}).rollAdv || []).forEach(x => { if ((x.on || []).some(t => tags.includes(t))) adv.push(x.label); });
@@ -1475,7 +1476,7 @@ function csOnClick(e){
     if (d.csHp === 'temp') return csEdit('Temp HP ' + n, p => { p.tempHp = Math.max(p.tempHp || 0, n); });
     const i = csIdx(), sign = +d.csHp, type = sign < 0 ? (CS.dtype || null) : null;
     // Hurt while concentrating: a CON save to keep it, DC 10 or half the damage.
-    if (sign < 0 && pc.concentration && !CS.embed) CS.conc = { dc: sktConcDc(n, pc), spell: pc.concentration };
+    if (sign < 0 && pc.concentration && !CS.embed && sktRuleOn('concSave')) CS.conc = { dc: sktConcDc(n, pc), spell: pc.concentration };
     const run = () => { panelDefs.party._applyHpDelta(i, sign * n, type); csCommit(); };
     // The number changes right in front of them, and the other button puts it
     // back: no Undo toast for it (Ctrl+Z still works).
@@ -1609,8 +1610,7 @@ function csOnClick(e){
       if (s.conc){
         if (s.on) p.concentration = null;
         else {
-          if (p.concentration && p.concentration !== s.spell && typeof showToast === 'function') showToast('Concentration on ' + p.concentration + ' ends');
-          p.concentration = s.spell;
+          p.concentration = csConcOn(p.concentration, s.spell);
         }
       } else {
         p.active = Object.assign({}, p.active);
@@ -2263,7 +2263,7 @@ function csSpellsClick(e, t, d, pc){
     const s = csSpell(name);
     let used = null;
     csEdit('Cast ' + name, p => {
-      if (/^\d+$/.test(how) && +how > 0){
+      if (/^\d+$/.test(how) && +how > 0 && sktRuleOn('slots')){
         const slot = p.sheet.spellSlots[+how];
         if (!slot || slot.total - (slot.expended || 0) <= 0) return;
         slot.expended = (slot.expended || 0) + 1;
@@ -2364,12 +2364,19 @@ function csCastUses(pc, name){
     .map(a => ({ a, r: (pc.resources || []).find(x => x.name === a.resource) }));
 }
 // What casting does beyond paying for it: concentration, a spell's own toggle.
+// Concentration on a new spell: it replaces the one going, which ends (and
+// says so) — or, with the table's rule off, joins it ("A + B").
+function csConcOn(was, spell){
+  if (!was || was === spell) return spell;
+  if (sktRuleOn('concOne')){
+    if (typeof showToast === 'function') showToast('Concentration on ' + was + ' ends');
+    return spell;
+  }
+  return String(was).split(' + ').includes(spell) ? was : was + ' + ' + spell;
+}
 function csCastEffects(p, name){
   const s = csSpell(name);
-  if (s && s.concentration){
-    if (p.concentration && p.concentration !== name && typeof showToast === 'function') showToast('Concentration on ' + p.concentration + ' ends');
-    p.concentration = name;
-  }
+  if (s && s.concentration) p.concentration = csConcOn(p.concentration, name);
   const tg = ((p.sheet || {}).states || []).find(x => x.spell === name && !x.conc);
   if (tg) p.active = Object.assign({}, p.active, { [tg.key]: true });
 }
@@ -2566,7 +2573,7 @@ function csItemSub(m, pc){
     + (miss ? ' <b class="cs-item-warn">— ' + csE(pc.name) + ' isn’t a ' + csE(miss) + '</b>' : '') + '</span>' : '';
 }
 // The most a character can attune to: 3, more for an artificer.
-function csAttuneMax(pc){ return +((pc.sheet || {}).attuneMax) || 3; }
+function csAttuneMax(pc){ return sktRuleOn('attune') ? +((pc.sheet || {}).attuneMax) || 3 : Infinity; }
 // The items in use, in attunement order up to the limit.
 function csActiveItems(pc){
   const max = csAttuneMax(pc); let n = 0;
@@ -2907,10 +2914,7 @@ function csItemClick(d, pc){
   let ok = true;
   csEdit('Cast ' + spell + ' from ' + name, p => {
     if (key && !spend(p, name, key, cost)){ ok = false; return; }
-    if (s && s.concentration){
-      if (p.concentration && p.concentration !== s.name && typeof showToast === 'function') showToast('Concentration on ' + p.concentration + ' ends');
-      p.concentration = s.name;
-    }
+    if (s && s.concentration) p.concentration = csConcOn(p.concentration, s.name);
   });
   if (ok && typeof showToast === 'function') showToast('Cast ' + spell + ' from ' + name);
   return true;
