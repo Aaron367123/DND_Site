@@ -27506,6 +27506,19 @@ for (const cls of Object.keys(rule)) for (let L = 1; L <= 20; L++) for (const sc
         S._pick = null;
         // the Notes window: a sync with no conflicts doesn't redraw it
         ok('Notes: a sync reporting no conflicts doesn’t redraw the window (every 8 s with a folder vault)', /was !== now\) this\._render\(\)/.test(String(panelDefs.notes._initLocalSync)), '');
+        // the World clock: another DM screen's change shows, open or closed
+        const T = panelDefs.time, TM0 = localStorage.getItem('skt-time-v1');
+        try {
+          openPanel('time'); await sleep(200);
+          const cur = JSON.parse(localStorage.getItem('skt-time-v1') || 'null') || T._data || {};
+          const moved = Object.assign({}, cur, { day: ((+cur.day || 1) % 28) + 1 });
+          localStorage.setItem('skt-time-v1', JSON.stringify(moved));
+          _reloadPanel('time'); await sleep(60);
+          ok('the World clock open: another DM screen’s change shows', !!T._data && T._data.day === moved.day, JSON.stringify([T._data && T._data.day, moved.day]));
+          closePanel('time'); await sleep(60);
+          _reloadPanel('time');
+          ok('…closed: its old copy dropped (a rest would have written it back)', T._data === null, String(T._data));
+        } finally { if (TM0 == null) localStorage.removeItem('skt-time-v1'); else localStorage.setItem('skt-time-v1', TM0); T._data = null; }
       } catch(e){ ok('round 534 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
       finally {
         try { document.activeElement && document.activeElement.blur && document.activeElement.blur(); } catch(e){}

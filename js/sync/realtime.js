@@ -1556,8 +1556,14 @@ function _sktKeep(fn){ return typeof sktKeepTyping === 'function' ? sktKeepTypin
 // remount; panels that read straight from `state` just need a re-render.
 function _reloadPanel(id) {
   const def = panelDefs[id];
+  // The time and the weather keep their own copy, open or closed: another
+  // DM screen's change never showed, and a rest here advanced the clock from
+  // the old copy and wrote it back over the newer one.
+  if (def && (id === 'time' || id === 'weather')) def._data = null;
   if (!def || !def._body) return;
-  if (id !== 'battlemap') return _sktKeep(() => _reloadPanelNow(id, def));
+  // (the Loot window keeps its own field, and follows a row that moved:
+  // put back by position, the text landed in the row that took its place)
+  if (id !== 'battlemap' && id !== 'loot') return _sktKeep(() => _reloadPanelNow(id, def));
   return _reloadPanelNow(id, def);
 }
 function _reloadPanelNow(id, def) {
@@ -1584,6 +1590,8 @@ function _reloadPanelNow(id, def) {
     notes:     () => { def._data = null; },
     bestiary:  () => { def._data = null; },
     encounter: () => { /* mount() always re-reads */ },
+    time:      () => {},
+    weather:   () => {},
   };
   if (resets[id]) {
     resets[id]();
