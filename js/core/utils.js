@@ -2863,6 +2863,7 @@ function sktCircleMagicOn(){ return sktRuleOn('circleMagic'); }
 // a choice is made here.
 // [group, key, name, what it does, default, kind ('house' | 'optional')]
 const SKT_TABLE_RULES = [
+  ['move', 'anyoneMoves', 'Anyone can move any token', 'Players’ phones and the TV can drag every creature they can see — monsters and other characters too, not only their own.'],
   ['move', 'walls', 'Walls and closed doors stop players', 'A player can’t drag their token through a wall or a shut door. The DM always can.'],
   ['move', 'wallsDM', 'Walls stop the DM’s drags too', 'The DM’s token drags stop at walls and shut doors as the players’ do (hold Alt to go through anyway).', false, 'optional'],
   ['move', 'fear', 'Frightened creatures can’t move closer', 'A player can’t move a frightened creature nearer to what frightens it.'],

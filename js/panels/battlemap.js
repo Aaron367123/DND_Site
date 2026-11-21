@@ -1659,7 +1659,7 @@ registerPanel('battlemap',{
       if (!t) return;
       const dir = { ArrowLeft: [-1, 0], ArrowRight: [1, 0], ArrowUp: [0, -1], ArrowDown: [0, 1] }[e.key];
       if (dir){
-        if (isPlayer && !sktPlayerMayMoveToken(t)) return;
+        if (isPlayer && !sktMayDragToken(t)) return;
         e.preventDefault();
         this._keyMove(t, dir[0], dir[1]);
         return;
@@ -3274,7 +3274,7 @@ registerPanel('battlemap',{
     const c = (state.combatants || []).find(x => x && x.id === state.activeCombatantId);
     const t = c && typeof sktTokenForCombatant === 'function' ? sktTokenForCombatant(this._tokens || [], c) : null;
     if (!t) return null;
-    if (document.body.classList.contains('player-mode') && !sktPlayerMayMoveToken(t)) return null;
+    if (document.body.classList.contains('player-mode') && !sktMayDragToken(t)) return null;
     return t;
   },
   // Under the map: "Moved 15 / 30 ft", red past it, and Take back while
@@ -9115,9 +9115,12 @@ registerPanel('battlemap',{
         if (this._group && this._group.size && !this._group.has(t.id)) this._groupClear();
         // A player moves (or rubs out) only what is theirs. Someone else's:
         // a click shows what they can see of it (see _tokCard).
-        if (isPlayer && !sktPlayerMayMoveToken(t)){ this._tapCard(t, e.clientX, e.clientY, 'mouseup'); return; }
+        if (isPlayer && !sktMayDragToken(t)){ this._tapCard(t, e.clientX, e.clientY, 'mouseup'); return; }
 
         if(this._tool==='erase'){
+          // (a phone rubs out only its own: moving anyone is the table's
+          // rule, removing a monster from a player's screen alone isn't)
+          if (isPlayer && !sktPlayerMayMoveToken(t)) return;
           const i=this._tokens.findIndex(x=>x.id===t.id);
           if(i>=0){
             const wasPC = !!this._tokens[i].isPC;
@@ -9235,9 +9238,12 @@ registerPanel('battlemap',{
 
         if (this._tool === 'ruler'){ this._rulerDrag(t.x, t.y, true, t); return; }
         if (this._tool === 'area'){ const p = this._stagePoint(touch.clientX, touch.clientY, stage); this._areaPointerDown(p.x, p.y, touch.clientX, touch.clientY, true, t); return; }
-        if (isPlayer && !sktPlayerMayMoveToken(t)){ this._tapCard(t, touch.clientX, touch.clientY, 'touchend'); return; }
+        if (isPlayer && !sktMayDragToken(t)){ this._tapCard(t, touch.clientX, touch.clientY, 'touchend'); return; }
 
         if(this._tool==='erase'){
+          // (a phone rubs out only its own: moving anyone is the table's
+          // rule, removing a monster from a player's screen alone isn't)
+          if (isPlayer && !sktPlayerMayMoveToken(t)) return;
           const i=this._tokens.findIndex(x=>x.id===t.id);
           if(i>=0){
             const wasPC = !!this._tokens[i].isPC;
@@ -9885,6 +9891,17 @@ function _sktTokenRules(){
 // (sktDragHeld), so its new place has to be written too. Everything else on
 // the map is the DM's. A phone could drag any monster about, and open its
 // token panel to hide it, rename it or take it off the map.
+// Whether THIS screen may drag token t: the DM's any; a phone's or the TV's
+// any it can see while the table's rule says so (Aaron's: "anybody can move
+// anything" — the TV moved no one, and a phone only its own), else only its
+// own (sktPlayerMayMoveToken). Only moving: whose eyes a phone sees with stay
+// its own character's.
+function sktMayDragToken(t, opts){
+  if (!t) return false;
+  if (!document.body.classList.contains('player-mode')) return true;
+  if (typeof sktRuleOn === 'function' && sktRuleOn('anyoneMoves')) return true;
+  return sktPlayerMayMoveToken(t, opts);
+}
 function sktPlayerMayMoveToken(t, opts){
   const me = typeof paPc === 'function' ? paPc() : null;
   if (!me || !t) return false;

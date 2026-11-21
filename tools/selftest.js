@@ -10623,6 +10623,8 @@
     // -- Round 104: the map's tokens across devices ----------------------------
     {
       const spec = _ENTITY_KEYS['skt-battlemap-v1'], pa0 = window.paPc;
+      // (what a phone sends with "Anyone can move any token" off — round 541 has it on)
+      const am104 = state.settings.rules ? state.settings.rules.anyoneMoves : undefined; sktSetRule('anyoneMoves', false);
       try {
         // Stacking order: added last = on top. Firebase hands nodes back in key
         // order, so ids that sort the other way used to come back reversed.
@@ -10644,7 +10646,7 @@
         ok('map sync: moving their own token that exists is still allowed', spec.playerWritable('tokens/t2', Object.assign({ 'tokens/t2': own }, prev), own) === true);
         ok('map sync: but not moving the DM’s ogre', spec.playerWritable('tokens/t1', prev, prev['tokens/t1']) === false);
       } catch(e){ ok('round 104 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
-      finally { window.paPc = pa0; }
+      finally { window.paPc = pa0; if (am104 === undefined){ if (state.settings.rules) delete state.settings.rules.anyoneMoves; } else sktSetRule('anyoneMoves', am104); }
     }
     // -- Round 105: a player's note shows in their colour on the DM's screen ---
     {
@@ -26939,7 +26941,7 @@ for (const cls of Object.keys(rule)) for (let L = 1; L <= 20; L++) for (const sc
         state.settings.rules = {}; delete state.settings.useAmmunition; delete state.settings.circleMagic;
         // the list
         const keys = SKT_TABLE_RULES.map(r => r.key);
-        ok('36 table rules, each named, said and grouped once', keys.length === 36 && new Set(keys).size === 36 && SKT_TABLE_RULES.every(r => r.name && r.what && SKT_TABLE_RULE_GROUPS[r.group]), keys.length);
+        ok('37 table rules, each named, said and grouped once', keys.length === 37 && new Set(keys).size === 37 && SKT_TABLE_RULES.every(r => r.name && r.what && SKT_TABLE_RULE_GROUPS[r.group]), keys.length);
         ok('…all on by default, as the app has always played — but Circle Magic (a book’s optional rule) and the DM’s walls', SKT_TABLE_RULES.every(r => sktRuleOn(r.key) === !['circleMagic', 'wallsDM'].includes(r.key)), SKT_TABLE_RULES.filter(r => sktRuleOn(r.key) === ['circleMagic', 'wallsDM'].includes(r.key)).map(r => r.key).join());
         state.settings.useAmmunition = false; state.settings.circleMagic = true;
         ok('…the ammunition and Circle Magic settings from before still count', !sktRuleOn('ammo') && sktRuleOn('circleMagic') && !sktAmmoOn() && sktCircleMagicOn());
@@ -27105,7 +27107,7 @@ for (const cls of Object.keys(rule)) for (let L = 1; L <= 20; L++) for (const sc
         const drawer = document.getElementById('settings-drawer');
         sktRenderTableRules();
         const rows = drawer.querySelectorAll('#table-rules-body .tr-row');
-        ok('Settings → Table rules: a switch for each, checked as it plays', rows.length === 36 && [...rows].every(x => x.querySelector('input').checked === sktRuleOn(x.dataset.rule)), rows.length);
+        ok('Settings → Table rules: a switch for each, checked as it plays', rows.length === 37 && [...rows].every(x => x.querySelector('input').checked === sktRuleOn(x.dataset.rule)), rows.length);
         const terr = drawer.querySelector('#table-rules-body .tr-row[data-rule="terrain"] input');
         terr.checked = false; terr.dispatchEvent(new Event('change', { bubbles: true }));
         ok('…unticked: off for the table, and the heading counts it', sktRuleOn('terrain') === false && state.settings.rules.terrain === false && /1 changed/.test(document.getElementById('table-rules-meta').textContent), document.getElementById('table-rules-meta').textContent);
@@ -30690,6 +30692,8 @@ for (const cls of Object.keys(rule)) for (let L = 1; L <= 20; L++) for (const sc
     if (PLAYER){
       const keepTab = paTab, keepC = JSON.stringify(state.combatants); const B = panelDefs.battlemap;
       let keepT = null, keepF; let fogSaved = false;
+      // (with "Anyone can move any token" off — round 541 has it on)
+      const am357 = state.settings.rules ? state.settings.rules.anyoneMoves : undefined; sktSetRule('anyoneMoves', false);
       try {
         if (paMyIdx() < 0) paSetPc(state.party[0].id);
         const me = paPc();
@@ -30739,7 +30743,7 @@ for (const cls of Object.keys(rule)) for (let L = 1; L <= 20; L++) for (const sc
         ok('sync: a monster’s token isn’t the phone’s to write', w(mon) === false);
         ok('sync: its own token, its companion, and a creature it drags in a grapple are', w(mine) && w(wolf) && w({ id: 'r357th', cid: 'r357h', label: 'r357 Held', x: 1, y: 1 }));
       } catch(e){ ok('round 357 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
-      finally { if (fogSaved) B._fog = keepF; if (keepT){ B._tokens = keepT; try { B._saveMap(); } catch(e){} } state.combatants = JSON.parse(keepC); try { B._renderTokens(); } catch(e){} paTab = keepTab; paRender(); }
+      finally { if (am357 === undefined){ if (state.settings.rules) delete state.settings.rules.anyoneMoves; } else sktSetRule('anyoneMoves', am357); if (fogSaved) B._fog = keepF; if (keepT){ B._tokens = keepT; try { B._saveMap(); } catch(e){} } state.combatants = JSON.parse(keepC); try { B._renderTokens(); } catch(e){} paTab = keepTab; paRender(); }
     }
     // -- Round 359: a player lays a spell's area from the phone — shape and size; theirs to move and remove, the DM's left alone --
     if (PLAYER){
@@ -31641,6 +31645,8 @@ for (const cls of Object.keys(rule)) for (let L = 1; L <= 20; L++) for (const sc
     if (PLAYER && typeof Touch === 'function'){
       const keepTab = paTab, B = panelDefs.battlemap;
       let keep = null;
+      // (a tap on someone else's token, with "Anyone can move any token" off)
+      const am433 = state.settings.rules ? state.settings.rules.anyoneMoves : undefined; sktSetRule('anyoneMoves', false);
       try {
         if (paMyIdx() < 0) paSetPc('zoey');
         paTab = 'map'; paRender(); await sleep(900);
@@ -31676,6 +31682,7 @@ for (const cls of Object.keys(rule)) for (let L = 1; L <= 20; L++) for (const sc
         ok('a hold (a ping): no card', !card());
       } catch(e){ ok('round 433 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
       finally {
+        if (am433 === undefined){ if (state.settings.rules) delete state.settings.rules.anyoneMoves; } else sktSetRule('anyoneMoves', am433);
         try { B._tokCardOff(); } catch(e){}
         if (keep){ B._tokens = keep.t; state.combatants = keep.c; state.combatRound = keep.r; state.activeCombatantId = keep.a; B._fog = keep.f; B._drawings = keep.d; B._gridType = keep.g; }
         try { B._render(); } catch(e){}
@@ -32256,6 +32263,59 @@ for (const cls of Object.keys(rule)) for (let L = 1; L <= 20; L++) for (const sc
         ok('…at 100%: the hit-point row on one line', !!g.sel && Math.abs(g.sel.top - g.temp.top) < 4, JSON.stringify([g.sel && Math.round(g.sel.top), g.temp && Math.round(g.temp.top)]));
       } catch(e){ ok('round 535 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
       finally { applyFontScale(fs0); paTab = tab0; paRender(); }
+    }
+    // -- Round 541: anyone can move any token (a table rule, on): the TV — no character — moved no one, and a phone only its own; now any creature it can see, monsters too, and the move is one the sync sends. Off: as before. A phone's eraser still rubs out only its own --
+    {
+      const B = panelDefs.battlemap, T0 = B._tokens, K0 = JSON.stringify(state.combatants), R0 = JSON.stringify(state.settings.rules || null), ME0 = localStorage.getItem('skt-me-v1'), TAB0 = paTab;
+      try {
+        // the TV: no character
+        localStorage.removeItem('skt-me-v1');
+        state.combatants = [{ id: 'r541m', name: 'R541 Ogre', isPC: false, hp: 30, hpMax: 30, conditions: [] }];
+        state.settings.rules = {};
+        paTab = 'map'; paRender(); await sleep(800);
+        const cs = B._csScreen() || 50;
+        B._tokens = (T0 || []).filter(t => t && t.id !== 'r541t').concat([{ id: 'r541t', cid: 'r541m', label: 'R541 Ogre', x: cs * 1.5, y: cs * 1.5, size: 1, color: '#844' }]);
+        B._render(); await sleep(150);
+        const tok = () => B._tokens.find(t => t.id === 'r541t');
+        const el = () => document.querySelector('.pa-mount .map-token[data-tid="r541t"]');
+        const drag = async dx => {
+          const e0 = el(); if (!e0) return false;
+          e0.scrollIntoView({ block: 'center', inline: 'center' }); await sleep(80);
+          const r = e0.getBoundingClientRect(); let cx = Math.round(r.left + r.width / 2), cy = Math.round(r.top + r.height / 2);
+          e0.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, cancelable: true, clientX: cx, clientY: cy, button: 0, buttons: 1 }));
+          for (let i = 1; i <= 8; i++) document.dispatchEvent(new MouseEvent('mousemove', { bubbles: true, cancelable: true, clientX: cx + Math.round(dx * i / 8), clientY: cy, buttons: 1 }));
+          document.dispatchEvent(new MouseEvent('mouseup', { bubbles: true, cancelable: true, clientX: cx + dx, clientY: cy, button: 0 }));
+          await sleep(150); return true;
+        };
+        ok('the TV (no character): Anyone can move any token is on by default', !paPc() && sktRuleOn('anyoneMoves') === true, '');
+        const x0 = tok().x;
+        await drag(Math.round(2 * cs * B._screenScale()));
+        ok('…the TV drags a monster', tok().x > x0 + cs, JSON.stringify([Math.round(x0), Math.round(tok().x)]));
+        const prev = { 'tokens/r541t': JSON.stringify(Object.assign({}, tok(), { x: x0 })) };
+        const ad = _ENTITY_KEYS['skt-battlemap-v1'];
+        const pw = ad && typeof ad.playerWritable === 'function' ? ad.playerWritable('tokens/r541t', prev, JSON.stringify(tok())) : null;
+        ok('…and the move is one the sync sends', pw === true, String(pw));
+        // the rule off: as before
+        sktSetRule('anyoneMoves', false); B._render(); await sleep(100);
+        const x1 = tok().x;
+        await drag(Math.round(2 * cs * B._screenScale()));
+        const pw2 = ad && typeof ad.playerWritable === 'function' ? ad.playerWritable('tokens/r541t', prev, JSON.stringify(tok())) : null;
+        ok('the rule off: the TV can’t drag it, nor send it', tok().x === x1 && pw2 === false, JSON.stringify([Math.round(x1), Math.round(tok().x), pw2]));
+        sktSetRule('anyoneMoves', true);
+        // the eraser: only its own
+        B._tool = 'erase'; B._render(); await sleep(100);
+        const e1 = el(); if (e1){ const r = e1.getBoundingClientRect(), cx = Math.round(r.left + r.width / 2), cy = Math.round(r.top + r.height / 2);
+          e1.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, cancelable: true, clientX: cx, clientY: cy, button: 0, buttons: 1 }));
+          document.dispatchEvent(new MouseEvent('mouseup', { bubbles: true, cancelable: true, clientX: cx, clientY: cy, button: 0 })); await sleep(100); }
+        ok('the eraser on someone else’s token: it stays (a phone rubs out only its own)', !!tok(), '');
+        B._tool = null; B._render();
+      } catch(e){ ok('round 541 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
+      finally {
+        B._tool = null; B._tokens = T0; state.combatants = JSON.parse(K0);
+        state.settings.rules = JSON.parse(R0) || undefined; if (!state.settings.rules) delete state.settings.rules;
+        if (ME0 == null) localStorage.removeItem('skt-me-v1'); else localStorage.setItem('skt-me-v1', ME0);
+        paTab = TAB0; try { paRender(); } catch(e){}
+      }
     }
   }
 

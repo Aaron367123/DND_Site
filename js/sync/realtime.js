@@ -447,7 +447,7 @@ const _ENTITY_KEYS = {
       // Any token was writable, whole — a phone could hide or rename a monster.
       if (node in prev){
         let was = null; try { was = JSON.parse(prev[node]); } catch(e){}
-        return typeof sktPlayerMayMoveToken !== 'function' || sktPlayerMayMoveToken(was, { sync: true });
+        return typeof sktMayDragToken !== 'function' || sktMayDragToken(was, { sync: true });
       }
       const me = typeof paPc === 'function' ? paPc() : null;
       let t = null; try { t = JSON.parse(next); } catch(e){}

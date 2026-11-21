@@ -307,7 +307,7 @@ const window = {};
       return lat(await W(dm, zt + ' === 1'));
     });
 
-    await step('phone moves its own token → DM; a monster it can’t move → the DM’s stays put', async () => {
+    await step('phone moves its own token → DM, and a monster too (Anyone can move any token, on) → the DM’s moves', async () => {
       const pos = id => "const t = (panelDefs.battlemap._tokens||[]).find(t => " + id + "); return t ? Math.round(t.x) + ',' + Math.round(t.y) : null";
       const ZOEY = "t.isPC && t.label === 'Zoey'";
       // The phone's map holds its tokens once its Map tab has been opened.
@@ -324,10 +324,13 @@ const window = {};
       const zPhone = await pl.ev(pos(ZOEY));
       const t = await W(dm, 'return (' + "(() => { " + pos(ZOEY) + " })()" + ') === ' + JSON.stringify(zPhone));
       if (t == null) return { ok: false, why: 'Zoey’s move never reached the DM (' + zPhone + ')' };
-      await sleep(1500);
-      const ogre1 = await dm.ev(pos("t.id === 'e2e-ogre'")), ogreP = await pl.ev(pos("t.id === 'e2e-ogre'"));
+      // (the table's rule, on by default: the phone's move of the ogre is the DM's too)
+      const ogreP = await pl.ev(pos("t.id === 'e2e-ogre'"));
+      const om = await W(dm, 'return (' + "(() => { " + pos("t.id === 'e2e-ogre'") + " })()" + ') === ' + JSON.stringify(ogreP));
+      const ogre1 = await dm.ev(pos("t.id === 'e2e-ogre'"));
       await dm.ev("const B = panelDefs.battlemap; B._tokens = B._tokens.filter(t => t.id !== 'e2e-ogre'); B._saveMap(); B._renderTokens(); return 1");
-      if (ogre1 !== ogre0 || ogreP !== ogre0) return { ok: false, why: 'the ogre moved: DM ' + ogre0 + ' → ' + ogre1 + ', phone ' + ogreP };
+      if (ogreP === ogre0) return { ok: false, why: 'the phone couldn’t drag the ogre (' + ogre0 + ')' };
+      if (om == null) return { ok: false, why: 'the phone’s ogre move never reached the DM: DM ' + ogre1 + ', phone ' + ogreP };
       return lat(t);
     });
 
