@@ -21543,7 +21543,7 @@ for (const cls of Object.keys(rule)) for (let L = 1; L <= 20; L++) for (const sc
               document.dispatchEvent(new MouseEvent('mousemove', { bubbles: true, clientX: sx + cx * cs * z, clientY: sy + cy * cs * z })); await sleep(4);
             }
           }
-          if (peek) seen = peek();
+          if (peek){ await new Promise(res => requestAnimationFrame(() => res())); seen = peek(); }   // (the ruler follows once a frame)
           document.dispatchEvent(new MouseEvent('mouseup', { bubbles: true, clientX: sx + cx * cs * z, clientY: sy + cy * cs * z })); await sleep(60);
           return seen;
         };
@@ -21690,6 +21690,7 @@ for (const cls of Object.keys(rule)) for (let L = 1; L <= 20; L++) for (const sc
           const [sx, sy] = ctr(fromId);
           B._body.querySelector('.map-token[data-tid="' + fromId + '"]').dispatchEvent(new MouseEvent('mousedown', { bubbles: true, cancelable: true, button: 0, clientX: sx, clientY: sy }));
           document.dispatchEvent(new MouseEvent('mousemove', { bubbles: true, clientX: x, clientY: y })); await sleep(20);
+          await new Promise(res => requestAnimationFrame(() => res()));   // (the ruler follows once a frame)
           const t = (B._body.querySelector('.bm-measure-l') || {}).textContent || '';
           document.dispatchEvent(new MouseEvent('mouseup', { bubbles: true, clientX: x, clientY: y })); await sleep(20);
           return t;
