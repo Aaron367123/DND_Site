@@ -27692,6 +27692,45 @@ for (const cls of Object.keys(rule)) for (let L = 1; L <= 20; L++) for (const sc
         B._tokens = T0; try { closePanel('battlemap'); } catch(e){}
       }
     }
+    // -- Round 540: the zoom doesn't stutter — a big map picture is shown from a smaller copy when it's shown small (a 24 MP map froze the zoom 200–300 ms decoding itself afresh at each size); the picture is scaled by the graphics card while the zoom moves, drawn sharp once it settles; token names read their sizes before writing (a layout per token per wheel step) --
+    if (!PLAYER){
+      const B = panelDefs.battlemap;
+      const I0 = _mapBgImage, P0 = B._bgMapPath, W0 = B._bgMapNaturalW, H0 = B._bgMapNaturalH, V0 = B._viewScale, L0 = B._bgLevels;
+      try {
+        openPanel('battlemap'); await sleep(400);
+        // a 4000×3000 picture (12 MP)
+        const big = await new Promise(res => { const c = document.createElement('canvas'); c.width = 4000; c.height = 3000; const x = c.getContext('2d'); x.fillStyle = '#e9e4d4'; x.fillRect(0, 0, 4000, 3000); x.strokeStyle = '#333'; for (let v = 0; v < 4000; v += 100){ x.beginPath(); x.moveTo(v, 0); x.lineTo(v, 3000); x.stroke(); } c.toBlob(bl => { const i = new Image(); i.onload = () => res(i); i.src = URL.createObjectURL(bl); }, 'image/png'); });
+        _mapBgImage = big; B._bgMapPath = null; B._bgMapNaturalW = 4000; B._bgMapNaturalH = 3000; B._bgLevels = null;
+        B._render(); await sleep(100);
+        B._makeBgLevels();
+        for (let i = 0; i < 60 && !(B._bgLevels && B._bgLevels.img === big); i++) await sleep(100);
+        ok('a 12 MP map: a smaller copy made for showing it small (2048 across)', !!B._bgLevels && B._bgLevels.img === big && B._bgLevels.list.length === 1 && B._bgLevels.list[0].w === 2048, JSON.stringify(B._bgLevels && B._bgLevels.list.map(x => x.w)));
+        const st = () => B._body.querySelector('#map-stage').style.backgroundImage;
+        B._applyViewScale(0.2); await sleep(320);
+        ok('…zoomed out: the copy drawn', /^url\("blob:/.test(st()) && st().indexOf(big.src) === -1, st().slice(0, 40));
+        B._applyViewScale(2); await sleep(320);
+        ok('…zoomed in close: the picture itself', st().indexOf(big.src) !== -1, st().slice(0, 40));
+        ok('…what finds walls and squares still reads the picture itself', _mapBgImage === big, '');
+        // a small picture: no copies
+        const small = await new Promise(res => { const c = document.createElement('canvas'); c.width = 1200; c.height = 900; c.getContext('2d').fillRect(0, 0, 10, 10); const i = new Image(); i.onload = () => res(i); i.src = c.toDataURL('image/png'); });
+        _mapBgImage = small; B._bgMapNaturalW = 1200; B._bgMapNaturalH = 900; B._makeBgLevels(); await sleep(200);
+        ok('…a small picture: no copies (it draws quickly as it is), the last map’s let go', !B._bgLevels, JSON.stringify(B._bgLevels));
+        // the zoom: scaled by the graphics card while it moves, sharp when it settles
+        const z = () => B._body.querySelector('#map-zoom');
+        B._applyViewScale(0.5); await sleep(20); B._applyViewScale(0.55);
+        const moving = z().style.willChange;
+        await sleep(300);
+        ok('while the zoom moves: scaled as drawn (will-change); settled: drawn sharp', moving === 'transform' && z().style.willChange === '', JSON.stringify([moving, z().style.willChange]));
+        // token names: every size read before any written
+        const src = String(B._fitTokenNames), loop = src.slice(src.indexOf('drawn.forEach'));
+        ok('token names: sizes read before the loop that writes (no layout per token)', src.indexOf('drawn.forEach') > 0 && !/offsetHeight/.test(loop), '');
+      } catch(e){ ok('round 540 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
+      finally {
+        _mapBgImage = I0; B._bgMapPath = P0; B._bgMapNaturalW = W0; B._bgMapNaturalH = H0; B._bgLevels = L0;
+        try { if (V0) B._applyViewScale(V0); B._render(); } catch(e){}
+        closePanel('battlemap');
+      }
+    }
     // -- Class features: represented, not just text ------------------------
     {
       try {

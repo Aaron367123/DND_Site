@@ -2868,7 +2868,12 @@ registerPanel('battlemap',{
     const gridC = b && b.querySelector('#map-canvas');
     if (gridC) this._drawGrid(gridC, this._csScreen());
     clearTimeout(this._requalityTimer);
-    this._requalityTimer = setTimeout(() => this._requalityCanvases(), 180);
+    this._requalityTimer = setTimeout(() => {
+      // (settled: the picture drawn sharp at the new zoom, once)
+      const z = this._body && this._body.querySelector('#map-zoom'); if (z) z.style.willChange = '';
+      this._swapBgLevel();
+      this._requalityCanvases();
+    }, 180);
   },
 
   _drawAllStrokes(){
@@ -3963,6 +3968,13 @@ registerPanel('battlemap',{
     if (this._mapRotation) stage.style.transform = this._rotTransform();
 
     if (zoomEl){
+      // While the zoom moves, the map as drawn is scaled by the graphics card
+      // (will-change) instead of the whole picture drawn again at each step —
+      // a 6105×4000 map was 60 ms of drawing a wheel step (measured), and the
+      // zoom stuttered. It's drawn sharp once the zoom settles
+      // (_requalityCanvases, below).
+      if (this._vsDrawn != null && this._vsDrawn !== vs) zoomEl.style.willChange = 'transform';
+      this._vsDrawn = vs;
       zoomEl.style.transformOrigin = '0 0';
       zoomEl.style.transform = 'scale(' + vs + ')';
       zoomEl.style.width  = W + 'px';
@@ -4500,8 +4512,15 @@ registerPanel('battlemap',{
     // "below" are the screen's, not the map's)
     const drawn = els.map(el => ({ el, t: byId.get(el.dataset.tid) })).filter(d => d.t)
       .map(d => Object.assign(d, { s: this._screenVec(d.t.x || 0, d.t.y || 0) }));
-    drawn.forEach(({ el, t, s }) => {
-      const h = el.offsetHeight || 16 / vs;
+    // Every size read first, then every change written: reading a height
+    // after writing the last name's place made the browser lay the map out
+    // again for each token — 21 ms a wheel step with ten tokens, more with
+    // more (measured), and the zoom stuttered.
+    const tokEls = new Map([...b.querySelectorAll('.map-token')].map(e => [String(e.dataset.tid), e]));
+    const hs = drawn.map(d => d.el.offsetHeight || 16 / vs);
+    const dims = drawn.map(d => { const te = tokEls.get(String(d.t.id)); return (te && te.offsetHeight) || 40; });
+    drawn.forEach(({ el, t, s }, di) => {
+      const h = hs[di];
       let near = Infinity;
       for (const d of drawn){
         const o = d.s;
@@ -4518,8 +4537,7 @@ registerPanel('battlemap',{
       // or it lay across the other token (Creambak's name over the
       // Doppelganger beneath him). Below and above both taken: shown on
       // hover, like a name with no room beside it.
-      const tokEl = b.querySelector('.map-token[data-tid="' + CSS.escape(String(t.id)) + '"]');
-      const dim = (tokEl && tokEl.offsetHeight) || 40;
+      const dim = dims[di];
       const blocked = dir => drawn.some(d => d.t !== t && Math.abs(d.s.x - s.x) < dim * 0.9
         && dir * (d.s.y - s.y) > 0 && dir * (d.s.y - s.y) < dim * 1.6);
       const below = blocked(1), above = below && blocked(-1);
@@ -8233,6 +8251,57 @@ registerPanel('battlemap',{
     if (curAdv && Array.from(sel.options).some(o => o.value === curAdv)){ sel.value = curAdv; handlePick(); }
   },
 
+  // ─── A big map picture, shown small ───────────────────────────────────────
+  // A 6105×4000 picture (24 MP: Baldur's Gate's tavern) froze the zoom for
+  // 200–300 ms at a time while the browser decoded the whole picture afresh
+  // at the new size — measured on a real graphics card. Shown at a sixth of
+  // its size it was decoding 24 MP to draw 1 MP. So once it's on, two
+  // smaller copies are made (2048 and 4096 px across), and the map shows the
+  // smallest that is still sharp at the zoom it settles on — the whole
+  // picture only when zoomed in close. Only what's drawn changes:
+  // _mapBgImage, which finding walls and squares reads, is the picture itself.
+  _bgLevels: null,   // { img, list: [{ w, url }] } — of _mapBgImage
+  _bgLevelUrl(dispW){
+    const L = this._bgLevels, img = typeof _mapBgImage !== 'undefined' ? _mapBgImage : null;
+    if (!L || !img || L.img !== img || !L.list.length) return null;
+    const shown = dispW * (this._viewScale || 1) * (window.devicePixelRatio || 1) * (typeof getZoom === 'function' ? (getZoom() || 1) : 1);
+    const ok = L.list.find(x => x.w * 0.9 >= shown);
+    return ok ? ok.url : null;
+  },
+  _makeBgLevels(){
+    const img = typeof _mapBgImage !== 'undefined' ? _mapBgImage : null;
+    if (!img || typeof createImageBitmap !== 'function' || this._bgLevelsJob === img) return;
+    if (this._bgLevels && this._bgLevels.img === img) return;
+    // (the last map's copies let go)
+    if (this._bgLevels){ this._bgLevels.list.forEach(x => { try { URL.revokeObjectURL(x.url); } catch(e){} }); this._bgLevels = null; }
+    const W0 = img.naturalWidth, H0 = img.naturalHeight;
+    if (!(W0 * H0 > 9e6)) return;                 // a picture this size draws quickly as it is
+    this._bgLevelsJob = img;
+    const sizes = [2048, 4096].filter(w => w < Math.max(W0, H0) * 0.8);
+    const make = w => {
+      const k = w / Math.max(W0, H0), cw = Math.round(W0 * k), ch = Math.round(H0 * k);
+      return createImageBitmap(img, { resizeWidth: cw, resizeHeight: ch, resizeQuality: 'high' }).then(bmp => new Promise(res => {
+        const c = document.createElement('canvas'); c.width = cw; c.height = ch;
+        c.getContext('2d').drawImage(bmp, 0, 0); if (bmp.close) bmp.close();
+        // (webp keeps a transparent map's transparency; a browser that can't
+        // write it gives png)
+        c.toBlob(bl => res(bl ? { cw, url: URL.createObjectURL(bl) } : null), 'image/webp', 0.9);
+      }));
+    };
+    Promise.all(sizes.map(make)).then(list => {
+      this._bgLevelsJob = null;
+      const got = list.filter(Boolean);
+      if (_mapBgImage !== img){ got.forEach(x => { try { URL.revokeObjectURL(x.url); } catch(e){} }); return; }
+      // (compared by width across, as the map is laid out)
+      this._bgLevels = { img, list: got.map(x => ({ w: x.cw, url: x.url })).sort((a, b) => a.w - b.w) };
+      this._swapBgLevel();
+    }).catch(() => { this._bgLevelsJob = null; });
+  },
+  // The copy for the zoom it's settled on (or the picture itself).
+  _swapBgLevel(){
+    const st = this._body && this._body.querySelector('#map-stage');
+    if (st && typeof _mapBgImage !== 'undefined' && _mapBgImage) this._applyBg(st);
+  },
   _applyBg(stage,W,H){
     if (_mapBgImage){
       // Render the image at natural × scale — never stretch. The grid was
@@ -8253,10 +8322,12 @@ registerPanel('battlemap',{
       // looked right. Only the players — and the DM's next reload — got the
       // dead one. The comment this replaces said uploads "don't have a path",
       // which stopped being true the day uploads started being shared.
-      const url = (this._bgMapPath && !this._isSharedUpload(this._bgMapPath))
+      const url = this._bgLevelUrl(dispW) || ((this._bgMapPath && !this._isSharedUpload(this._bgMapPath))
         ? assetUrl(this._bgMapPath)
-        : _mapBgImage.src;
+        : _mapBgImage.src);
       stage.style.backgroundImage = `url("${url}")`;
+      // (a big picture: its smaller copies made once it's on, for zooming out)
+      if (!this._bgLevels || this._bgLevels.img !== _mapBgImage){ clearTimeout(this._bgLevelsT); this._bgLevelsT = setTimeout(() => this._makeBgLevels(), 600); }
       stage.style.backgroundSize = `${dispW}px ${dispH}px`;
       stage.style.backgroundRepeat = 'no-repeat';
       stage.style.backgroundPosition = '0 0';
