@@ -27548,6 +27548,24 @@ for (const cls of Object.keys(rule)) for (let L = 1; L <= 20; L++) for (const sc
       } catch(e){ ok('round 536 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
       finally { if (M0) E._monsters = M0; try { E._render(); } catch(e){} closePanel('encounter'); }
     }
+    // -- Round 537: a pop-up's buttons wrap once they can't fit — on the DM's phone the map picker's row ran off the left edge (Save current as… out of reach), the upload note squeezed to a word a line --
+    if (!PLAYER && innerWidth < 600){
+      try {
+        openPanel('battlemap'); await sleep(500);
+        const B = panelDefs.battlemap, P0 = B._bgMapPath;
+        if (!B._bgMapPath) B._bgMapPath = 'adventure/SKT/073-skt07-svardborg.webp';
+        try {
+          B._openMapPicker(); await sleep(400);
+          const row = [...document.querySelectorAll('.modal-actions')].filter(a => a.getClientRects().length).pop();
+          const kids = row ? [...row.children].filter(c => c.getClientRects().length) : [];
+          const out = kids.filter(c => { const r = c.getBoundingClientRect(); return r.left < -1 || r.right > innerWidth + 1; });
+          ok('the DM’s phone: every button of the map picker’s row on screen', kids.length >= 3 && !out.length, out.map(c => c.textContent.trim()).join(', '));
+          const note = row && row.querySelector('.mapsel-upload-note');
+          ok('…its upload note on one line', !!note && note.getBoundingClientRect().height < 24, note && Math.round(note.getBoundingClientRect().height));
+        } finally { document.querySelectorAll('.modal-backdrop').forEach(m => m.remove()); B._bgMapPath = P0; }
+      } catch(e){ ok('round 537 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
+      finally { closePanel('battlemap'); }
+    }
     // -- Class features: represented, not just text ------------------------
     {
       try {

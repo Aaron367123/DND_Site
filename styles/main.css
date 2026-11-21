@@ -3703,7 +3703,10 @@ body.player-mode .loot-sumbar > span[style*="flex:1"]{display:none}
 .modal-fields{display:flex;flex-direction:column;gap:12px;margin-bottom:20px}
 .modal-field label{display:block;font-size:var(--fs-xs);color:var(--text-muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:4px}
 .modal-field input{font-size:var(--fs-lg);padding:8px 10px}
-.modal-actions{display:flex;gap:8px;justify-content:flex-end}
+/* (wraps once it can't fit: on a phone the map picker's row ran off the
+   left edge — Save current as… out of reach — since a row pushed to the
+   right overflows leftward, where nothing scrolls) */
+.modal-actions{display:flex;gap:8px;justify-content:flex-end;flex-wrap:wrap}
 /* Diagnostics viewer (js/errors.js). Wider than a normal modal because the
    payload is stack traces, and it has to stay usable when the app is broken —
    so it leans on nothing but these rules. */
