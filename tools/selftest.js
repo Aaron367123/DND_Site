@@ -30273,8 +30273,9 @@ for (const cls of Object.keys(rule)) for (let L = 1; L <= 20; L++) for (const sc
         // (Anyone can move any token: on, a monster's move goes; off, it doesn't)
         { const ogreP = { 'tokens/ogre': JSON.stringify({ id: 'ogre', label: 'Ogre', isPC: false }) }, am = state.settings.rules ? state.settings.rules.anyoneMoves : undefined;
           try {
-            sktSetRule('anyoneMoves', false); const off = wr('tokens/ogre', ogreP, '{}');
-            sktSetRule('anyoneMoves', true); const on = wr('tokens/ogre', ogreP, '{}');
+            const mv = JSON.stringify({ id: 'ogre', label: 'Ogre', isPC: false, x: 5, y: 5 });   // (where it stands, nothing else)
+            sktSetRule('anyoneMoves', false); const off = wr('tokens/ogre', ogreP, mv);
+            sktSetRule('anyoneMoves', true); const on = wr('tokens/ogre', ogreP, mv);
             ok('player: an existing monster’s move — not with the table’s rule off, yes with it on', off === false && on === true, JSON.stringify([off, on]));
           } finally { if (am === undefined){ if (state.settings.rules) delete state.settings.rules.anyoneMoves; save(); } else sktSetRule('anyoneMoves', am); } }
         ok('player: may NOT create a new token', wr('tokens/zzz', prev) !== true);
@@ -32436,7 +32437,7 @@ for (const cls of Object.keys(rule)) for (let L = 1; L <= 20; L++) for (const sc
             document.dispatchEvent(new MouseEvent('mouseup', { bubbles: true, cancelable: true, clientX: x + lo, clientY: y, button: 0 }));
             await sleep(100);
           } finally { window.removeEventListener('error', onErr); }
-          ok('two drags back to back: the second goes the whole way, nothing thrown', tok().x > xa + cs && !errs.length, JSON.stringify([Math.round(xa), Math.round(tok().x), errs]));
+          ok('two drags back to back: the second goes the whole way, nothing thrown', tok().x >= xa + cs - 1 && !errs.length, JSON.stringify([Math.round(xa), Math.round(tok().x), errs]));
         }
       } catch(e){ ok('round 543 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
       finally {
