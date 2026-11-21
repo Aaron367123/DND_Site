@@ -5558,7 +5558,7 @@ button.char-downed-badge { cursor:pointer; border:none; font:inherit; width:100%
 .cs-ab, .cs-box { display:flex; flex-direction:column; align-items:center; gap:2px; padding:6px 4px; border:1px solid var(--border); border-radius:8px; background:var(--panel-2); color:var(--text); font:inherit; }
 button.cs-ab, button.cs-box { cursor:pointer; }
 button.cs-ab:hover, button.cs-box:hover, .cs-row:hover { border-color:var(--accent); }
-.cs-ab span, .cs-box span { font-size:var(--fs-2xs); text-transform:uppercase; letter-spacing:.05em; color:var(--text-muted); }
+.cs-ab span, .cs-box span { font-size:var(--fs-2xs); text-transform:uppercase; letter-spacing:.05em; color:var(--text-muted); max-width:100%; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
 .cs-ab b, .cs-box b { font-size:20px; line-height:1.1; }
 .cs-ab i { font-style:normal; font-size:var(--fs-xs); color:var(--text-muted); }
 .cs-list { display:flex; flex-direction:column; gap:1px; }

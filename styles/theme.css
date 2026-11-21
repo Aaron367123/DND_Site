@@ -342,10 +342,12 @@ html:has(body.player-app), body.player-app, #cs-root .cs-body { overscroll-behav
 #cs-root .cs-hp-n b { font-size: 28px; line-height: 1; }
 #cs-root .cs-hp-n span { font-size: 15px; }
 #cs-root .cs-hpbar { margin: 0; }
-#cs-root .cs-hp-ctl { flex-wrap: nowrap; gap: 5px; }
+/* One line while it fits; at a larger text size (Settings, up to 150%) the
+   damage type went off the phone's edge, out of reach. */
+#cs-root .cs-hp-ctl { flex-wrap: wrap; gap: 5px; }
 #cs-root .cs-hp-ctl input { width: 52px; min-width: 0; flex: 0 0 52px; }
 #cs-root .cs-hp-ctl .btn { padding: 4px 9px; min-height: 32px; flex: 0 0 auto; }
-#cs-root .cs-hp-ctl .cb-sel { flex: 0 1 150px; min-width: 0; width: auto; }
+#cs-root .cs-hp-ctl .cb-sel { flex: 1 1 80px; max-width: 150px; min-width: 80px; width: auto; }
 #cs-root .cs-hp-ctl input, #cs-root .cs-hp-ctl .cb-sel { min-height: 32px; padding-top: 3px; padding-bottom: 3px; }
 
 /* ── 13. NPC notes pasted from elsewhere ─────────────────── */

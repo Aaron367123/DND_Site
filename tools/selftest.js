@@ -32033,6 +32033,27 @@ for (const cls of Object.keys(rule)) for (let L = 1; L <= 20; L++) for (const sc
       } catch(e){ ok('round 508 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
       finally { B._fog = FG; B._tokens = JSON.parse(T0); state.combatants = JSON.parse(K0); state.combatRound = R0; state.activeCombatantId = A0; B._cols = C0; B._rows = W0; B._applyViewScale(V0 || 1); B._render(); }
     }
+    // -- Round 535: the phone's sheet at a larger text size (Settings, 150%) — the damage type went off the screen's edge, out of reach; a box's label ran out of its box. One line still at 100% --
+    if (innerWidth < 600 && typeof paSetPc === 'function'){
+      const tab0 = paTab, fs0 = (state.settings && state.settings.fontScale) || 1;
+      try {
+        if (paMyIdx() < 0 && state.party.length) paSetPc(state.party[0].id);
+        const at = async fs => {
+          applyFontScale(fs); paTab = 'you'; paRender(); await sleep(150);
+          const temp = [...document.querySelectorAll('#pa-screen .cs-hp-ctl .btn')].find(b => /^Temp$/.test(b.textContent.trim()));
+          const sel = document.querySelector('#pa-screen .cs-hp-ctl .cb-sel');
+          return { temp: temp && temp.getBoundingClientRect(), sel: sel && sel.getBoundingClientRect() };
+        };
+        let g = await at(1.5);
+        ok('phone sheet at 150%: the damage type on screen, within reach', !!g.sel && g.sel.right <= innerWidth + 1 && g.sel.left >= 0 && g.temp.right <= innerWidth + 1, g.sel ? JSON.stringify([Math.round(g.sel.left), Math.round(g.sel.right), innerWidth]) : 'no select');
+        const boxes = [...document.querySelectorAll('#pa-screen .cs-box span')].filter(s => s.getClientRects().length);
+        const out = boxes.filter(s => { const b = s.closest('.cs-box').getBoundingClientRect(), r = s.getBoundingClientRect(); return r.right > b.right + 1 || r.left < b.left - 1; });
+        ok('…every box’s label inside its box', boxes.length > 0 && !out.length, out.map(s => s.textContent).join(', '));
+        g = await at(1);
+        ok('…at 100%: the hit-point row on one line', !!g.sel && Math.abs(g.sel.top - g.temp.top) < 4, JSON.stringify([g.sel && Math.round(g.sel.top), g.temp && Math.round(g.temp.top)]));
+      } catch(e){ ok('round 535 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
+      finally { applyFontScale(fs0); paTab = tab0; paRender(); }
+    }
   }
 
   // ══════════════════════════════════════════════════════════ mobile / phone
