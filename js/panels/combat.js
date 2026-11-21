@@ -1060,8 +1060,10 @@ registerPanel('combat',{
         if (card && typeof card._openMenu === 'function') card._openMenu(r.left, r.bottom + 2);
       }
       else if(act==='clear-conc'){
-        const i = parseInt(el.dataset.idx);
-        this._setConcentration(i, null);
+        // (dropping it also sends its summons away: undoable, as on the
+        // party card and the sheet)
+        const i = parseInt(el.dataset.idx), c = state.combatants[i];
+        sktUndoable((c ? c.name + ': ' : '') + 'concentration dropped', () => { this._setConcentration(i, null); this._render(); }, { keys: ['skt-combat-v1', 'skt-party-v1', 'skt-battlemap-v1'] });
       }
       else if(act==='add-buff')      this._promptAddBuff(parseInt(el.dataset.idx));
       else if(act==='rm-buff'){

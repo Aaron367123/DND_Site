@@ -22899,7 +22899,10 @@ for (const cls of Object.keys(rule)) for (let L = 1; L <= 20; L++) for (const sc
         const it = item();
         ok('…in the dark: Forget what the players have explored', !!it);
         const before = B._exploreEpoch || 0;
-        if (it) it.click(); await sleep(100);
+        if (it) it.click(); await sleep(150);
+        // (it asks first now — round 538)
+        const yes = [...document.querySelectorAll('.modal-backdrop button')].find(b => /^Forget$/.test(b.textContent.trim()));
+        if (yes) yes.click(); await sleep(150);
         ok('…pressed: a new epoch, sent with the map', (B._exploreEpoch || 0) > before && JSON.parse(localStorage.getItem('skt-battlemap-v1')).exploreEpoch === B._exploreEpoch);
       } catch(e){ ok('round 402 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
       finally {
@@ -27565,6 +27568,82 @@ for (const cls of Object.keys(rule)) for (let L = 1; L <= 20; L++) for (const sc
         } finally { document.querySelectorAll('.modal-backdrop').forEach(m => m.remove()); B._bgMapPath = P0; }
       } catch(e){ ok('round 537 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
       finally { closePanel('battlemap'); }
+    }
+    // -- Round 538: one click that couldn't be taken back — the Turn View's ×, the party card's Remove from combat, the tracker's concentration ×, a new or loaded shop over the one on screen, Reset alignment: undoable now; a sound of one's own, and Forget what's explored: asked first --
+    if (!PLAYER){
+      const K0 = JSON.stringify(state.combatants), PA0 = JSON.stringify(state.party), SH0 = JSON.stringify(state.shop || null), AC0 = state.activeCombatantId;
+      const confirmBtn = re => [...document.querySelectorAll('.modal-backdrop button')].find(b => re.test(b.textContent.trim()));
+      try {
+        // the Turn View's × on a chip
+        state.combatants = [{ id: 'r538a', name: 'R538 Orc', isPC: false, hp: 9, hpMax: 15, ac: 13, initiative: 12, conditions: ['prone'] }, { id: 'r538b', name: 'R538 Elf', isPC: false, hp: 20, hpMax: 20, ac: 14, initiative: 8, conditions: [] }];
+        state.activeCombatantId = 'r538b'; save();
+        openPanel('turnview'); await sleep(400);
+        const TV = panelDefs.turnview, EI0 = TV._editInit; TV._editInit = true; TV._render(); await sleep(100);
+        const x = TV._body.querySelector('[data-tv="rm"][data-id="r538a"]');
+        if (x){
+          x.click(); await sleep(150);
+          ok('the Turn View’s × on a chip: out of the fight', !state.combatants.some(c => c.id === 'r538a'), '');
+          sktUndo(); await sleep(150);
+          const back = state.combatants.find(c => c.id === 'r538a');
+          ok('…and Ctrl+Z puts them back — hit points, conditions, place', !!back && back.hp === 9 && (back.conditions || []).includes('prone') && back.initiative === 12, JSON.stringify(back));
+        } else ok('the Turn View’s × on a chip', false, 'no × found');
+        TV._editInit = EI0; closePanel('turnview');
+        // the tracker's concentration ×
+        state.combatants = [{ id: 'r538c', name: 'R538 Mage', isPC: false, hp: 20, hpMax: 20, concentration: 'Fly', conditions: [] }]; save();
+        openPanel('combat'); await sleep(200); panelDefs.combat._render(); await sleep(80);
+        const cx = panelDefs.combat._body.querySelector('[data-act="clear-conc"]');
+        if (cx){ cx.click(); await sleep(100); }
+        const dropped = !state.combatants[0].concentration;
+        sktUndo(); await sleep(100);
+        ok('the tracker’s concentration ×: dropped, and Ctrl+Z brings it back', !!cx && dropped && state.combatants[0].concentration === 'Fly', JSON.stringify([!!cx, dropped, state.combatants[0].concentration]));
+        // the party card: Remove from combat
+        const pc = JSON.parse(PA0)[0];
+        if (pc){
+          state.party = [pc]; state.combatants = [{ id: pc.id, name: pc.name, isPC: true, hp: pc.hp, hpMax: pc.hpMax, ac: pc.ac, initiative: 17, conditions: [] }]; save();
+          openPanel('party'); await sleep(200); panelDefs.party._render(); await sleep(80);
+          const tb = panelDefs.party._body.querySelector('[data-act="toggle-combat"]');
+          if (tb){ tb.click(); await sleep(100); }
+          const out = !state.combatants.some(c => c.id === pc.id);
+          sktUndo(); await sleep(100);
+          const back = state.combatants.find(c => c.id === pc.id);
+          ok('the party card’s Remove from combat: out, and Ctrl+Z puts them back with their initiative', !!tb && out && !!back && back.initiative === 17, JSON.stringify([!!tb, out, back && back.initiative]));
+        }
+        // the shop: a new one over the one on screen
+        openPanel('shop'); await sleep(300); const S = panelDefs.shop;
+        S._invLimit = 20; S._generate(); await sleep(100);
+        const first = JSON.stringify(state.shop);
+        S._body.querySelector('[data-act="gen"]').click(); await sleep(150);
+        const second = JSON.stringify(state.shop);
+        sktUndo(); await sleep(150);
+        ok('Generate Shop over the one on screen: Ctrl+Z brings it back, stock and all', first !== second && JSON.stringify(state.shop) === first, '');
+        // Reset alignment
+        openPanel('battlemap'); await sleep(300); const B = panelDefs.battlemap;
+        const ox0 = B._gridOffsetX, oy0 = B._gridOffsetY;
+        B._gridOffsetX = 13; B._gridOffsetY = 7; B._saveSettling();
+        B._resetAlign();
+        const zeroed = B._gridOffsetX === 0 && B._gridOffsetY === 0;
+        sktUndo(); await sleep(100);
+        ok('Reset alignment: 0,0, and Ctrl+Z puts the grid back where it was lined up', zeroed && B._gridOffsetX === 13 && B._gridOffsetY === 7, JSON.stringify([zeroed, B._gridOffsetX, B._gridOffsetY]));
+        B._gridOffsetX = ox0; B._gridOffsetY = oy0; B._saveSettling();
+        // a sound of one's own: asked first
+        const SB = panelDefs.soundboard, P0 = _sb.personal, SC0 = _sb.scenes;
+        let deleted = 0; const DEL0 = window._sbIdbDel; window._sbIdbDel = () => { deleted++; return Promise.resolve(); };
+        try {
+          _sb.personal = [{ id: 'r538s', name: 'R538 Rain', source: 'personal', url: '' }]; _sb.scenes = [];
+          openPanel('soundboard'); await sleep(300); SB._render(); await sleep(80);
+          SB._body.querySelector('[data-del="r538s"]').click(); await sleep(200);
+          const asked = !!confirmBtn(/^Remove$/);
+          const cancel = [...document.querySelectorAll('.modal-backdrop button')].find(b => /Cancel/.test(b.textContent)); if (cancel) cancel.click(); await sleep(150);
+          ok('a sound of your own: × asks first (the file goes for good) — Cancel keeps it', asked && _sb.personal.some(s => s.id === 'r538s') && !deleted, JSON.stringify([asked, deleted]));
+        } finally { window._sbIdbDel = DEL0; _sb.personal = P0; _sb.scenes = SC0; document.querySelectorAll('.modal-backdrop').forEach(m => m.remove()); try { SB._render(); } catch(e){} closePanel('soundboard'); }
+      } catch(e){ ok('round 538 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
+      finally {
+        document.querySelectorAll('.modal-backdrop, .ctx-menu').forEach(m => m.remove());
+        document.querySelectorAll('#toast-host .toast-item').forEach(t => t.remove());
+        state.combatants = JSON.parse(K0); state.party = JSON.parse(PA0); state.shop = JSON.parse(SH0); state.activeCombatantId = AC0;
+        try { panelDefs.combat._render(); panelDefs.party._render(); } catch(e){}
+        save();
+      }
     }
     // -- Class features: represented, not just text ------------------------
     {

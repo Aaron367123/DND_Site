@@ -3251,8 +3251,7 @@ registerPanel('party',{
               // Combat owns the turn order — see combat.js _removeCombatantAt.
               // Splicing here and resetting the active id to combatants[0]
               // rewound the initiative order to the top mid-round.
-              panelDefs.combat._removeCombatantAt(cIdx);
-              save(); this._render(); panelDefs.combat?._render?.();
+              sktUndoable(r.c.name + ' out of the fight', () => { panelDefs.combat._removeCombatantAt(cIdx); save(); this._render(); panelDefs.combat?._render?.(); }, { keys: ['skt-combat-v1', 'skt-party-v1', 'skt-battlemap-v1'] });
             } else if (panelDefs.combat?._addPartyToCombat){
               panelDefs.combat._addPartyToCombat(r.idx);
               this._render();
@@ -3446,9 +3445,7 @@ registerPanel('party',{
           // The comment here used to promise it advanced to the next
           // combatant; the code jumped to combatants[0]. Combat owns this —
           // see combat.js _removeCombatantAt.
-          panelDefs.combat._removeCombatantAt(cIdx);
-          save(); this._render(); panelDefs.combat?._render?.();
-          showToast(c.name + ' removed from combat');
+          sktUndoable(c.name + ' out of the fight', () => { panelDefs.combat._removeCombatantAt(cIdx); save(); this._render(); panelDefs.combat?._render?.(); }, { keys: ['skt-combat-v1', 'skt-party-v1', 'skt-battlemap-v1'] });
         } else {
           // Reuse combat.js's _addPartyToCombat so init-mod / portrait / etc.
           // get computed the same way as a drag-drop. Falls back to a minimal

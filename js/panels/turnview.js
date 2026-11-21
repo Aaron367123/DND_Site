@@ -5679,7 +5679,12 @@ registerPanel('turnview', {
       else if (act === 'addmon'){ panelDefs.combat?._openMonsterPicker?.(); }
       else if (act === 'addpc'){ panelDefs.combat?._addPartyToCombat?.(+el.dataset.pi); }
       else if (act === 'addother'){ panelDefs.combat?._addPrompt?.(); }
-      else if (act === 'rm'){ this._removeCombatant(el.dataset.id); }
+      else if (act === 'rm'){
+        // (as the Combat Tracker's Remove: one Ctrl+Z puts them back, hit
+        // points, conditions, place in the order — it was gone for good)
+        const who = (this._order().find(c => c.id === el.dataset.id) || {}).name || 'Combatant';
+        sktUndoable('Removed ' + who, () => this._removeCombatant(el.dataset.id), { keys: ['skt-combat-v1', 'skt-party-v1', 'skt-battlemap-v1'] });
+      }
       else if (act === 'arm'){
         this._armed = el.dataset.id;
         // Mid-multiattack, clicking a target IS the swing — the target list is

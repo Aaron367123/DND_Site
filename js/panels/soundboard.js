@@ -335,9 +335,14 @@ registerPanel('soundboard', {
     });
 
     // Delete buttons — also remove from IndexedDB
-    b.querySelectorAll('[data-del]').forEach(el=>el.addEventListener('click',e=>{
+    b.querySelectorAll('[data-del]').forEach(el=>el.addEventListener('click',async e=>{
       e.stopPropagation();
       const id=el.dataset.del;
+      // (the file uploaded is gone for good, and from every scene it was in:
+      // one click took it)
+      const snd = _sb.personal.find(s => s.id === id);
+      const inScenes = (_sb.scenes || []).filter(sc => (sc.sounds || []).some(s => s.id === id)).length;
+      if (typeof showConfirm === 'function' && !(await showConfirm('Remove “' + (snd ? snd.name : 'this sound') + '”? The file you uploaded is deleted' + (inScenes ? ', and it leaves ' + inScenes + ' saved scene' + (inScenes === 1 ? '' : 's') : '') + '. This can’t be undone.', { title: 'Remove sound', confirmLabel: 'Remove', danger: true }))) return;
       this._stop(id);
       const removed = _sb.personal.find(s => s.id === id);
       if (removed?.url) try { URL.revokeObjectURL(removed.url); } catch(_){}

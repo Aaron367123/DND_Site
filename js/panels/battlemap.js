@@ -5330,6 +5330,15 @@ registerPanel('battlemap',{
     if (typeof showToast === 'function') showToast(text, { aside: true });
     return true;
   },
+  // The grid back to 0,0: undoable (the map's own history keeps its tokens,
+  // fog and drawings, not where the grid lies — a map lined up by hand was
+  // lined up again by hand).
+  _resetAlign(){
+    const ox = this._gridOffsetX || 0, oy = this._gridOffsetY || 0;
+    const put = (x, y) => { this._gridOffsetX = x; this._gridOffsetY = y; this._alignFirstClick = null; this._saveSettling(); this._render(); };
+    put(0, 0);
+    if ((ox || oy) && typeof sktUndoRecordCustom === 'function') sktUndoRecordCustom('Reset the grid alignment', () => put(ox, oy), () => put(0, 0));
+  },
   // The menu of the door whose handle is under the screen point (cx, cy):
   // open or close, lock or unlock, make it a wall, remove it. The DM's
   // (a player's right-click or hold stays a ping). → whether there was one.
@@ -6686,7 +6695,9 @@ registerPanel('battlemap',{
           items.push({ label: 'Remove this floor…', danger: true, onClick: () => this._removeFloor() });
         }
         // What the players' screens remember of where they've been (sight on).
-        if (this._sightSrc().on) items.push({ label: 'Forget what the players have explored', onClick: () => {
+        if (this._sightSrc().on) items.push({ label: 'Forget what the players have explored…', onClick: async () => {
+          // (for good, on every screen: asked first)
+          if (typeof showConfirm === 'function' && !(await showConfirm('Every player’s map forgets where they’ve been, and goes dark outside what they see now. This can’t be undone.', { title: 'Forget what they’ve explored', confirmLabel: 'Forget', danger: true }))) return;
           this._exploreEpoch = Date.now(); this._saveMap(); this._render();
           if (typeof showToast === 'function') showToast('The players’ maps forget where they’ve been.');
         } });
@@ -6714,10 +6725,7 @@ registerPanel('battlemap',{
       }
       else if(act==='toggle-snap'){this._snapToGrid=!this._snapToGrid;this._saveMap();this._render();}
       else if(act==='reset-align'){
-        this._gridOffsetX=0; this._gridOffsetY=0;
-        this._alignFirstClick=null;
-        this._saveMap();
-        this._render();
+        this._resetAlign();
       }
       else if(act==='clear-draw'){
         if (!this._drawings.length) return;
@@ -7618,11 +7626,7 @@ registerPanel('battlemap',{
         else if (typeof showToast === 'function') showToast('Align: click two grid intersections. Span MULTIPLE cells for accuracy.');
         this._render(); return;
       }
-      if (k === 'reset-align'){
-        this._gridOffsetX = 0; this._gridOffsetY = 0; this._alignFirstClick = null;
-        this._saveMap(); this._render();
-        return;
-      }
+      if (k === 'reset-align'){ this._resetAlign(); return; }
       if (k === 'match-grid'){ this._matchGrid(); return; }
       if (k === 'fog-toggle'){
         this._fog = this._fog!==null ? null : new Set();

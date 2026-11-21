@@ -56,7 +56,9 @@ registerPanel('shop',{
       </div>
       <div class="shop-display"><div class="shop-display-scroll" id="shop-display">${this._renderDisplay()}</div></div>
     </div></div>`;
-    b.querySelector('[data-act="gen"]').addEventListener('click',e=>{e.stopPropagation();this._invLimit=20;this._generate();});
+    // (over the shop on screen — its stock as the players left it: undoable)
+    b.querySelector('[data-act="gen"]').addEventListener('click',e=>{e.stopPropagation();this._invLimit=20;
+      if (state.shop && typeof sktUndoable === 'function') sktUndoable('New shop', () => this._generate(), { keys: ['skt-shop-v1'] }); else this._generate();});
     // (a choice made, not yet generated: kept for the next redraw)
     ['#shop-type', '#shop-price', '#shop-economy', '#shop-assort'].forEach(id => b.querySelector(id)?.addEventListener('change', () => {
       const v = s => (b.querySelector(s) || {}).value;
@@ -66,8 +68,8 @@ registerPanel('shop',{
     b.querySelector('[data-act="save-shop"]')?.addEventListener('click', () => this._saveCurrentShop());
     b.querySelectorAll('[data-act="load-shop"]').forEach(btn => btn.addEventListener('click', () => {
       const s = this._saved.find(x => x.id === btn.dataset.sid); if (!s) return;
-      state.shop = JSON.parse(JSON.stringify(s.shop));
-      save();
+      const put = () => { state.shop = JSON.parse(JSON.stringify(s.shop)); save(); };
+      if (state.shop && typeof sktUndoable === 'function') sktUndoable('Loaded ' + (s.name || 'a shop'), put, { keys: ['skt-shop-v1'] }); else put();
       this._invLimit = 20;
       this._render();
       if (typeof showToast==='function') showToast('Loaded "' + s.name + '"');
