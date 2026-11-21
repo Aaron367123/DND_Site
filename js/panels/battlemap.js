@@ -916,6 +916,9 @@ registerPanel('battlemap',{
     const onKey = e => { if (e.key === 'Escape' && this._wallFind){ e.stopPropagation(); this._endWallFind(); } };
     document.addEventListener('keydown', onKey, true);
     wf.off = () => { offBox(); document.removeEventListener('keydown', onKey, true); };
+    const endWf = () => { if (this._wallFind === wf) this._endWallFind(); };
+    wf.endMode = endWf;
+    this._modeStart(endWf, bar);
   },
   // ─── A group of tokens ─────────────────────────────────────────────────────
   // The party walking down a corridor, a pack of wolves: Shift+click tokens
@@ -971,7 +974,8 @@ registerPanel('battlemap',{
     (b.querySelector('.bm-main') || b).appendChild(bar);
     let off = null;
     const key = e => { if (e.key === 'Escape'){ e.stopPropagation(); end(); } };
-    const end = () => { if (off) off(); off = null; bar.remove(); document.removeEventListener('keydown', key, true); this._wallErasing = false; };
+    const end = () => { this._modeDone(end); if (off) off(); off = null; bar.remove(); document.removeEventListener('keydown', key, true); this._wallErasing = false; };
+    this._modeStart(end, bar);
     bar.addEventListener('click', e => { if (e.target.closest('[data-we="cancel"]')){ e.stopPropagation(); end(); } });
     this._wallErasing = true;
     off = this._boxOnMap(() => this._wallErasing, (box, rect) => {
@@ -1025,6 +1029,7 @@ registerPanel('battlemap',{
   _endWallFind(){
     const wf = this._wallFind; if (!wf) return;
     this._wallFind = null;
+    if (wf.endMode) this._modeDone(wf.endMode);
     if (wf.off) wf.off();
     if (wf.bar) wf.bar.remove();
     if (wf.rect) wf.rect.remove();
@@ -1319,6 +1324,7 @@ registerPanel('battlemap',{
     }
   },
   unmount(){
+    this._endMode();
     if (this._resizeObserver){ this._resizeObserver.disconnect(); this._resizeObserver = null; }
     if (this._docMouseUp){ document.removeEventListener('mouseup', this._docMouseUp); this._docMouseUp = null; }
     // Drop any queued repaint — its callback would run against a torn-down body.
@@ -5322,6 +5328,17 @@ registerPanel('battlemap',{
       return false;
     });
   },
+  // ─── One map mode at a time ────────────────────────────────────────────────
+  // Placing creatures, removing walls in a box, moving a wall or light,
+  // finding walls: each listens on the map and the document until done. A
+  // second one started left the first listening too (one click placed both
+  // groups), a redraw wiped its hint but left it armed (the next click
+  // teleported them, and was eaten), and closing the map left its Escape
+  // swallowing the next one anywhere. Now: starting one ends the last, a
+  // redraw puts its hint back, closing the map ends it.
+  _modeStart(end, hint){ this._endMode(); this._modeEnd = end; this._modeHint = hint || null; },
+  _modeDone(end){ if (this._modeEnd === end){ this._modeEnd = null; this._modeHint = null; } },
+  _endMode(){ const f = this._modeEnd; this._modeEnd = null; this._modeHint = null; if (f) try { f(); } catch(e){ console.warn('[SKT] map mode', e); } },
   // A tip shown once on this device (localStorage), the first time it's
   // wanted — what a gesture does, where nothing on screen says so.
   _tipOnce(key, text){
@@ -5465,6 +5482,7 @@ registerPanel('battlemap',{
       follow(p.clientX, p.clientY);
     };
     const done = keep => {
+      this._modeDone(done);
       this._movingEntry = null;
       hint.remove();
       b.removeEventListener('mousedown', onDown, true);
@@ -5479,6 +5497,7 @@ registerPanel('battlemap',{
       else this._saveMap();
       this._renderAreas();
     };
+    this._modeStart(done, hint);
     b.addEventListener('mousedown', onDown, true);
     b.addEventListener('touchstart', onDown, { capture: true, passive: false });
     document.addEventListener('mousemove', onMove);
@@ -6513,6 +6532,7 @@ registerPanel('battlemap',{
     +'</div>';
 
     b.innerHTML=html;
+    if (this._modeHint && !this._modeHint.isConnected) (b.querySelector('.bm-main') || b).appendChild(this._modeHint);
     this._setupMap();
     this._fitToolbar();
     // Restore scroll on the freshly-mounted #map-scroll so cursor-centered
@@ -9454,13 +9474,15 @@ registerPanel('battlemap',{
   // them where they are.
   _placeCombatants(cids){
     const b = this._body; if (!b || !Array.isArray(cids) || !cids.length) return false;
+    this._endMode();   // (first: the last placing's end clears _placing)
     this._placing = cids.slice();
     b.querySelector('.map-place-hint')?.remove();
     const hint = document.createElement('div');
     hint.className = 'map-place-hint';
     hint.innerHTML = '<span>Click where they stand — ' + cids.length + ' creature' + (cids.length === 1 ? '' : 's') + '</span><button class="btn small" data-place-cancel>Keep them here</button>';
     (b.querySelector('.bm-main') || b).appendChild(hint);
-    const done = () => { this._placing = null; hint.remove(); b.removeEventListener('pointerdown', onDown, true); document.removeEventListener('keydown', onKey, true); };
+    const done = () => { this._modeDone(done); this._placing = null; hint.remove(); b.removeEventListener('pointerdown', onDown, true); document.removeEventListener('keydown', onKey, true); };
+    this._modeStart(done, hint);
     const onKey = e => { if (e.key === 'Escape'){ e.stopPropagation(); done(); } };
     const onDown = e => {
       if (e.target.closest && e.target.closest('[data-place-cancel]')){ e.preventDefault(); done(); return; }

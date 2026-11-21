@@ -103,7 +103,7 @@ registerPanel('loot',{
     if (keep) this._putEdit(keep);
     // Refresh the dropdown once 5e data finishes loading so suggestions appear
     // even if the user opened the panel before the load completed.
-    if (typeof on5eLoaded === 'function') on5eLoaded(() => { if (this._body) this._renderSearchDropdown(); });
+    if (typeof on5eLoaded === 'function' && !this._5eWaiting){ this._5eWaiting = true; on5eLoaded(() => { this._5eWaiting = false; if (this._body) this._renderSearchDropdown(); }); }
     if (typeof load5eData === 'function') load5eData();
   },
   unmount(){this._body=null;},

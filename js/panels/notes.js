@@ -268,13 +268,16 @@ registerPanel('notes', {
   },
 
   // Wire the local-folder adapter. Idempotent — only attaches once.
+  // (the subscriptions once; the polling and the pull redraw on every mount —
+  // unmount stops them, and a reopened Notes window never started them again,
+  // so a folder vault went quiet for the rest of the session)
   _initLocalSync(){
-    if (this._localSyncWired) return;
     const ns = window.notesSync; if (!ns) return;
+    ns._onPullCallback = () => { if (!this._editing && this._body) this._renderKeepScroll(); };
+    if (this._localSyncWired){ ns.startPolling(() => this._data); return; }
     this._localSyncWired = true;
     ns.init(() => this._editing);
     ns.onStatus(() => { if (this._body) this._renderVaultPill(); });
-    ns._onPullCallback = () => { if (!this._editing && this._body) this._renderKeepScroll(); };
     // Conflict subscription — when notes-sync detects a two-sided change,
     // surface a banner so the user can review and choose a winner.
     if (typeof ns.onConflict === 'function'){

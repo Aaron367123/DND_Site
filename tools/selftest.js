@@ -27645,6 +27645,53 @@ for (const cls of Object.keys(rule)) for (let L = 1; L <= 20; L++) for (const sc
         save();
       }
     }
+    // -- Round 539: one battle-map mode at a time — Push and place twice placed both groups with one click; a redraw hid the hint but left placing armed (the next click teleported them); closing the map left its Escape swallowing the next one anywhere. And the ? list's keys stop with it --
+    if (!PLAYER){
+      const B = panelDefs.battlemap, T0 = B._tokens;
+      try {
+        openPanel('battlemap'); await sleep(400);
+        const cs = B._csScreen() || 50;
+        B._tokens = [{ id: 'r539a', cid: 'r539A', label: 'R539 A', x: cs / 2, y: cs / 2, size: 1 }, { id: 'r539b', cid: 'r539B', label: 'R539 B', x: cs * 1.5, y: cs / 2, size: 1 }];
+        B._render(); await sleep(100);
+        const hints = () => B._body.querySelectorAll('.map-place-hint').length;
+        B._placeCombatants(['r539A']); B._placeCombatants(['r539B']); await sleep(50);
+        ok('Push and place twice: one hint, the second group’s', hints() === 1 && /1 creature/.test(B._body.querySelector('.map-place-hint').textContent), hints());
+        B._render(); await sleep(80);
+        ok('…a redraw (a phone’s change) puts its hint back, still placing', hints() === 1 && JSON.stringify(B._placing) === '["r539B"]', JSON.stringify([hints(), B._placing]));
+        // one click on the map: only B moves
+        // (the middle of what's on screen of the map: zoomed and scrolled as
+        // it may be, a fixed square can be off it)
+        const st = B._body.querySelector('#map-stage'), sr = st.getBoundingClientRect(), vr = B._body.querySelector('#map-scroll').getBoundingClientRect();
+        const px = Math.round((Math.max(sr.left, vr.left) + Math.min(sr.right, vr.right)) / 2), py = Math.round((Math.max(sr.top, vr.top) + Math.min(sr.bottom, vr.bottom)) / 2);
+        const a0 = { x: B._tokens[0].x, y: B._tokens[0].y }, b0 = { x: B._tokens[1].x, y: B._tokens[1].y };
+        document.elementFromPoint(px, py).dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, cancelable: true, clientX: px, clientY: py, button: 0 }));
+        await sleep(80);
+        ok('…one click: the second group placed, the first left where it was, no hint left', B._tokens[0].x === a0.x && B._tokens[0].y === a0.y && (B._tokens[1].x !== b0.x || B._tokens[1].y !== b0.y) && hints() === 0 && !B._placing, JSON.stringify([B._tokens.map(t => [Math.round(t.x), Math.round(t.y)]), hints()]));
+        // closing the map mid-placing: its Escape doesn't outlive it
+        B._placeCombatants(['r539A']); await sleep(30);
+        closePanel('battlemap'); await sleep(80);
+        let reached = false; const probe = () => { reached = true; };
+        document.addEventListener('keydown', probe);
+        document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+        document.removeEventListener('keydown', probe);
+        ok('…the map closed mid-placing: the next Escape reaches everything else', reached && !B._placing, JSON.stringify([reached, B._placing]));
+        // the ? list closed by its button: its keys stop too
+        showHelpOverlay(); await sleep(50);
+        document.querySelector('#help-close').click(); await sleep(30);
+        const inp = document.createElement('textarea'); document.body.appendChild(inp); inp.focus();
+        const ev = new KeyboardEvent('keydown', { key: '?', bubbles: true, cancelable: true });
+        inp.dispatchEvent(ev); inp.remove();
+        ok('the ? list closed by its button: the next ? typed in a note isn’t swallowed', !ev.defaultPrevented, '');
+        document.getElementById('help-overlay')?.remove();
+        // Notes: reopened, its folder vault polls again
+        ok('Notes reopened: its local-folder sync starts again (it went quiet for the session)', /if \(this\._localSyncWired\)\{ ns\.startPolling/.test(String(panelDefs.notes._initLocalSync)), '');
+      } catch(e){ ok('round 539 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
+      finally {
+        try { B._endMode && B._endMode(); } catch(e){}
+        document.getElementById('help-overlay')?.remove();
+        B._tokens = T0; try { closePanel('battlemap'); } catch(e){}
+      }
+    }
     // -- Class features: represented, not just text ------------------------
     {
       try {

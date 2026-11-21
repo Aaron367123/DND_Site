@@ -831,14 +831,15 @@ function showHelpOverlay(){
     <div class="modal-actions" style="margin-top:14px"><button class="btn primary" id="help-close">Close (Esc)</button></div>
   </div>`;
   document.body.appendChild(back);
-  const close = () => back.remove();
+  // (closed by its button or a click outside, its keys went on listening —
+  // the next ? typed in a note was swallowed)
+  const close = () => { back.remove(); document.removeEventListener('keydown', onKey); };
   back.querySelector('#help-close').addEventListener('click', close);
   back.addEventListener('mousedown', e => { if (e.target === back) close(); });
   const onKey = (e) => {
     if (e.key === 'Escape' || e.key === '?'){
       e.preventDefault();
       close();
-      document.removeEventListener('keydown', onKey);
     }
   };
   document.addEventListener('keydown', onKey);
