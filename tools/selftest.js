@@ -27528,6 +27528,26 @@ for (const cls of Object.keys(rule)) for (let L = 1; L <= 20; L++) for (const sc
         save();
       }
     }
+    // -- Round 536: the Encounter Builder's right column scrolls, and its pushes stay in view — at the window's first size Push to Combat Tracker and the saved encounters were cut off, out of reach (the column clipped and didn't scroll) --
+    if (!PLAYER){
+      const E = panelDefs.encounter;
+      let M0 = null;
+      try {
+        openPanel('encounter'); await sleep(400);
+        M0 = E._monsters; E._monsters = (M0 && M0.length) ? M0 : [{ name: 'R536 Ogre', cr: '2', count: 1, hp: 59, ac: 11 }];
+        E._render(); await sleep(100);
+        const win = E._body.closest('.window'), w0 = { h: win.style.height };
+        win.style.height = '420px'; await sleep(100);
+        try {
+          const wr = win.getBoundingClientRect(), push = E._body.querySelector('#enc-push-combat').getBoundingClientRect();
+          ok('a short Encounter Builder: Push to Combat Tracker in view', push.bottom <= wr.bottom + 1 && push.top >= wr.top, JSON.stringify([Math.round(push.bottom), Math.round(wr.bottom)]));
+          const R = E._body.querySelector('.enc-right'); R.scrollTop = 99999; await sleep(60);
+          const save = [...E._body.querySelectorAll('button')].find(b => /Save current/.test(b.textContent)).getBoundingClientRect();
+          ok('…the saved encounters reached by scrolling the column', /auto|scroll/.test(getComputedStyle(R).overflowY) && R.scrollHeight > R.clientHeight && save.bottom <= wr.bottom + 1, JSON.stringify([R.scrollHeight, R.clientHeight, Math.round(save.bottom), Math.round(wr.bottom)]));
+        } finally { win.style.height = w0.h; }
+      } catch(e){ ok('round 536 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
+      finally { if (M0) E._monsters = M0; try { E._render(); } catch(e){} closePanel('encounter'); }
+    }
     // -- Class features: represented, not just text ------------------------
     {
       try {

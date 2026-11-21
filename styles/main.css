@@ -3501,7 +3501,11 @@ body.player-mode .loot-sumbar > span[style*="flex:1"]{display:none}
 .enc-root{height:100%;container:encwin / inline-size}
 .enc-panel{display:flex;height:100%}
 .enc-left{width:220px;flex-shrink:0;border-right:1px solid var(--border);display:flex;flex-direction:column;overflow:hidden}
-.enc-right{flex:1;display:flex;flex-direction:column;overflow:hidden}
+/* (it scrolls: hidden, at the window's first size Push to Combat Tracker
+   and the saved encounters were cut off, out of reach) */
+.enc-right{flex:1;display:flex;flex-direction:column;overflow-x:hidden;overflow-y:auto}
+/* The pushes stay in view at the column's foot while the rest scrolls. */
+.enc-acts{position:sticky;bottom:0;z-index:2;background:var(--panel);margin:8px -10px 0;padding:8px 10px;border-top:1px solid var(--border);display:flex;gap:8px;flex-wrap:wrap}
 /* A narrow window stacks the columns: party and monsters on top, the budget
    below, one scroll for the lot. Side by side on a phone the 220px left column
    left the budget 150px: the difficulty scale ran together as
@@ -3511,6 +3515,7 @@ body.player-mode .loot-sumbar > span[style*="flex:1"]{display:none}
   .enc-panel{flex-direction:column;height:auto}
   .enc-left{width:auto;border-right:none;border-bottom:1px solid var(--border);overflow:visible}
   .enc-right{overflow:visible}
+  .enc-acts{position:static;margin:8px 0 0;padding:0;border-top:none;background:none}
   .enc-monsters-list{flex:none;overflow:visible}
 }
 .enc-section{padding:10px;border-bottom:1px solid var(--border)}

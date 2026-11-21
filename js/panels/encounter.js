@@ -318,7 +318,7 @@ registerPanel('encounter',{
               <option value="mine" ${this._hpMode==='mine'?'selected':''}>I’ll roll them — ask me</option>
             </select>
           </div>
-          <div style="margin-top:8px;display:flex;gap:8px;flex-wrap:wrap">
+          <div class="enc-acts">
             <button class="btn small primary" id="enc-push-combat" ${!this._monsters.length?'disabled':''}>▶ Push to Combat Tracker</button>
             <button class="btn small" id="enc-push-map" ${!this._monsters.length?'disabled':''} title="Add them to the fight, then click the battle map where they stand">Push and place on map</button>
             <button class="btn small danger" id="enc-clear">Clear encounter</button>
