@@ -4250,14 +4250,22 @@ registerPanel('battlemap',{
   },
   // The ruler on a token being dragged: this drag, and on its turn the whole
   // turn's movement against what it has.
+  // The way a dragged token walks, square by square, kept up with every
+  // pointer event — the ruler that shows it is drawn once a frame, but the
+  // way can't wait for it: a finger round a wall's end inside one frame (a
+  // slow phone's frame is long) went straight at the wall and stopped there.
+  _pathFollow(t, x0, y0, x1, y1){
+    const d = this._drag; if (!d) return;
+    if (!d.path){ const hex = this._gridType === 'hex'; d.path = { ox: x0, oy: y0, hex, cells: [] }; d.path.cells.push(this._pathCell(d.path, x0, y0)); }
+    this._pathTo(d.path, t, x1, y1);
+  },
   _measureMove(t, x0, y0, x1, y1){
     const mi = this._moveInfo(t);
     const prev = mi && typeof sktTurnDiag === 'function' ? sktTurnDiag(t) : 0;
     // Dragged: along the way walked, square by square or hex by hex.
     const d = this._drag;
     if (d){
-      if (!d.path){ const hex = this._gridType === 'hex'; d.path = { ox: x0, oy: y0, hex, cells: [] }; d.path.cells.push(this._pathCell(d.path, x0, y0)); }
-      this._pathTo(d.path, t, x1, y1);
+      this._pathFollow(t, x0, y0, x1, y1);
       const pc = this._pathCost(t, d.path, prev);
       return this._measureShow(x0, y0, x1, y1, mi ? mi.budget : this._tokenSpeed(t), mi ? mi.moved : 0, mi && mi.cost, prev, pc.rough, pc);
     }
@@ -9251,6 +9259,7 @@ registerPanel('battlemap',{
           el.style.left=curPx+'px';
           el.style.top=curPy+'px';
           if (grp) grp.forEach(m => { if (m.el){ m.el.style.left = (m.sx + curPx - this._drag.startPx) + 'px'; m.el.style.top = (m.sy + curPy - this._drag.startPy) + 'px'; } });
+          this._pathFollow(t, drag.startPx, drag.startPy, curPx, curPy);
           frameSoon();
         };
 
@@ -9388,6 +9397,7 @@ registerPanel('battlemap',{
           curPy = drag.startPy + dy;
           el.style.left = curPx+'px';
           el.style.top  = curPy+'px';
+          this._pathFollow(t, drag.startPx, drag.startPy, curPx, curPy);
           frameSoon();
         };
         const onEnd = ev => {

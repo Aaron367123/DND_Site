@@ -32583,6 +32583,41 @@ for (const cls of Object.keys(rule)) for (let L = 1; L <= 20; L++) for (const sc
         paTab = TAB0; try { paRender(); } catch(e){}
       }
     }
+    // -- Round 547: a finger that goes round a wall's end inside one frame — the token's way follows it round (the ruler is drawn once a frame, but the way walked is kept with every move: worked out only at the frame, it went straight at the wall and stopped) --
+    if (PLAYER){
+      const keepTab = paTab, B = panelDefs.battlemap;
+      let keepT = null, keepD = null, keepF, keepSnap, saved = false;
+      try {
+        if (paMyIdx() < 0) paSetPc('zoey');
+        paTab = 'map'; paRender(); await sleep(900);
+        keepT = B._tokens.slice(); keepD = B._drawings.slice(); keepF = B._fog; keepSnap = B._snapToGrid; saved = true;
+        const cs = B._csScreen(), me = paPc();
+        B._tokens = [{ id: 't547z', cid: me.id, label: me.name, isPC: true, x: 3.5 * cs, y: 5.5 * cs, size: 1 }]; B._fog = null; B._snapToGrid = true;
+        B._drawings = [{ k: 'tpl', id: 'r547w', shape: 'wall', pts: [6 * cs, 0, 6 * cs, 7 * cs] }];
+        B._render(); await sleep(150);
+        const el = document.querySelector('#pa-screen .map-token[data-tid="t547z"]');
+        el.scrollIntoView({ block: 'center', inline: 'center' }); await sleep(100);
+        const st = B._body.querySelector('#map-stage'), zz = B._screenScale();
+        const at = (gx, gy) => { const r = st.getBoundingClientRect(); return { x: Math.round(r.left + gx * cs * zz), y: Math.round(r.top + gy * cs * zz) }; };
+        const T = p => new Touch({ identifier: 9, target: el, clientX: p.x, clientY: p.y });
+        let p = at(3.5, 5.5);
+        el.dispatchEvent(new TouchEvent('touchstart', { bubbles: true, cancelable: true, touches: [T(p)], changedTouches: [T(p)] }));
+        // down below the wall's end, across, and up the far side — all before a frame
+        const leg = (gx, gy) => { const q = at(gx, gy); for (let k = 1; k <= 8; k++){ const m = { x: Math.round(p.x + (q.x - p.x) * k / 8), y: Math.round(p.y + (q.y - p.y) * k / 8) }; document.dispatchEvent(new TouchEvent('touchmove', { bubbles: true, cancelable: true, touches: [T(m)], changedTouches: [T(m)] })); } p = q; };
+        leg(4.5, 8.5); leg(8.5, 8.5); leg(8.5, 5.5);
+        const cells = (B._drag && B._drag.path && B._drag.path.cells) || [], c = cells[cells.length - 1], last = c ? [3.5 + c[0], 5.5 + c[1]] : null;
+        ok('a finger round a wall’s end inside one frame: the way follows it to the far side', !!last && Math.abs(last[0] - 8.5) < 0.01 && Math.abs(last[1] - 5.5) < 0.01, JSON.stringify(cells));
+        document.dispatchEvent(new TouchEvent('touchend', { bubbles: true, cancelable: true, touches: [], changedTouches: [T(p)] }));
+        await sleep(150);
+        const z = B._tokens.find(t => t.id === 't547z');
+        ok('…let go: it’s on the far side', !!z && Math.abs(z.x / cs - 8.5) < 0.1 && Math.abs(z.y / cs - 5.5) < 0.1, z && JSON.stringify([z.x / cs, z.y / cs]));
+      } catch(e){ ok('round 547 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
+      finally {
+        if (saved){ B._tokens = keepT; B._drawings = keepD; B._fog = keepF; B._snapToGrid = keepSnap; }
+        try { B._render(); } catch(e){}
+        paTab = keepTab; try { paRender(); } catch(e){}
+      }
+    }
   }
 
   // ══════════════════════════════════════════════════════════ mobile / phone
