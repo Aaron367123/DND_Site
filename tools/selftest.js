@@ -21163,6 +21163,7 @@ for (const cls of Object.keys(rule)) for (let L = 1; L <= 20; L++) for (const sc
           el2.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, cancelable: true, clientX: cx, clientY: cy, button: 0 }));
           const z = B._screenScale();
           for (let i = 1; i <= 4; i++){ document.dispatchEvent(new MouseEvent('mousemove', { bubbles: true, clientX: cx + i * cs * z / 2, clientY: cy })); await sleep(15); }
+          await new Promise(res => requestAnimationFrame(() => res()));   // (what follows a dragged token does so once a frame)
           const rr = B._body.querySelector('#tpl-layer rect[data-tpl="' + au.id + '"]'), midX = +rr.getAttribute('x') + +rr.getAttribute('width') / 2;
           ok('mid-drag, the emanation follows the token', Math.abs(midX - (cl.x + 2 * cs)) < cs * 0.3, midX + ' vs ' + (cl.x + 2 * cs));
           document.dispatchEvent(new MouseEvent('mouseup', { bubbles: true, clientX: cx + 2 * cs * z, clientY: cy })); await sleep(80);
