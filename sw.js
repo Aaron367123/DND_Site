@@ -34,10 +34,10 @@
  */
 'use strict';
 
-const BUILD = '1b61193357';
+const BUILD = '77d19573c2';
 const PRECACHE = [
   'skt-workspace.html',
-  'styles/main.css?v=1eac1ec160',
+  'styles/main.css?v=e787ccb81e',
   'styles/theme.css?v=f8bac47baa',
   'js/core/errors.js?v=67c70f2e1d',
   'js/core/data.js?v=183a16905e',
@@ -70,7 +70,7 @@ const PRECACHE = [
   'js/panels/quests.js?v=36e3261d56',
   'js/panels/factions.js?v=39b868d6d9',
   'js/panels/homebrew.js?v=3e3c4f0d84',
-  'js/panels/battlemap.js?v=e04f2307e1',
+  'js/panels/battlemap.js?v=2fa079e550',
   'js/panels/npc-library.js?v=84a549ccbc',
   'js/panels/bestiary.js?v=da542163a4',
   'js/panels/content-panel.js?v=1a060dfd0b',

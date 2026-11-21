@@ -1425,6 +1425,7 @@ registerPanel('battlemap',{
         el.classList.toggle('turn', this._isTurn(t));
         el.title = this._tokenTitle(t) + (t.hidden ? ' · hidden from players' : '');
       });
+      if ((+state.combatRound > 0 ? state.activeCombatantId : null) !== this._namesTurn) this._fitTokenNames();
       this._footMove();
       return;
     }
@@ -4560,6 +4561,8 @@ registerPanel('battlemap',{
     const tokEls = new Map([...b.querySelectorAll('.map-token')].map(e => [String(e.dataset.tid), e]));
     const hs = drawn.map(d => d.el.offsetHeight || 16 / vs);
     const dims = drawn.map(d => { const te = tokEls.get(String(d.t.id)); return (te && te.offsetHeight) || 40; });
+    const turns = drawn.map(d => this._isTurn(d.t));
+    const wds = drawn.map((d, i) => turns[i] ? d.el.scrollWidth : 0);   // (the whole name, however it was cut)
     drawn.forEach(({ el, t, s }, di) => {
       const h = hs[di];
       let near = Infinity;
@@ -4578,8 +4581,11 @@ registerPanel('battlemap',{
       // or it lay across the other token (Creambak's name over the
       // Doppelganger beneath him). Below and above both taken: shown on
       // hover, like a name with no room beside it.
-      const dim = dims[di];
-      const blocked = dir => drawn.some(d => d.t !== t && Math.abs(d.s.x - s.x) < dim * 0.9
+      const dim = dims[di], turn = turns[di];
+      // (whose turn it is: its whole name is shown, so anything under the
+      // name's width counts — Zoey a step down and aside hid Creambak's)
+      const reach = turn ? Math.max(dim * 0.9, wds[di] / 2 + dim / 2) : dim * 0.9;
+      const blocked = dir => drawn.some(d => d.t !== t && Math.abs(d.s.x - s.x) < reach
         && dir * (d.s.y - s.y) > 0 && dir * (d.s.y - s.y) < dim * 1.6);
       const below = blocked(1), above = below && blocked(-1);
       const dy = below && !above ? -(dim / 2 + 4 + h) : dim / 2 + 4;
@@ -4588,8 +4594,15 @@ registerPanel('battlemap',{
       el.style.top = ((t.y || 0) + off.y).toFixed(1) + 'px';
       el.dataset.dx = off.x.toFixed(1); el.dataset.dy = off.y.toFixed(1);
       el.classList.toggle('above', below && !above);
-      el.classList.toggle('tight', room < 40 / vs || (below && above));
+      // Whose turn it is: named in full whatever's beside it — the creature
+      // the whole table is looking for. In a fight's huddle every name was
+      // hidden till hovered, and the TV has nothing to hover with (Creambak's
+      // turn, and no name on him). Above its neighbours', on a dark pill.
+      el.classList.toggle('turn-name', turn);
+      if (turn) el.style.maxWidth = '';
+      el.classList.toggle('tight', !turn && (room < 40 / vs || (below && above)));
     });
+    this._namesTurn = typeof state !== 'undefined' && +state.combatRound > 0 ? state.activeCombatantId : null;
   },
 
   // ─── Areas of effect ────────────────────────────────────────────────────────

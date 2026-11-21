@@ -27918,6 +27918,44 @@ for (const cls of Object.keys(rule)) for (let L = 1; L <= 20; L++) for (const sc
       } catch(e){ ok('round 546 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
       finally { B._drawings = D0; B._tool = T0; try { B._saveMap(); B._render(); } catch(e){} closePanel('battlemap'); }
     }
+    // -- Round 548: whose turn it is, named in full in a fight's huddle — every name there was hidden till hovered, and the TV has nothing to hover with; on top of the tokens round it, above its own when the name would lie on one below; the turn passing moves it --
+    if (!PLAYER){
+      const B = panelDefs.battlemap, T0 = B._tokens, K0 = JSON.stringify(state.combatants), R0 = state.combatRound, A0 = state.activeCombatantId;
+      try {
+        openPanel('battlemap'); await sleep(400);
+        const cs = B._csScreen() || 50;
+        state.combatants = [{ id: 'r548a', name: 'R548 Alpha', isPC: false, hp: 9, hpMax: 9, conditions: [] }, { id: 'r548b', name: 'R548 Bravo', isPC: false, hp: 9, hpMax: 9, conditions: [] }, { id: 'r548c', name: 'R548 Charlie', isPC: false, hp: 9, hpMax: 9, conditions: [] }];
+        state.combatRound = 1; state.activeCombatantId = 'r548a';
+        // a huddle: B beside A, C a step down and half a square aside
+        B._tokens = [
+          { id: 't548a', cid: 'r548a', label: 'R548 Alpha', x: cs * 4.5, y: cs * 4.5, size: 1, color: '#844' },
+          { id: 't548b', cid: 'r548b', label: 'R548 Bravo', x: cs * 5.5, y: cs * 4.5, size: 1, color: '#484' },
+          { id: 't548c', cid: 'r548c', label: 'R548 Charlie', x: cs * 5.0, y: cs * 5.5, size: 1, color: '#448' }];
+        B._render(); await sleep(250);
+        // Charlie: aside enough that a name-wide look sees him under Alpha's name and a token-wide one doesn't
+        { const dim = B._body.querySelector('.map-token[data-tid="t548a"]').offsetHeight, wd = B._body.querySelector('.map-token-name[data-tid="t548a"]').scrollWidth;
+          const lo = dim * 0.9, hi = wd / 2 + dim / 2;
+          B._tokens[2].x = B._tokens[0].x + (lo + hi) / 2; B._render(); await sleep(200); }
+        const nm = id => B._body.querySelector('.map-token-name[data-tid="' + id + '"]');
+        const shown = id => { const e = nm(id); return !!e && getComputedStyle(e).visibility === 'visible' && e.scrollWidth <= e.clientWidth + 1; };
+        ok('a huddle: the names beside each other are hidden (no room), as before', !shown('t548b'), nm('t548b') && nm('t548b').className);
+        ok('…but whose turn it is (Alpha) is named in full', shown('t548a') && nm('t548a').classList.contains('turn-name'), nm('t548a') && nm('t548a').className);
+        const za = nm('t548a') && +getComputedStyle(nm('t548a')).zIndex, zt = +getComputedStyle(B._body.querySelector('.map-token[data-tid="t548c"]')).zIndex;
+        ok('…drawn over the tokens round it', za > zt, JSON.stringify([za, zt]));
+        const ra = nm('t548a').getBoundingClientRect(), rc = B._body.querySelector('.map-token[data-tid="t548c"]').getBoundingClientRect(), rt = B._body.querySelector('.map-token[data-tid="t548a"]').getBoundingClientRect();
+        const lies = ra.right > rc.left && ra.left < rc.right && ra.bottom > rc.top && ra.top < rc.bottom;
+        ok('…and put above its token, not across Charlie a step down and aside', !lies && ra.bottom <= rt.top + 1, JSON.stringify([Math.round(ra.top), Math.round(ra.bottom), Math.round(rt.top), Math.round(rc.top)]));
+        // the turn passes (the tokens updated in place, as the tracker does it)
+        state.activeCombatantId = 'r548b'; B._syncFromCombat(); await sleep(60);
+        ok('the turn passes to Bravo: Bravo named, Alpha back to hidden', shown('t548b') && !shown('t548a'), JSON.stringify([nm('t548a').className, nm('t548b').className]));
+        state.combatRound = 0; B._syncFromCombat(); await sleep(60);
+        ok('the fight over: nobody singled out', !B._body.querySelector('.map-token-name.turn-name'), '');
+      } catch(e){ ok('round 548 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
+      finally {
+        B._tokens = T0; state.combatants = JSON.parse(K0); state.combatRound = R0; state.activeCombatantId = A0;
+        try { B._render(); } catch(e){} closePanel('battlemap');
+      }
+    }
     // -- Class features: represented, not just text ------------------------
     {
       try {

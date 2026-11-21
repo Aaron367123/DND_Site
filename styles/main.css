@@ -2882,6 +2882,7 @@ body.player-mode #campaign-btn{display:none !important}
 #map-stage.hide-tokens .map-token,
 .map-token-name.tight{visibility:hidden}
 .map-token-name.full{max-width:none !important; z-index:6 !important; visibility:visible}
+.map-token-name.turn-name{visibility:visible;max-width:none !important;z-index:5 !important}
 #map-stage.hide-tokens .map-token-name{display:none !important}
 #map-stage.hide-names  .map-token-name{display:none !important}
 #map-stage.hide-pcs    .map-token.pc,
