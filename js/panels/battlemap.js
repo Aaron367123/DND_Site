@@ -2955,6 +2955,18 @@ registerPanel('battlemap',{
   // Eraser hit-test: walk every stored stroke, check the cursor against each
   // segment. The first stroke whose closest segment is within the brush
   // radius gets removed and the canvas is repainted. Returns true on a hit.
+  // The eraser from one pointer event to the next (screen points): every
+  // 6 px of the way, inside the 8 px it grabs at. Only the points the events
+  // landed on were tried — a quick swipe across a line jumped it.
+  _eraseAlong(x0, y0, x1, y1, el){
+    const n = Math.max(1, Math.ceil(Math.hypot(x1 - x0, y1 - y0) / 6));
+    let hit = false;
+    for (let i = 1; i <= n; i++){
+      const p = this._stagePoint(x0 + (x1 - x0) * i / n, y0 + (y1 - y0) * i / n, el);
+      if (this._eraseStrokeAt(Math.round(p.x), Math.round(p.y))) hit = true;
+    }
+    return hit;
+  },
   _eraseStrokeAt(x, y){
     if (!this._drawings || !this._drawings.length) return false;
     // Hit radius scales with the stroke width so thicker lines are also easier
@@ -6888,10 +6900,12 @@ registerPanel('battlemap',{
         // (return) — token erasing is handled by token mousedown handlers.
         let removed = this._eraseStrokeAt(x, y);
         this._erasingNow = true;   // a gesture: see _gestureBusy
-        // Drag-to-erase: keep removing strokes the cursor passes over.
+        // Drag-to-erase: keep removing strokes the cursor passes over —
+        // along the way between events, not only at them (_eraseAlong).
+        let lastE = [e.clientX, e.clientY];
         const onMove = ev => {
-          const mp = this._stagePoint(ev.clientX, ev.clientY, drawCanvas);
-          if (this._eraseStrokeAt(Math.round(mp.x), Math.round(mp.y))) removed = true;
+          if (this._eraseAlong(lastE[0], lastE[1], ev.clientX, ev.clientY, drawCanvas)) removed = true;
+          lastE = [ev.clientX, ev.clientY];
         };
         const onUp = () => {
           document.removeEventListener('mousemove', onMove);
@@ -6973,12 +6987,13 @@ registerPanel('battlemap',{
         e.preventDefault(); e.stopPropagation();
         let removed = this._eraseStrokeAt(x, y);
         this._erasingNow = true;   // a gesture: see _gestureBusy
+        let lastE = [touch.clientX, touch.clientY];
         const onMove = ev => {
           if (ev.touches.length !== 1) return;
           ev.preventDefault();
           const t2 = ev.touches[0];
-          const mp = this._stagePoint(t2.clientX, t2.clientY, drawCanvas);
-          if (this._eraseStrokeAt(Math.round(mp.x), Math.round(mp.y))) removed = true;
+          if (this._eraseAlong(lastE[0], lastE[1], t2.clientX, t2.clientY, drawCanvas)) removed = true;
+          lastE = [t2.clientX, t2.clientY];
         };
         const onEnd = () => {
           document.removeEventListener('touchmove', onMove);

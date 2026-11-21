@@ -27875,6 +27875,47 @@ for (const cls of Object.keys(rule)) for (let L = 1; L <= 20; L++) for (const sc
         try { B._saveMap(); B._render(); } catch(e){} closePanel('battlemap');
       }
     }
+    // -- Round 546: the eraser takes a line it's swiped across quickly — it tried only the points the mouse events landed on, and a swipe jumped the line between two of them --
+    if (!PLAYER){
+      const B = panelDefs.battlemap, D0 = B._drawings, T0 = B._tool;
+      try {
+        openPanel('battlemap'); await sleep(400);
+        const cs = B._csScreen() || 50;
+        const st = B._body.querySelector('#map-stage').getBoundingClientRect(), sc = B._body.querySelector('#map-scroll').getBoundingClientRect();
+        const left = Math.max(sc.left, st.left), top = Math.max(sc.top, st.top), z = B._screenScale();
+        // a line straight down, a square in from what's on screen
+        const at = (cx, cy) => B._stagePoint(cx, cy, B._body.querySelector('#draw-canvas'));
+        const a = at(left + cs * z * 3, top + cs * z), b = at(left + cs * z * 3, top + cs * z * 4);
+        const line = { id: 'r546l', p: [a.x, a.y, b.x, b.y], c: '#c33', s: 3 };
+        B._drawings = (D0 || []).filter(s => s && s.id !== 'r546l').concat([line]);
+        B._tool = 'erase'; B._render(); await sleep(150);
+        const dc = B._body.querySelector('#draw-canvas');
+        const y = Math.round(top + cs * z * 2.5), x1 = Math.round(left + cs * z * 1), x2 = Math.round(left + cs * z * 5);
+        dc.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, cancelable: true, clientX: x1, clientY: y, button: 0, buttons: 1 }));
+        document.dispatchEvent(new MouseEvent('mousemove', { bubbles: true, cancelable: true, clientX: x2, clientY: y, buttons: 1 }));   // one event, across it
+        document.dispatchEvent(new MouseEvent('mouseup', { bubbles: true, cancelable: true, clientX: x2, clientY: y, button: 0 }));
+        await sleep(80);
+        ok('eraser: a swipe across a line in one mouse event takes it', !B._drawings.some(s => s && s.id === 'r546l'), JSON.stringify([x1, x2, Math.round(cs * z)]));
+        // …and one that passes beside it doesn't
+        B._drawings = B._drawings.concat([line]); B._drawAllStrokes();
+        const yb = Math.round(top + cs * z * 6);   // below its end
+        dc.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, cancelable: true, clientX: x1, clientY: yb, button: 0, buttons: 1 }));
+        document.dispatchEvent(new MouseEvent('mousemove', { bubbles: true, cancelable: true, clientX: x2, clientY: yb, buttons: 1 }));
+        document.dispatchEvent(new MouseEvent('mouseup', { bubbles: true, cancelable: true, clientX: x2, clientY: yb, button: 0 }));
+        await sleep(80);
+        ok('…a swipe that passes below its end leaves it', B._drawings.some(s => s && s.id === 'r546l'), '');
+        // a finger, the same
+        if (typeof Touch === 'function'){
+          const T = (cx) => new Touch({ identifier: 1, target: dc, clientX: cx, clientY: y });
+          dc.dispatchEvent(new TouchEvent('touchstart', { bubbles: true, cancelable: true, touches: [T(x1)], changedTouches: [T(x1)] }));
+          document.dispatchEvent(new TouchEvent('touchmove', { bubbles: true, cancelable: true, touches: [T(x2)], changedTouches: [T(x2)] }));
+          document.dispatchEvent(new TouchEvent('touchend', { bubbles: true, cancelable: true, touches: [], changedTouches: [T(x2)] }));
+          await sleep(80);
+          ok('eraser: a finger swiped across it takes it too', !B._drawings.some(s => s && s.id === 'r546l'), '');
+        }
+      } catch(e){ ok('round 546 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
+      finally { B._drawings = D0; B._tool = T0; try { B._saveMap(); B._render(); } catch(e){} closePanel('battlemap'); }
+    }
     // -- Class features: represented, not just text ------------------------
     {
       try {
