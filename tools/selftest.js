@@ -32372,6 +32372,81 @@ for (const cls of Object.keys(rule)) for (let L = 1; L <= 20; L++) for (const sc
         paTab = TAB0; try { paRender(); } catch(e){}
       }
     }
+    // -- Round 543: someone else's token on a phone or the TV, under Anyone can move any token — a tap or a click that doesn't move it shows its card (it showed nothing once it could be dragged), a finger held on it shows the card and never the DM's token panel (it opened it, Delete and Hide from players included), and the sync takes only the move from a phone (it took the whole token: rename, hide, delete) --
+    {
+      const B = panelDefs.battlemap, T0 = B._tokens, K0 = JSON.stringify(state.combatants), R0 = JSON.stringify(state.settings.rules || null), ME0 = localStorage.getItem('skt-me-v1'), TAB0 = paTab;
+      try {
+        localStorage.removeItem('skt-me-v1');
+        state.combatants = [{ id: 'r543m', name: 'R543 Ogre', isPC: false, hp: 30, hpMax: 30, conditions: [] }];
+        state.settings.rules = {};
+        paTab = 'map'; paRender(); await sleep(800);
+        const cs = B._csScreen() || 50;
+        B._tokens = (T0 || []).filter(t => t && t.id !== 'r543t').concat([{ id: 'r543t', cid: 'r543m', label: 'R543 Ogre', x: cs * 1.5, y: cs * 1.5, size: 1, color: '#844' }]);
+        B._render(); await sleep(150);
+        const tok = () => B._tokens.find(t => t.id === 'r543t');
+        const el = () => document.querySelector('.pa-mount .map-token[data-tid="r543t"]');
+        const card = () => { const c = document.querySelector('.bm-tok-card'); return c ? c.textContent : ''; };
+        const panel = () => { const tp = document.querySelector('.pa-mount #token-panel'); return !!(tp && tp.offsetParent); };
+        const reset = async () => { if (B._tokCardOff) B._tokCardOff(); B._closePanel(); await sleep(60); };
+        const at = async () => { const e0 = el(); e0.scrollIntoView({ block: 'center', inline: 'center' }); await sleep(80); const r = e0.getBoundingClientRect(); return [Math.round(r.left + r.width / 2), Math.round(r.top + r.height / 2)]; };
+        const press = async ms => {
+          const [x, y] = await at(), e0 = el(), T = () => new Touch({ identifier: 1, target: e0, clientX: x, clientY: y });
+          e0.dispatchEvent(new TouchEvent('touchstart', { bubbles: true, cancelable: true, touches: [T()], changedTouches: [T()] }));
+          await sleep(ms);
+          document.dispatchEvent(new TouchEvent('touchend', { bubbles: true, cancelable: true, touches: [], changedTouches: [T()] }));
+          await sleep(150);
+        };
+        ok('the rule is on, and the TV may drag the ogre', sktRuleOn('anyoneMoves') && sktMayDragToken(tok()), '');
+        await reset(); const x0 = tok().x;
+        if (typeof Touch === 'function'){
+          await press(60);
+          ok('a tap on the ogre: its card, and it stays put', /R543 Ogre/.test(card()) && tok().x === x0, JSON.stringify(card()));
+          await reset(); await press(700);
+          ok('a finger held on it: the card, not the DM’s token panel', /R543 Ogre/.test(card()) && !panel(), JSON.stringify([card(), panel()]));
+        } else ok('touch (none here)', true);
+        await reset();
+        { const [x, y] = await at();
+          el().dispatchEvent(new MouseEvent('mousedown', { bubbles: true, cancelable: true, clientX: x, clientY: y, button: 0, buttons: 1 }));
+          document.dispatchEvent(new MouseEvent('mouseup', { bubbles: true, cancelable: true, clientX: x, clientY: y, button: 0 })); await sleep(150); }
+        ok('a click that doesn’t move it: its card', /R543 Ogre/.test(card()) && tok().x === x0, JSON.stringify(card()));
+        await reset();
+        // the sync: the move only
+        const ad = _ENTITY_KEYS['skt-battlemap-v1'], was = tok(), prev = { 'tokens/r543t': JSON.stringify(was) };
+        const pw = n => ad.playerWritable('tokens/r543t', prev, n == null ? n : JSON.stringify(n));
+        const mv = Object.assign({}, was, { x: was.x + cs, mv: { k: 'r543', ft: 5 } });
+        ok('sync: the ogre moved — sent', pw(mv) === true, String(pw(mv)));
+        ok('…renamed, hidden or recoloured with it — not', pw(Object.assign({}, mv, { label: 'Bob' })) === false && pw(Object.assign({}, mv, { hidden: true })) === false && pw(Object.assign({}, was, { color: '#000' })) === false,
+           JSON.stringify([pw(Object.assign({}, mv, { label: 'Bob' })), pw(Object.assign({}, mv, { hidden: true }))]));
+        ok('…nor deleted', pw(null) === false && pw(undefined) === false, '');
+        // two drags back to back: the first one's tidy-up (run late on a page in
+        // the background) lands in the middle of the second — it threw there
+        { const [x, y] = await at(), e0 = el(), xa = tok().x, errs = [];
+          const onErr = ev => errs.push(String(ev.message)); window.addEventListener('error', onErr);
+          try {
+            const one = (x1, y1, cx, cy) => {
+              e0.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, cancelable: true, clientX: x1, clientY: y1, button: 0, buttons: 1 }));
+              document.dispatchEvent(new MouseEvent('mousemove', { bubbles: true, cancelable: true, clientX: cx, clientY: cy, buttons: 1 }));
+            };
+            one(x, y, x + 10, y);
+            document.dispatchEvent(new MouseEvent('mouseup', { bubbles: true, cancelable: true, clientX: x + 10, clientY: y, button: 0 }));
+            one(x + 10, y, x + 14, y);   // the second drag, begun before the first's tidy-up runs
+            await sleep(30);
+            const lo = Math.round(2 * cs * B._screenScale());
+            document.dispatchEvent(new MouseEvent('mousemove', { bubbles: true, cancelable: true, clientX: x + lo, clientY: y, buttons: 1 }));
+            document.dispatchEvent(new MouseEvent('mouseup', { bubbles: true, cancelable: true, clientX: x + lo, clientY: y, button: 0 }));
+            await sleep(100);
+          } finally { window.removeEventListener('error', onErr); }
+          ok('two drags back to back: the second goes the whole way, nothing thrown', tok().x > xa + cs && !errs.length, JSON.stringify([Math.round(xa), Math.round(tok().x), errs]));
+        }
+      } catch(e){ ok('round 543 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
+      finally {
+        try { if (B._tokCardOff) B._tokCardOff(); B._closePanel(); } catch(e){}
+        B._tokens = T0; state.combatants = JSON.parse(K0);
+        state.settings.rules = JSON.parse(R0) || undefined; if (!state.settings.rules) delete state.settings.rules;
+        if (ME0 == null) localStorage.removeItem('skt-me-v1'); else localStorage.setItem('skt-me-v1', ME0);
+        paTab = TAB0; try { paRender(); } catch(e){}
+      }
+    }
   }
 
   // ══════════════════════════════════════════════════════════ mobile / phone

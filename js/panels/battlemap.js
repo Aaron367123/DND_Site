@@ -9184,7 +9184,7 @@ registerPanel('battlemap',{
         // pure-closure copy would go stale and teleport the token on the next
         // mousemove. (Local zoom no longer rescales anything — see
         // _applyViewScale — but a saved-map restore mid-drag still can.)
-        this._drag = { moved:false, startPx:t.x, startPy:t.y };
+        const drag = this._drag = { moved:false, startPx:t.x, startPy:t.y };
         const _oaFrom = { x:t.x, y:t.y };   // origin for the opportunity-attack check
         // Dragging one of a group moves the rest with it, as they stand.
         const grp = !isPlayer && this._group && this._group.size > 1 && this._group.has(t.id)
@@ -9201,10 +9201,10 @@ registerPanel('battlemap',{
           const _sd = this._stageDelta((ev.clientX-startX)/z, (ev.clientY-startY)/z);
           const dx=_sd.x, dy=_sd.y;
           if(!moved&&Math.abs(dx)<4&&Math.abs(dy)<4) return;
-          moved=true;this._drag.moved=true;
+          moved=true;drag.moved=true;
           el.style.cursor='grabbing';
-          curPx = this._drag.startPx + dx;
-          curPy = this._drag.startPy + dy;
+          curPx = drag.startPx + dx;
+          curPy = drag.startPy + dy;
           el.style.left=curPx+'px';
           el.style.top=curPy+'px';
           if (grp) grp.forEach(m => { if (m.el){ m.el.style.left = (m.sx + curPx - this._drag.startPx) + 'px'; m.el.style.top = (m.sy + curPy - this._drag.startPy) + 'px'; } });
@@ -9253,12 +9253,16 @@ registerPanel('battlemap',{
           // the footer's hint is gone in a fight (the move readout takes its
           // place), and a click that only selects looks like nothing works.
           if (!moved && !isPlayer) this._tipOnce('token-menu', 'Right-click a token for its hit points, conditions and more.');
+          // A player's (or the TV's) click on someone else's token that it
+          // may drag (Anyone can move any token): its card, as before the
+          // rule — a click that doesn't move it showed nothing.
+          if (!moved && isPlayer && !sktPlayerMayMoveToken(t)) this._tokCard(t);
           // Clear the drag flag AFTER the synthesized click event has had its
           // turn to fire, so canvas-click bail logic still works for the
           // immediate drag-release click. Without this defer, every future
           // canvas click silently bails on `if (this._drag?.moved) return`
           // — that's what broke the align tool after any token drag.
-          setTimeout(() => { this._drag = null; }, 0);
+          setTimeout(() => { if (this._drag === drag) this._drag = null; }, 0);
         };
 
         document.addEventListener('mousemove',onMove);
@@ -9304,12 +9308,15 @@ registerPanel('battlemap',{
         // Drag anchor lives on this._drag so _scaleTokensTo can rescale it
         // when the user pinch-zooms mid-drag. See mouse handler above for
         // full rationale.
-        this._drag = { moved:false, startPx:t.x, startPy:t.y };
+        const drag = this._drag = { moved:false, startPx:t.x, startPy:t.y };
         const _oaFrom = { x:t.x, y:t.y };   // origin for the opportunity-attack check
         const longPressTimer = setTimeout(() => {
           if (moved) return;
           longPressFired = true;
-          this._showPanel(t);
+          // The token panel (hit points, hide, delete) is the DM's, as a
+          // right-click is: a finger held on any token on a phone opened it
+          // — Delete and Hide from players included. A phone: its card.
+          if (isPlayer) this._tokCard(t); else this._showPanel(t);
         }, 500);
 
         const onMove = ev => {
@@ -9322,12 +9329,12 @@ registerPanel('battlemap',{
           const _sd = this._stageDelta((tt.clientX-startX)/z, (tt.clientY-startY)/z);
           const dx = _sd.x, dy = _sd.y;
           if (!moved && Math.abs(dx)<6 && Math.abs(dy)<6) return;
-          moved = true; this._drag.moved = true;
+          moved = true; drag.moved = true;
           clearTimeout(longPressTimer);
           if (longPressFired) return; // already opened panel; ignore drag
           ev.preventDefault();
-          curPx = this._drag.startPx + dx;
-          curPy = this._drag.startPy + dy;
+          curPx = drag.startPx + dx;
+          curPy = drag.startPy + dy;
           el.style.left = curPx+'px';
           el.style.top  = curPy+'px';
           this._auraFollow(t, curPx, curPy);
@@ -9347,8 +9354,10 @@ registerPanel('battlemap',{
           if (moved && this._tool !== 'ruler') this._measureLinger();
           // Same defer-clear as the mouse path — prevents the drag's "moved"
           // state from poisoning the next tap on the canvas.
-          setTimeout(() => { this._drag = null; }, 0);
+          setTimeout(() => { if (this._drag === drag) this._drag = null; }, 0);
           if (longPressFired) return;
+          // A tap on someone else's token (one it may drag): its card.
+          if (!moved && isPlayer && !sktPlayerMayMoveToken(t)) this._tokCard(t);
           if (moved){
             let nx = curPx, ny = curPy;
             if (this._snapToGrid){ const sp = this._snapPt(nx, ny, size); nx = sp.x; ny = sp.y; }

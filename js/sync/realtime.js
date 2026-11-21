@@ -447,7 +447,16 @@ const _ENTITY_KEYS = {
       // Any token was writable, whole — a phone could hide or rename a monster.
       if (node in prev){
         let was = null; try { was = JSON.parse(prev[node]); } catch(e){}
-        return typeof sktMayDragToken !== 'function' || sktMayDragToken(was, { sync: true });
+        if (typeof sktMayDragToken !== 'function') return true;
+        if (!sktMayDragToken(was, { sync: true })) return false;
+        if (typeof sktPlayerMayMoveToken !== 'function' || sktPlayerMayMoveToken(was, { sync: true })) return true;
+        // Someone else's, moved under "Anyone can move any token": the move
+        // and nothing else — where it stands, and this turn's feet and Take
+        // back. A phone could otherwise rename, hide or delete a monster.
+        let now = null; try { now = JSON.parse(next); } catch(e){}
+        if (!was || !now || typeof now !== 'object') return false;
+        const MOVE = { x: 1, y: 1, mv: 1, mvBack: 1 };
+        return Object.keys(Object.assign({}, was, now)).every(k => MOVE[k] || JSON.stringify(was[k]) === JSON.stringify(now[k]));
       }
       const me = typeof paPc === 'function' ? paPc() : null;
       let t = null; try { t = JSON.parse(next); } catch(e){}
