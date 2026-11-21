@@ -30221,7 +30221,13 @@ for (const cls of Object.keys(rule)) for (let L = 1; L <= 20; L++) for (const sc
         const mineTok = JSON.stringify({ id: 'abc', isPC: true, label: meNow ? meNow.name : 'x', cid: meNow ? meNow.id : 'x' });
         const prev = { 'tokens/abc': mineTok };
         ok('player: may move an existing token of their own', !meNow || wr('tokens/abc', prev, mineTok) === true);
-        ok('player: not an existing monster', wr('tokens/ogre', { 'tokens/ogre': JSON.stringify({ id: 'ogre', label: 'Ogre', isPC: false }) }, '{}') === false);
+        // (Anyone can move any token: on, a monster's move goes; off, it doesn't)
+        { const ogreP = { 'tokens/ogre': JSON.stringify({ id: 'ogre', label: 'Ogre', isPC: false }) }, am = state.settings.rules ? state.settings.rules.anyoneMoves : undefined;
+          try {
+            sktSetRule('anyoneMoves', false); const off = wr('tokens/ogre', ogreP, '{}');
+            sktSetRule('anyoneMoves', true); const on = wr('tokens/ogre', ogreP, '{}');
+            ok('player: an existing monster’s move — not with the table’s rule off, yes with it on', off === false && on === true, JSON.stringify([off, on]));
+          } finally { if (am === undefined){ if (state.settings.rules) delete state.settings.rules.anyoneMoves; save(); } else sktSetRule('anyoneMoves', am); } }
         ok('player: may NOT create a new token', wr('tokens/zzz', prev) !== true);
         ok('player: may draw', wr('drawings', prev) === true);
         ok('player: may NOT overwrite map meta', wr('meta', prev) !== true);

@@ -3274,7 +3274,10 @@ registerPanel('battlemap',{
     const c = (state.combatants || []).find(x => x && x.id === state.activeCombatantId);
     const t = c && typeof sktTokenForCombatant === 'function' ? sktTokenForCombatant(this._tokens || [], c) : null;
     if (!t) return null;
-    if (document.body.classList.contains('player-mode') && !sktMayDragToken(t)) return null;
+    // (a player's phone counts its own creature's moves; the TV, which has no
+    // creature of its own, whoever's turn it is when anyone may move anyone —
+    // a goblin's count on Zoey's phone was only clutter)
+    if (document.body.classList.contains('player-mode') && !(typeof paPc === 'function' && paPc() ? sktPlayerMayMoveToken(t) : sktMayDragToken(t))) return null;
     return t;
   },
   // Under the map: "Moved 15 / 30 ft", red past it, and Take back while
@@ -9898,7 +9901,8 @@ function _sktTokenRules(){
 // its own character's.
 function sktMayDragToken(t, opts){
   if (!t) return false;
-  if (!document.body.classList.contains('player-mode')) return true;
+  // (what a phone may SEND is the phone's rule, wherever it's asked)
+  if (!(opts && opts.sync) && !document.body.classList.contains('player-mode')) return true;
   if (typeof sktRuleOn === 'function' && sktRuleOn('anyoneMoves')) return true;
   return sktPlayerMayMoveToken(t, opts);
 }
