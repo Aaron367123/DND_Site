@@ -7166,7 +7166,7 @@ registerPanel('battlemap',{
     // Fog painting — mousedown + drag. _fog holds REVEALED cells. Reveal
     // mode adds to the set (clears fog), Hide mode removes from the set
     // (re-fogs cells the player had seen).
-    const fogPaint=(e)=>{
+    const fogPaint=(e, start)=>{
       if(!this._fogTool||this._fog===null)return;
       // Zoom + rotation-aware conversion (see _stagePoint) — plain rect math
       // painted the wrong cells whenever zoom != 1 or the map was rotated.
@@ -7182,16 +7182,33 @@ registerPanel('battlemap',{
       const radius=this._fogRadius||1;
       const mode  = this._fogPaintMode  || 'reveal';
       const shape = this._fogBrushShape || 'square';
+      const free = (this._fogBrushMode || 'grid') === 'free';
+      // Free brush radius (in cells): matches grid coverage roughly —
+      // radius=1 → 0.5 cell radius (1-cell diameter), radius=5 → 4.5 cell radius.
+      const rCells = Math.max(0.25, radius - 0.5);
+      // The way from the last point painted, not only the points the mouse
+      // reports: a quick sweep sends a few events far apart, and only those
+      // were painted — a flick across 12 squares revealed 4, a dotted line of
+      // fog left between (measured). Stamps three quarters of a brush apart (the
+      // line's edge waves by 7%; half a square on the grid). A free stamp nearer the last than that adds nothing new:
+      // skipped — every mouse event was a stroke, saved and sent to every
+      // screen (3000 of them, 256 KB, a 25 ms redraw, from one long sweep).
+      const step = (free ? Math.max(0.2, rCells * 0.75) : 0.5) * cs;
+      const last = start ? null : this._fogLast;
+      if (free && last && Math.hypot(ex - last.x, ey - last.y) < step) return;
+      const pts = [];
+      if (last && free){
+        // a stamp each step from the last, the rest carried to the next move
+        const d = Math.hypot(ex - last.x, ey - last.y), ux = (ex - last.x) / d, uy = (ey - last.y) / d;
+        for (let k = 1; k * step <= d + 0.01; k++) pts.push([last.x + ux * step * k, last.y + uy * step * k]);
+      } else if (last){ const d = Math.hypot(ex - last.x, ey - last.y), n = Math.max(1, Math.ceil(d / step)); for (let i = 1; i <= n; i++) pts.push([last.x + (ex - last.x) * i / n, last.y + (ey - last.y) * i / n]); }
+      else pts.push([ex, ey]);
+      this._fogLast = free && pts.length ? { x: pts[pts.length - 1][0], y: pts[pts.length - 1][1] } : { x: ex, y: ey };
       // Free mode — record a pixel-level stroke in cell-fraction coords so it
       // survives zoom. The fog canvas redraw paints these on top of the
       // cell-based reveal pass.
-      if ((this._fogBrushMode || 'grid') === 'free'){
-        const xc = ex / cs;
-        const yc = ey / cs;
-        // Free brush radius (in cells): matches grid coverage roughly —
-        // radius=1 → 0.5 cell radius (1-cell diameter), radius=5 → 4.5 cell radius.
-        const rCells = Math.max(0.25, radius - 0.5);
-        this._fogStrokes.push({xc, yc, r:rCells, op:mode, shape});
+      if (free){
+        pts.forEach(([px, py]) => this._fogStrokes.push({ xc: px / cs, yc: py / cs, r: rCells, op: mode, shape }));
         // Repaint locally every move so the DM gets immediate feedback —
         // batched to one redraw per frame. Defer the broadcast until mouseup
         // (handled below) to avoid hammering BroadcastChannel/Firebase.
@@ -7208,10 +7225,11 @@ registerPanel('battlemap',{
       const _fpScale = _mapBgImage ? (this._bgMapScale || 1) : 1;
       const offX = (((this._gridOffsetX || 0) * _fpScale) % cs + cs) % cs;
       const offY = (((this._gridOffsetY || 0) * _fpScale) % cs + cs) % cs;
-      const gx=Math.floor((ex-offX)/cs);
-      const gy=Math.floor((ey-offY)/cs);
       const r2 = (radius - 0.5) * (radius - 0.5);
       let changed=false;
+      for (const [px, py] of pts){
+      const gx=Math.floor((px-offX)/cs);
+      const gy=Math.floor((py-offY)/cs);
       for(let dx=-radius+1;dx<radius;dx++){
         for(let dy=-radius+1;dy<radius;dy++){
           if (shape === 'circle' && (dx*dx + dy*dy) > r2) continue;
@@ -7226,6 +7244,7 @@ registerPanel('battlemap',{
           }
         }
       }
+      }
       if(changed){this._invalidate({fog:true});this._broadcastThrottled();}
     };
     canvas.addEventListener('mousedown',e=>{
@@ -7233,7 +7252,7 @@ registerPanel('battlemap',{
       if(!this._fogTool||this._tool==='add-pc'||this._tool==='add-npc')return;
       e.stopPropagation();e.preventDefault();
       this._isPainting=true;
-      fogPaint(e);
+      fogPaint(e, true);
     });
     canvas.addEventListener('mousemove',e=>{
       if(this._isPainting&&this._fogTool)fogPaint(e);
@@ -7287,7 +7306,7 @@ registerPanel('battlemap',{
       if(e.touches.length!==1)return;
       e.stopPropagation();e.preventDefault();
       this._isPainting=true;
-      fogPaint(e.touches[0]);
+      fogPaint(e.touches[0], true);
     },{ passive:false });
     canvas.addEventListener('touchmove',e=>{
       if(!this._isPainting||!this._fogTool)return;

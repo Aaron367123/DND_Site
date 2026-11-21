@@ -27825,6 +27825,56 @@ for (const cls of Object.keys(rule)) for (let L = 1; L <= 20; L++) for (const sc
       } catch(e){ ok('round 544 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
       finally { B._snapToGrid = SN; B._tokens = T0; try { B._renderTokens(); B._measureHide && B._measureHide(); } catch(e){} closePanel('battlemap'); }
     }
+    // -- Round 545: the fog brush paints the way the mouse went, not only where its events landed — a quick flick across 12 squares revealed 4 (a dotted line of fog left between); and a free stroke adds a mark only where it reaches somewhere new (every mouse event was one: 3000 marks, 256 KB saved and sent to every screen, from one long sweep) --
+    if (!PLAYER){
+      const B = panelDefs.battlemap, F0 = B._fog, S0 = B._fogStrokes, K = { t: B._fogTool, r: B._fogRadius, m: B._fogPaintMode, b: B._fogBrushMode, s: B._fogBrushShape };
+      try {
+        openPanel('battlemap'); await sleep(400);
+        const w = B._body.closest('.window'), w0 = { w: w.style.width, h: w.style.height };
+        w.style.width = '1100px'; w.style.height = '760px'; await sleep(150);
+        B._fog = new Set(); B._fogStrokes = []; B._fogTool = true; B._fogRadius = 1; B._fogPaintMode = 'reveal'; B._fogBrushShape = 'square'; B._render(); await sleep(250);
+        const canvas = [...B._body.querySelectorAll('#map-stage canvas')].find(c => getComputedStyle(c).pointerEvents !== 'none');
+        const sc = B._body.querySelector('#map-scroll').getBoundingClientRect(), cs = B._csScreen(), z = B._screenScale();
+        const st = B._body.querySelector('#map-stage').getBoundingClientRect();   // (the map sits centred in a wider window)
+        const x0 = Math.round(Math.max(sc.left, st.left) + cs * z * 0.5), y0 = Math.round(Math.max(sc.top, st.top) + cs * z * 2.5);
+        const cells = Math.max(4, Math.min(10, Math.floor((Math.min(sc.right, st.right) - x0) / (cs * z)) - 1));   // what's on screen
+        const sweep = (events, len) => {
+          canvas.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, cancelable: true, clientX: x0, clientY: y0, button: 0, buttons: 1 }));
+          for (let i = 1; i <= events; i++) canvas.dispatchEvent(new MouseEvent('mousemove', { bubbles: true, cancelable: true, clientX: Math.round(x0 + len * i / events), clientY: y0, buttons: 1 }));
+          document.dispatchEvent(new MouseEvent('mouseup', { bubbles: true, cancelable: true, clientX: Math.round(x0 + len), clientY: y0, button: 0 }));
+        };
+        // the grid brush: four events across the squares
+        B._fogBrushMode = 'grid'; sweep(4, Math.round(cells * cs * z)); await sleep(60);
+        const xs = [...B._fog].map(k => +k.split(',')[0]).sort((a, b) => a - b), span = xs.length ? xs[xs.length - 1] - xs[0] + 1 : 0;
+        ok('fog, grid brush: a flick across ' + cells + ' squares in four mouse events reveals every square on the way', span >= cells && xs.length === span, JSON.stringify([cells, xs]));
+        // the free brush: the same flick, then is every point on the line revealed?
+        B._fog = new Set(); B._fogStrokes = []; B._fogBrushMode = 'free'; sweep(4, Math.round(cells * cs * z)); await sleep(60);
+        let holes = 0; const yc = B._stagePoint(x0, y0, canvas).y / cs;
+        for (let i = 0; i <= 100; i++){
+          const xc = B._stagePoint(x0 + cells * cs * z * i / 100, y0, canvas).x / cs;
+          if (!B._fogStrokes.some(s => Math.max(Math.abs(s.xc - xc), Math.abs(s.yc - yc)) <= s.r + 0.01)) holes++;
+        }
+        ok('fog, free brush: the same flick leaves nothing fogged along the line', holes === 0, holes + ' of 101 points, ' + B._fogStrokes.length + ' marks');
+        // a slow free stroke: 200 events a few pixels apart — a mark only where it gets somewhere new
+        B._fogStrokes = []; sweep(200, Math.round(cells * cs * z)); await sleep(60);
+        const n = B._fogStrokes.length, most = Math.ceil(cells / (0.5 * 0.75)) + 2;
+        ok('fog, free brush: 200 small moves make a mark each three quarters of a brush, not one each', n <= most && n >= cells, JSON.stringify([n, most]));
+        // a new press starts a new line (nothing joins it to the last)
+        B._fog = new Set(); B._fogBrushMode = 'grid';
+        canvas.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, cancelable: true, clientX: x0, clientY: y0, button: 0, buttons: 1 }));
+        document.dispatchEvent(new MouseEvent('mouseup', { bubbles: true, cancelable: true, clientX: x0, clientY: y0, button: 0 }));
+        const far = Math.round(x0 + 3 * cs * z);   // (inside what the sweep above found on the map)
+        canvas.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, cancelable: true, clientX: far, clientY: y0, button: 0, buttons: 1 }));
+        document.dispatchEvent(new MouseEvent('mouseup', { bubbles: true, cancelable: true, clientX: far, clientY: y0, button: 0 }));
+        await sleep(60);
+        ok('fog: two clicks apart reveal two squares, not the way between', B._fog.size === 2, JSON.stringify([...B._fog, x0, far, y0]));
+        w.style.width = w0.w; w.style.height = w0.h;
+      } catch(e){ ok('round 545 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
+      finally {
+        B._fog = F0; B._fogStrokes = S0; B._fogTool = K.t; B._fogRadius = K.r; B._fogPaintMode = K.m; B._fogBrushMode = K.b; B._fogBrushShape = K.s;
+        try { B._saveMap(); B._render(); } catch(e){} closePanel('battlemap');
+      }
+    }
     // -- Class features: represented, not just text ------------------------
     {
       try {
