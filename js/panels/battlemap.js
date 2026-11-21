@@ -2739,6 +2739,17 @@ registerPanel('battlemap',{
   // Returns null (⇒ keep the old full-stage behaviour) when:
   //   • the scroll container isn't measurable yet;
   //   • the whole stage already fits, where the two are equivalent anyway.
+  // Whether what's on screen now lies inside what each canvas layer last
+  // painted (its _covers, set by _sizeLayer). A turned map: not worked out,
+  // so always repainted, as before.
+  _viewInsidePainted(){
+    const b = this._body; if (!b || this._mapRotation) return false;
+    const scroll = b.querySelector('#map-scroll'); if (!scroll) return false;
+    const vs = this._viewScale || 1;
+    const x = scroll.scrollLeft / vs, y = scroll.scrollTop / vs, w = scroll.clientWidth / vs, h = scroll.clientHeight / vs;
+    const layers = ['#map-canvas', '#draw-canvas'].concat(this._fog !== null ? ['#fog-canvas'] : []).map(s => b.querySelector(s)).filter(Boolean);
+    return layers.length > 0 && layers.every(c => { const r = c._covers; return !!r && x >= r.x - 0.5 && y >= r.y - 0.5 && x + w <= r.x + r.w + 0.5 && y + h <= r.y + r.h + 0.5; });
+  },
   _visibleStageRect(){
     const b = this._body; if (!b) return null;
     const scroll = b.querySelector('#map-scroll'); if (!scroll) return null;
@@ -2774,12 +2785,16 @@ registerPanel('battlemap',{
     // (#map-scroll sits outside the map's transform). Divide to get stage px.
     const w = vw / vs, h = vh / vs;
     if (w >= W && h >= H) return null;          // whole stage visible
-    // A margin either side so a small scroll doesn't expose unpainted canvas
-    // before the scroll handler catches up.
-    const pad = Math.max(cs, 64 / vs);
-    let x = scroll.scrollLeft / vs - pad;
-    let y = scroll.scrollTop  / vs - pad;
-    let rw = w + pad * 2, rh = h + pad * 2;
+    // A margin either side so a scroll doesn't expose unpainted canvas —
+    // a quarter of the screen: panning stays inside what's painted for a
+    // while (_onMapScroll skips repainting until it leaves). It was 64 px,
+    // and every pan step repainted the grid, the fog and the drawings: 50 ms
+    // a frame on a phone (measured), the pan stuttered. The layers' pixel
+    // budget (_canvasK) keeps the memory in hand.
+    const padX = Math.max(cs, 64 / vs, w * 0.25), padY = Math.max(cs, 64 / vs, h * 0.25);
+    let x = scroll.scrollLeft / vs - padX;
+    let y = scroll.scrollTop  / vs - padY;
+    let rw = w + padX * 2, rh = h + padY * 2;
     x = Math.max(0, Math.min(x, Math.max(0, W - rw)));
     y = Math.max(0, Math.min(y, Math.max(0, H - rh)));
     rw = Math.min(rw, W - x);
@@ -2810,6 +2825,7 @@ registerPanel('battlemap',{
     canvas.style.height = ch + 'px';
     canvas.style.left = ox + 'px';
     canvas.style.top  = oy + 'px';
+    canvas._covers = vis ? { x: ox, y: oy, w: cw, h: ch, k } : null;   // (see _onMapScroll)
     const ctx = canvas.getContext('2d');
     // The translate is what keeps EVERY existing draw call correct without
     // touching it: callers still work in stage coordinates and still clear
@@ -2828,6 +2844,8 @@ registerPanel('battlemap',{
     this._scrollRaf = requestAnimationFrame(() => {
       this._scrollRaf = null;
       if (!this._body || !this._visibleStageRect()) return;
+      // Still inside what every layer has painted: nothing to do.
+      if (this._viewInsidePainted()) return;
       // All three layers size and position themselves, so moving the viewport
       // just means asking each to repaint.
       const gridC = this._body.querySelector('#map-canvas');
@@ -3993,7 +4011,7 @@ registerPanel('battlemap',{
     // Consumed by CSS for anything that must stay a fixed SCREEN size despite
     // the transform (mobile token tap targets — see styles/main.css).
     stage.style.setProperty('--bm-vs', String(vs));
-    this._counterScaleLabels(vs);
+    this._counterScaleLabels(vs, true);
 
     // Re-rasterise the canvas layers at the new zoom, once the zoom settles.
     // Deliberately debounced rather than immediate: reallocating three backing
@@ -5558,7 +5576,7 @@ registerPanel('battlemap',{
     t.x = s.x; t.y = s.y;
   },
 
-  _counterScaleLabels(vs){
+  _counterScaleLabels(vs, zooming){
     const b = this._body; if (!b) return;
     const bg = this._bgMapScale || 1;
     b.querySelectorAll('.map-token-name').forEach(el => {
@@ -5576,7 +5594,13 @@ registerPanel('battlemap',{
       const dim = ((t.size || 1) * this._tokenUnit() - 4) * bg;
       el.style.fontSize = Math.max(14 / vs, dim * 0.6).toFixed(1) + 'px';
     });
-    this._fitTokenNames();
+    // While a zoom moves (the wheel, a pinch), the names find their places
+    // once it settles: placing them reads every name's size and compares
+    // each with every other — 16 ms a step on a phone (measured), and a
+    // pinch fires several a frame.
+    clearTimeout(this._namesT);
+    if (zooming) this._namesT = setTimeout(() => { if (this._body) this._fitTokenNames(); }, 160);
+    else this._fitTokenNames();
   },
 
   // A device still running the OLD code writes _bgMapScale when it zooms, and
@@ -7480,15 +7504,23 @@ registerPanel('battlemap',{
       if (_touchPinch && e.touches.length === 2){
         e.preventDefault();
         const dist = touchDistance(e.touches[0], e.touches[1]);
-        const ratio = dist / _touchPinch.startDist;
         if (!_mapBgImage) return;
-        const newScale = this._clampView(_touchPinch.startScale * ratio);
-        // Display-only, exactly like the wheel path — a player pinching their
-        // phone must not rescale the DM's tokens.
-        this._applyViewScale(newScale);
-        const po = this._sizerOff(scrollEl);
-        scrollEl.scrollLeft = _touchPinch.imgX * newScale - _touchPinch.anchorX + po.x;
-        scrollEl.scrollTop  = _touchPinch.imgY * newScale - _touchPinch.anchorY + po.y;
+        // One zoom a frame: a finger reports two or more moves a frame (120 Hz
+        // screens), and each laid the map out again.
+        _touchPinch.ratio = dist / _touchPinch.startDist;
+        if (_touchPinch.raf) return;
+        const pin = _touchPinch;
+        pin.apply = () => {
+          pin.raf = 0;
+          const newScale = this._clampView(pin.startScale * pin.ratio);
+          // Display-only, exactly like the wheel path — a player pinching their
+          // phone must not rescale the DM's tokens.
+          this._applyViewScale(newScale);
+          const po = this._sizerOff(scrollEl);
+          scrollEl.scrollLeft = pin.imgX * newScale - pin.anchorX + po.x;
+          scrollEl.scrollTop  = pin.imgY * newScale - pin.anchorY + po.y;
+        };
+        pin.raf = requestAnimationFrame(() => { if (_touchPinch === pin) pin.apply(); });
       } else if (_touchPan && e.touches.length === 1){
         const t = e.touches[0];
         const dx = t.clientX - _touchPan.startX, dy = t.clientY - _touchPan.startY;
@@ -7501,6 +7533,8 @@ registerPanel('battlemap',{
       }
     }, { passive: false });
     const endTouch = () => {
+      // (the last step of the pinch, if it hasn't been drawn yet)
+      if (_touchPinch && _touchPinch.raf){ cancelAnimationFrame(_touchPinch.raf); _touchPinch.apply(); }
       if (_touchPinch){
         // Per-device key, not _saveMap(). Nothing synced changed.
         this._saveViewState();

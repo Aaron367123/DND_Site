@@ -27733,6 +27733,55 @@ for (const cls of Object.keys(rule)) for (let L = 1; L <= 20; L++) for (const sc
         closePanel('battlemap');
       }
     }
+    // -- Round 542: the map pans and pinches smoothly on a phone — the canvas layers paint a quarter screen past the edges and a pan inside that repaints nothing (each pan step repainted grid, fog and drawings: 50 ms a frame); a pinch zooms once a frame and the names find their places once it settles (16 ms each, several a frame) --
+    if (!PLAYER){
+      const B = panelDefs.battlemap, V0 = B._viewScale;
+      try {
+        openPanel('battlemap'); await sleep(400);
+        const w = B._body.closest('.window'), w0 = { w: w.style.width, h: w.style.height };
+        w.style.width = '600px'; w.style.height = '500px'; await sleep(200);
+        B._applyViewScale(2); await sleep(350);   // zoomed in: the layers cover the screen, not the map
+        const sc = B._body.querySelector('#map-scroll'), grid = B._body.querySelector('#map-canvas');
+        const vr = B._visibleStageRect(), vs = B._viewScale || 1;
+        ok('zoomed in: a layer covers a quarter of the screen past each edge', !!vr && vr.w >= (sc.clientWidth / vs) * 1.4 - 1, JSON.stringify([vr && Math.round(vr.w), Math.round(sc.clientWidth / vs)]));
+        // draw everything once, then a small pan: nothing repainted
+        B._drawGrid(grid, B._csScreen()); B._drawAllStrokes(); await sleep(50);
+        let draws = 0; const DG = B._drawGrid; B._drawGrid = function(){ draws++; return DG.apply(this, arguments); };
+        try {
+          sc.scrollLeft += 20; sc.scrollTop += 10; B._onMapScroll(); await sleep(80);
+          const small = draws;
+          sc.scrollLeft += sc.clientWidth * 2; B._onMapScroll(); await sleep(80);
+          ok('a small pan inside what’s painted repaints nothing; a long one repaints', small === 0 && draws > 0, JSON.stringify([small, draws]));
+        } finally { B._drawGrid = DG; }
+        // the names: placed once a zoom settles, not on each step
+        let fits = 0; const FT = B._fitTokenNames; B._fitTokenNames = function(){ fits++; return FT.apply(this, arguments); };
+        try {
+          for (let i = 0; i < 6; i++) B._applyViewScale(1 + i * 0.1);
+          const during = fits; await sleep(260);
+          ok('zooming: the names placed once it settles, not at every step', during === 0 && fits === 1, JSON.stringify([during, fits]));
+        } finally { B._fitTokenNames = FT; }
+        // the pinch: one zoom a frame
+        let applies = 0; const AV = B._applyViewScale; B._applyViewScale = function(){ applies++; return AV.apply(this, arguments); };
+        try {
+          const r = sc.getBoundingClientRect(), cx = Math.round(r.left + r.width / 2), cy = Math.round(r.top + r.height / 2);
+          const T = (id, x) => new Touch({ identifier: id, target: sc, clientX: x, clientY: cy });
+          if (typeof Touch === 'function'){
+            B._tool = null;
+            sc.dispatchEvent(new TouchEvent('touchstart', { bubbles: true, cancelable: true, touches: [T(1, cx - 40), T(2, cx + 40)], changedTouches: [T(1, cx - 40), T(2, cx + 40)] }));
+            for (let i = 1; i <= 6; i++) sc.dispatchEvent(new TouchEvent('touchmove', { bubbles: true, cancelable: true, touches: [T(1, cx - 40 - i * 5), T(2, cx + 40 + i * 5)], changedTouches: [T(1, cx - 40 - i * 5), T(2, cx + 40 + i * 5)] }));
+            const inFrame = applies;
+            await new Promise(res => requestAnimationFrame(() => requestAnimationFrame(res)));
+            const after = applies, vsMid = B._viewScale;
+            sc.dispatchEvent(new TouchEvent('touchmove', { bubbles: true, cancelable: true, touches: [T(1, cx - 100), T(2, cx + 100)], changedTouches: [T(1, cx - 100), T(2, cx + 100)] }));
+            sc.dispatchEvent(new TouchEvent('touchend', { bubbles: true, cancelable: true, touches: [], changedTouches: [T(1, cx - 100), T(2, cx + 100)] }));
+            ok('a pinch: six finger moves in a frame, one zoom', inFrame === 0 && after === 1, JSON.stringify([inFrame, after]));
+            ok('…and lifting the fingers applies the last step', applies === 2 && B._viewScale > vsMid, JSON.stringify([applies, vsMid, B._viewScale]));
+          } else ok('a pinch (no touch here)', true);
+        } finally { B._applyViewScale = AV; }
+        w.style.width = w0.w; w.style.height = w0.h;
+      } catch(e){ ok('round 542 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
+      finally { try { if (V0) B._applyViewScale(V0); } catch(e){} closePanel('battlemap'); }
+    }
     // -- Class features: represented, not just text ------------------------
     {
       try {
