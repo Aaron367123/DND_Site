@@ -17644,6 +17644,7 @@ for (const cls of Object.keys(rule)) for (let L = 1; L <= 20; L++) for (const sc
           const x0 = r.left + r.width / 2, y0 = r.top + r.height / 2;
           el.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, cancelable: true, button: 0, clientX: x0, clientY: y0 }));
           document.dispatchEvent(new MouseEvent('mousemove', { bubbles: true, clientX: x0 + dx * z, clientY: y0 + dy * z }));
+          await new Promise(res => requestAnimationFrame(() => res()));   // (the ruler follows once a frame)
           const label = (B._body.querySelector('.bm-measure-l') || {}).textContent || '';
           const over = !!B._body.querySelector('.bm-measure-l.over');
           document.dispatchEvent(new MouseEvent('mouseup', { bubbles: true, clientX: x0 + dx * z, clientY: y0 + dy * z }));
@@ -17941,6 +17942,7 @@ for (const cls of Object.keys(rule)) for (let L = 1; L <= 20; L++) for (const sc
           const x0 = r.left + r.width / 2, y0 = r.top + r.height / 2;
           el.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, cancelable: true, button: 0, clientX: x0, clientY: y0 }));
           document.dispatchEvent(new MouseEvent('mousemove', { bubbles: true, clientX: x0 + dx * z, clientY: y0 + dy * z }));
+          await new Promise(res => requestAnimationFrame(() => res()));   // (the ruler follows once a frame)
           const label = (B._body.querySelector('.bm-measure-l') || {}).textContent || '';
           document.dispatchEvent(new MouseEvent('mouseup', { bubbles: true, clientX: x0 + dx * z, clientY: y0 + dy * z }));
           await sleep(20);
@@ -18031,6 +18033,7 @@ for (const cls of Object.keys(rule)) for (let L = 1; L <= 20; L++) for (const sc
           const x0 = r.left + r.width / 2, y0 = r.top + r.height / 2;
           el.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, cancelable: true, button: 0, clientX: x0, clientY: y0 }));
           document.dispatchEvent(new MouseEvent('mousemove', { bubbles: true, clientX: x0 + dx * z, clientY: y0 + dy * z }));
+          await new Promise(res => requestAnimationFrame(() => res()));   // (the ruler follows once a frame)
           const label = (B._body.querySelector('.bm-measure-l') || {}).textContent || '';
           document.dispatchEvent(new MouseEvent('mouseup', { bubbles: true, clientX: x0 + dx * z, clientY: y0 + dy * z }));
           await sleep(20);
@@ -27781,6 +27784,46 @@ for (const cls of Object.keys(rule)) for (let L = 1; L <= 20; L++) for (const sc
         w.style.width = w0.w; w.style.height = w0.h;
       } catch(e){ ok('round 542 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
       finally { try { if (V0) B._applyViewScale(V0); } catch(e){} closePanel('battlemap'); }
+    }
+    // -- Round 544: a token dragged with a fast mouse — what follows it (the measuring line and its feet, the other screens' ghost) is worked out once a frame, not on each of the 8-16 mouse events a frame (each measured the way walked: most of a drag's time), and the last is done as the button lifts, so the drop reads the whole way --
+    if (!PLAYER){
+      const B = panelDefs.battlemap, T0 = B._tokens, SN = B._snapToGrid;
+      try {
+        openPanel('battlemap'); await sleep(400);
+        const cs = B._csScreen() || 50;
+        B._snapToGrid = false;
+        B._tokens = (T0 || []).filter(t => t && t.id !== 'r544t').concat([{ id: 'r544t', label: 'R544 Scout', x: cs * 2.5, y: cs * 2.5, size: 1, color: '#468' }]);
+        B._renderTokens(); await sleep(120);
+        const el = B._body.querySelector('#map-stage .map-token[data-tid="r544t"]');
+        el.scrollIntoView({ block: 'center', inline: 'center' }); await sleep(120);
+        const r = el.getBoundingClientRect(), x = Math.round(r.left + r.width / 2), y = Math.round(r.top + r.height / 2);
+        const z = B._screenScale(), at = i => x + Math.round(i * 5 * cs * z / 20);   // five squares in twenty moves (whole pixels)
+        let n = 0, ticks = 0; const MM = B._measureMove, BT = B._broadcastTokenTick;
+        B._measureMove = function(){ n++; return MM.apply(this, arguments); };
+        B._broadcastTokenTick = function(){ ticks++; return BT.apply(this, arguments); };
+        try {
+          // a click that doesn't move it: nothing measured (no 0 ft line)
+          el.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, cancelable: true, clientX: x, clientY: y, button: 0, buttons: 1 }));
+          document.dispatchEvent(new MouseEvent('mouseup', { bubbles: true, cancelable: true, clientX: x, clientY: y, button: 0 }));
+          await sleep(60);
+          ok('a click that doesn’t move the token measures nothing', n === 0 && ticks === 0, JSON.stringify([n, ticks]));
+          el.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, cancelable: true, clientX: x, clientY: y, button: 0, buttons: 1 }));
+          for (let i = 1; i <= 12; i++) document.dispatchEvent(new MouseEvent('mousemove', { bubbles: true, cancelable: true, clientX: at(i), clientY: y, buttons: 1 }));
+          const inFrame = n;
+          await new Promise(res => requestAnimationFrame(() => requestAnimationFrame(res)));
+          const afterFrame = n, ticksFrame = ticks;
+          ok('twelve mouse moves in a frame: measured once, after it (it was twelve times, as they came)', inFrame === 0 && afterFrame === 1 && ticksFrame === 1, JSON.stringify([inFrame, afterFrame, ticksFrame]));
+          // more moves, and the button lifts before a frame comes
+          for (let i = 13; i <= 20; i++) document.dispatchEvent(new MouseEvent('mousemove', { bubbles: true, cancelable: true, clientX: at(i), clientY: y, buttons: 1 }));
+          document.dispatchEvent(new MouseEvent('mouseup', { bubbles: true, cancelable: true, clientX: at(20), clientY: y, button: 0 }));
+          const atUp = n;
+          await sleep(120);
+          const t = B._tokens.find(k => k.id === 'r544t'), lab = B._body.querySelector('.bm-measure:not(.remote) .bm-measure-l');
+          ok('…the button lifts before the next frame: the last is measured then, once', atUp === 2 && n === 2, JSON.stringify([atUp, n]));
+          ok('…the token lands the whole way (five squares), and the line reads 25 ft', Math.abs(t.x - (cs * 2.5 + (at(20) - x) / z)) < 2 && !!lab && /25\s*ft/.test(lab.textContent), JSON.stringify([Math.round(t.x), Math.round(cs * 2.5 + (at(20) - x) / z), lab && lab.textContent]));
+        } finally { B._measureMove = MM; B._broadcastTokenTick = BT; }
+      } catch(e){ ok('round 544 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
+      finally { B._snapToGrid = SN; B._tokens = T0; try { B._renderTokens(); B._measureHide && B._measureHide(); } catch(e){} closePanel('battlemap'); }
     }
     // -- Class features: represented, not just text ------------------------
     {

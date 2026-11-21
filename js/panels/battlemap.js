@@ -9186,6 +9186,15 @@ registerPanel('battlemap',{
         // _applyViewScale — but a saved-map restore mid-drag still can.)
         const drag = this._drag = { moved:false, startPx:t.x, startPy:t.y };
         const _oaFrom = { x:t.x, y:t.y };   // origin for the opportunity-attack check
+        // What follows the token — the measuring line and its feet, an
+        // emanation, the other screens' ghost — once a frame, not once a
+        // pointer event: a fast mouse sends 8-16 a frame, and each measured
+        // the way walked (most of a frame's time in a drag, measured). The
+        // last is done as the button or finger lifts (flush), before the drop.
+        let _fRaf = 0;
+        const _fPaint = () => { _fRaf = 0; this._auraFollow(t, curPx, curPy); this._measureMove(t, drag.startPx, drag.startPy, curPx, curPy); this._broadcastTokenTick(t.id, curPx, curPy); };
+        const frameSoon = () => { if (!_fRaf) _fRaf = requestAnimationFrame(_fPaint); };
+        const flush = () => { if (_fRaf){ cancelAnimationFrame(_fRaf); _fPaint(); } };
         // Dragging one of a group moves the rest with it, as they stand.
         const grp = !isPlayer && this._group && this._group.size > 1 && this._group.has(t.id)
           ? [...this._group].filter(id => id !== t.id).map(id => { const m = (this._tokens || []).find(x => x && x.id === id); return m && m.x != null ? { t: m, el: stage.querySelector('.map-token[data-tid="' + CSS.escape(String(id)) + '"]'), sx: m.x, sy: m.y } : null; }).filter(Boolean)
@@ -9208,14 +9217,13 @@ registerPanel('battlemap',{
           el.style.left=curPx+'px';
           el.style.top=curPy+'px';
           if (grp) grp.forEach(m => { if (m.el){ m.el.style.left = (m.sx + curPx - this._drag.startPx) + 'px'; m.el.style.top = (m.sy + curPy - this._drag.startPy) + 'px'; } });
-          this._auraFollow(t, curPx, curPy);
-          this._measureMove(t, this._drag.startPx, this._drag.startPy, curPx, curPy);
-          this._broadcastTokenTick(t.id, curPx, curPy);
+          frameSoon();
         };
 
         const onUp=ev=>{
           document.removeEventListener('mousemove',onMove);
           document.removeEventListener('mouseup',onUp);
+          flush();
           this._liveTok = null;
           if (moved) this._broadcastTokenEnd();
           if (moved && this._tool !== 'ruler') this._measureLinger();
@@ -9310,6 +9318,15 @@ registerPanel('battlemap',{
         // full rationale.
         const drag = this._drag = { moved:false, startPx:t.x, startPy:t.y };
         const _oaFrom = { x:t.x, y:t.y };   // origin for the opportunity-attack check
+        // What follows the token — the measuring line and its feet, an
+        // emanation, the other screens' ghost — once a frame, not once a
+        // pointer event: a fast mouse sends 8-16 a frame, and each measured
+        // the way walked (most of a frame's time in a drag, measured). The
+        // last is done as the button or finger lifts (flush), before the drop.
+        let _fRaf = 0;
+        const _fPaint = () => { _fRaf = 0; this._auraFollow(t, curPx, curPy); this._measureMove(t, drag.startPx, drag.startPy, curPx, curPy); this._broadcastTokenTick(t.id, curPx, curPy); };
+        const frameSoon = () => { if (!_fRaf) _fRaf = requestAnimationFrame(_fPaint); };
+        const flush = () => { if (_fRaf){ cancelAnimationFrame(_fRaf); _fPaint(); } };
         const longPressTimer = setTimeout(() => {
           if (moved) return;
           longPressFired = true;
@@ -9337,12 +9354,11 @@ registerPanel('battlemap',{
           curPy = drag.startPy + dy;
           el.style.left = curPx+'px';
           el.style.top  = curPy+'px';
-          this._auraFollow(t, curPx, curPy);
-          this._measureMove(t, this._drag.startPx, this._drag.startPy, curPx, curPy);
-          this._broadcastTokenTick(t.id, curPx, curPy);
+          frameSoon();
         };
         const onEnd = ev => {
           clearTimeout(longPressTimer);
+          flush();
           this._liveTok = null;
           document.removeEventListener('touchmove', onMove);
           document.removeEventListener('touchend', onEnd);
