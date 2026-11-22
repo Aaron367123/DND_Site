@@ -32101,7 +32101,17 @@ for (const cls of Object.keys(rule)) for (let L = 1; L <= 20; L++) for (const sc
         const tb = document.querySelector('#pa-screen [data-cs-tab="actions"]'); if (tb){ tb.click(); await sleep(300); }
         const pip = [...document.querySelectorAll('#pa-screen .cs-pip')].find(b => /r460 Pips/.test(b.getAttribute('aria-label') || ''));
         { const coarse = matchMedia('(pointer: coarse)').matches, w = pip ? Math.round(pip.getBoundingClientRect().width) : 0;
-          ok('a resource’s pips are 28 px for a finger (16), and stay 16 with a mouse', !!pip && (coarse ? w >= 28 && Math.round(pip.getBoundingClientRect().height) >= 28 : w === 16), coarse + ' ' + w); }
+          // (they were 28 px on a phone — as big as the buttons, and the count wrapped to a line of its own)
+          ok('a resource’s pips are small on a phone too (16–20 px), and 16 with a mouse', !!pip && (coarse ? w >= 16 && w <= 20 : w === 16), coarse + ' ' + w);
+          if (coarse && pip){
+            pip.scrollIntoView({ block: 'center' }); await sleep(60);
+            const nx = pip.nextElementSibling, r = pip.getBoundingClientRect(), q = nx.getBoundingClientRect(), cy = Math.round(r.top + r.height / 2);
+            const at = (x, y) => document.elementFromPoint(Math.round(x), Math.round(y));
+            // the next tracker down (Sneak Attack): a tap nearer this row is never taken by that one's pip, nor the other way
+            const dn = pip.closest('.cs-res').nextElementSibling, sp = dn && dn.querySelector('.cs-pip'), sr = sp && sp.getBoundingClientRect(), cx = r.left + r.width / 2, mid = sr ? (r.bottom + sr.top) / 2 : 0;
+            const hits = [at(r.right + 3, cy) === pip, at(q.left - 3, cy) === nx, at(cx, r.top - 5) === pip, at(cx, r.bottom + 5) === pip, !!sp && at(cx, mid - 1) !== sp, !!sp && at(sr.left + sr.width / 2, mid + 1) !== pip, !!sp && at(sr.left + sr.width / 2, sr.top - 5) === sp];
+            ok('…but a finger still gets a box round each: a tap in the gap goes to the nearer pip, just above or below to the pip, and never to the next tracker’s', hits.every(Boolean), JSON.stringify(hits) + ' gap ' + (sr && Math.round(sr.top - r.bottom)));
+          } }
         const heads = [...document.querySelectorAll('#pa-screen .cs-act-h')].filter(h => h.querySelector('select, button') && h.querySelector('b'));
         const thin = heads.filter(h => h.querySelector('b').getBoundingClientRect().width < 90).map(h => h.querySelector('b').textContent);
         ok('no action’s name is squeezed under 90 px by its controls', !thin.length, JSON.stringify(thin));

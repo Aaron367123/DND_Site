@@ -5670,8 +5670,14 @@ body.player-mode .dm-only{display:none !important}
 .cs-pip { width:16px; height:16px; border-radius:50%; border:1px solid var(--accent); background:transparent; cursor:pointer; padding:0; }
 .cs-pip.on { background:var(--accent); }
 .cs-pip.slot { border-radius:3px; }
-/* A finger: 16px circles four apart, and the third of six was a guess. */
-@media (pointer: coarse){ .cs-pips { gap:8px; } .cs-pip { width:28px; height:28px; } .cs-creature { min-height:32px; } }
+/* A finger: 16px circles four apart, and the third of six was a guess. The
+   pip drawn stays small (28px ones were as big as the buttons and pushed the
+   count to its own line); the finger gets an invisible box round it that
+   meets its neighbour's halfway across the gap, never overlapping it — beside
+   it (8px gaps), and above and below (12px between rows, a wrapped line of
+   pips or the next tracker's). */
+@media (pointer: coarse){ .cs-pips { gap:12px 8px; } .cs-pip { width:18px; height:18px; position:relative; }
+  .cs-pip::after { content:''; position:absolute; inset:-7px -5px; } .cs-res { padding:6px 0; } .cs-creature { min-height:32px; } }
 .cs-std { margin-top:14px; }
 .cs-feat { padding:4px 0; border-bottom:1px solid var(--border); }
 .cs-feat summary { cursor:pointer; }
