@@ -6295,6 +6295,11 @@ registerPanel('battlemap',{
   _applyLiveToken(id, x, y){
     const b = this._body; if (!b || x == null || y == null) return;
     if (this._drag) return;                      // our own drag wins locally
+    // Glided between ticks, not jumped: they come ten times a second, and a
+    // token the DM dragged across the map hopped over the TV a square at a
+    // time. (Only while ticks come: a drag of your own, or a move from a
+    // saved map, goes where it goes at once.)
+    this._glideOn(id);
     const el = b.querySelector('.map-token[data-tid="' + CSS.escape(String(id)) + '"]');
     if (el){ el.style.left = x + 'px'; el.style.top = y + 'px'; }
     const nm = b.querySelector('.map-token-name[data-tid="' + CSS.escape(String(id)) + '"]');
@@ -6313,6 +6318,21 @@ registerPanel('battlemap',{
       if (tok){ const ox = tok.x, oy = tok.y; tok.x = x; tok.y = y;
                 try { T._syncFromMap(); } finally { tok.x = ox; tok.y = oy; } }
     }
+  },
+
+  _GLIDE_SEL: ['.map-token', '.map-token-name', '.map-token-conds', '.map-token-elev'],
+  _glideEls(id){
+    const b = this._body, q = '[data-tid="' + CSS.escape(String(id)) + '"]';
+    return b ? this._GLIDE_SEL.map(s => b.querySelector(s + q)).filter(Boolean) : [];
+  },
+  _glideOn(id){
+    this._glideEls(id).forEach(e => e.classList.add('live-move'));
+    const T = this._glideT = this._glideT || {};
+    clearTimeout(T[id]); T[id] = setTimeout(() => this._glideStop(id), 400);
+  },
+  _glideStop(id){
+    const T = this._glideT || {}; clearTimeout(T[id]); delete T[id];
+    this._glideEls(id).forEach(e => e.classList.remove('live-move'));
   },
 
   // Preview-stroke layer (player view only). Lives on the existing draw-canvas
@@ -9255,6 +9275,7 @@ registerPanel('battlemap',{
         // mousemove. (Local zoom no longer rescales anything — see
         // _applyViewScale — but a saved-map restore mid-drag still can.)
         const drag = this._drag = { moved:false, startPx:t.x, startPy:t.y };
+        this._glideStop(t.id);   // (picked up while someone's ticks still glided it: it follows the hand)
         const _oaFrom = { x:t.x, y:t.y };   // origin for the opportunity-attack check
         // What follows the token — the measuring line and its feet, an
         // emanation, the other screens' ghost — once a frame, not once a
@@ -9388,6 +9409,7 @@ registerPanel('battlemap',{
         // when the user pinch-zooms mid-drag. See mouse handler above for
         // full rationale.
         const drag = this._drag = { moved:false, startPx:t.x, startPy:t.y };
+        this._glideStop(t.id);   // (picked up while someone's ticks still glided it: it follows the hand)
         const _oaFrom = { x:t.x, y:t.y };   // origin for the opportunity-attack check
         // What follows the token — the measuring line and its feet, an
         // emanation, the other screens' ghost — once a frame, not once a

@@ -2883,6 +2883,11 @@ body.player-mode #campaign-btn{display:none !important}
 .map-token-name.tight{visibility:hidden}
 .map-token-name.full{max-width:none !important; z-index:6 !important; visibility:visible}
 .map-token-name.turn-name{visibility:visible;max-width:none !important;z-index:5 !important}
+/* Someone else's drag, ten ticks a second: glided between them, not hopped.
+   (Even with reduced motion: the token moves either way — this is the gentler
+   of the two, a tenth of a second between where it was and where it is.) */
+.map-token.live-move{transition:left .12s linear, top .12s linear, box-shadow .1s}
+.map-token-name.live-move, .map-token-conds.live-move, .map-token-elev.live-move{transition:left .12s linear, top .12s linear}
 #map-stage.hide-tokens .map-token-name{display:none !important}
 #map-stage.hide-names  .map-token-name{display:none !important}
 #map-stage.hide-pcs    .map-token.pc,

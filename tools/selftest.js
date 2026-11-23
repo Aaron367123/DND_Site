@@ -32698,6 +32698,47 @@ for (const cls of Object.keys(rule)) for (let L = 1; L <= 20; L++) for (const sc
         paTab = keepTab; try { paRender(); } catch(e){}
       }
     }
+    // -- Round 550: someone else's drag, ten ticks a second, glides between ticks on this screen (it hopped a square at a time over the TV); it stops gliding when the ticks stop, and a token picked up here follows the hand at once --
+    if (PLAYER){
+      const keepTab = paTab, B = panelDefs.battlemap;
+      let keepT = null, keepF, saved = false;
+      try {
+        if (paMyIdx() < 0) paSetPc('zoey');
+        paTab = 'map'; paRender(); await sleep(900);
+        keepT = B._tokens.slice(); keepF = B._fog; saved = true;
+        const cs = B._csScreen(), me = paPc();
+        B._tokens = [{ id: 't550z', cid: me.id, label: me.name, isPC: true, x: 3.5 * cs, y: 4.5 * cs, size: 1 },
+                     { id: 't550g', label: 'R550 Goblin', x: 5.5 * cs, y: 4.5 * cs, size: 1, color: '#844' }];
+        B._fog = null; B._render(); await sleep(150);
+        const el = () => document.querySelector('#pa-screen .map-token[data-tid="t550g"]');
+        el().scrollIntoView({ block: 'center', inline: 'center' }); await sleep(100);
+        const cx = () => { const r = el().getBoundingClientRect(); return r.left + r.width / 2; };
+        const x0 = cx(), step = 3 * cs * B._screenScale();
+        B._applyLiveToken('t550g', 8.5 * cs, 4.5 * cs);
+        await sleep(45);
+        const mid = cx();
+        ok('a tick from someone’s drag: the goblin glides there, not jumps (part way after 45 ms)', mid > x0 + 2 && mid < x0 + step - 2, JSON.stringify([Math.round(x0), Math.round(mid), Math.round(x0 + step)]));
+        await sleep(200);
+        ok('…and gets there', Math.abs(cx() - (x0 + step)) < 1.5, JSON.stringify([Math.round(cx()), Math.round(x0 + step)]));
+        const nm = document.querySelector('#pa-screen .map-token-name[data-tid="t550g"]');
+        ok('…its name glides with it', !!nm && nm.classList.contains('live-move') && el().classList.contains('live-move'), nm && nm.className);
+        await sleep(400);
+        ok('the ticks stopped: no more gliding (a move that comes whole goes at once)', !el().classList.contains('live-move') && !nm.classList.contains('live-move'), el().className);
+        // a tick, then picked up here at once: it follows the finger, not a glide behind it
+        B._applyLiveToken('t550z', 3.5 * cs, 5.5 * cs); await sleep(20);
+        const z = document.querySelector('#pa-screen .map-token[data-tid="t550z"]'), zr = z.getBoundingClientRect();
+        const T = p => new Touch({ identifier: 7, target: z, clientX: p.x, clientY: p.y }), p0 = { x: Math.round(zr.left + zr.width / 2), y: Math.round(zr.top + zr.height / 2) };
+        z.dispatchEvent(new TouchEvent('touchstart', { bubbles: true, cancelable: true, touches: [T(p0)], changedTouches: [T(p0)] }));
+        ok('…picked up while still gliding: it stops gliding, to follow the finger', !z.classList.contains('live-move'), z.className);
+        document.dispatchEvent(new TouchEvent('touchend', { bubbles: true, cancelable: true, touches: [], changedTouches: [T(p0)] }));
+        await sleep(100);
+      } catch(e){ ok('round 550 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
+      finally {
+        if (saved){ B._tokens = keepT; B._fog = keepF; }
+        try { B._render(); } catch(e){}
+        paTab = keepTab; try { paRender(); } catch(e){}
+      }
+    }
   }
 
   // ══════════════════════════════════════════════════════════ mobile / phone
