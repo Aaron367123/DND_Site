@@ -2242,7 +2242,7 @@ CB_RENDER.equipment = () => {
   let html = '<h3>Equipment</h3>';
   if ((b.equipment || {}).materialized){
     html += '<div class="cb-note">This character’s inventory is kept on their sheet now — what they carry, equipped and attuned. The starting kit no longer applies.</div>'
-      + '<div class="cb-dim">Carrying: ' + cbEsc((b.items || []).map(m => m.name + ((m.qty || 1) > 1 ? ' ×' + m.qty : '')).join(', ') || 'nothing') + '</div>';
+      + '<div class="cb-dim">Carrying: ' + cbEsc((b.items || []).map(m => m.name + ((m.qty || 1) > 1 ? ' ×' + m.qty : '')).join(' · ') || 'nothing') + '</div>';   // (· not a comma: "Instrument of the Bards, Cli Lyre" is one thing)
     const rec = CB.rec;
     return html + '<h4>Result</h4><div class="cb-note">AC ' + rec.ac + (rec.sheet.acSource ? ' (' + cbEsc(rec.sheet.acSource) + ')' : '') + '</div>';
   }

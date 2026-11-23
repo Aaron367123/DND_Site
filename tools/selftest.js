@@ -33055,6 +33055,21 @@ for (const cls of Object.keys(rule)) for (let L = 1; L <= 20; L++) for (const sc
         paTab = keepTab; try { paRender(); } catch(e){}
       }
     }
+    // -- Round 561: the builder's Equipment step lists what's carried with dots between — with commas, "Instrument of the Bards, Cli Lyre" read as two things --
+    if (PLAYER){
+      try {
+        {
+          // (a new build, its kit already on the sheet)
+          await openCharBuilder({ edition: '2024' }); for (let k = 0; k < 50 && CB && CB.loading; k++) await sleep(100);
+          CB.build.cls = 'Bard'; CB.build.equipment = Object.assign({}, CB.build.equipment, { materialized: true });
+          CB.build.items = [{ name: 'Instrument of the Bards, Cli Lyre' }, { name: 'Dagger', qty: 2 }];
+          CB.step = 'equipment'; cbRender(); await sleep(60);
+          const line = [...document.querySelectorAll('.cb .cb-dim')].map(e => e.textContent).find(t => /^Carrying:/.test(t)) || '';
+          ok('Equipment: “Carrying: Instrument of the Bards, Cli Lyre · Dagger ×2”', line === 'Carrying: Instrument of the Bards, Cli Lyre · Dagger ×2', line);
+          cbClose();
+        }
+      } catch(e){ ok('round 561 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); try { cbClose(); } catch(_){} }
+    }
   }
 
   // ══════════════════════════════════════════════════════════ mobile / phone
