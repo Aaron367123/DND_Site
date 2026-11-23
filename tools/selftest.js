@@ -28185,6 +28185,20 @@ for (const cls of Object.keys(rule)) for (let L = 1; L <= 20; L++) for (const sc
         ok('…and Cover’s card is the rule', /^Cover/.test(c) && /degree of protection/i.test(c), c.slice(0, 100));
       } catch(e){ ok('round 558 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
     }
+    // -- Round 559: a heading's name inside a description carries no raw tags — the figurine of wondrous power showed "{@creature griffon||Bronze Griffon}" as its heading, in its card and in the DMG's Treasure chapter --
+    if (!PLAYER){
+      try {
+        for (let i = 0; i < 300 && !(typeof _5eLoaded !== 'undefined' && _5eLoaded); i++) await sleep(100);
+        const fig = _5eData.find(r => r.cat === 'item' && /^Figurine of Wondrous Power/.test(r.name) && r._source === 'DMG');
+        const html = fig && typeof renderItemFull === 'function' ? renderItemFull(fig) : '';
+        const w = document.createElement('div'); w.innerHTML = html;
+        const heads = [...w.querySelectorAll('h3, h4, strong, b')].map(h => h.textContent.trim());
+        ok('the figurine’s card: no raw tags, and “Bronze Griffon” as a heading', !!fig && !/\{@/.test(w.textContent) && heads.includes('Bronze Griffon'), JSON.stringify([fig && fig.name, (w.textContent.match(/\{@[^}]*\}/) || [''])[0], heads.slice(0, 6)]));
+        // across every item's description
+        const leaks = _5eData.filter(r => r.cat === 'item' && /\{@/.test(r.desc || (r._raw && r._raw.desc) || '')).map(r => r.name);
+        ok('…nor any item’s description', !leaks.length, leaks.slice(0, 5).join(', '));
+      } catch(e){ ok('round 559 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
+    }
     // -- Class features: represented, not just text ------------------------
     {
       try {

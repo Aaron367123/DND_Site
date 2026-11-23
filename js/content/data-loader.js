@@ -128,7 +128,9 @@ function _parseEntries(entries, sep) {
     switch (e.type) {
       case 'entries':
       case 'section':
-        return (e.name ? '\x01' + e.name + '\n\n' : '') + _parseEntries(e.entries);
+        // (a heading's name can carry tags too: the figurine of wondrous
+        // power's "{@creature griffon||Bronze Griffon}" showed as that)
+        return (e.name ? '\x01' + _stripTags(e.name) + '\n\n' : '') + _parseEntries(e.entries);
       case 'list':
         return (e.items||[])
           .map(i => (typeof i==='string' ? _stripTags(i) : _parseEntries([i], '\n')))
@@ -167,12 +169,12 @@ function _parseEntries(entries, sep) {
       // `entry` singular as often as in `entries`.
       case 'itemSub':
       case 'itemSpell':
-        return '\x04' + (e.name||'') + '\x04 ' + _parseEntries(e.entries || (e.entry ? [e.entry] : []), '\n');
+        return '\x04' + _stripTags(e.name||'') + '\x04 ' + _parseEntries(e.entries || (e.entry ? [e.entry] : []), '\n');
       case 'spellcasting':
-        return (e.name ? '\x04' + e.name + '\x04 ' : '') + _spellcastingText(e);
+        return (e.name ? '\x04' + _stripTags(e.name) + '\x04 ' : '') + _spellcastingText(e);
       case 'inset':
       case 'insetReadaloud':
-        return '\x02' + (e.name ? '\x06' + e.name + '\x06\n' : '') + _parseEntries(e.entries || [], '\n') + '\x02';
+        return '\x02' + (e.name ? '\x06' + _stripTags(e.name) + '\x06\n' : '') + _parseEntries(e.entries || [], '\n') + '\x02';
       case 'quote':
         return '\x03' + _parseEntries(e.entries || [], '\n') + '\x03';
       case 'abilityDc':
@@ -188,7 +190,7 @@ function _parseEntries(entries, sep) {
                    : (typeof e.entry === 'string' ? _stripTags(e.entry)
                    : (typeof e.text  === 'string' ? _stripTags(e.text) : ''));
         if (!body) return '';
-        return e.name ? '\x04' + e.name + '\x04 ' + body : body;
+        return e.name ? '\x04' + _stripTags(e.name) + '\x04 ' + body : body;
       }
     }
   }).filter(Boolean).join(sep);
@@ -842,7 +844,9 @@ function _normSearchIdx(s) {
 // "Attack:" that left every 2024 monster attack at +0 to hit.
 // 20261123a — variant prices: a silvered/adamantine weapon's and barding's
 // from the data's sum on the base item, silvered ammunition's from the PHB.
-const DATA_STAMP   = '20261123a';
+// 20261123b: a heading's, item's or inset's name inside an entry is
+// tag-stripped ("{@creature griffon||Bronze Griffon}" showed raw).
+const DATA_STAMP   = '20261123b';
 // A hash of data/'s contents, stamped by tools/stamp-build.js — so a data
 // refresh renews every device's cache (here and in sw.js) without anyone
 // remembering to bump DATA_STAMP. DATA_STAMP stays for converter changes.
