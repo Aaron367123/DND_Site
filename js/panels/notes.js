@@ -89,13 +89,17 @@ function _notesUpdateLineAuthors(oldContent, oldAuthors, newContent, myId){
   });
 }
 
-function _notesMdLine(line){
+// `num`: the number this line's list item shows, when the render counts a
+// run of them ("1. " on every line, as the toolbar types it, reads 1, 2, 3).
+function _notesMdLine(line, num){
   let h = line.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
   let block=null;
   if(/^### (.+)$/.test(h))      { block='h3'; h=h.replace(/^### /,''); }
   else if(/^## (.+)$/.test(h))  { block='h2'; h=h.replace(/^## /,''); }
   else if(/^# (.+)$/.test(h))   { block='h1'; h=h.replace(/^# /,''); }
-  else if(/^> (.+)$/.test(h))   { block='blockquote'; h=h.replace(/^> /,''); }
+  // (escaped above, so its ">" reads "&gt;" here: the toolbar's Quote
+  // button typed "> " and the line showed just that, never a quote)
+  else if(/^&gt; (.+)$/.test(h)) { block='blockquote'; h=h.replace(/^&gt; /,''); }
   else if(/^---+$/.test(h))     return '<hr>';
   else if(/^[-*] (.+)$/.test(h))     { block='li';  h=h.replace(/^[-*] /,''); }
   else if(/^\d+\.\s(.+)$/.test(h))   { block='oli'; h=h.replace(/^\d+\.\s/,''); }
@@ -104,23 +108,32 @@ function _notesMdLine(line){
     const depth = Math.min(4, Math.floor(m[1].length/2));
     block = 'li-indent-'+depth; h = m[2];
   }
+  // Code and [[links]] first, set aside: what's inside them is not
+  // formatting ("`code_x_y`", "[[Ice_Spire_Hold]]" lost their underscores to
+  // italics, and the link its target).
+  const held = [], hold = s => '\x00' + (held.push(s) - 1) + '\x00';
+  h = h.replace(/`(.+?)`/g, (_m, c) => hold('<code>' + c + '</code>'));
+  h = h.replace(/\[\[([^\]\n]+?)\]\]/g, (_m, target) => {
+    const safe = target.replace(/"/g, '&quot;');
+    return hold('<a class="note-wiki-link" data-wiki-target="'+safe+'" href="#" title="Jump to note &quot;'+safe+'&quot;">'+target+'</a>');
+  });
   h = h.replace(/\*\*(.+?)\*\*/g,'<strong>$1</strong>');
   h = h.replace(/~~(.+?)~~/g,'<del>$1</del>');
   h = h.replace(/\*(.+?)\*/g,'<em>$1</em>');
-  h = h.replace(/_(.+?)_/g,'<em>$1</em>');
-  h = h.replace(/`(.+?)`/g,'<code>$1</code>');
+  // An underscore inside a word is just an underscore, as in Markdown: a
+  // link's "some_path_here" or "frost_giant_jarl" went half italic.
+  h = h.replace(/(^|[^A-Za-z0-9_])_(?=\S)(.+?)_(?![A-Za-z0-9_])/g,'$1<em>$2</em>');
   // Wiki-style backlinks — `[[Note Name]]` becomes a clickable chip that
   // jumps to the matching note. Resolution happens at click time so the
   // link survives note renames (matched by name, case-insensitive). The
   // `[[` text was already entity-escaped above so we match `&#91;&#91;` —
   // but the input is already-escaped, so `[[` is literal. The data-attr
   // carries the raw target name; click handler in _wire dispatches.
-  h = h.replace(/\[\[([^\]\n]+?)\]\]/g, (_m, target) => {
-    const safe = target.replace(/"/g, '&quot;');
-    return '<a class="note-wiki-link" data-wiki-target="'+safe+'" href="#" title="Jump to note &quot;'+safe+'&quot;">'+target+'</a>';
-  });
+  h = h.replace(/\x00(\d+)\x00/g, (_m, k) => held[+k]);
   if (block === 'li')  return '<ul><li>'+h+'</li></ul>';
-  if (block === 'oli') return '<ol><li>'+h+'</li></ol>';
+  // Each line is its own list, so each restarted at 1: "1. 2. 3." showed
+  // 1, 1, 1. It starts at the number it should show.
+  if (block === 'oli'){ const n = num || parseInt(line, 10) || 1; return '<ol' + (n !== 1 ? ' start="' + n + '"' : '') + '><li>'+h+'</li></ol>'; }
   if (block && block.indexOf('li-indent-') === 0){
     const d = +block.slice('li-indent-'.length);
     return '<ul class="md-li-indent-'+d+'"><li>'+h+'</li></ul>';
@@ -1106,7 +1119,12 @@ registerPanel('notes', {
     const renderTableCell = c => '<td>'+_notesMdLine(c.trim())+'</td>';
     const renderTableHead = c => '<th>'+_notesMdLine(c.trim())+'</th>';
     const splitCells = ln => ln.replace(/^\s*\|/,'').replace(/\|\s*$/,'').split('|');
+    // A run of numbered lines counts on from its first: "1. " typed on each
+    // (the toolbar's numbered list) reads 1, 2, 3, as in Markdown.
+    let olN = 0;
     return lines.map((line, i) => {
+      const isOl = !flags[i] && /^\d+\.\s(.+)$/.test(line);
+      olN = isOl ? (olN ? olN + 1 : (parseInt(line, 10) || 1)) : 0;
       const aId = file.lineAuthors && file.lineAuthors[i];
       const author = aId ? (authorsMap[aId] || this._pcAuthor(aId)) : ownerAuthor;
       const color = author && author.color ? author.color : '';
@@ -1128,7 +1146,7 @@ registerPanel('notes', {
           html = '<table class="md-table"><tbody><tr>'+splitCells(line).map(renderTableCell).join('')+'</tr></tbody></table>';
         }
       } else {
-        html = _notesMdLine(line) || '&nbsp;';
+        html = _notesMdLine(line, olN) || '&nbsp;';
       }
       return '<div class="nl" data-line="'+i+'"'+styleAttr+tip+'>'+html+'</div>';
     }).join('');

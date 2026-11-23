@@ -34,7 +34,7 @@
  */
 'use strict';
 
-const BUILD = '3193fbd79a';
+const BUILD = '21a93f329e';
 const PRECACHE = [
   'skt-workspace.html',
   'styles/main.css?v=9da031fdee',
@@ -63,7 +63,7 @@ const PRECACHE = [
   'js/sync/notes-sync.js?v=7ee89969f6',
   'js/sync/dropbox-config.js?v=ccf8533d50',
   'js/sync/dropbox-sync.js?v=c4897e8ffa',
-  'js/panels/notes.js?v=4a893b92a5',
+  'js/panels/notes.js?v=0527f812eb',
   'js/panels/handouts.js?v=92072fbc59',
   'js/panels/game-log.js?v=26b8913f8d',
   'js/panels/messages.js?v=a89b3f4ef9',

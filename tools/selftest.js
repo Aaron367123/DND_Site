@@ -28229,6 +28229,36 @@ for (const cls of Object.keys(rule)) for (let L = 1; L <= 20; L++) for (const sc
       } catch(e){ ok('round 560 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
       finally { try { state.searchState = JSON.parse(S0); } catch(e){} }
     }
+    // -- Round 563: Session Notes — the Quote button's "> " shows a quote, a numbered list counts 1, 2, 3, and an underscore inside a word, a link or `code` stays an underscore --
+    {
+      const N = panelDefs.notes, host = document.createElement('div');
+      try {
+        if (!N._data) N._data = _notesHydrate();
+        host.className = 'notes-edit-area'; host.style.cssText = 'position:fixed;left:0;top:0;width:500px;opacity:0;pointer-events:none';
+        document.body.appendChild(host);
+        host.innerHTML = N._renderColored({ content: [
+          '> Harshnag said the ring is in Ironmaster',
+          '1. Bryn Shander', '1. Goldenfields', '1. Triboar',
+          '',
+          '4. Waterdeep', '5. Neverwinter',
+          'Map at http://x.example/some_path_here and `giant_bag_count` and `2d6*2*`',
+          'Go to [[Ice_Spire_Hold]] then _hurry_ to [[*Draft* notes]]',
+        ].join('\n'), lineAuthors: [] });
+        const L = [...host.querySelectorAll('.nl')];
+        const q = L[0].querySelector('blockquote');
+        ok('the toolbar’s Quote ("> ") shows a quote, not the ">"', !!q && q.textContent === 'Harshnag said the ring is in Ironmaster', L[0].innerHTML);
+        const starts = [1, 2, 3, 5, 6].map(i => { const o = L[i].querySelector('ol'); return o ? o.start : null; });
+        ok('a numbered list typed "1." on each line counts 1, 2, 3 (each line showed 1)', starts.slice(0, 3).join() === '1,2,3', JSON.stringify(starts));
+        ok('…and one that starts at 4 after a gap counts 4, 5', starts.slice(3).join() === '4,5', JSON.stringify(starts));
+        ok('an underscore inside a web link, or * or _ in `code`, stays itself, not italics', !L[7].querySelector('em') && /some_path_here/.test(L[7].textContent) && [...L[7].querySelectorAll('code')].map(c => c.textContent).join('|') === 'giant_bag_count|2d6*2*', L[7].innerHTML);
+        const a = L[8].querySelector('a.note-wiki-link');
+        ok('a [[link]] to a note named with underscores keeps its target whole', !!a && a.dataset.wikiTarget === 'Ice_Spire_Hold' && a.textContent === 'Ice_Spire_Hold', L[8].innerHTML);
+        const a2 = L[8].querySelectorAll('a.note-wiki-link')[1];
+        ok('…and one with asterisks in its name', !!a2 && a2.dataset.wikiTarget === '*Draft* notes', L[8].innerHTML);
+        ok('…and _word_ is still italics', [...L[8].querySelectorAll('em')].map(e => e.textContent).join() === 'hurry', L[8].innerHTML);
+      } catch(e){ ok('round 563 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
+      finally { host.remove(); }
+    }
     // -- Class features: represented, not just text ------------------------
     {
       try {
