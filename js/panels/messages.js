@@ -90,7 +90,12 @@ function sktMsgComposeHtml(ph){
 // Wire a compose box: Enter sends (Shift+Enter for a new line).
 function sktMsgWire(root, to, after){
   const f = root.querySelector('[data-msg-form]'), i = root.querySelector('[data-msg-input]'); if (!f || !i) return;
-  const send = () => { const v = i.value.trim(); if (!v) return; if (sktMsgSend(typeof to === 'function' ? to() : to, v)){ i.value = ''; if (after) after(); } };
+  // The box is emptied BEFORE the send: sending redraws the conversation,
+  // and the redraw keeps what's typed in the box (a half-written reply) — so
+  // the message just sent was put back in it, on the DM's window and the
+  // phone alike, and a second Enter sent it twice.
+  const send = () => { const v = i.value.trim(); if (!v) return; i.value = '';
+    if (sktMsgSend(typeof to === 'function' ? to() : to, v)){ if (after) after(); } else i.value = v; };
   f.addEventListener('submit', e => { e.preventDefault(); send(); });
   i.addEventListener('keydown', e => { if (e.key === 'Enter' && !e.shiftKey){ e.preventDefault(); send(); } });
 }

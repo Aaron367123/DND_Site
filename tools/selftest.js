@@ -28259,6 +28259,70 @@ for (const cls of Object.keys(rule)) for (let L = 1; L <= 20; L++) for (const sc
       } catch(e){ ok('round 563 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
       finally { host.remove(); }
     }
+    // -- Round 564: Messages — the DM's reply leaves the box once sent (the redraw put it back, and a second Enter sent it twice); a half-written reply still stays with its conversation --
+    {
+      const keepM = localStorage.getItem(SKT_MSG_KEY), P = panelDefs.messages;
+      try {
+        openPanel('messages'); await sleep(500);
+        const b = P._body, people = P._people();
+        const enter = el => el.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true }));
+        P._thread = people[0].id; P._render();
+        let i = b.querySelector('[data-msg-input]'); i.focus(); i.value = 'R564 the door is trapped';
+        enter(i); await sleep(150);
+        i = b.querySelector('[data-msg-input]');
+        const sent = () => sktMsgThread(people[0].id).filter(m => m.text === 'R564 the door is trapped').length;
+        ok('the DM’s reply is sent once and the box is empty after', sent() === 1 && i.value === '', JSON.stringify([sent(), i.value]));
+        enter(i); await sleep(150);
+        ok('…so Enter again sends nothing more', sent() === 1, sent());
+        // a draft for one character, then another's conversation and back: still there
+        if (people[1]){
+          i.value = 'R564 half a thought';
+          b.querySelector('[data-msg-who="' + people[1].id + '"]').click(); await sleep(100);
+          ok('…a half-written reply doesn’t follow the DM to the next conversation', b.querySelector('[data-msg-input]').value === '', b.querySelector('[data-msg-input]').value);
+          b.querySelector('[data-msg-who="' + people[0].id + '"]').click(); await sleep(100);
+          ok('…and is still there on coming back', b.querySelector('[data-msg-input]').value === 'R564 half a thought', b.querySelector('[data-msg-input]').value);
+          b.querySelector('[data-msg-input]').value = '';
+        }
+      } catch(e){ ok('round 564 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
+      finally {
+        try { if (keepM == null) localStorage.removeItem(SKT_MSG_KEY); else localStorage.setItem(SKT_MSG_KEY, keepM); } catch(e){}
+        try { if (P._drafts) P._drafts = {}; closePanel('messages'); } catch(e){}
+      }
+    }
+    // -- Round 566: the NPC generator names a man with a man's name and a woman with a woman's (a "Male" dwarf came out Brunhilda), every people has names of its own, and an elf is of an elf's age --
+    {
+      const G = panelDefs.npcgen, keepN = G._npc, keepL = G._locks, keepF = G._filters;
+      try {
+        const D = NPC_GEN_DATA, bare = n => { const e = D.epithets.find(x => n.endsWith(' ' + x)); return e ? n.slice(0, -e.length - 1) : n; };
+        const wrong = [], generic = [], ages = [];
+        D.races.forEach(race => ['Male', 'Female'].forEach(gender => {
+          const other = _npcNamePool(race, gender === 'Male' ? 'Female' : 'Male'), mine = _npcNamePool(race, gender);
+          for (let k = 0; k < 25; k++){
+            const n = genNPC({ race, gender }), nm = bare(n.name);
+            if (!mine.includes(nm) || (other.includes(nm) && !(((D.names[race] || {}).n) || []).includes(nm))) wrong.push(gender + ' ' + race + ' ' + n.name);
+            const [lo, hi] = D.ages[race]; if (!(n.age >= lo && n.age <= hi) && n.role !== 'Street Urchin') ages.push(race + ' ' + n.age);
+          }
+        }));
+        ok('a man is given a man’s name and a woman a woman’s, for every people', !wrong.length, wrong.slice(0, 4).join('; '));
+        const dwarfM = _npcNamePool('Dwarf', 'Male');
+        ok('…a male dwarf is never Brunhilda', !dwarfM.includes('Brunhilda') && dwarfM.includes('Brokk'), dwarfM.join());
+        ['Dragonborn', 'Tiefling', 'Half-Orc', 'Goliath', 'Gnome', 'Tabaxi'].forEach(r => { if (!D.names[r]) generic.push(r); });
+        ok('…and dragonborn, tieflings, half-orcs, goliaths, gnomes and tabaxi have names of their own', !generic.length, generic.join());
+        const nb = _npcNamePool('Dwarf', 'Non-binary');
+        ok('…a non-binary NPC may have any of them', nb.includes('Brokk') && nb.includes('Brunhilda'), nb.length);
+        ok('…an aasimar borrows the human names, a half-elf the human and elven', _npcNamePool('Aasimar', 'Male').includes('Aldric') && _npcNamePool('Half-Elf', 'Female').includes('Mira') && _npcNamePool('Half-Elf', 'Female').includes('Aelindra'), '');
+        ok('each NPC is of an age for its people (an elf not 20, a half-orc not 79)', !ages.length, ages.slice(0, 5).join('; '));
+        const urchins = Array.from({ length: 30 }, () => genNPC({ race: 'Human', role: 'Street Urchin' }).age);
+        ok('…and a street urchin is a child', urchins.every(a => a >= 6 && a < 18), urchins.join());
+        // a kept gender: the new name is for it
+        G._npc = genNPC({ race: 'Dwarf', gender: 'Female' }); G._locks = { gender: true, race: true }; G._filters = { race: '', gender: '', role: '', attitude: '' };
+        const kept = Array.from({ length: 30 }, () => G._rollRespectingLocks());
+        const bad = kept.filter(n => n.gender !== 'Female' || n.race !== 'Dwarf' || !_npcNamePool('Dwarf', 'Female').includes(bare(n.name)));
+        ok('a kept “Female” and “Dwarf”: the new name is a dwarf woman’s', !bad.length, bad.slice(0, 3).map(n => n.gender + ' ' + n.race + ' ' + n.name).join('; '));
+        ok('a secret reads “shouldn’t”, with its apostrophe', D.secrets.some(s => /shouldn’t have/.test(s)) && !D.secrets.some(s => /shouldnt/.test(s)), '');
+      } catch(e){ ok('round 566 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
+      finally { G._npc = keepN; G._locks = keepL; G._filters = keepF; }
+    }
     // -- Class features: represented, not just text ------------------------
     {
       try {
@@ -33120,6 +33184,28 @@ for (const cls of Object.keys(rule)) for (let L = 1; L <= 20; L++) for (const sc
         }
       } catch(e){ ok('round 562 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
       finally { state.party = JSON.parse(P0); paTab = keepTab; try { paRender(); } catch(e){} }
+    }
+    // -- Round 565: a player's message to the DM leaves the box once sent (it came back, and a second tap of Enter sent it twice) --
+    if (PLAYER){
+      const keepM = localStorage.getItem(SKT_MSG_KEY), keepTab = paTab, keepSub = paMoreSub;
+      try {
+        if (paMyIdx() < 0) paSetPc('zoey');
+        paTab = 'more'; paMoreSub = 'msg'; paRender(); await sleep(300);
+        const el = document.getElementById('pa-screen');
+        let i = el.querySelector('[data-msg-input]');
+        i.focus(); i.value = 'R565 I pocket the gem';
+        const enter = x => x.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true }));
+        enter(i); await sleep(150);
+        const sent = () => sktMsgThread(paPc().id).filter(m => m.text === 'R565 I pocket the gem').length;
+        i = el.querySelector('[data-msg-input]');
+        ok('a player’s message to the DM is sent once and the box is empty after', sent() === 1 && !!i && i.value === '', JSON.stringify([sent(), i && i.value]));
+        enter(i); await sleep(150);
+        ok('…so Enter again sends nothing more', sent() === 1, sent());
+      } catch(e){ ok('round 565 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
+      finally {
+        try { if (keepM == null) localStorage.removeItem(SKT_MSG_KEY); else localStorage.setItem(SKT_MSG_KEY, keepM); } catch(e){}
+        paTab = keepTab; paMoreSub = keepSub; try { paRender(); } catch(e){}
+      }
     }
   }
 

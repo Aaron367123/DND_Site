@@ -17,28 +17,67 @@ const NPC_GEN_DATA = {
   ],
   motivations:['Greed','Love','Revenge','Survival','Duty','Curiosity','Fear','Ambition','Loyalty','Redemption','Power','Freedom','Family','Faith','Honor'],
   secrets:[
-    'Owes a debt to a dangerous faction','Is not who they claim to be','Witnessed something they shouldnt have',
+    'Owes a debt to a dangerous faction','Is not who they claim to be','Witnessed something they shouldn’t have',
     'Has a family member in trouble','Was once involved in a crime','Is being blackmailed','Knows the location of something valuable',
     'Secretly sympathizes with the enemy','Has a hidden illness','Is working as an informant',
   ],
+  // Names by people and by gender: one list per people made a "Male" dwarf
+  // Brunhilda as often as Brokk, and a dragonborn or a goliath was named
+  // from a list of ten generic ones. m / f, and n for names that are neither
+  // (a tabaxi's). A non-binary NPC draws from all of them; a people without
+  // its own list borrows one (an aasimar's are human, a firbolg's elven).
   names:{
-    Human:['Aldric','Mira','Gareth','Seraphine','Tobias','Elara','Dorian','Vesna','Caspian','Lyra'],
-    Elf:['Aelindra','Faelwen','Caladrel','Miriel','Thalindor','Sylvara','Elarion','Nimue','Daeron','Ithilwen'],
-    Dwarf:['Throdin','Brunhilda','Kazrak','Helga','Dolgrin','Marta','Brokk','Sigrun','Rangrim','Vera'],
-    Halfling:['Pip','Rosie','Merric','Calla','Tobold','Bree','Hob','Daisy','Willo','Peony'],
-    default:['Zara','Krix','Veln','Sora','Dax','Mira','Odo','Lyss','Finn','Cael'],
+    Human:{ m:['Aldric','Gareth','Tobias','Dorian','Caspian','Bram','Edric','Hollis','Marten','Roderick'],
+            f:['Mira','Seraphine','Elara','Vesna','Lyra','Annika','Brienne','Celia','Imogen','Rowena'] },
+    Elf:{ m:['Caladrel','Thalindor','Elarion','Daeron','Aerendyl','Faelmir','Ilvanor','Lorethan','Saelorn','Vaeril'],
+          f:['Aelindra','Faelwen','Miriel','Sylvara','Nimue','Ithilwen','Elanessa','Liraen','Shaelia','Ysolde'] },
+    Dwarf:{ m:['Throdin','Kazrak','Dolgrin','Brokk','Rangrim','Bardrun','Durgan','Harnok','Torgar','Ulfgrim'],
+            f:['Brunhilda','Helga','Marta','Sigrun','Vera','Agna','Dagny','Hildra','Ingrid','Tova'] },
+    Halfling:{ m:['Pip','Merric','Tobold','Hob','Willo','Bramble','Fennick','Jory','Milo','Tad'],
+               f:['Rosie','Calla','Bree','Daisy','Peony','Clover','Hazel','Lavinia','Marigold','Tansy'] },
+    Gnome:{ m:['Bimble','Fizzwick','Nackle','Orryn','Quillon','Tibbit','Wrenfold','Zook','Dabbin','Gimble'],
+            f:['Bella','Carlin','Fizzy','Lorilla','Nissa','Pippa','Quenna','Tilly','Wynnie','Zanna'] },
+    Dragonborn:{ m:['Draxis','Kethrax','Morvoth','Tazhan','Vorrak','Szurath','Ghesh','Nadrith','Pyrrax','Uthrak'],
+                 f:['Sorasha','Kava','Thessa','Vyrel','Zhenna','Irrith','Myrrhae','Naalia','Raxa','Ulvessa'] },
+    Tiefling:{ m:['Malachar','Kalleth','Mordai','Zarek','Belvane','Orrin','Sarkis','Thamuz','Azrem','Valko'],
+               f:['Lilit','Nemeia','Orianna','Rieta','Sabine','Vashti','Zaira','Akta','Kallista','Morwen'],
+               n:['Hope','Sorrow','Ash','Ember','Torment','Reverie','Solace','Vigil'] },
+    'Half-Orc':{ m:['Grukk','Durza','Krog','Mardok','Ruhn','Shagrol','Thokar','Urzog','Varg','Zorbash'],
+                 f:['Arza','Ghorza','Kansha','Murka','Oretta','Sharga','Tuva','Urzha','Vola','Yevra'] },
+    Goliath:{ m:['Kavrok','Lothar','Orrik','Thalgar','Vaunak','Gorran','Kelvak','Pethor','Ranak','Uthal'],
+              f:['Aukala','Ilikai','Kethra','Naloa','Orvala','Paavi','Thenna','Vaema','Keoni','Mavra'] },
+    Tabaxi:{ n:['Seven Lanterns','Dust on the Road','Quiet Feather','Copper Bell','River Song','Two Moons Rising','Hollow Reed','Bright Pebble','Morning Ash','Still Water'] },
   },
+  nameFrom:{ Aasimar:'Human', Firbolg:'Elf', 'Half-Elf':['Human', 'Elf'] },
+  // Ages a grown NPC of each people might be [youngest, oldest]: a 25-year-old
+  // elf merchant is a child by elven reckoning, a 70-year-old half-orc ancient.
+  ages:{ Human:[18, 75], Elf:[110, 600], 'Half-Elf':[20, 160], Dwarf:[50, 300], Halfling:[20, 130], Gnome:[40, 350],
+         Tiefling:[18, 85], Dragonborn:[15, 70], 'Half-Orc':[14, 60], Goliath:[18, 80], Tabaxi:[18, 70], Firbolg:[30, 400], Aasimar:[18, 140] },
   epithets:['the Bold','the Silent','One-Eye','the Quick','the Elder','the Gray','the Red','the Tall','Ironhands','Goldtongue','the Pious','the Drunk'],
 };
 
 function rnd(arr){return arr[Math.floor(Math.random()*arr.length)];}
+// The names an NPC of this people and gender could have.
+function _npcNamePool(race, gender){
+  const D = NPC_GEN_DATA;
+  let src = D.names[race] ? [race] : [].concat(D.nameFrom[race] || 'Human');
+  const g = gender === 'Male' ? 'm' : gender === 'Female' ? 'f' : null;
+  const pool = [];
+  src.forEach(r => { const p = D.names[r] || {}; (g ? (p[g] || []).concat(p.n || []) : [].concat(p.m || [], p.f || [], p.n || [])).forEach(x => pool.push(x)); });
+  return pool.length ? pool : [].concat(D.names.Human.m, D.names.Human.f);
+}
+function _npcAge(race, role){
+  const [lo, hi] = NPC_GEN_DATA.ages[race] || [18, 75];
+  // A street urchin is a child, of whatever people.
+  if (role === 'Street Urchin') return Math.max(6, Math.round(lo * (0.45 + Math.random() * 0.4)));
+  return lo + Math.floor(Math.random() * (hi - lo + 1));
+}
 function genNPC(overrides){
   const race=overrides.race||rnd(NPC_GEN_DATA.races);
   const gender=overrides.gender||rnd(NPC_GEN_DATA.genders);
   const role=overrides.role||rnd(NPC_GEN_DATA.roles);
-  const namePool=NPC_GEN_DATA.names[race]||NPC_GEN_DATA.names.default;
-  const name=rnd(namePool)+(Math.random()<0.25?' '+rnd(NPC_GEN_DATA.epithets):'');
-  const age=20+Math.floor(Math.random()*60);
+  const name=rnd(_npcNamePool(race, gender))+(Math.random()<0.25?' '+rnd(NPC_GEN_DATA.epithets):'');
+  const age=_npcAge(race, role);
   // Roll quirks first so we can dedupe — picking quirk2 != quirk avoids
   // "Hums under their breath. Hums under their breath." in the saved
   // NPC's description.
@@ -72,7 +111,10 @@ registerPanel('npcgen',{
   // Roll a fresh NPC, then merge locked fields back from the current one so
   // they survive. Shared by single + bulk generate paths.
   _rollRespectingLocks(){
-    const fresh = genNPC(this._filters);
+    // A kept people, gender or role rolls the rest for it: the name for a
+    // kept "Female", the age for a kept dwarf.
+    const keep = {}; ['race', 'gender', 'role'].forEach(k => { if (this._locks[k] && this._npc && this._npc[k]) keep[k] = this._npc[k]; });
+    const fresh = genNPC(Object.assign({}, this._filters, keep));
     if (!this._npc) return fresh;
     const merged = {...fresh};
     Object.keys(this._locks).forEach(k => {
