@@ -46,8 +46,8 @@ const CONTENT_PANEL_SHARED = {
 
   _render(){
     const b = this._body; if (!b) return;
-    if (this._currentAdvId) this._renderAdv();
-    else this._renderList();
+    if (this._currentAdvId) return this._renderAdv();
+    this._renderList();
   },
 
   // Inline string → HTML. The default pipeline strips 5etools tags to plain
@@ -113,11 +113,15 @@ const CONTENT_PANEL_SHARED = {
         + esc(chapter) + '">' + esc(display) + '</a>';
     }
     if (tag === 'adventure' || tag === 'book'){
-      // Meta refs to source books/adventures — no popover. Show as a subtle
-      // styled span so the user can tell it's a reference, not body text.
-      const display = parts[2] || parts[0] || '';
-      const titleAttr = parts[0] ? ' title="' + esc(parts[0]) + '"' : '';
-      return '<span class="adv-link-source"' + titleAttr + '>' + esc(display) + '</span>';
+      // {@book shown text|SOURCE|chapter|section}: a link to that book (or
+      // adventure) at that chapter and heading. The third part is the
+      // chapter's NUMBER, and it was shown as the text: Storm King's Thunder
+      // read 'see "1" sidebar in chapter 1 of the Dungeon Master's Guide'.
+      const display = parts[0] || '';
+      const src = parts[1] || '';
+      if (!src) return '<span class="adv-link-source">' + esc(display) + '</span>';
+      return '<a class="adv-link adv-xref" href="javascript:void(0)" data-kind="' + tag + '" data-src="' + esc(src)
+        + '" data-ch="' + esc(parts[2] || '') + '" data-sec="' + esc(parts[3] || '') + '">' + esc(display) + '</a>';
     }
     const name    = parts[0] || '';
     const source  = parts[1] || '';
@@ -429,6 +433,51 @@ const CONTENT_PANEL_SHARED = {
     }
   },
 
+  // Open a book or adventure from a reference in another: the Library at
+  // that one, its chapter, scrolled to the heading named.
+  async _openXref(kind, src, ch, sec){
+    const pid = kind === 'adventure' ? 'adventures' : 'books';
+    try { openPanel(pid); } catch(e){ return; }
+    const P = panelDefs[pid]; if (!P) return;
+    if (typeof P._loadIndex === 'function') await P._loadIndex();
+    const s = String(src || '').toLowerCase();
+    const it = (P._adventures || []).find(a => String(a.id || '').toLowerCase() === s);
+    if (!it){ if (typeof showToast === 'function') showToast('That ' + (kind === 'adventure' ? 'adventure' : 'book') + ' (' + src + ') isn’t in the library'); return; }
+    P._currentAdvId = it.id;
+    const file = await P._loadAdventure(it.id);
+    const n = (file && file.data || []).length, ci = parseInt(ch, 10);
+    P._currentChapterIdx = Number.isInteger(ci) && ci >= 0 && ci < n ? ci : 0;
+    if (typeof P._bumpBookmark === 'function') P._bumpBookmark();
+    await P._render();
+    const bb = P._body, sc = bb && bb.querySelector('#adv-content'); if (!sc) return;
+    const want = String(sec || '').trim().toLowerCase().replace(/[.:]$/, '');
+    const head = want && [...sc.querySelectorAll('h1,h2,h3,h4,h5,.adv-section-head,.adv-inset-head,strong')]
+      .find(h => h.textContent.trim().toLowerCase().replace(/[.:]$/, '') === want);
+    sc.scrollTop = head ? sc.scrollTop + head.getBoundingClientRect().top - sc.getBoundingClientRect().top - 8 : 0;
+    const toc = bb.querySelector('.adv-toc-list'), on = toc && toc.querySelector('.adv-chapter.active');
+    if (on){ const y = on.getBoundingClientRect().top - toc.getBoundingClientRect().top; if (y < 0 || y + on.offsetHeight > toc.clientHeight) toc.scrollTop += y - toc.clientHeight / 3; }
+  },
+
+  // Which chapter of the open adventure holds the section with this id
+  // (-1: none). Filed once per adventure.
+  _chapterOfSection(id){
+    const file = this._advCache && this._advCache[(this._currentAdvId || '').toLowerCase()];
+    const chapters = (file && file.data) || [];
+    if (!this._secIndex || this._secIndex.file !== file){
+      const map = new Map();
+      const walk = (n, ci) => {
+        if (Array.isArray(n)){ n.forEach(x => walk(x, ci)); return; }
+        if (!n || typeof n !== 'object') return;
+        if (n.id != null && !map.has(String(n.id))) map.set(String(n.id), ci);
+        for (const k in n) if (n[k] && typeof n[k] === 'object') walk(n[k], ci);
+      };
+      chapters.forEach((c, ci) => walk(c, ci));
+      this._secIndex = { file, map };
+    }
+    const ci = this._secIndex.map.get(String(id));
+    return ci == null ? -1 : ci;
+  },
+
   _wireCards(){
     const b = this._body; if (!b) return;
     b.querySelectorAll('.adv-card').forEach(c => {
@@ -460,7 +509,7 @@ const CONTENT_PANEL_SHARED = {
       b.innerHTML = `
         <div class="adv-panel">
           <div class="adv-head">
-            <button class="btn small" data-act="back">← All adventures</button>
+            <button class="btn small" data-act="back">← All ${this._kindLabel === 'Book' ? 'books' : 'adventures'}</button>
             <span class="adv-head-title">${esc(adv.name)}</span>
           </div>
           <div class="empty-state" style="padding:40px;text-align:center">Loading…</div>
@@ -505,7 +554,7 @@ const CONTENT_PANEL_SHARED = {
     b.innerHTML = `
       <div class="adv-panel adv-panel-detail">
         <div class="adv-head">
-          <button class="btn small" data-act="back">← All adventures</button>
+          <button class="btn small" data-act="back">← All ${this._kindLabel === 'Book' ? 'books' : 'adventures'}</button>
           <span class="adv-head-title">${esc(adv.name)}</span>
           <span class="adv-head-meta">${esc((adv.source||'')+(adv.published?(' · '+adv.published):''))}</span>
           <span style="flex:1"></span>
@@ -546,18 +595,42 @@ const CONTENT_PANEL_SHARED = {
     // Hover popovers for {@creature}, {@spell}, {@item}, {@condition}.
     this._wireAdvHover();
 
+    // Links to another book or adventure (or another part of this one).
+    b.querySelectorAll('.adv-link.adv-xref').forEach(a => a.addEventListener('click', e => {
+      e.preventDefault();
+      this._openXref(a.dataset.kind, a.dataset.src, a.dataset.ch, a.dataset.sec);
+    }));
+
     // Area links: click to scroll to the matching section.
     b.querySelectorAll('.adv-link.adv-area').forEach(a => a.addEventListener('click', e => {
       e.preventDefault();
       const id = a.dataset.chapter;
       if (!id) return;
-      const target = b.querySelector('#adv-section-' + CSS.escape(id));
-      const scroller = b.querySelector('#adv-content');
-      if (target && scroller){
-        // Use offsetTop relative to the scroller, not scrollIntoView (which
-        // scrolls the wrong ancestor when nested in the workspace).
-        scroller.scrollTo({ top: target.offsetTop - 8, behavior: 'smooth' });
-      }
+      const go = smooth => {
+        const bb = this._body; if (!bb) return false;
+        const target = bb.querySelector('#adv-section-' + CSS.escape(id));
+        const scroller = bb.querySelector('#adv-content');
+        if (!target || !scroller) return false;
+        // Measured against the scroller, not scrollIntoView (which scrolls the
+        // wrong ancestor when nested in the workspace) nor offsetTop (from the
+        // panel, not the scroller: the heading landed 32 px out of sight).
+        const top = scroller.scrollTop + target.getBoundingClientRect().top - scroller.getBoundingClientRect().top - 8;
+        scroller.scrollTo({ top, behavior: smooth ? 'smooth' : 'auto' });
+        return true;
+      };
+      if (go(true)) return;
+      // In another chapter: open that one, then go to it. Only the chapter
+      // being read is drawn, so a link anywhere else did nothing — every
+      // link on Storm King's Thunder's Dramatis Personae page, say.
+      const ci = this._chapterOfSection(id);
+      if (ci < 0 || ci === this._currentChapterIdx) return;
+      this._currentChapterIdx = ci;
+      this._bumpBookmark();
+      Promise.resolve(this._render()).then(() => {
+        const toc = this._body?.querySelector('.adv-toc-list'), on = toc && toc.querySelector('.adv-chapter.active');
+        if (on){ const y = on.getBoundingClientRect().top - toc.getBoundingClientRect().top; if (y < 0 || y + on.offsetHeight > toc.clientHeight) toc.scrollTop += y - toc.clientHeight / 3; }
+        if (!go(false)){ const c = this._body?.querySelector('#adv-content'); if (c) c.scrollTop = 0; }
+      });
     }));
   },
 

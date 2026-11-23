@@ -28092,6 +28092,69 @@ for (const cls of Object.keys(rule)) for (let L = 1; L <= 20; L++) for (const sc
         try { B._render(); } catch(e){} try { closePanel('battlemap'); } catch(e){}
       }
     }
+    // -- Round 556: an adventure's links to a place in another chapter open that chapter at it (only the chapter being read is drawn, so they did nothing — every link on Storm King's Thunder's Dramatis Personae); a link lands its heading in view (it scrolled 32 px past) --
+    if (!PLAYER){
+      try {
+        openPanel('adventures'); await sleep(800);
+        const A = panelDefs.adventures, body = () => document.querySelector('.window[data-panel="library"] .window-body');
+        const card = [...document.querySelectorAll('.adv-list > *')].find(x => /Storm King/.test(x.textContent));
+        if (!card){ ok('round 556: Storm King’s Thunder is in the library', false, 'no card'); }
+        else {
+          card.click();
+          for (let i = 0; i < 60 && !body().querySelector('.adv-chapter'); i++) await sleep(100);
+          [...body().querySelectorAll('.adv-chapter')][0].click(); await sleep(300);
+          const a = [...body().querySelectorAll('.adv-link.adv-area')].find(x => x.textContent.trim() === 'Bryn Shander');
+          const id = a && a.dataset.chapter;
+          a.click(); await sleep(500);
+          const on = body().querySelector('.adv-chapter.active'), sc = body().querySelector('#adv-content'), t = body().querySelector('#adv-section-' + CSS.escape(id));
+          ok('Dramatis Personae → “Bryn Shander”: Chapter 2 opens', !!on && /Chapter 2/.test(on.textContent), on && on.textContent);
+          const y = t ? t.getBoundingClientRect().top - sc.getBoundingClientRect().top : null;
+          ok('…at Bryn Shander, its heading in view at the top', t != null && y >= 0 && y < 30, y);
+          // a link to a place in the chapter being read (smooth scroll)
+          const here = [...body().querySelectorAll('.adv-link.adv-area')].find(x => { const s2 = body().querySelector('#adv-section-' + CSS.escape(x.dataset.chapter || '')); return s2 && s2.getBoundingClientRect().top - sc.getBoundingClientRect().top > 400; });
+          if (here){
+            const t2 = body().querySelector('#adv-section-' + CSS.escape(here.dataset.chapter)); here.click(); await sleep(1200);
+            const y2 = t2.getBoundingClientRect().top - sc.getBoundingClientRect().top;
+            ok('…a link to a place further on in the same chapter: its heading lands in view', y2 >= 0 && y2 < 30, y2);
+          }
+          ok('…and the reader remembers the chapter it went to', A._bookmarks && A._bookmarks[A._currentAdvId] && A._bookmarks[A._currentAdvId].chapterIdx === A._currentChapterIdx, JSON.stringify(A._bookmarks && A._bookmarks[A._currentAdvId]));
+          [...body().querySelectorAll('.adv-chapter')][0].click(); await sleep(200);
+        }
+        closePanel('library');
+      } catch(e){ ok('round 556 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
+    }
+    // -- Round 557: a reference to another book ({@book text|DMG|1|Tracking Time}) reads as its text and opens that book at the chapter and heading — it showed the chapter's number ('see "1" sidebar') and did nothing; the Books tab's way back says books --
+    if (!PLAYER){
+      try {
+        openPanel('adventures'); await sleep(800);
+        const body = () => document.querySelector('.window[data-panel="library"] .window-body');
+        const card = [...document.querySelectorAll('.adv-list > *')].find(x => /Storm King/.test(x.textContent));
+        if (!card){ ok('round 557: Storm King’s Thunder is in the library', false, 'no card'); }
+        else {
+          card.click();
+          for (let i = 0; i < 60 && !body().querySelector('.adv-chapter'); i++) await sleep(100);
+          const P = panelDefs.adventures, file = P._advCache['skt'];
+          const ci = file.data.findIndex(c => JSON.stringify(c).includes('Calendar of Harptos|DMG'));
+          [...body().querySelectorAll('.adv-chapter')][ci].click(); await sleep(300);
+          const near = [...body().querySelectorAll('#adv-content p')].find(p => /calendar of the Forgotten Realms/.test(p.textContent));
+          ok('Storm King’s Thunder: see “The Calendar of Harptos” sidebar (not “1”)', !!near && /see "The Calendar of Harptos" sidebar/.test(near.textContent), near && near.textContent.slice(0, 160));
+          const a = near && near.querySelector('.adv-xref');
+          ok('…a link', !!a && a.textContent === 'The Calendar of Harptos', a && a.outerHTML.slice(0, 120));
+          a.click();
+          const B = panelDefs.books;
+          for (let i = 0; i < 80 && !(B._body && B._currentAdvId === 'DMG' && B._body.querySelector('#adv-content h3, #adv-content .adv-section-head')); i++) await sleep(100);
+          await sleep(200);
+          const bb = B._body, sc = bb && bb.querySelector('#adv-content');
+          const head = sc && [...sc.querySelectorAll('h1,h2,h3,h4,.adv-section-head,.adv-inset-head,strong')].find(h => /^tracking time$/i.test(h.textContent.trim()));
+          const y = head ? head.getBoundingClientRect().top - sc.getBoundingClientRect().top : null;
+          ok('…opens the Dungeon Master’s Guide, chapter 1, at “Tracking Time”', B._currentAdvId === 'DMG' && B._currentChapterIdx === 1 && y != null && y >= 0 && y < 30, JSON.stringify([B._currentAdvId, B._currentChapterIdx, y]));
+          const back = bb && bb.querySelector('[data-act="back"]');
+          ok('…and the Books tab’s way back says “All books”', !!back && /All books/.test(back.textContent), back && back.textContent);
+          back && back.click(); await sleep(200);
+        }
+        closePanel('library');
+      } catch(e){ ok('round 557 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
+    }
     // -- Class features: represented, not just text ------------------------
     {
       try {

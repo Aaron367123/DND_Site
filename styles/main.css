@@ -3183,6 +3183,9 @@ body.player-mode #campaign-btn{display:none !important}
   font-weight:500;
 }
 .adv-content .adv-link.adv-area:hover{color:#fff;border-bottom-color:#fff;background:rgba(212,165,116,.18)}
+/* A reference to another book or adventure: a link too, to that book. */
+.adv-content .adv-link.adv-xref{color:var(--accent);text-decoration:none;border-bottom:1px dotted var(--accent);cursor:pointer;font-style:italic}
+.adv-content .adv-link.adv-xref:hover{color:#fff;border-bottom-color:#fff;background:rgba(212,165,116,.18)}
 /* Source refs ({@book}, {@adventure}) — italic, not hoverable, but still
    readable. Previously used --text-dim which faded into the body text. */
 .adv-content .adv-link-source{
