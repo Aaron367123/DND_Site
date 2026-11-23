@@ -188,7 +188,7 @@ registerPanel('notes', {
         const tree = b.querySelector('.notes-tree');
         const root = b.querySelector('.notes-shell');
         if (!tree || !root) return;
-        const z = (typeof getZoom === 'function') ? getZoom() : 1;
+        const z = ((typeof getZoom === 'function') ? getZoom() : 1) * (typeof sktPageZoom === 'function' ? sktPageZoom() : 1);
         const rootW = root.getBoundingClientRect().width / z;
         const min = 160, max = Math.max(min + 100, rootW - 320);
         let w = drag.ow + (e.clientX - drag.sx) / z;

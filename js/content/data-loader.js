@@ -840,7 +840,9 @@ function _normSearchIdx(s) {
 // 20261027a — 5etools 2.39 (Ravenloft: The Horrors Within, Arcana Unleashed…).
 // 20261104a — 2024 {@atkr m} renders "Melee Attack Roll:", not a bare
 // "Attack:" that left every 2024 monster attack at +0 to hit.
-const DATA_STAMP   = '20261105b';
+// 20261123a — variant prices: a silvered/adamantine weapon's and barding's
+// from the data's sum on the base item, silvered ammunition's from the PHB.
+const DATA_STAMP   = '20261123a';
 // A hash of data/'s contents, stamped by tools/stamp-build.js — so a data
 // refresh renews every device's cache (here and in sw.js) without anyone
 // remembering to bump DATA_STAMP. DATA_STAMP stays for converter changes.
@@ -1200,6 +1202,31 @@ async function _buildIndexFromFiles() {
     merged.name = namePrefix + base.name + nameSuffix;
     // Variant's source wins; keep base's type/properties otherwise.
     merged.source = inh.source || base.source;
+    // Its price. The data gives a silvered or adamantine weapon's (and
+    // barding's) as a sum on the base item's — "[[baseItem.value]] + 10000"
+    // — and it went unread: a silvered longsword cost what a plain one does.
+    // Silvered ammunition has none in the data: the PHB's 100 gp for ten
+    // pieces, 10 gp each (a Silvered Bolt was 5 cp).
+    const bv = +base.value;
+    if (isFinite(bv) && base.value != null){
+      const m = String(inh.valueExpression || '').replace(/\[\[baseItem\.value\]\]/g, String(bv)).match(/^\s*([\d.]+)\s*([+*])\s*([\d.]+)\s*$/);
+      if (m) merged.value = m[2] === '+' ? +m[1] + +m[3] : +m[1] * +m[3];
+      else if (variant.name === 'Silvered Ammunition'){
+        const n = (Array.isArray(base.packContents) && base.packContents[0] && +base.packContents[0].quantity) || 1;
+        merged.value = bv + 1000 * n;
+      }
+      // A magic one with no price in the data (the 2024 silvered weapon, a
+      // common magic item; adamantine and mithral armour): the plain item's
+      // price was its whole price — adamantine plate cost what plate does.
+      // The plain item plus its rarity's price, the 2024 DMG's (each inside
+      // the 2014 DMG's range for that rarity too): a silvered battleaxe 110 gp,
+      // as the 2014 rule makes it.
+      else {
+        const add = { common: 10000, uncommon: 40000, rare: 400000, 'very rare': 4000000, legendary: 20000000 }[String(inh.rarity || '').toLowerCase()];
+        if (add) merged.value = bv + add;
+      }
+    }
+    delete merged.valueExpression;
     // 5etools entry templates use {=propName} to splice merged properties
     // into descriptions (e.g. "{=bonusWeapon}" → "+1"). Resolve them here so
     // the rendered description reads cleanly.

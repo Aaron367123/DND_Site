@@ -27987,6 +27987,111 @@ for (const cls of Object.keys(rule)) for (let L = 1; L <= 20; L++) for (const sc
         try { B._render(); } catch(e){} closePanel('battlemap');
       }
     }
+    // -- Round 551: variant prices — a silvered weapon costs 100 gp more than a plain one, an adamantine one 500, barding four times the armour, and silvered ammunition 10 gp a piece (the data's sums went unread: a Silvered Bolt was 5 cp, a silvered longsword a plain one's 15 gp) --
+    if (!PLAYER){
+      try {
+        for (let i = 0; i < 300 && !(typeof _5eLoaded !== 'undefined' && _5eLoaded); i++) await sleep(100);
+        const it = n => _5eData.find(r => r.cat === 'item' && r.name === n && (!r._raw || r._raw.source !== 'XDMG'));
+        const cp = n => { const r = it(n); return r && r._raw ? r._raw.value_cp : null; };
+        ok('a silvered longsword: 15 gp + 100 gp', cp('Silvered Longsword') === 11500, cp('Silvered Longsword'));
+        ok('an adamantine longsword: 15 gp + 500 gp', cp('Adamantine Longsword') === 51500, cp('Adamantine Longsword'));
+        ok('a silvered crossbow bolt: 5 cp + 10 gp; twenty of them, 1 gp + 200 gp', cp('Silvered Crossbow Bolt') === 1005 && cp('Silvered Crossbow Bolts (20)') === 20100, JSON.stringify([cp('Silvered Crossbow Bolt'), cp('Silvered Crossbow Bolts (20)')]));
+        ok('the plain ones unchanged (longsword 15 gp, twenty bolts 1 gp)', cp('Longsword') === 1500 && cp('Crossbow Bolts (20)') === 100, JSON.stringify([cp('Longsword'), cp('Crossbow Bolts (20)')]));
+        // the 2024 ones are magic items with no price in the data: the plain item and the rarity's price
+        const x = n => { const r = _5eData.find(r => r.cat === 'item' && r.name === n && r._raw && /common/i.test(r._raw.rarity || '') && !/unknown/i.test(r._raw.rarity || '')); return r ? r._raw.value_cp : null; };
+        const ad = _5eData.find(r => r.cat === 'item' && r.name === 'Adamantine Plate Armor');
+        ok('a 2024 silvered battleaxe (a common magic item): 10 gp + 100 gp', x('Silvered Battleaxe') === 11000, x('Silvered Battleaxe'));
+        ok('adamantine plate (uncommon): plate’s 1,500 gp + 400 gp, not plate’s price alone', !!ad && ad._raw.value_cp === 190000, ad && ad._raw.value_cp);
+        const bard = _5eData.find(r => r.cat === 'item' && /^Chain Mail Barding$/.test(r.name));
+        ok('barding: four times its armour (chain mail 75 gp → 300 gp)', !!bard && bard._raw.value_cp === 30000, bard && bard._raw.value_cp);
+      } catch(e){ ok('round 551 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
+    }
+    // -- Round 552: the temperature follows the clock — the roll is the day's high, mid-afternoon; coolest in the small hours, by more in a desert, by less under cloud, not at all underground; the hour moving on (here or from the DM's screen) changes it (it was 19 °C all day, four in the morning included) --
+    if (!PLAYER){
+      const T0 = localStorage.getItem('skt-time-v1'), W0 = localStorage.getItem('skt-weather-v2');
+      try {
+        openPanel('world'); await sleep(300);
+        const T = panelDefs.time, W = panelDefs.weather;
+        const at = async (hour, wx) => {
+          T._data = Object.assign({}, T._data, { hour, minute: 0 });
+          W._data = Object.assign({}, W._data, { biome: 'desert', season: 'winter', temp: 20, clouds: 0, wind: 20, humid: 10, feelsLike: 20, lastRollDate: { year: T._data.year || 0, month: T._data.month || 0, day: T._data.day } }, wx || {});
+          T._save(); T._render(); W._render(); await sleep(30);
+          return [parseInt(W._body.querySelector('.weather-temp').textContent, 10), W._body.querySelector('.weather-feels').textContent];
+        };
+        let r = await at(15);
+        ok('the desert in the afternoon: the day’s high, 20 °C', r[0] === 20 && /High 20° · Low 4°/.test(r[1]), JSON.stringify(r));
+        r = await at(3);
+        ok('…at three in the morning: 4 °C (a clear desert night), and the wind makes it feel colder', r[0] === 4 && /Feels like 0°C/.test(r[1]), JSON.stringify(r));
+        r = await at(9);
+        ok('…at nine: half way, 12 °C', r[0] === 12, JSON.stringify(r));
+        r = await at(3, { clouds: 100 });
+        ok('under full cloud the night keeps half the heat: 12 °C', r[0] === 12, JSON.stringify(r));
+        r = await at(3, { biome: 'underdark' });
+        ok('underground: the same all day', r[0] === 20, JSON.stringify(r));
+        // the DM's screen moves the hour on: this one's temperature follows
+        await at(3);
+        _applyRemoteKey('skt-time-v1', JSON.stringify(Object.assign({}, T._data, { hour: 15 }))); await sleep(60);
+        ok('the hour moved on from another screen: the temperature here follows', parseInt(W._body.querySelector('.weather-temp').textContent, 10) === 20, W._body.querySelector('.weather-temp').textContent);
+        closePanel('world');
+      } catch(e){ ok('round 552 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
+      finally {
+        _remoteUpdate = true;
+        try {
+          if (T0 == null) localStorage.removeItem('skt-time-v1'); else localStorage.setItem('skt-time-v1', T0);
+          if (W0 == null) localStorage.removeItem('skt-weather-v2'); else localStorage.setItem('skt-weather-v2', W0);
+        } finally { _remoteUpdate = false; }
+        panelDefs.time._data = null; panelDefs.weather._data = null;
+      }
+    }
+    // -- Round 554: at a text size other than 100% (Settings, a zoom of the whole page), a drag goes as far as the pointer — a window, a token, the map panned; at 150% each went half as far again (the pointer's screen pixels were taken for the page's unzoomed ones) --
+    if (!PLAYER){
+      const FS0 = state.settings.fontScale, B = panelDefs.battlemap;
+      let T0 = null, V0, S0;
+      try {
+        state.settings.fontScale = 1.5; applyFontScale(1.5); await sleep(150);
+        const PE = (type, x, y) => new PointerEvent(type, { bubbles: true, cancelable: true, pointerId: 1, isPrimary: true, clientX: Math.round(x), clientY: Math.round(y), button: 0, buttons: type === 'pointerup' ? 0 : 1 });
+        // a window, dragged 60 px toward the middle
+        openPanel('quests'); await sleep(250);
+        const w = document.querySelector('.window[data-panel="quests"]'), h = w.querySelector('.window-head'), hr = h.getBoundingClientRect(), w0 = w.getBoundingClientRect();
+        const dir = w0.left + w0.width / 2 > innerWidth / 2 ? -1 : 1, x = hr.left + 40, y = hr.top + hr.height / 2;
+        h.dispatchEvent(PE('pointerdown', x, y));
+        for (let k = 1; k <= 4; k++) document.dispatchEvent(PE('pointermove', x + dir * 15 * k, y));
+        document.dispatchEvent(PE('pointerup', x + dir * 60, y)); await sleep(80);
+        const w1 = w.getBoundingClientRect();
+        ok('at 150% text size: a window dragged 60 px moves 60 px', Math.abs((w1.left - w0.left) * dir - 60) <= 2, JSON.stringify([Math.round(w1.left - w0.left), dir * 60]));
+        closePanel('quests');
+        // a token, dragged three of its widths
+        openPanel('battlemap'); await sleep(400);
+        T0 = B._tokens; V0 = B._viewScale; S0 = B._snapToGrid;
+        const cs = B._csScreen() || 50;
+        B._snapToGrid = false;
+        B._tokens = [{ id: 't554', label: 'R554 Rat', x: cs * 3.5, y: cs * 3.5, size: 1, color: '#844' }];
+        B._render(); await sleep(150);
+        const tel = () => B._body.querySelector('.map-token[data-tid="t554"]');
+        tel().scrollIntoView({ block: 'center', inline: 'center' }); await sleep(80);
+        const r0 = tel().getBoundingClientRect(), cx = Math.round(r0.left + r0.width / 2), cy = Math.round(r0.top + r0.height / 2), d = 60;
+        tel().dispatchEvent(new MouseEvent('mousedown', { bubbles: true, cancelable: true, clientX: cx, clientY: cy, button: 0, buttons: 1 }));
+        for (let k = 1; k <= 6; k++) document.dispatchEvent(new MouseEvent('mousemove', { bubbles: true, cancelable: true, clientX: cx + d * k / 6, clientY: cy, buttons: 1 }));
+        document.dispatchEvent(new MouseEvent('mouseup', { bubbles: true, cancelable: true, clientX: cx + d, clientY: cy, button: 0 })); await sleep(250);
+        const r1 = tel().getBoundingClientRect();
+        ok('…a token dragged 60 px moves 60 px on screen', Math.abs(r1.left - r0.left - d) <= 2, JSON.stringify([Math.round(r1.left - r0.left), d]));
+        // the map panned: zoomed in so there's room, a middle-button drag
+        B._applyViewScale(B._clampView(3 * (V0 || 1))); await sleep(120);
+        const sc = B._body.querySelector('#map-scroll');
+        tel().scrollIntoView({ block: 'center', inline: 'center' }); await sleep(80);
+        const p0 = tel().getBoundingClientRect(), sr = sc.getBoundingClientRect(), px = Math.round(sr.left + sr.width / 2 + 7), py = Math.round(sr.top + sr.height / 2 + 7);
+        sc.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, cancelable: true, clientX: px, clientY: py, button: 1, buttons: 4 }));
+        for (let k = 1; k <= 4; k++) document.dispatchEvent(new MouseEvent('mousemove', { bubbles: true, cancelable: true, clientX: px - 15 * k, clientY: py, buttons: 4 }));
+        document.dispatchEvent(new MouseEvent('mouseup', { bubbles: true, cancelable: true, clientX: px - 60, clientY: py, button: 1 })); await sleep(80);
+        const p1 = tel().getBoundingClientRect();
+        ok('…the map panned 60 px moves 60 px under the pointer', Math.abs(p1.left - p0.left + 60) <= 2, JSON.stringify([Math.round(p1.left - p0.left), -60]));
+      } catch(e){ ok('round 554 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
+      finally {
+        state.settings.fontScale = FS0; applyFontScale(FS0 ?? 1);
+        if (T0){ B._tokens = T0; B._snapToGrid = S0; if (V0) B._applyViewScale(V0); }
+        try { B._render(); } catch(e){} try { closePanel('battlemap'); } catch(e){}
+      }
+    }
     // -- Class features: represented, not just text ------------------------
     {
       try {
@@ -32735,6 +32840,80 @@ for (const cls of Object.keys(rule)) for (let L = 1; L <= 20; L++) for (const sc
       } catch(e){ ok('round 550 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
       finally {
         if (saved){ B._tokens = keepT; B._fog = keepF; }
+        try { B._render(); } catch(e){}
+        paTab = keepTab; try { paRender(); } catch(e){}
+      }
+    }
+    // -- Round 553: the sheet's tab strip is solid — what scrolls under it doesn't read through ("Bonus Actions" showed through the tab names: the strip was 78% and its edge fade was a mask that faded the strip itself); the fade at an edge with more tabs beyond is drawn over the names, and takes no room --
+    if (PLAYER){
+      const keepTab = paTab;
+      try {
+        if (paMyIdx() < 0) paSetPc('zoey');
+        paTab = 'you'; paRender(); await sleep(400);
+        for (let i = 0; i < 60 && !(typeof CS !== 'undefined' && CS && CS.R); i++) await sleep(100);
+        // the sheet draws itself again as its rules and items load: wait till it has settled (the same strip for 0.6 s)
+        { let prev = null, same = 0; for (let i = 0; i < 80 && same < 6; i++){ const cur = document.querySelector('#cs-root .cs-tabs'); same = cur && cur === prev ? same + 1 : 0; prev = cur; await sleep(100); } }
+        const tb = document.querySelector('#cs-root .cs-tabs');
+        const cs = getComputedStyle(tb), a = (cs.backgroundColor.match(/[\d.]+/g) || []).map(Number);
+        const alpha = /^color\(/.test(cs.backgroundColor) ? (cs.backgroundColor.match(/\/\s*([\d.]+)/) || [0, 1])[1] : (a.length > 3 ? a[3] : 1);
+        const mask = cs.maskImage || cs.webkitMaskImage || 'none';
+        ok('the sheet’s tab strip is solid, with no mask on it', +alpha === 1 && mask === 'none', cs.backgroundColor + ' ' + mask);
+        // narrow enough that the tabs scroll, as on a phone
+        const w0 = tb.style.maxWidth; tb.style.maxWidth = '300px'; tb.scrollLeft = 40; tb.dispatchEvent(new Event('scroll')); await sleep(80);
+        const both = tb.classList.contains('more-l') && tb.classList.contains('more-r');
+        const af = getComputedStyle(tb, '::after'), bf = getComputedStyle(tb, '::before');
+        ok('…tabs both ways: a fade drawn at each edge, over the names', both && af.content !== 'none' && af.position === 'sticky' && bf.content !== 'none' && bf.position === 'sticky', JSON.stringify([tb.className, af.content, af.position, bf.content, bf.position]));
+        // (the sheet may draw itself again as it loads: the strip on screen now, its last tab)
+        const lastOf = () => { const t = document.querySelector('#cs-root .cs-tabs'); return [t, t && [...t.querySelectorAll('.cs-tab')].filter(x => x.offsetParent).pop()]; };
+        let [tb2, last] = lastOf();
+        for (let i = 0; i < 30 && !last; i++){ await sleep(100); [tb2, last] = lastOf(); }
+        tb2.style.maxWidth = '300px'; tb2.scrollLeft = tb2.scrollWidth; tb2.dispatchEvent(new Event('scroll')); await sleep(80);
+        [tb2, last] = lastOf();
+        const lr = last.getBoundingClientRect(), tr = tb2.getBoundingClientRect();
+        ok('…and scrolled to the end, the last tab is all there (the fades take no room)', lr.right <= tr.right + 1 && !tb2.classList.contains('more-r'), JSON.stringify([Math.round(lr.right), Math.round(tr.right), tb2.className]));
+        tb.style.maxWidth = w0; tb2.style.maxWidth = w0;
+      } catch(e){ ok('round 553 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
+      finally { paTab = keepTab; try { paRender(); } catch(e){} }
+    }
+    // -- Round 555: a phone at a bigger text size — a finger panning the map moves it as far as the finger goes (at 150% it ran half as far again), and a token dragged follows the finger --
+    if (PLAYER){
+      const keepTab = paTab, B = panelDefs.battlemap, FS0 = state.settings.fontScale;
+      let keepT = null, keepF, keepV, saved = false;
+      try {
+        if (paMyIdx() < 0) paSetPc('zoey');
+        state.settings.fontScale = 1.5; applyFontScale(1.5);
+        paTab = 'map'; paRender(); await sleep(900);
+        keepT = B._tokens.slice(); keepF = B._fog; keepV = B._viewScale; saved = true;
+        const cs = B._csScreen(), me = paPc();
+        B._tokens = [{ id: 't555z', cid: me.id, label: me.name, isPC: true, x: 6.5 * cs, y: 6.5 * cs, size: 1 }];
+        B._fog = null; B._render(); await sleep(150);
+        B._applyViewScale(B._clampView(3 * (keepV || 1))); await sleep(150);
+        const tel = () => document.querySelector('#pa-screen .map-token[data-tid="t555z"]');
+        tel().scrollIntoView({ block: 'center', inline: 'center' }); await sleep(100);
+        const sc = document.querySelector('#pa-screen #map-scroll'), sr = sc.getBoundingClientRect();
+        // a finger on empty map beside the token, 60 px left
+        const p = { x: Math.round(sr.left + sr.width / 2), y: Math.round(sr.top + sr.height / 2 + 70) };
+        const T = (q, tg) => new Touch({ identifier: 5, target: tg, clientX: q.x, clientY: q.y });
+        const r0 = tel().getBoundingClientRect(), tg = document.elementFromPoint(p.x, p.y) || sc;
+        tg.dispatchEvent(new TouchEvent('touchstart', { bubbles: true, cancelable: true, touches: [T(p, tg)], changedTouches: [T(p, tg)] }));
+        for (let k = 1; k <= 4; k++){ const q = { x: p.x - 15 * k, y: p.y }; tg.dispatchEvent(new TouchEvent('touchmove', { bubbles: true, cancelable: true, touches: [T(q, tg)], changedTouches: [T(q, tg)] })); }
+        tg.dispatchEvent(new TouchEvent('touchend', { bubbles: true, cancelable: true, touches: [], changedTouches: [T({ x: p.x - 60, y: p.y }, tg)] })); await sleep(120);
+        const r1 = tel().getBoundingClientRect();
+        ok('at 150% text size on a phone: the map panned 60 px by a finger moves 60 px', Math.abs(r1.left - r0.left + 60) <= 2, JSON.stringify([Math.round(r1.left - r0.left), -60]));
+        // her token, dragged 60 px
+        const a = { x: Math.round(r1.left + r1.width / 2), y: Math.round(r1.top + r1.height / 2) }, el = tel(), offW = el.offsetWidth;
+        const U = q => new Touch({ identifier: 6, target: el, clientX: q.x, clientY: q.y });
+        el.dispatchEvent(new TouchEvent('touchstart', { bubbles: true, cancelable: true, touches: [U(a)], changedTouches: [U(a)] }));
+        for (let k = 1; k <= 6; k++){ const q = { x: a.x, y: a.y + 10 * k }; document.dispatchEvent(new TouchEvent('touchmove', { bubbles: true, cancelable: true, touches: [U(q)], changedTouches: [U(q)] })); }
+        document.dispatchEvent(new TouchEvent('touchend', { bubbles: true, cancelable: true, touches: [], changedTouches: [U({ x: a.x, y: a.y + 60 })] })); await sleep(200);
+        // (in map squares: the phone centres on her after a drop, so not on screen) — 60 px over her real size on screen
+        const z = B._tokens.find(t => t.id === 't555z'), k = r1.width / offW, sq = 60 / (cs * k);   // (screen px per map px: her token on screen over its size on the map)
+        const want = B._snapToGrid ? Math.round(sq) : sq;
+        ok('…her token dragged 60 px goes 60 px’s worth of map', !!z && Math.abs((z.y / cs - 6.5) - want) < 0.05, JSON.stringify([z && +(z.y / cs - 6.5).toFixed(3), +sq.toFixed(3), B._snapToGrid]));
+      } catch(e){ ok('round 555 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
+      finally {
+        state.settings.fontScale = FS0; applyFontScale(FS0 ?? 1);
+        if (saved){ B._tokens = keepT; B._fog = keepF; if (keepV) B._applyViewScale(keepV); }
         try { B._render(); } catch(e){}
         paTab = keepTab; try { paRender(); } catch(e){}
       }

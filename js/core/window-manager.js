@@ -387,7 +387,7 @@ let   _wmGlobalsWired = false;
 
 function _wmOnMove(e){
   if (!_wmDrag.size && !_wmResize.size) return;
-  const z = (typeof getZoom==='function') ? getZoom() : 1;
+  const z = ((typeof getZoom==='function') ? getZoom() : 1) * (typeof sktPageZoom === 'function' ? sktPageZoom() : 1);
   _wmDrag.forEach((drag, id) => {
     const el = document.querySelector(`.window[data-panel="${id}"]`);
     if (!el || !layout[id]){ _wmDrag.delete(id); return; }

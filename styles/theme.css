@@ -103,8 +103,9 @@
 .modal { background: var(--grain), linear-gradient(180deg, color-mix(in srgb, var(--panel) 90%, var(--accent)), var(--panel)); border-color: color-mix(in srgb, var(--accent) 35%, var(--border)); }
 /* The player's phone: the same grain behind everything. */
 body.player-mode { background-image: var(--grain), var(--mottle); background-size: 240px 240px, cover; background-repeat: repeat, no-repeat; background-attachment: fixed; background-color: var(--bg); }
-/* The sheet's tab strip stays put as you scroll: see-through, over the grain. */
-.cs-tabs { background: color-mix(in srgb, var(--bg) 78%, transparent) !important; -webkit-backdrop-filter: blur(6px); backdrop-filter: blur(6px); }
+/* The sheet's tab strip stays put as you scroll: solid, so what scrolls under
+   it doesn't read through it ("Bonus Actions" showed through the tab names). */
+.cs-tabs { background: var(--bg) !important; }
 /* Light (Parchment) tone: a warm, soft vignette, not a black one. */
 [data-theme-tone="light"] .workspace {
   background-image:
@@ -977,9 +978,13 @@ body:has(#cb-root) #toast-host { bottom: 64px; }
   box-shadow: var(--sh-2); font-size: var(--fs-sm); color: var(--text); }
 
 /* ── 47. The sheet's tabs say they scroll ────────────────── */
-.cs-tabs.more-r { -webkit-mask-image: linear-gradient(to right, #000 calc(100% - 36px), transparent); mask-image: linear-gradient(to right, #000 calc(100% - 36px), transparent); }
-.cs-tabs.more-l { -webkit-mask-image: linear-gradient(to left, #000 calc(100% - 36px), transparent); mask-image: linear-gradient(to left, #000 calc(100% - 36px), transparent); }
-.cs-tabs.more-l.more-r { -webkit-mask-image: linear-gradient(to right, transparent, #000 36px, #000 calc(100% - 36px), transparent); mask-image: linear-gradient(to right, transparent, #000 36px, #000 calc(100% - 36px), transparent); }
+/* The tab names fade at an edge with more beyond it — a fade drawn over the
+   names in the strip's own colour. (A mask faded the strip with them: the
+   page scrolling under it showed through at that edge.) Each takes no room:
+   its width is given back by its margin. */
+.cs-tabs.more-r::after, .cs-tabs.more-l::before { content: ''; position: sticky; flex: 0 0 36px; z-index: 1; pointer-events: none; }
+.cs-tabs.more-r::after { right: 0; margin-left: -36px; background: linear-gradient(to right, transparent, var(--bg)); }
+.cs-tabs.more-l::before { left: 0; margin-right: -36px; background: linear-gradient(to left, transparent, var(--bg)); }
 
 /* ── 48. Keyboard focus you can see ──────────────────────── */
 /* Tabbing through the DM's screen showed nothing: most controls set their

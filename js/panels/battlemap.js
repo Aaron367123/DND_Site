@@ -2540,9 +2540,19 @@ registerPanel('battlemap',{
   },
   // Total screen pixels per stage pixel: the workspace's CSS scale() times
   // this device's map zoom. Every screen→stage conversion divides by this.
+  // Screen px per #map-scroll px: the workspace zoom and the page's text size
+  // (the map's own zoom is inside the scroll box, so not this).
+  _panZoom(){
+    return (((typeof getZoom === 'function') ? (getZoom() || 1) : 1) * (typeof sktPageZoom === 'function' ? sktPageZoom() : 1)) || 1;
+  },
   _screenScale(){
     const z = (typeof getZoom === 'function') ? (getZoom() || 1) : 1;
-    return z * (this._viewScale || 1);
+    const s = z * (this._viewScale || 1);
+    // A third scale: Settings → Text size zooms the whole page (body zoom).
+    // Not counted, a drag at 150% put a token half as far again as the
+    // pointer went, and the ruler, pencil and eraser missed the same way.
+    // (sktPageZoom, utils.js: measured once per text size.)
+    return s * (typeof sktPageZoom === 'function' ? sktPageZoom() : 1);
   },
   // Max EFFECTIVE zoom. Touch devices get more headroom because the whole
   // point of this feature is a phone being able to read a token label on a
@@ -7422,7 +7432,7 @@ registerPanel('battlemap',{
       // #map-scroll sits inside the workspace transform but outside the map
       // one, so _viewScale must not appear here. It is already carried by
       // oldScale/newScale below, which is what makes the anchor math work.
-      const _wz = (typeof getZoom === 'function') ? (getZoom() || 1) : 1;
+      const _wz = ((typeof getZoom === 'function') ? (getZoom() || 1) : 1) * (typeof sktPageZoom === 'function' ? sktPageZoom() : 1);
       const cx = (e.clientX - rect.left)/_wz, cy = (e.clientY - rect.top)/_wz;
       // Stage-space point under the cursor before the zoom.
       const off0 = this._sizerOff(scrollEl);
@@ -7464,12 +7474,15 @@ registerPanel('battlemap',{
       scrollEl.style.cursor = 'grabbing';
       // (a pan in hand: the map doesn't slide off to whose turn came up)
       this._panning = true;
+      // (the scroll box's pixels are the workspace's and the page's, unzoomed:
+      // a screen pixel of pointer is 1 / both of them — the wheel's rule)
+      const pz = this._panZoom();
       const onMove = ev => {
         const dx = ev.clientX - startX, dy = ev.clientY - startY;
         if (!didMove && Math.abs(dx)+Math.abs(dy) < 3) return;
         didMove = true;
-        scrollEl.scrollLeft = startScrollX - dx;
-        scrollEl.scrollTop  = startScrollY - dy;
+        scrollEl.scrollLeft = startScrollX - dx / pz;
+        scrollEl.scrollTop  = startScrollY - dy / pz;
       };
       const onUp = () => {
         scrollEl.style.cursor = '';
@@ -7572,12 +7585,12 @@ registerPanel('battlemap',{
         _touchPan = {
           startX: t.clientX, startY: t.clientY,
           startScrollX: scrollEl.scrollLeft, startScrollY: scrollEl.scrollTop,
-          didMove: false,
+          didMove: false, pz: this._panZoom(),
         };
       } else if (e.touches.length === 2){
         e.preventDefault();
-        const rect = scrollEl.getBoundingClientRect();
-        const mid = touchMidpoint(e.touches[0], e.touches[1], rect);
+        const rect = scrollEl.getBoundingClientRect(), pz = this._panZoom();
+        const mid0 = touchMidpoint(e.touches[0], e.touches[1], rect), mid = { x: mid0.x / pz, y: mid0.y / pz };
         _touchPan = null; // pinch supersedes pan
         _touchPinch = {
           startDist: touchDistance(e.touches[0], e.touches[1]),
@@ -7618,8 +7631,8 @@ registerPanel('battlemap',{
         _touchPan.didMove = true;
         this._isFitted = false;
         e.preventDefault();
-        scrollEl.scrollLeft = _touchPan.startScrollX - dx;
-        scrollEl.scrollTop  = _touchPan.startScrollY - dy;
+        scrollEl.scrollLeft = _touchPan.startScrollX - dx / _touchPan.pz;
+        scrollEl.scrollTop  = _touchPan.startScrollY - dy / _touchPan.pz;
       }
     }, { passive: false });
     const endTouch = () => {

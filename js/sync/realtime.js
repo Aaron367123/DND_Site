@@ -1551,6 +1551,9 @@ function _applyRemoteKey(key, fbVal) {
 
   const panels = _PANELS_FOR_KEY[key] || [];
   panels.forEach(id => _reloadPanel(id));
+  // The temperature follows the clock: the DM's hour moving on warms or
+  // cools it here too (only redrawn — the weather itself is the DM's).
+  if (key === 'skt-time-v1'){ const W = panelDefs && panelDefs.weather; if (W && W._body && W._data && typeof W._render === 'function'){ try { _sktKeep(() => W._render()); } catch(e){ _diag('weather', e); } } }
   if (key === 'skt-loot-v1'){
     // A closed Loot window kept its old copy and showed it on the next open.
     const L = panelDefs && panelDefs.loot; if (L && !L._body) L._loot = null;

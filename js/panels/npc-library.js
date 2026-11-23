@@ -132,7 +132,7 @@ registerPanel('npclib', {
         const left = b.querySelector('.npclib-left');
         const root = b.querySelector('.npclib-root');
         if (!left || !root) return;
-        const z = (typeof getZoom==='function') ? getZoom() : 1;
+        const z = ((typeof getZoom==='function') ? getZoom() : 1) * (typeof sktPageZoom === 'function' ? sktPageZoom() : 1);
         const rootW = root.getBoundingClientRect().width / z;
         const min = 200, max = Math.max(min + 100, rootW - 280);
         let w = drag.ow + (e.clientX - drag.sx) / z;

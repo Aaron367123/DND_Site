@@ -1185,7 +1185,7 @@ function createFloatingWindow(opts) {
     var ox = parseInt(el.style.left), oy = parseInt(el.style.top);
     var sx = e.clientX, sy = e.clientY;
     function move(ev) {
-      var z = (typeof getZoom === 'function') ? getZoom() : 1;
+      var z = ((typeof getZoom === 'function') ? getZoom() : 1) * sktPageZoom();
       el.style.left = Math.max(0, ox + (ev.clientX - sx) / z) + 'px';
       el.style.top  = Math.max(0, oy + (ev.clientY - sy) / z) + 'px';
     }
@@ -1207,7 +1207,7 @@ function createFloatingWindow(opts) {
       var ow = parseInt(el.style.width), oh = parseInt(el.style.height);
       var sx = e.clientX, sy = e.clientY;
       function move(ev) {
-        var z = (typeof getZoom === 'function') ? getZoom() : 1;
+        var z = ((typeof getZoom === 'function') ? getZoom() : 1) * sktPageZoom();
         var dx = (ev.clientX - sx) / z, dy = (ev.clientY - sy) / z;
         var nx = ox, ny = oy, nw = ow, nh = oh;
         if (dir.indexOf('e') >= 0) nw = Math.max(240, ow + dx);
@@ -2805,6 +2805,22 @@ function sktAskBardic(opts){
       options: ready.map(b => ({ value: b.id, label: b.name + ' (' + sktBardicPool(b).current + ' left)' })) }], 'Inspire')
       .then(r => { if (r && r.from) done(r.from, opts.to); });
   }
+}
+
+// Settings → Text size zooms the whole page (body zoom, settings.js). The
+// pointer and every box on screen are then in zoomed pixels, the layout in
+// unzoomed ones: a drag's movement divided by the workspace zoom alone went
+// half as far again at 150% — windows, dividers and the battle map's tokens,
+// ruler and pencil. How a browser reports a zoomed page differs, so this is
+// measured (the body on screen against its layout width), once per size.
+function sktPageZoom(){
+  var b = typeof document !== 'undefined' && document.body, bz = b ? b.style.zoom : '';
+  if (!bz || Math.abs((parseFloat(bz) || 1) - 1) < 0.001) return 1;
+  if (sktPageZoom._key === bz && sktPageZoom._k) return sktPageZoom._k;
+  var w = b.offsetWidth, k = w ? b.getBoundingClientRect().width / w : 0;
+  if (!(k > 0) || !isFinite(k)) return 1;
+  sktPageZoom._key = bz; sktPageZoom._k = Math.abs(k - 1) < 0.02 ? 1 : k;
+  return sktPageZoom._k;
 }
 
 // Heroes of Faerûn's Circle Magic is a table rule: spellcasters casting one

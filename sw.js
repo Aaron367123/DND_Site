@@ -34,11 +34,11 @@
  */
 'use strict';
 
-const BUILD = '5caa1e65b4';
+const BUILD = '41bed5af9d';
 const PRECACHE = [
   'skt-workspace.html',
   'styles/main.css?v=5b5f11ee43',
-  'styles/theme.css?v=f8bac47baa',
+  'styles/theme.css?v=cb4e875b1d',
   'js/core/errors.js?v=67c70f2e1d',
   'js/core/data.js?v=183a16905e',
   'js/core/theme.js?v=9db78fe46f',
@@ -46,13 +46,13 @@ const PRECACHE = [
   'js/generated/token-index.js?v=2840810fc7',
   'js/generated/species-portraits.js?v=56581792b0',
   'js/core/campaign.js?v=171a617f55',
-  'js/core/utils.js?v=6bd6cc7d38',
+  'js/core/utils.js?v=d5e8fcaa1d',
   'js/ui/dice-fx.js?v=1acff2694d',
   'js/core/state.js?v=375d5a9fcf',
   'js/core/undo.js?v=86cddb637a',
   'js/features/roll-requests.js?v=99a146e147',
   'js/features/monster-picker.js?v=c742f66779',
-  'js/core/window-manager.js?v=8d9486d699',
+  'js/core/window-manager.js?v=6f4262424e',
   'js/panels/combat.js?v=fecd15051f',
   'js/panels/attacks.js?v=99097afcf2',
   'js/generated/reactions.js?v=0e74ab8786',
@@ -63,15 +63,15 @@ const PRECACHE = [
   'js/sync/notes-sync.js?v=7ee89969f6',
   'js/sync/dropbox-config.js?v=ccf8533d50',
   'js/sync/dropbox-sync.js?v=c4897e8ffa',
-  'js/panels/notes.js?v=18e3273391',
+  'js/panels/notes.js?v=4a893b92a5',
   'js/panels/handouts.js?v=92072fbc59',
   'js/panels/game-log.js?v=26b8913f8d',
   'js/panels/messages.js?v=a89b3f4ef9',
   'js/panels/quests.js?v=36e3261d56',
   'js/panels/factions.js?v=39b868d6d9',
   'js/panels/homebrew.js?v=3e3c4f0d84',
-  'js/panels/battlemap.js?v=3cac07d77f',
-  'js/panels/npc-library.js?v=84a549ccbc',
+  'js/panels/battlemap.js?v=966183c8f8',
+  'js/panels/npc-library.js?v=3080576d3c',
   'js/panels/bestiary.js?v=da542163a4',
   'js/panels/content-panel.js?v=1a060dfd0b',
   'js/panels/adventures.js?v=0870abbb59',
@@ -81,17 +81,17 @@ const PRECACHE = [
   'js/panels/loot.js?v=298c9c3783',
   'js/panels/encounter.js?v=c3ea13686b',
   'js/panels/soundboard.js?v=82c35c166e',
-  'js/panels/weather.js?v=be4fc599ab',
+  'js/panels/weather.js?v=521eb46546',
   'js/panels/timetracker.js?v=a4bf06c348',
   'js/panels/world.js?v=3363ff2d50',
-  'js/content/data-loader.js?v=9a662fd8f7',
+  'js/content/data-loader.js?v=c972766218',
   'js/content/search.js?v=3f434975de',
   'js/features/backup.js?v=544e2b6d21',
   'js/ui/qr.js?v=b696ff33f3',
   'js/ui/settings.js?v=a5c1618a7e',
   'js/ui/campaign-ui.js?v=87872361dd',
   'js/ui/context-menu.js?v=738247f1b2',
-  'js/ui/zoom-pan.js?v=31a2882b02',
+  'js/ui/zoom-pan.js?v=b38c43a001',
   'js/ui/workspaces.js?v=07664d648a',
   'js/ui/command-palette.js?v=fd1d3547c2',
   'js/features/char-rules.js?v=b7647c321f',
@@ -102,7 +102,7 @@ const PRECACHE = [
   'js/features/pdf-import.js?v=95d9f5740f',
   'js/player/player-app.js?v=94838ef6fd',
   'js/ui/player-view.js?v=2481f28c78',
-  'js/sync/realtime.js?v=c9ab9800f3',
+  'js/sync/realtime.js?v=4ac30de81d',
   'js/sync/presence.js?v=50e9bead2e',
   'js/ui/tutorial.js?v=7427317caa',
   'js/ui/onboarding.js?v=af17803033',
@@ -119,7 +119,7 @@ const SHELL_CACHE = 'skt-shell-' + BUILD;   // swapped wholesale each build
 // invalidates the HTTP cache too, from the same single source of truth.
 // The activate handler deletes any skt-data-* bucket that isn't this one, so
 // the changeover is automatic.
-const DATA_STAMP  = '20261105b.f9766c7c18';
+const DATA_STAMP  = '20261123a.f9766c7c18';
 const DATA_CACHE  = 'skt-data-' + DATA_STAMP;
 const IMG_CACHE   = 'skt-img-v1';           // survives builds; capped
 const IMG_MAX_ENTRIES = 120;

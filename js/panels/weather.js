@@ -63,9 +63,7 @@ function _rollWeather(biomeId, seasonId) {
   }
   // "Feels like" — wind chill for cold (<10°C, wind >8 km/h),
   // heat index for hot+humid (>24°C, humidity >60%)
-  let feelsLike = temp;
-  if (temp < 10 && wind > 8)  feelsLike -= Math.round(wind * 0.18);
-  if (temp > 24 && humid > 60) feelsLike += Math.round((humid - 60) * 0.08);
+  const feelsLike = _weatherFeels(temp, wind, humid);
   // Wind direction — 8 compass points. Picked uniformly; pressure is rolled
   // separately and biased to match condition (storms = low pressure, clear =
   // high pressure) for flavour rather than meteorological accuracy.
@@ -128,6 +126,36 @@ function _weatherReadInGameDate(){
     if (!t || typeof t.day !== 'number') return null;
     return { year: t.year||0, month: t.month||0, day: t.day };
   } catch(e){ return null; }
+}
+// The hour on the clock (with its minutes), or null with no clock.
+function _weatherReadHour(){
+  try {
+    const t = JSON.parse(localStorage.getItem('skt-time-v1') || 'null');
+    if (!t || typeof t.hour !== 'number') return null;
+    return t.hour + (+t.minute || 0) / 60;
+  } catch(e){ return null; }
+}
+// The temperature through the day. The roll is the day's warmest, mid-
+// afternoon; it is coolest in the small hours, by more in a desert than by the
+// sea, and by less under cloud, which holds the day's heat in. It was one
+// number all day: 19 °C at four in the morning in a desert in winter.
+const WEATHER_DAY_SWING = { desert: 8, temperate: 5, arctic: 3, tropical: 4, coastal: 3, mountain: 6, swamp: 4, underdark: 0 };
+function _weatherLowOf(w){
+  const amp = WEATHER_DAY_SWING[w.biome] ?? 5, cl = Math.max(0, Math.min(100, +w.clouds || 0));
+  return +w.temp - 2 * amp * (1 - 0.5 * cl / 100);
+}
+function _weatherTempAt(w, hour){
+  if (hour == null || typeof w.temp !== 'number') return w.temp;
+  const lo = _weatherLowOf(w);
+  return Math.round(lo + (w.temp - lo) * (1 + Math.cos(2 * Math.PI * (hour - 15) / 24)) / 2);
+}
+// Wind chill for cold (<10 °C, wind over 8 km/h), heat index for hot and
+// humid (>24 °C, humidity over 60%) — the roll's rule, at any temperature.
+function _weatherFeels(temp, wind, humid){
+  let f = temp;
+  if (temp < 10 && wind > 8)  f -= Math.round(wind * 0.18);
+  if (temp > 24 && humid > 60) f += Math.round((humid - 60) * 0.08);
+  return f;
 }
 function _weatherSameDate(a, b){
   return !!a && !!b && a.year===b.year && a.month===b.month && a.day===b.day;
@@ -210,14 +238,18 @@ registerPanel('weather', {
       `<option value="${k}"${k===w.biome?' selected':''}>${esc(v.label)}</option>`).join('');
     const seasonOpts = Object.entries(WEATHER_SEASONS).map(([k,v]) =>
       `<option value="${k}"${k===w.season?' selected':''}>${esc(v.label)}</option>`).join('');
+    // Now, by the clock: the roll is the day's high.
+    const hr = _weatherReadHour(), now = _weatherTempAt(w, hr);
+    const feels = hr == null ? w.feelsLike : _weatherFeels(now, w.wind, w.humid);
+    const range = hr == null || typeof w.temp !== 'number' ? '' : ' · High ' + w.temp + '° · Low ' + Math.round(_weatherLowOf(w)) + '°';
     b.innerHTML = `
       <div class="weather-hero">
         <div class="weather-icon">${w.icon}</div>
-        <div class="weather-temp">${w.temp}°C</div>
+        <div class="weather-temp">${now}°C</div>
       </div>
       <div class="weather-sub">
         <div class="weather-condition">${esc(w.condition)}</div>
-        <div class="weather-feels">Feels like ${w.feelsLike}°C</div>
+        <div class="weather-feels">Feels like ${feels}°C${range}</div>
       </div>
       <div class="weather-stats">
         <div class="weather-stat"><div class="lab">Wind</div><div class="val">${w.wind} km/h${w.windDir?' '+esc(w.windDir):''}</div></div>

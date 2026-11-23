@@ -149,10 +149,10 @@ function zoomFitContent(){
 function clientToCanvas(clientX, clientY){
   const ws = document.getElementById('workspace');
   if (!ws) return {x: clientX, y: clientY};
-  const r = ws.getBoundingClientRect();
+  const r = ws.getBoundingClientRect(), pz = typeof sktPageZoom === 'function' ? sktPageZoom() : 1;
   return {
-    x: (ws.scrollLeft + (clientX - r.left)) / _zoom,
-    y: (ws.scrollTop  + (clientY - r.top))  / _zoom,
+    x: (ws.scrollLeft + (clientX - r.left) / pz) / _zoom,
+    y: (ws.scrollTop  + (clientY - r.top)  / pz) / _zoom,
   };
 }
 
