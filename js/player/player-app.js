@@ -1743,7 +1743,9 @@ const PA_SKILLS = {
   persuasion:'Persuasion', religion:'Religion', sleightOfHand:'Sleight of Hand',
   stealth:'Stealth', survival:'Survival',
 };
-const paSign = n => (n >= 0 ? '+' : '') + n;
+// (a number, or one kept as text with its sign — the sheet keeps a spell
+// attack as "+7", and that came out "++7")
+const paSign = n => { const v = parseInt(n, 10); return isNaN(v) ? String(n) : (v >= 0 ? '+' : '') + v; };
 const paMod = v => (typeof v === 'number' ? Math.floor((v - 10) / 2) : null);
 
 // Which sheets are open, by character id. Kept in memory, not stored: a

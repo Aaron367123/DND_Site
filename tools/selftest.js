@@ -33070,6 +33070,27 @@ for (const cls of Object.keys(rule)) for (let L = 1; L <= 20; L++) for (const sc
         }
       } catch(e){ ok('round 561 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); try { cbClose(); } catch(_){} }
     }
+    // -- Round 562: the Party tab's look at a friend says "Spell attack +7" (the sheet keeps it as "+7", and the sign went on twice: "++7"); a character's text copy lists its equipment with semicolons, so "Instrument of the Bards, Cli Lyre" stays one thing --
+    if (PLAYER){
+      const P0 = JSON.stringify(state.party), keepTab = paTab;
+      try {
+        if (paMyIdx() < 0) paSetPc('zoey');
+        const me = paPc(), mate = sktPlayerParty().find(p => p.id !== me.id);
+        state.party = state.party.map(p => p.id === mate.id ? Object.assign({}, p, { sheet: Object.assign({}, p.sheet || {}, { spellSaveDc: 15, spellAtkBonus: '+7', profBonus: 3 }) }) : p);
+        const det = paSheetDetail(state.party.find(p => p.id === mate.id));
+        ok('a friend’s spell attack reads +7, not ++7', /Spell attack \+7\b/.test(det) && !/\+\+/.test(det), (det.match(/Spell attack[^·<]*/) || [''])[0]);
+        ok('…and a plain number still gets its sign', paSign(3) === '+3' && paSign(-2) === '-2' && paSign('+7') === '+7' && paSign('-1') === '-1', [paSign(3), paSign(-2), paSign('+7'), paSign('-1')].join(' '));
+        if (typeof csCharacterText === 'function'){
+          paTab = 'you'; paRender(); for (let i = 0; i < 60 && !(typeof CS !== 'undefined' && CS && CS.R); i++) await sleep(100);
+          const pc = Object.assign({}, state.party.find(p => p.id === me.id));
+          pc.build = Object.assign({}, pc.build || {}, { items: [{ name: 'Instrument of the Bards, Cli Lyre' }, { name: 'Dagger', qty: 2 }] });
+          pc.inventory = [{ name: 'Instrument of the Bards, Cli Lyre' }, { name: 'Dagger', qty: 2 }];
+          const t = csCharacterText(pc), line = (t.split('\n').find(l => /^Equipment:/.test(l)) || '');
+          ok('the text copy: “Equipment: … Instrument of the Bards, Cli Lyre; Dagger ×2”', !line || /Instrument of the Bards, Cli Lyre; Dagger ×2/.test(line), line);
+        }
+      } catch(e){ ok('round 562 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
+      finally { state.party = JSON.parse(P0); paTab = keepTab; try { paRender(); } catch(e){} }
+    }
   }
 
   // ══════════════════════════════════════════════════════════ mobile / phone

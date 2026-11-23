@@ -197,7 +197,7 @@ function csCharacterText(pc){
   const feats = (sh.featureList || []).filter(f => !f.info).map(f => f.name);
   if (feats.length){ out.push(''); out.push('Features: ' + feats.join(', ')); }
   const items = csItems(pc);
-  if (items.length){ out.push(''); out.push('Equipment: ' + items.map(m => m.name + ((m.qty || 1) > 1 ? ' ×' + m.qty : '')).join(', ')); }
+  if (items.length){ out.push(''); out.push('Equipment: ' + items.map(m => m.name + ((m.qty || 1) > 1 ? ' ×' + m.qty : '')).join('; ')); }   // (; — "Instrument of the Bards, Cli Lyre" is one thing)
   const coins = csCoins(pc);
   const purse = CS_COINS.map(([k]) => (coins[k] || 0) + ' ' + k).filter(s => !/^0 /.test(s)).join(', ');
   out.push('Coins: ' + (purse || 'none'));
