@@ -38,6 +38,9 @@ const CONTENT_PANEL_SHARED = {
     deity:'deity', object:'object', vehicle:'vehicle', reward:'reward',
     psionic:'psionic', trap:'trap', hazard:'hazard',
     variantrule:'variantrule', table:'table', language:'language',
+    // {@quickref Cover||3||total cover}: the PHB's quick reference, which
+    // isn't in the data — the 2024 rules glossary has the same rules.
+    quickref:'variantrule',
     cult:'cult', boon:'boon',
     action:'action', skill:'skill', sense:'sense',
     charoption:'charoption', facility:'facility',
@@ -64,7 +67,7 @@ const CONTENT_PANEL_SHARED = {
     const placeholders = [];
     // Hoverable reference tags + the few link-style ones (area, adventure,
     // book). Everything else continues to flow through _stripTags as-is.
-    const TAGS_RE = /\{@(creature|spell|item|itemProperty|itemMastery|condition|status|disease|background|race|feat|optfeature|class|classFeature|subclassFeature|deity|object|vehicle|reward|psionic|trap|hazard|variantrule|table|language|cult|boon|action|skill|sense|charoption|facility|deck|encounter|recipe|area|adventure|book)\s+([^}]+)\}/gi;
+    const TAGS_RE = /\{@(quickref|creature|spell|item|itemProperty|itemMastery|condition|status|disease|background|race|feat|optfeature|class|classFeature|subclassFeature|deity|object|vehicle|reward|psionic|trap|hazard|variantrule|table|language|cult|boon|action|skill|sense|charoption|facility|deck|encounter|recipe|area|adventure|book)\s+([^}]+)\}/gi;
     const marked = s.replace(TAGS_RE, (_full, tag, body) => {
       const idx = placeholders.length;
       placeholders.push({ tag: tag.toLowerCase(), body });
@@ -96,6 +99,28 @@ const CONTENT_PANEL_SHARED = {
       if (slow && (d._source||'').toLowerCase() === slow) return d;
       if (!best) best = d;
     }
+    if (best || cat !== 'item') return best;
+    // Items the books name loosely. "+1 longbow": the longbow, and what the
+    // +1 does. "giant slayer", "figurine of wondrous power", "spell scroll":
+    // the data has each kind under its own name — "Giant Slayer Longsword",
+    // "Figurine of Wondrous Power, Bronze Griffon", "Spell Scroll (1st
+    // Level)" — so the first of them. (All showed "Reference unavailable".)
+    const plus = nlow.match(/^\+(\d)\s+(.+)$/);
+    if (plus){
+      const base = this._lookup(tag, plus[2], '');
+      if (!base) return null;
+      const r = base._raw || {}, armor = /^(LA|MA|HA|S)(\||$)/.test(String(r.type || '')) || r.ac != null;
+      const what = armor ? '+' + plus[1] + ' bonus to Armor Class while you wear ' + (/^S(\||$)/.test(String(r.type || '')) ? 'or carry it' : 'it')
+                         : '+' + plus[1] + ' bonus to attack and damage rolls made with this magic weapon';
+      return Object.assign({}, base, { name: '+' + plus[1] + ' ' + base.name, meta: (base.meta ? base.meta + ' · ' : '') + what });
+    }
+    for (const d of _5eData){
+      if (d.cat !== cat) continue;
+      const n = (d.name || '').toLowerCase();
+      if (!(n.startsWith(nlow + ', ') || n.startsWith(nlow + ' (') || n.startsWith(nlow + ' '))) continue;
+      if (slow && (d._source || '').toLowerCase() === slow) return d;
+      if (!best) best = d;
+    }
     return best;
   },
 
@@ -123,9 +148,22 @@ const CONTENT_PANEL_SHARED = {
       return '<a class="adv-link adv-xref" href="javascript:void(0)" data-kind="' + tag + '" data-src="' + esc(src)
         + '" data-ch="' + esc(parts[2] || '') + '" data-sec="' + esc(parts[3] || '') + '">' + esc(display) + '</a>';
     }
+    // Only a card when there's one to show: with the data loaded and nothing
+    // found, the words as they are (not a card saying "unavailable").
+    const loaded = typeof _5eLoaded !== 'undefined' && _5eLoaded && typeof _5eData !== 'undefined' && _5eData;
+    if (tag === 'quickref'){
+      // {@quickref name|source|index|hash|shown text}: the shown text is often
+      // the rule itself ("lightly obscured"), the name its section ("Vision
+      // and Light", which the glossary hasn't).
+      const shown = parts[4] || parts[0] || '';
+      const hit = [parts[4], parts[0]].find(n => n && this._lookup(tag, n, ''));
+      if (!hit) return loaded ? esc(shown) : '<span class="adv-tag" data-tag="quickref" data-name="' + esc(parts[0] || '') + '" data-source="">' + esc(shown) + '</span>';
+      return '<span class="adv-tag" data-tag="quickref" data-name="' + esc(hit) + '" data-source="">' + esc(shown) + '</span>';
+    }
     const name    = parts[0] || '';
     const source  = parts[1] || '';
     const display = parts[2] || name;
+    if ((tag === 'status' || tag === 'table') && loaded && !this._lookup(tag, name, source)) return esc(display);
     return '<span class="adv-tag" data-tag="' + esc(tag)
       + '" data-name="' + esc(name) + '" data-source="' + esc(source)
       + '">' + esc(display) + '</span>';

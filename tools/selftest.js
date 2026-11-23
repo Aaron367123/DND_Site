@@ -28163,6 +28163,28 @@ for (const cls of Object.keys(rule)) for (let L = 1; L <= 20; L++) for (const sc
         closePanel('library');
       } catch(e){ ok('round 557 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
     }
+    // -- Round 558: the reader's hover cards for things the books name loosely — "+1 longbow" (the longbow and what +1 does), "giant slayer" / "spell scroll" (the first of their kind), a quick-reference rule ("total cover": the glossary's Cover); and words with no card read as words, not a card saying "unavailable" --
+    if (!PLAYER){
+      try {
+        for (let i = 0; i < 300 && !(typeof _5eLoaded !== 'undefined' && _5eLoaded); i++) await sleep(100);
+        const P = panelDefs.adventures;
+        const card = (tag, n) => { const d = document.createElement('div'); d.innerHTML = P._renderAdvPop(tag, n, ''); return d.innerText.replace(/\s+/g, ' '); };
+        let c = card('item', '+1 longbow');
+        ok('“+1 longbow”: the longbow, with its +1 to attack and damage', /^\+1 Longbow/.test(c) && /\+1 bonus to attack and damage rolls/.test(c) && /1d8 piercing/.test(c), c.slice(0, 120));
+        c = card('item', '+2 breastplate');
+        ok('“+2 breastplate”: +2 to AC', /^\+2 Breastplate/.test(c) && /\+2 bonus to Armor Class/.test(c), c.slice(0, 120));
+        c = card('item', 'giant slayer');
+        ok('“giant slayer”: a giant slayer weapon’s card', /^Giant Slayer /.test(c) && !/unavailable/i.test(c), c.slice(0, 80));
+        c = card('item', 'spell scroll');
+        ok('“spell scroll”: a spell scroll’s card', /^Spell Scroll \(/.test(c), c.slice(0, 80));
+        const h = P._inline('{@quickref Cover||3||total cover} / {@quickref Vision and Light||2||lightly obscured} / {@quickref Vision and Light||2} / {@status surprised} / {@table Magic Item Table F}');
+        const w = document.createElement('div'); w.innerHTML = h;
+        const tags = [...w.querySelectorAll('.adv-tag')].map(s => s.textContent + '→' + s.dataset.name);
+        ok('quick references: “total cover” → Cover, “lightly obscured” → Lightly Obscured; the rest plain words', JSON.stringify(tags) === JSON.stringify(['total cover→Cover', 'lightly obscured→lightly obscured']) && w.textContent === 'total cover / lightly obscured / Vision and Light / surprised / Magic Item Table F', JSON.stringify([tags, w.textContent]));
+        c = card('quickref', 'Cover');
+        ok('…and Cover’s card is the rule', /^Cover/.test(c) && /degree of protection/i.test(c), c.slice(0, 100));
+      } catch(e){ ok('round 558 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
+    }
     // -- Class features: represented, not just text ------------------------
     {
       try {
