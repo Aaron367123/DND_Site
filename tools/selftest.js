@@ -10565,7 +10565,10 @@
         const theirs = JSON.stringify(Object.assign({}, R, { answers: { namroc: { v: 14, rid: 'rr_race', at: 1 } } }));
         const mine = JSON.stringify(Object.assign({}, R, { answers: { zoey: { v: 9, rid: 'rr_race', at: 2 } } }));
         let server = base, cache = base;
-        _fbDb = { ref(path){ return {
+        // (only this key's path is the race: anything else saved meanwhile in
+        // a long run — the suite's own state — goes nowhere, not over `server`)
+        const elsewhere = { set(){ return Promise.resolve(); }, transaction(){ return Promise.resolve({ committed: false }); }, on(){}, off(){}, once(){ return Promise.resolve({ exists: () => false, val: () => null }); } };
+        _fbDb = { ref(path){ if (!String(path).includes(typeof _toFbKey === 'function' ? _toFbKey(K) : K)) return elsewhere; return {
           set(v){ server = v; cache = v; return Promise.resolve(); },
           transaction(fn){
             // Their write lands first, and its event reaches us mid-push.
@@ -10583,7 +10586,7 @@
         ok('sync: two players answering a roll at once — the server keeps both answers', !!srv.zoey && !!srv.namroc, Object.keys(srv).join('+'));
         ok('sync: and this device shows both, not the other phone’s copy', !!loc.zoey && !!loc.namroc, Object.keys(loc).join('+'));
         // A reaction prompt is one question and one answer: still a plain replace.
-        let setCalls = 0; const fbT = _fbDb; _fbDb = { ref(){ return { set(v){ setCalls++; return Promise.resolve(); }, transaction(){ throw new Error('atomic key used a transaction'); } }; } };
+        let setCalls = 0; const fbT = _fbDb, PK = typeof _toFbKey === 'function' ? _toFbKey('skt-prompt-v1') : 'skt-prompt-v1'; _fbDb = { ref(path){ if (!String(path).includes(PK)) return elsewhere; return { set(v){ setCalls++; return Promise.resolve(); }, transaction(){ throw new Error('atomic key used a transaction'); } }; } };
         _lastServer['skt-prompt-v1'] = 'null'; rawSet('skt-prompt-v1', JSON.stringify({ id: 'p_x', answer: null })); _dirtyKeys.clear(); _dirtyKeys.add('skt-prompt-v1');
         await _flushDirtyKeys();
         ok('sync: an atomic key (the reaction prompt) is still written whole', setCalls === 1);
@@ -28197,6 +28200,12 @@ for (const cls of Object.keys(rule)) for (let L = 1; L <= 20; L++) for (const sc
         // across every item's description
         const leaks = _5eData.filter(r => r.cat === 'item' && /\{@/.test(r.desc || (r._raw && r._raw.desc) || '')).map(r => r.name);
         ok('…nor any item’s description', !leaks.length, leaks.slice(0, 5).join(', '));
+        // who may attune: "by a creature that has proficiency in the {@skill Arcana} skill"
+        const tab = _5eData.find(r => r.cat === 'item' && r.name === 'Black Crystal Tablet');
+        const att = tab && tab._raw && tab._raw.requires_attunement;
+        ok('…nor who may attune to an item (the Black Crystal Tablet: proficiency in the Arcana skill)', !!att && !/\{@/.test(att) && /Arcana skill/.test(att), att);
+        const leaksA = _5eData.filter(r => r.cat === 'item' && /\{@/.test((r._raw && r._raw.requires_attunement) || '')).map(r => r.name);
+        ok('…for any item', !leaksA.length, leaksA.slice(0, 5).join(', '));
       } catch(e){ ok('round 559 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
     }
     // -- Class features: represented, not just text ------------------------

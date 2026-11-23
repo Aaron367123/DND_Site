@@ -714,8 +714,10 @@ function _convertItem(d) {
   const expanded = _expandItemRefs(d.entries || d.entriesTemplate || [], d);
   const desc = _parseEntries(expanded);
   const rarity = d.rarity || 'unknown';
+  // (tag-stripped: "by a creature that has proficiency in the {@skill
+  // Arcana} skill" showed its tags on the Black Crystal Tablet)
   const attune = d.reqAttune
-    ? (typeof d.reqAttune === 'string' ? d.reqAttune : 'attunement required')
+    ? (typeof d.reqAttune === 'string' ? _stripTags(d.reqAttune) : 'attunement required')
     : null;
   // 5etools stores value in copper pieces; render in the largest unit that
   // doesn't lose precision (gp / sp / cp) for the stat block. We also retain
@@ -846,7 +848,8 @@ function _normSearchIdx(s) {
 // from the data's sum on the base item, silvered ammunition's from the PHB.
 // 20261123b: a heading's, item's or inset's name inside an entry is
 // tag-stripped ("{@creature griffon||Bronze Griffon}" showed raw).
-const DATA_STAMP   = '20261123b';
+// 20261123c: an item's "requires attunement by ..." is tag-stripped too.
+const DATA_STAMP   = '20261123c';
 // A hash of data/'s contents, stamped by tools/stamp-build.js — so a data
 // refresh renews every device's cache (here and in sw.js) without anyone
 // remembering to bump DATA_STAMP. DATA_STAMP stays for converter changes.

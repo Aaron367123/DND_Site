@@ -34,7 +34,7 @@
  */
 'use strict';
 
-const BUILD = '0e5506d38c';
+const BUILD = 'fcc885eceb';
 const PRECACHE = [
   'skt-workspace.html',
   'styles/main.css?v=9da031fdee',
@@ -84,7 +84,7 @@ const PRECACHE = [
   'js/panels/weather.js?v=521eb46546',
   'js/panels/timetracker.js?v=a4bf06c348',
   'js/panels/world.js?v=3363ff2d50',
-  'js/content/data-loader.js?v=46d5e10066',
+  'js/content/data-loader.js?v=1b129a7196',
   'js/content/search.js?v=3f434975de',
   'js/features/backup.js?v=544e2b6d21',
   'js/ui/qr.js?v=b696ff33f3',
@@ -119,7 +119,7 @@ const SHELL_CACHE = 'skt-shell-' + BUILD;   // swapped wholesale each build
 // invalidates the HTTP cache too, from the same single source of truth.
 // The activate handler deletes any skt-data-* bucket that isn't this one, so
 // the changeover is automatic.
-const DATA_STAMP  = '20261123b.f9766c7c18';
+const DATA_STAMP  = '20261123c.f9766c7c18';
 const DATA_CACHE  = 'skt-data-' + DATA_STAMP;
 const IMG_CACHE   = 'skt-img-v1';           // survives builds; capped
 const IMG_MAX_ENTRIES = 120;
