@@ -28208,6 +28208,27 @@ for (const cls of Object.keys(rule)) for (let L = 1; L <= 20; L++) for (const sc
         ok('…for any item', !leaksA.length, leaksA.slice(0, 5).join(', '));
       } catch(e){ ok('round 559 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
     }
+    // -- Round 560: search ranks the name typed first, and among things of that name the monster, spell, item… before species, languages and recipes — "goblin" opened on four languages and three species with the monster eighth, "orc" on a recipe ('"Orc" Bacon'); then names with the word in them before matches only in the description --
+    if (!PLAYER){
+      const S0 = JSON.stringify(state.searchState || {});
+      try {
+        for (let i = 0; i < 300 && !(typeof _5eLoaded !== 'undefined' && _5eLoaded); i++) await sleep(100);
+        const top = q => { state.searchState = Object.assign({}, state.searchState, { query: q, category: 'all' }); return doSearch(); };
+        let r = top('goblin');
+        ok('“goblin”: the Goblin monster first', r[0] && r[0].name === 'Goblin' && r[0].cat === 'monster', r.slice(0, 4).map(x => x.name + '/' + x.cat).join(', '));
+        r = top('orc');
+        const bacon = r.findIndex(x => /Bacon/.test(x.name)), lastOrc = r.map(x => x.name).lastIndexOf('Orc');
+        ok('“orc”: the Orc monster first, the recipe after every “Orc”', r[0] && r[0].name === 'Orc' && r[0].cat === 'monster' && (bacon < 0 || bacon > lastOrc), JSON.stringify([r.slice(0, 3).map(x => x.name + '/' + x.cat), bacon, lastOrc]));
+        const langs = r.filter(x => x.name === 'Orc').map(x => x.cat), li = langs.indexOf('language'), ri = langs.lastIndexOf('race');
+        ok('…its species before its languages', li < 0 || ri < 0 || ri < li, JSON.stringify(langs));
+        r = top('elf');
+        const astral = r.findIndex(x => x.name === 'Astral Elf'), descOnly = r.findIndex(x => !(' ' + (x._n || '') + ' ').includes(' elf') && !(x._n || '').startsWith('elf'));
+        ok('“elf”: “Astral Elf” before matches only in a description', astral >= 0 && (descOnly < 0 || astral < descOnly), JSON.stringify([astral, descOnly, r[descOnly] && r[descOnly].name]));
+        r = top('fireball');
+        ok('“fireball”: still the spell first', r[0] && r[0].name === 'Fireball' && r[0].cat === 'spell', r[0] && r[0].name);
+      } catch(e){ ok('round 560 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
+      finally { try { state.searchState = JSON.parse(S0); } catch(e){} }
+    }
     // -- Class features: represented, not just text ------------------------
     {
       try {

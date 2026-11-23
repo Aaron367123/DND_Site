@@ -979,6 +979,11 @@ function _editDistance(a, b){
   return dp[m][n];
 }
 
+// Among results with the same name, which kind of thing comes first.
+const _SEARCH_CAT_W = { monster: 0, spell: 1, item: 2, condition: 3, action: 4, classFeature: 5, optionalfeature: 6, feat: 7,
+  race: 8, background: 9, class: 10, variantrule: 11, sense: 12, skill: 13, object: 14, trap: 15, hazard: 16, vehicle: 17,
+  deity: 25, reward: 26, table: 27, deck: 28, language: 30, recipe: 31 };
+function _searchCatWeight(c){ return _SEARCH_CAT_W[c] ?? 20; }
 function doSearch(){
   const qRaw=(state.searchState.query||'').trim().toLowerCase();
   const q=_normSearch(qRaw);
@@ -1010,11 +1015,14 @@ function doSearch(){
       return true;
     });
     const edRank = sktEditionRank();
-    pool.sort((a,b) => {
-      const aStarts = (a._n || '').startsWith(q) ? 0 : 1;
-      const bStarts = (b._n || '').startsWith(q) ? 0 : 1;
-      return aStarts - bStarts || a.name.localeCompare(b.name) || edRank(a) - edRank(b);
-    });
+    // Names that start with what was typed first (the name exactly, as the
+    // shortest, leads them), then names with it as a word ("Astral Elf"),
+    // then matches only in the description line. Among things of one name,
+    // what's most often looked for at the table first: "goblin" put the
+    // species and four languages ahead of the monster, "orc" opened on a
+    // recipe, "dragon" on a Waterdeep item.
+    const tier = r => { const n = r._n || (r._n = _normSearch(r.name)); return n.startsWith(q) ? 0 : (' ' + n + ' ').includes(' ' + q + ' ') ? 1 : 2; };
+    pool.sort((a,b) => tier(a) - tier(b) || (a._n || '').localeCompare(b._n || '') || _searchCatWeight(a.cat) - _searchCatWeight(b.cat) || edRank(a) - edRank(b));
     // Fuzzy fallback — only kicks in for single-token queries of 3+ chars
     // when strict results are thin. Compares the query against each word
     // of every candidate's name with Damerau-Levenshtein, keeps anything
