@@ -28097,7 +28097,10 @@ for (const cls of Object.keys(rule)) for (let L = 1; L <= 20; L++) for (const sc
       try {
         openPanel('adventures'); await sleep(800);
         const A = panelDefs.adventures, body = () => document.querySelector('.window[data-panel="library"] .window-body');
-        const card = [...document.querySelectorAll('.adv-list > *')].find(x => /Storm King/.test(x.textContent));
+        // (from the list: a round before may have left the reader open on an adventure)
+        panelDefs.adventures._currentAdvId = null; panelDefs.adventures._render();
+        let card = null;
+        for (let i = 0; i < 60 && !card; i++){ card = [...document.querySelectorAll('.adv-list > *')].find(x => /Storm King/.test(x.textContent)); if (!card) await sleep(100); }
         if (!card){ ok('round 556: Storm King’s Thunder is in the library', false, 'no card'); }
         else {
           card.click();
@@ -28120,6 +28123,7 @@ for (const cls of Object.keys(rule)) for (let L = 1; L <= 20; L++) for (const sc
           ok('…and the reader remembers the chapter it went to', A._bookmarks && A._bookmarks[A._currentAdvId] && A._bookmarks[A._currentAdvId].chapterIdx === A._currentChapterIdx, JSON.stringify(A._bookmarks && A._bookmarks[A._currentAdvId]));
           [...body().querySelectorAll('.adv-chapter')][0].click(); await sleep(200);
         }
+        try { panelDefs.adventures._currentAdvId = null; panelDefs.adventures._render(); } catch(e){}
         closePanel('library');
       } catch(e){ ok('round 556 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
     }
@@ -28128,7 +28132,10 @@ for (const cls of Object.keys(rule)) for (let L = 1; L <= 20; L++) for (const sc
       try {
         openPanel('adventures'); await sleep(800);
         const body = () => document.querySelector('.window[data-panel="library"] .window-body');
-        const card = [...document.querySelectorAll('.adv-list > *')].find(x => /Storm King/.test(x.textContent));
+        // (from the list: a round before may have left the reader open on an adventure)
+        panelDefs.adventures._currentAdvId = null; panelDefs.adventures._render();
+        let card = null;
+        for (let i = 0; i < 60 && !card; i++){ card = [...document.querySelectorAll('.adv-list > *')].find(x => /Storm King/.test(x.textContent)); if (!card) await sleep(100); }
         if (!card){ ok('round 557: Storm King’s Thunder is in the library', false, 'no card'); }
         else {
           card.click();
@@ -28152,6 +28159,7 @@ for (const cls of Object.keys(rule)) for (let L = 1; L <= 20; L++) for (const sc
           ok('…and the Books tab’s way back says “All books”', !!back && /All books/.test(back.textContent), back && back.textContent);
           back && back.click(); await sleep(200);
         }
+        try { panelDefs.adventures._currentAdvId = null; panelDefs.adventures._render(); } catch(e){}
         closePanel('library');
       } catch(e){ ok('round 557 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
     }
