@@ -4588,12 +4588,27 @@ registerPanel('battlemap',{
       const blocked = dir => drawn.some(d => d.t !== t && Math.abs(d.s.x - s.x) < reach
         && dir * (d.s.y - s.y) > 0 && dir * (d.s.y - s.y) < dim * 1.6);
       const below = blocked(1), above = below && blocked(-1);
-      const dy = below && !above ? -(dim / 2 + 4 + h) : dim / 2 + 4;
+      let up = below && !above;
+      // Whose turn it is, with someone above and below: it's shown anyway, so
+      // on the side where it covers less of them (Creambak's name lay across
+      // Zoey's face below him, when above it only grazed Zindle's corner).
+      if (turn && below && above){
+        const w = wds[di], cover = dir => {
+          const y0 = dir > 0 ? s.y + dim / 2 + 4 : s.y - dim / 2 - 4 - h, y1 = y0 + h, x0 = s.x - w / 2, x1 = s.x + w / 2;
+          let a = 0;
+          drawn.forEach((d, i) => { if (d.t === t) return; const r = dims[i] * 0.4;   // (the round token, near enough)
+            const ox = Math.min(x1, d.s.x + r) - Math.max(x0, d.s.x - r), oy = Math.min(y1, d.s.y + r) - Math.max(y0, d.s.y - r);
+            if (ox > 0 && oy > 0) a += ox * oy; });
+          return a;
+        };
+        up = cover(-1) < cover(1);
+      }
+      const dy = up ? -(dim / 2 + 4 + h) : dim / 2 + 4;
       const off = this._stageDelta(0, dy);
       el.style.left = ((t.x || 0) + off.x).toFixed(1) + 'px';
       el.style.top = ((t.y || 0) + off.y).toFixed(1) + 'px';
       el.dataset.dx = off.x.toFixed(1); el.dataset.dy = off.y.toFixed(1);
-      el.classList.toggle('above', below && !above);
+      el.classList.toggle('above', up);
       // Whose turn it is: named in full whatever's beside it — the creature
       // the whole table is looking for. In a fight's huddle every name was
       // hidden till hovered, and the TV has nothing to hover with (Creambak's

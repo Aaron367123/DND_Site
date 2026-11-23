@@ -27956,6 +27956,37 @@ for (const cls of Object.keys(rule)) for (let L = 1; L <= 20; L++) for (const sc
         try { B._render(); } catch(e){} closePanel('battlemap');
       }
     }
+    // -- Round 549: whose turn it is, with a token above and one below — its name goes where it covers less (it lay across the face of the one right below, when above it only grazed one off to the side) --
+    if (!PLAYER){
+      const B = panelDefs.battlemap, T0 = B._tokens, K0 = JSON.stringify(state.combatants), R0 = state.combatRound, A0 = state.activeCombatantId;
+      try {
+        openPanel('battlemap'); await sleep(400);
+        const cs = B._csScreen() || 50;
+        state.combatants = [{ id: 'r549a', name: 'R549 Alpha', isPC: false, hp: 9, hpMax: 9, conditions: [] }, { id: 'r549b', name: 'R549 Bravo', isPC: false, hp: 9, hpMax: 9, conditions: [] }, { id: 'r549c', name: 'R549 Charlie', isPC: false, hp: 9, hpMax: 9, conditions: [] }];
+        state.combatRound = 1; state.activeCombatantId = 'r549a';
+        B._tokens = [
+          { id: 't549a', cid: 'r549a', label: 'R549 Alpha', x: cs * 6.5, y: cs * 5.5, size: 1, color: '#844' },
+          { id: 't549b', cid: 'r549b', label: 'R549 Bravo', x: cs * 6.5, y: cs * 6.5, size: 1, color: '#484' },
+          { id: 't549c', cid: 'r549c', label: 'R549 Charlie', x: cs * 6.5, y: cs * 4.5, size: 1, color: '#448' }];
+        B._render(); await sleep(250);
+        // Charlie up and off to the side: under the whole name's reach, but clear of where it'd sit above
+        { const dim = B._body.querySelector('.map-token[data-tid="t549a"]').offsetHeight, wd = B._body.querySelector('.map-token-name[data-tid="t549a"]').scrollWidth;
+          B._tokens[2].x = B._tokens[0].x + 0.92 * (wd / 2 + dim / 2); B._render(); await sleep(200); }
+        const nm = B._body.querySelector('.map-token-name[data-tid="t549a"]'), box = id => B._body.querySelector('.map-token[data-tid="' + id + '"]').getBoundingClientRect();
+        const ra = nm.getBoundingClientRect(), ta = box('t549a'), tb = box('t549b'), tc = box('t549c');
+        const hit = (p, q) => p.right > q.left && p.left < q.right && p.bottom > q.top && p.top < q.bottom;
+        ok('Alpha’s turn, Bravo right below and Charlie above to the side: the name goes above', ra.bottom <= ta.top + 1 && nm.classList.contains('above'), JSON.stringify([Math.round(ra.top), Math.round(ra.bottom), Math.round(ta.top)]));
+        ok('…off Bravo’s face', !hit(ra, tb), JSON.stringify([Math.round(ra.bottom), Math.round(tb.top)]));
+        // Charlie straight above instead: below and above both cover a face — it stays below, as before
+        B._tokens[2].x = B._tokens[0].x; B._tokens[1].x = B._tokens[0].x + cs * 0.5; B._render(); await sleep(200);
+        { const r2 = nm.isConnected ? nm : B._body.querySelector('.map-token-name[data-tid="t549a"]'), q = r2.getBoundingClientRect(), t2 = box('t549a');
+          ok('…Charlie straight above, Bravo below and aside: below (the side it covers less)', q.top >= t2.bottom - 1 && !r2.classList.contains('above'), JSON.stringify([Math.round(q.top), Math.round(t2.bottom)])); }
+      } catch(e){ ok('round 549 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
+      finally {
+        B._tokens = T0; state.combatants = JSON.parse(K0); state.combatRound = R0; state.activeCombatantId = A0;
+        try { B._render(); } catch(e){} closePanel('battlemap');
+      }
+    }
     // -- Class features: represented, not just text ------------------------
     {
       try {
