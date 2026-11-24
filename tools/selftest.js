@@ -28610,6 +28610,28 @@ for (const cls of Object.keys(rule)) for (let L = 1; L <= 20; L++) for (const sc
         ok('an imported character: a carried potion and manual leave Strength 10; an attuned belt makes it 21', ip.abilities.str === 10 && ip2.abilities.str === 21, JSON.stringify([ip.abilities.str, ip2.abilities.str]));
       } catch(e){ ok('round 584 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
     }
+    // -- Round 585: a carried potion doesn't give its effect — a Potion of Fire Resistance in the pack gave fire resistance for good, a Potion of Invulnerability resistance to everything; a Ring of Resistance worn and attuned still does; a potion is still there to drink --
+    {
+      const keepP = JSON.stringify(state.party);
+      try {
+        const R = await sktRulesLoad('2014'), M = await sktMagicLoad('2014');
+        const mk = (n, att) => { const e = M.find(x => x.name === n); const it = e && sktMagicMake(R, e, ''); if (it && att) it.attuned = true; return it; };
+        const res = items => { const b = Object.assign(sktBlankBuild('2014'), { name: 'R585', cls: 'Fighter', level: 5, abilities: { method: 'manual', base: { str: 16, dex: 14, con: 14, int: 10, wis: 12, cha: 8 } } });
+          b.items = items.filter(Boolean); return sktComputeCharacter(b, R).resistances || []; };
+        ok('a Potion of Fire Resistance carried: no fire resistance', !res([mk('Potion of Fire Resistance')]).includes('fire'), JSON.stringify(res([mk('Potion of Fire Resistance')])));
+        ok('…a Potion of Invulnerability carried: no resistances at all', res([mk('Potion of Invulnerability')]).length === 0, JSON.stringify(res([mk('Potion of Invulnerability')])));
+        const ringIt = mk('Ring of Fire Resistance', true);
+        ok('…a Ring of Fire Resistance, attuned, still gives fire resistance', !!ringIt && res([ringIt]).includes('fire'), JSON.stringify(ringIt && res([ringIt])));
+        ok('what counts as used up: potions, oils, elixirs, manuals, tomes, scrolls — not a ring or a belt', ['Potion of Healing', 'Oil of Sharpness', 'Elixir of Health', 'Manual of Golems', 'Tome of Clear Thought', 'Spell Scroll (1st Level)', 'Keoghtom’s Ointment'].every(n => sktItemConsumable({ name: n }))
+           && !['Ring of Protection', 'Belt of Hill Giant Strength', 'Cloak of Protection', 'Potionmaker’s Bag'].some(n => sktItemConsumable({ name: n })), '');
+        // an imported character: carried, it isn't worn
+        const ip = { id: 'r585i', name: 'R585 Imported', abilities: { str: 10, dex: 12, con: 12, int: 10, wis: 10, cha: 10 }, sheet: { profBonus: 2 },
+          inventory: [{ name: 'Potion of Fire Resistance', qty: 1, resist: ['fire'] }, { name: 'Ring of Protection', reqAttune: true, attuned: true, qty: 1 }] };
+        const worn = csImpWorn(ip).map(m => m.name);
+        ok('…an imported character’s potion isn’t worn; the ring is', !worn.includes('Potion of Fire Resistance') && worn.includes('Ring of Protection'), JSON.stringify(worn));
+      } catch(e){ ok('round 585 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
+      finally { state.party = JSON.parse(keepP); }
+    }
     // -- Class features: represented, not just text ------------------------
     {
       try {

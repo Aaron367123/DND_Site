@@ -1976,9 +1976,17 @@ function sktSpellUp(s, i, slot){
 // effect, once had, goes on the sheet's own bonus. The Hammer of
 // Thunderbolts' +4 Strength is for one attuned to it while wearing a belt of
 // giant strength and gauntlets of ogre power — not for the hammer alone.
+// Something used up, not worn: a potion, an oil, an elixir, a philter, an
+// ointment, a manual or tome, a spell scroll. What it does lasts while it
+// works — drunk, rubbed on, read — not while it's carried: a Potion of Fire
+// Resistance in the pack gave fire resistance for good, a Potion of
+// Invulnerability resistance to everything, a Potion of Flying a flying speed.
+function sktItemConsumable(m){
+  return /^(Potions?|Oil|Elixir|Philter|Ointment|Manual|Tome) of\b|^Spell Scroll\b|\bOintment$/i.test(String((m && m.name) || ''));
+}
 function sktItemAbilityOn(m, active){
   const n = String((m && m.name) || '');
-  if (/^Potion of /i.test(n) || /^(Manual|Tome) of /i.test(n)) return false;
+  if (sktItemConsumable(m)) return false;
   if (/^Hammer of Thunderbolts/i.test(n)){
     const on = active || [];
     return !!m.attuned && on.some(x => /^Belt of .*Giant Strength/i.test(String(x && x.name))) && on.some(x => /^Gauntlets of Ogre Power/i.test(String(x && x.name)));

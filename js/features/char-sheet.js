@@ -3227,7 +3227,7 @@ function csGearAc(pc, gear, R){
   return { ac, parts };
 }
 // Worn: equipped (gear defaults to equipped), and attuned where that's needed.
-function csImpWorn(pc){ return (pc.inventory || []).filter(m => m.equipped !== false && (!m.reqAttune || m.attuned)); }
+function csImpWorn(pc){ return (pc.inventory || []).filter(m => m.equipped !== false && (!m.reqAttune || m.attuned) && !(typeof sktItemConsumable === 'function' && sktItemConsumable(m))); }
 // An inventory line for armour or a shield, plain or magic.
 function csGearLine(R, key, bonus){
   const bi = R.items[key]; if (!bi) return null;

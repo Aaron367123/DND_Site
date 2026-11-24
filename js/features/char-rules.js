@@ -3874,6 +3874,8 @@ function _sktActiveItems(build){
   const artLv = /^artificer$/i.test(full.cls || '') ? (full.level || 1) - others : ((full.multi || []).find(m => /^artificer$/i.test(m.cls || '')) || {}).level || 0;
   const max = artLv >= 18 ? 6 : artLv >= 14 ? 5 : artLv >= 10 ? 4 : 3;
   return (build.items || []).filter(m => {
+    // (a potion's, an oil's effect isn't the pack's: sktItemConsumable)
+    if (m && typeof sktItemConsumable === 'function' && sktItemConsumable(m)) return false;
     if (!m.reqAttune) return true;
     if (!m.attuned || attuned >= max) return false;
     attuned++; return true;

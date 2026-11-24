@@ -34,7 +34,7 @@
  */
 'use strict';
 
-const BUILD = 'cc7130acca';
+const BUILD = '723d504e91';
 const PRECACHE = [
   'skt-workspace.html',
   'styles/main.css?v=9da031fdee',
@@ -46,7 +46,7 @@ const PRECACHE = [
   'js/generated/token-index.js?v=2840810fc7',
   'js/generated/species-portraits.js?v=56581792b0',
   'js/core/campaign.js?v=171a617f55',
-  'js/core/utils.js?v=4837bc7fff',
+  'js/core/utils.js?v=9d90fdd5ce',
   'js/ui/dice-fx.js?v=1acff2694d',
   'js/core/state.js?v=375d5a9fcf',
   'js/core/undo.js?v=86cddb637a',
@@ -94,9 +94,9 @@ const PRECACHE = [
   'js/ui/zoom-pan.js?v=b38c43a001',
   'js/ui/workspaces.js?v=07664d648a',
   'js/ui/command-palette.js?v=fd1d3547c2',
-  'js/features/char-rules.js?v=50b4fad153',
+  'js/features/char-rules.js?v=74def40e98',
   'js/features/char-effects.js?v=6b739e6eda',
-  'js/features/char-sheet.js?v=4ea6d88a22',
+  'js/features/char-sheet.js?v=6daa405226',
   'js/features/char-print.js?v=9097b1b076',
   'js/features/char-builder.js?v=add9678714',
   'js/features/pdf-import.js?v=95d9f5740f',
