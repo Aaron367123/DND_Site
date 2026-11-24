@@ -1969,6 +1969,22 @@ function sktSpellUp(s, i, slot){
   if (/^\d+(\s*,\s*\d+)+$/.test(lv)) return lv.split(',').map(Number).filter(n => n > base && n <= +slot).length;
   return up;
 }
+// Whether a carried item's change to an ability score is in force. Not a
+// potion's (Hill Giant Strength is for the hour after it's drunk), nor a
+// manual's or tome's (+2 once, when read — and the book is spent): carried,
+// they set Strength 21 or added 2 for as long as they sat in the pack. Their
+// effect, once had, goes on the sheet's own bonus. The Hammer of
+// Thunderbolts' +4 Strength is for one attuned to it while wearing a belt of
+// giant strength and gauntlets of ogre power — not for the hammer alone.
+function sktItemAbilityOn(m, active){
+  const n = String((m && m.name) || '');
+  if (/^Potion of /i.test(n) || /^(Manual|Tome) of /i.test(n)) return false;
+  if (/^Hammer of Thunderbolts/i.test(n)){
+    const on = active || [];
+    return !!m.attuned && on.some(x => /^Belt of .*Giant Strength/i.test(String(x && x.name))) && on.some(x => /^Gauntlets of Ogre Power/i.test(String(x && x.name)));
+  }
+  return true;
+}
 // "4d10" grown by `up` steps of "1d10" → "6d10"; a different die is added on.
 function sktSpellStepped(dice, step, up){
   if (!step || !up) return dice;

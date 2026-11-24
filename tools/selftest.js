@@ -28587,6 +28587,29 @@ for (const cls of Object.keys(rule)) for (let L = 1; L <= 20; L++) for (const sc
            JSON.stringify([tm('Plant Growth'), tm('Counterspell'), tm('Healing Word')]));
       } catch(e){ ok('round 583 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
     }
+    // -- Round 584: an item's ability score — a carried Potion of Hill Giant Strength doesn't set Strength 21, nor a Manual or Tome add 2 (once, when read); a belt's 21 with an Ioun Stone's +2 stays 21 (it fell to 20); the Hammer of Thunderbolts' +4 only with its belt and gauntlets, to 25 --
+    {
+      try {
+        const R = await sktRulesLoad('2014'), M = await sktMagicLoad('2014');
+        const mk = (n, att) => { const e = M.find(x => x.name === n); const it = e && sktMagicMake(R, e, ''); if (it && att) it.attuned = true; return it; };
+        const str = (items, base) => { const b = Object.assign(sktBlankBuild('2014'), { name: 'R584', cls: 'Fighter', level: 5, abilities: { method: 'manual', base: Object.assign({ str: 10, dex: 14, con: 14, int: 16, wis: 12, cha: 8 }, base || {}) } });
+          b.items = items.filter(Boolean); return sktComputeCharacter(b, R).abilities; };
+        ok('a carried Potion of Hill Giant Strength: Strength 10, not 21', str([mk('Potion of Hill Giant Strength')]).str === 10, str([mk('Potion of Hill Giant Strength')]).str);
+        ok('…a Manual of Gainful Exercise or a Tome of Clear Thought carried: no +2', str([mk('Manual of Gainful Exercise')]).str === 10 && str([mk('Tome of Clear Thought')]).int === 16, '');
+        ok('…a Belt of Hill Giant Strength, attuned: 21; with an Ioun Stone of Strength too, still 21 (not 20)', str([mk('Belt of Hill Giant Strength', true)]).str === 21 && str([mk('Belt of Hill Giant Strength', true), mk('Ioun Stone, Strength', true)]).str === 21,
+           JSON.stringify([str([mk('Belt of Hill Giant Strength', true)]).str, str([mk('Belt of Hill Giant Strength', true), mk('Ioun Stone, Strength', true)]).str]));
+        ok('…an Ioun Stone of Strength alone: 10 → 12; at 19 → 20', str([mk('Ioun Stone, Strength', true)]).str === 12 && str([mk('Ioun Stone, Strength', true)], { str: 19 }).str === 20, '');
+        const ham = mk('Hammer of Thunderbolts', true);
+        ok('the Hammer of Thunderbolts alone: no +4; attuned with the belt and Ogre Power gauntlets: 21 + 4 = 25', !!ham && str([ham]).str === 10 && str([mk('Belt of Hill Giant Strength', true), mk('Gauntlets of Ogre Power', true), ham]).str === 25,
+           JSON.stringify([ham && str([ham]).str, str([mk('Belt of Hill Giant Strength', true), mk('Gauntlets of Ogre Power', true), ham]).str]));
+        // an imported character (the sheet's own reading of what's carried)
+        const ip = { id: 'r584i', name: 'R584 Imported', abilities: { str: 10, dex: 12, con: 12, int: 10, wis: 10, cha: 10 }, sheet: { profBonus: 2 } };
+        csImpItemFx(ip, [{ name: 'Potion of Hill Giant Strength', ability: { static: { str: 21 } } }, { name: 'Manual of Gainful Exercise', ability: { str: 2 } }]);
+        const ip2 = { id: 'r584j', name: 'R584 Imported 2', abilities: { str: 10, dex: 12, con: 12, int: 10, wis: 10, cha: 10 }, sheet: { profBonus: 2 } };
+        csImpItemFx(ip2, [{ name: 'Belt of Hill Giant Strength', reqAttune: true, attuned: true, ability: { static: { str: 21 } } }]);
+        ok('an imported character: a carried potion and manual leave Strength 10; an attuned belt makes it 21', ip.abilities.str === 10 && ip2.abilities.str === 21, JSON.stringify([ip.abilities.str, ip2.abilities.str]));
+      } catch(e){ ok('round 584 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
+    }
     // -- Class features: represented, not just text ------------------------
     {
       try {

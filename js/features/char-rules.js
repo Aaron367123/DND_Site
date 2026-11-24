@@ -1223,10 +1223,16 @@ function sktBuildAbilities(build, R, trace){
   });
   SKT_ABS.forEach(k => { const c = Math.max(1, Math.min(boonCap[k] || 20, out[k])); if (c < out[k]) note('Capped at ' + (boonCap[k] || 20), k, c - out[k]); out[k] = c; });
   // Magic items: a score set to a number (it never lowers one), or raised.
-  _sktActiveItems(build).forEach(m => {
+  const activeIt = _sktActiveItems(build);
+  activeIt.forEach(m => {
     const a = m.ability; if (!a || typeof a !== 'object') return;
+    if (typeof sktItemAbilityOn === 'function' && !sktItemAbilityOn(m, activeIt)) return;
     Object.keys(a.static || {}).forEach(k => { if (k in out && (+a.static[k] || 0) > out[k]){ note(m.name + ' (sets ' + a.static[k] + ')', k, (+a.static[k] || 0) - out[k]); out[k] = +a.static[k]; } });
-    SKT_ABS.forEach(k => { if (typeof a[k] === 'number'){ const v = Math.min(20, out[k] + a[k]); note(m.name, k, v - out[k]); out[k] = v; } });
+    // Raised to 20 at most — never lowered: a belt's Strength 21 with an Ioun
+    // Stone's +2 "to a maximum of 20" went down to 20. (The Hammer of
+    // Thunderbolts' +4 can go past 20, to 30.)
+    const cap = /^Hammer of Thunderbolts/i.test(String(m.name || '')) ? 30 : 20;
+    SKT_ABS.forEach(k => { if (typeof a[k] === 'number'){ const v = Math.max(out[k], Math.min(cap, out[k] + a[k])); if (v !== out[k]) note(m.name, k, v - out[k]); out[k] = v; } });
   });
   // The sheet's Customize, as on D&D Beyond: a bonus on top, or the score set
   // outright — last, so every modifier, save, skill and attack follows it.

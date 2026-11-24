@@ -3348,7 +3348,8 @@ function csImpItemFx(p, worn){
     if (p.invFx){ delete p.invFx.saves; delete p.invFx.dc; delete p.invFx.atk; }
   }
   const was = p.invFx || {};
-  const fxs = worn.map(csItemFx);
+  // (a potion's, a manual's ability score: not while carried — sktItemAbilityOn)
+  const fxs = worn.map(m => { const f = csItemFx(m); if (f.ability && typeof sktItemAbilityOn === 'function' && !sktItemAbilityOn(m, worn)) delete f.ability; return f; });
   const sum = k => fxs.reduce((n, f) => n + (num(f[k]) || 0), 0);
   // The PDF's scores, and its proficiency bonus.
   const base = Object.assign({}, p.abilities || {});
