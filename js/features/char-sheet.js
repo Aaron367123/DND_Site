@@ -1908,7 +1908,14 @@ function csSpellMeta(s){
   if (!s) return '';
   const t = [].concat(s.time || [])[0], r = s.range || {}, du = [].concat(s.duration || [])[0] || {};
   const time = t ? t.number + ' ' + String(t.unit).replace('bonus', 'bonus action') : '';
-  const range = r.type === 'point' && r.distance ? (r.distance.amount ? r.distance.amount + ' ' + r.distance.type : _csTitle(r.distance.type)) : r.type ? _csTitle(r.type) : '';
+  // An area from you with its size, as the book's range line has it: "Self
+  // (15-ft cone)" — it read "Cone", with no size and no "Self". A distance of
+  // one mile is "1 mile".
+  const unit = d => d.type === 'miles' ? (+d.amount === 1 ? 'mile' : 'miles') : d.type;
+  const AREA = { cone: 1, cube: 1, emanation: 1, sphere: 1, line: 1, radius: 1, hemisphere: 1, cylinder: 1 };
+  const range = r.type === 'point' && r.distance ? (r.distance.amount ? r.distance.amount + ' ' + unit(r.distance) : _csTitle(r.distance.type))
+    : AREA[r.type] && r.distance && r.distance.amount ? 'Self (' + r.distance.amount + '-' + (r.distance.type === 'miles' ? 'mile' : 'ft') + ' ' + r.type + ')'
+    : r.type ? _csTitle(r.type) : '';
   const dur = du.type === 'timed' && du.duration ? du.duration.amount + ' ' + du.duration.type + (du.duration.amount > 1 ? 's' : '') : du.type === 'instant' ? 'Instantaneous' : _csTitle(du.type || '');
   const c = s.components || {};
   const comp = [c.v ? 'V' : '', c.s ? 'S' : '', c.m ? 'M' : ''].filter(Boolean).join(', ');

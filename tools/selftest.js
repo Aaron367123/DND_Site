@@ -8496,7 +8496,7 @@
            && box.querySelector('.cp-spent').querySelectorAll('.cp-box').length === 5 && /Hit point maximum\s*38/.test(txt));
         ok('paper: limited uses as boxes to tick', [...box.querySelectorAll('.cp-res')].some(r => /Channel Divinity/.test(r.textContent) && r.querySelectorAll('.cp-box').length === 2));
         ok('paper: every feature with its text, not just its name', /Disciple of Life/.test(txt) && /additional Hit Points/i.test(txt));
-        ok('paper: spells with their casting line and text, and slots to tick', /Protective spirits/.test(txt) && [...box.querySelectorAll('.cp-meta-line')].some(m => /^1 action · Emanation/.test(m.textContent)) && /3rd level/.test(txt)
+        ok('paper: spells with their casting line and text, and slots to tick', /Protective spirits/.test(txt) && [...box.querySelectorAll('.cp-meta-line')].some(m => /^1 action · Self \(15-ft emanation\)/.test(m.textContent)) && /3rd level/.test(txt)
            && [...box.querySelectorAll('.cp-slots .cp-res')].some(r => /1st level/.test(r.textContent) && r.querySelectorAll('.cp-box').length === 4));
         ok('paper: what the player wrote, and lines where they haven’t', /Quotes scripture/.test(txt) && box.querySelectorAll('.cp-write .cp-lines').length >= 3);
         ok('paper: only armour and weapons are marked equipped', [...box.querySelectorAll('.cp-tbl tr')].some(r => /Mace/.test(r.textContent) && /equipped/.test(r.textContent))
@@ -28554,6 +28554,18 @@ for (const cls of Object.keys(rule)) for (let L = 1; L <= 20; L++) for (const sc
         ok('…on the sheet’s row too', !!b && /1d8\+4\s*force/.test(b.textContent), b && b.textContent);
       } catch(e){ ok('round 580 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
       finally { try { csClose(); } catch(e){} state.party = JSON.parse(keepP); save(); }
+    }
+    // -- Round 581: a spell's range line says an area's size, from you — "Self (15-ft cone)" (it read "Cone", nothing more), Thunderwave's cube, Spirit Guardians' emanation; "1 mile", not "1 miles" --
+    {
+      try {
+        const R = await sktRulesLoad('2024'), R14 = await sktRulesLoad('2014');
+        const rng = (n, r) => { const s = sktRulesSpell(r || R, n); return s ? (csSpellMeta(s).split(' · ')[1] || '') : 'missing'; };
+        ok('Burning Hands: Self (15-ft cone); Thunderwave: Self (15-ft cube); Spirit Guardians: Self (15-ft emanation)', rng('Burning Hands') === 'Self (15-ft cone)' && rng('Thunderwave') === 'Self (15-ft cube)' && rng('Spirit Guardians') === 'Self (15-ft emanation)',
+           JSON.stringify([rng('Burning Hands'), rng('Thunderwave'), rng('Spirit Guardians')]));
+        ok('…Clairvoyance 1 mile, Fireball 150 feet, Cure Wounds Touch, Shield Self', rng('Clairvoyance') === '1 mile' && rng('Fireball') === '150 feet' && rng('Cure Wounds') === 'Touch' && rng('Shield') === 'Self',
+           JSON.stringify([rng('Clairvoyance'), rng('Fireball'), rng('Cure Wounds'), rng('Shield')]));
+        ok('…a line and a 2014 sphere: Lightning Bolt Self (100-ft line)', rng('Lightning Bolt') === 'Self (100-ft line)', rng('Lightning Bolt'));
+      } catch(e){ ok('round 581 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
     }
     // -- Class features: represented, not just text ------------------------
     {
