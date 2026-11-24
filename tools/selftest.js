@@ -28353,6 +28353,23 @@ for (const cls of Object.keys(rule)) for (let L = 1; L <= 20; L++) for (const sc
         ok('…without the skill, 10 + its Wisdom; one typed in stays as typed', lout.passive === 11 && set.passive === 9, JSON.stringify([lout.passive, set.passive]));
       } catch(e){ ok('round 567 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
     }
+    // -- Round 569: carrying capacity — Powerful Build counts one size larger (a goliath carries 30 × Strength, not 15 ×: it was only a note), each size above Medium doubles it, and the printout says the sheet's own numbers (it ignored size, coins and the party loot carried) --
+    {
+      try {
+        const pc = (size, feats, str) => ({ id: 'r569', name: 'R569', abilities: { str: str || 15 }, sheet: { size, featureList: feats || [] }, inventory: [] });
+        const PB = [{ name: 'Powerful Build', from: 'species' }];
+        const caps = [csCarryCap(pc('Medium')), csCarryCap(pc('Medium', PB)), csCarryCap(pc('Small')), csCarryCap(pc('Large')), csCarryCap(pc('Large', PB)), csCarryCap(pc('Tiny')), csCarryCap(pc('Huge'))];
+        ok('Strength 15: Medium 225 lb, and with Powerful Build 450 (it was 225)', caps[0] === 225 && caps[1] === 450, JSON.stringify(caps));
+        ok('…Small 225, Large 450, Large with Powerful Build 900, Tiny 112.5, Huge 900', caps[2] === 225 && caps[3] === 450 && caps[4] === 900 && caps[5] === 112.5 && caps[6] === 900, JSON.stringify(caps));
+        ok('…a centaur’s Equine Build counts too; a Powerful Build noted only for information doesn’t', csCarryCap(pc('Medium', [{ name: 'Equine Build', from: 'species' }])) === 450 && csCarryCap(pc('Medium', [{ name: 'Powerful Build', from: 'species', info: true }])) === 225, '');
+        // the printout and the sheet agree
+        const p = JSON.parse(JSON.stringify(pc('Medium', PB, 14)));
+        p.gold = 100; p.inventory = [{ name: 'Rope, hempen (50 feet)', qty: 1, weight: 10 }];
+        const want = csCarry(p);
+        const html = csPrintSheet(p), m = /Carrying <b>([\d.]+) lb<\/b> of ([\d.]+) lb/.exec(html);
+        ok('the printout carries what the sheet does, of what the sheet can (14 Strength, Powerful Build: 420 lb)', !!m && +m[1] === Math.round(want.lb * 10) / 10 && +m[2] === 420 && want.cap === 420 && want.lb >= 12, JSON.stringify([m && m.slice(1), want]));
+      } catch(e){ ok('round 569 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
+    }
     // -- Class features: represented, not just text ------------------------
     {
       try {

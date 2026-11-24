@@ -146,7 +146,9 @@ function csPrintSheet(pc){
 
   // ── Equipment, background, notes, companions ──
   const items = csItems(pc), coins = csCoins(pc);
-  const lb = items.reduce((n, m) => n + csItemWeight(items, m), 0);
+  // The sheet's own load and capacity (coins, the party loot they carry, size
+  // and Powerful Build): this counted the items alone against 15 × Strength.
+  const { lb, cap } = csCarry(pc);
   // Only a weapon, armour or a shield is "equipped" (not a set of tools).
   const wearable = m => { const st = m.stats || (m.base && CS.R && CS.R.items[m.base]); return !!st && /^(M|R|LA|MA|HA|S)(\||$)/.test(String(st.type)); };
   h += '<section class="cp-page cp-last"><h2>Equipment</h2><div class="cp-coins">' + CS_COINS.map(([k]) => '<div class="cp-stat"><small>' + k.toUpperCase() + '</small><b>' + (coins[k] || 0) + '</b></div>').join('') + '</div>'
@@ -154,7 +156,7 @@ function csPrintSheet(pc){
       + (csItemWeight(items, m) ? Math.round(csItemWeight(items, m) * 10) / 10 + ' lb' : '') + '</td><td>'
       + csE([m.equipped !== false && wearable(m) ? 'equipped' : '', m.reqAttune ? (m.attuned ? 'attuned' : 'not attuned') : '', m.in ? 'in ' + m.in : ''].filter(Boolean).join(' · '))
       + (+m.charges > 0 ? ' charges ' + cpBoxes(m.charges) : '') + '</td></tr>').join('') + '</table>' : '<div class="cp-dim">Nothing carried.</div>')
-    + '<div class="cp-kv">Carrying <b>' + Math.round(lb * 10) / 10 + ' lb</b> of ' + ((ab.str || 10) * 15) + ' lb</div>';
+    + '<div class="cp-kv">Carrying <b>' + Math.round(lb * 10) / 10 + ' lb</b> of ' + cap + ' lb</div>';
   const facts = [['Size', sh.size], ['Gender', d.gender], ['Age', d.age], ['Height', d.height], ['Weight', d.weight], ['Eyes', d.eyes], ['Hair', d.hair], ['Skin', d.skin], ['Faith', d.faith], ['Lifestyle', d.lifestyle]].filter(([, v]) => v);
   h += '<h2>Background' + (pc.background ? ' — ' + csE(pc.background) : '') + '</h2>'
     + (facts.length ? '<div class="cp-facts">' + facts.map(([l, v]) => '<div class="cp-kv"><b>' + l + '</b> ' + csE(v) + '</div>').join('') + '</div>' : '');

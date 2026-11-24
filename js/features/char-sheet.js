@@ -2425,11 +2425,8 @@ function csInventoryHtml(pc){
   csEnsureMagic();
   const items = csItems(pc), coins = csCoins(pc);
   const pref = (pc.build && pc.build.overrides) || {};
-  const lootLb = csLootLb(csLootFor(pc));
-  const lb = items.reduce((n, m) => n + csItemWeight(items, m), 0) + (pref.coinWeight === false ? 0 : CS_COINS.reduce((n, [k]) => n + (+coins[k] || 0), 0) / 50) + lootLb;
+  const { lb, cap } = csCarry(pc);
   const boxes = items.filter(x => CS_CONTAINER.test(x.name));
-  const str = (pc.abilities || {}).str || 10, size = ((pc.sheet || {}).size || 'Medium');
-  const cap = str * 15 * (size === 'Tiny' ? 0.5 : size === 'Large' ? 2 : 1);
   const attuned = items.filter(m => m.reqAttune && m.attuned).length, attMax = csAttuneMax(pc);
   let h = '<div class="cs-coins">' + CS_COINS.map(([k]) => '<label class="cs-coin"><span>' + k.toUpperCase() + '</span>'
     + (ro ? '<b>' + (coins[k] || 0) + '</b>' : '<input type="number" min="0" data-cs-coin="' + k + '" value="' + (coins[k] || 0) + '">') + '</label>').join('')
@@ -2941,6 +2938,25 @@ const CS_CONTAINER = /backpack|\bbag\b|bag of|pouch|sack|chest|haversack|portabl
 // What the load does to the character under the chosen encumbrance rule.
 // cap is 15 x Strength (size-adjusted); the variant's steps are a third and
 // two thirds of it.
+// What the character carries and can carry, for the sheet and the printout
+// alike. Capacity is 15 × Strength, doubled for each size above Medium and
+// halved for Tiny — and Powerful Build (a goliath's, a firbolg's; a
+// centaur's Equine Build) counts one size larger: it was only a note, and the
+// printout ignored size altogether.
+const CS_CARRY_SIZES = ['Tiny', 'Small', 'Medium', 'Large', 'Huge', 'Gargantuan'];
+const CS_CARRY_MULT = { Tiny: 0.5, Small: 1, Medium: 1, Large: 2, Huge: 4, Gargantuan: 8 };
+function csCarryCap(pc){
+  const sh = pc.sheet || {}, str = +((pc.abilities || {}).str) || 10;
+  let i = CS_CARRY_SIZES.indexOf(String(sh.size || 'Medium').split(/\s+or\s+|\//)[0].trim()); if (i < 0) i = 2;
+  if ((sh.featureList || []).some(f => f && !f.info && /^(Powerful Build|Equine Build|Little Giant|Hippo Build)$/.test(f.name))) i = Math.min(CS_CARRY_SIZES.length - 1, i + 1);
+  return str * 15 * CS_CARRY_MULT[CS_CARRY_SIZES[i]];
+}
+function csCarry(pc){
+  const items = csItems(pc), coins = csCoins(pc), pref = (pc.build && pc.build.overrides) || {};
+  const lb = items.reduce((n, m) => n + csItemWeight(items, m), 0) + (pref.coinWeight === false ? 0 : CS_COINS.reduce((n, [k]) => n + (+coins[k] || 0), 0) / 50)
+    + (typeof csLootLb === 'function' && typeof csLootFor === 'function' ? csLootLb(csLootFor(pc)) : 0);
+  return { lb, cap: csCarryCap(pc) };
+}
 function csCarryNote(rule, lb, cap){
   if (rule === 'none') return '';
   if (rule === 'variant'){
