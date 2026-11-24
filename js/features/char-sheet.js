@@ -1937,7 +1937,16 @@ function csSpellDamage(s, slot){
   }
   // A bonus to one school's spell damage (the Evoker's Empowered Evocation).
   { const pc = typeof csPc === 'function' && CS ? csPc() : null, sd = pc && pc.sheet && pc.sheet.schoolDamage;
-    if (sd && sd[s.school]) expr += (sd[s.school] > 0 ? '+' : '') + sd[s.school]; }
+    if (sd && sd[s.school]) expr += (sd[s.school] > 0 ? '+' : '') + sd[s.school];
+    // "1d8 plus your spellcasting ability modifier" (Spiritual Weapon, 2024
+    // Flame Blade, Mordenkainen's Sword, Conjure Fey): the modifier with the
+    // dice. It read "1d8 force".
+    const tail = JSON.stringify(s.entries || []).slice(m.index + m[0].length, m.index + m[0].length + 90);
+    const sh = pc && pc.sheet;
+    if (sh && /^[^}]*\}[^.]{0,60}?(?:\+|plus) your spellcasting ability modifier/i.test(tail)){
+      const mod = (parseInt(sh.spellAtkBonus, 10) || 0) - (+sh.profBonus || 0);
+      if (mod) expr += (mod > 0 ? '+' : '') + mod;
+    } }
   return expr;
 }
 // The type of a spell's damage roll: the word after its dice in the text

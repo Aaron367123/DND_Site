@@ -28537,6 +28537,24 @@ for (const cls of Object.keys(rule)) for (let L = 1; L <= 20; L++) for (const sc
         ok('how many steps: listed levels only (2,4,6,8 from 2nd to 5th: 1), every level otherwise', sktSpellUp(sktRulesSpell(R14, 'Spiritual Weapon'), 0, 5) === 1 && sktSpellUp(sktRulesSpell(R, 'Spiritual Weapon'), 0, 5) === 3 && sktSpellUp(sktRulesSpell(R, 'Fireball'), 0, 3) === 0, '');
       } catch(e){ ok('round 579 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
     }
+    // -- Round 580: a spell whose damage adds the spellcasting modifier says so — Spiritual Weapon "1d8+4 force" for a +7 caster with +3 proficiency (it read "1d8 force"), 2024 Flame Blade; Fireball adds none --
+    {
+      const keepP = JSON.stringify(state.party);
+      try {
+        const R = await sktRulesLoad('2024');
+        const p = state.party.find(x => x.id === 'namroc');
+        p.rules = '2024'; p.sheet = Object.assign({}, p.sheet, { profBonus: 3, spells: ['Spiritual Weapon', 'Fireball'], spellSaveDc: 15, spellAtkBonus: '+7', spellSlots: { 2: { total: 3, expended: 0 }, 3: { total: 3, expended: 0 } } });
+        openCharSheet('namroc'); for (let k = 0; k < 40 && !(CS && CS.R); k++) await sleep(100);
+        const sw = sktRulesSpell(R, 'Spiritual Weapon'), fb = sktRulesSpell(R, 'Fireball'), bl = sktRulesSpell(R, 'Flame Blade');
+        ok('Spiritual Weapon: 1d8+4 force, 2d8+4 from a 3rd-level slot; Flame Blade 3d6+4 fire', csSpellDamageTyped(sw, 2) === '1d8+4 force' && csSpellDamageTyped(sw, 3) === '2d8+4 force' && csSpellDamageTyped(bl, 2) === '3d6+4 fire',
+           JSON.stringify([csSpellDamageTyped(sw, 2), csSpellDamageTyped(sw, 3), csSpellDamageTyped(bl, 2)]));
+        ok('…Fireball adds none: 8d6 fire', csSpellDamageTyped(fb, 3) === '8d6 fire', csSpellDamageTyped(fb, 3));
+        csGoTab('spells'); await sleep(300);
+        const b = document.querySelector('#cs-root [data-cs-spdmg="Spiritual Weapon"]');
+        ok('…on the sheet’s row too', !!b && /1d8\+4\s*force/.test(b.textContent), b && b.textContent);
+      } catch(e){ ok('round 580 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
+      finally { try { csClose(); } catch(e){} state.party = JSON.parse(keepP); save(); }
+    }
     // -- Class features: represented, not just text ------------------------
     {
       try {
