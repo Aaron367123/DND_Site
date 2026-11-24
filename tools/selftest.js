@@ -28448,6 +28448,31 @@ for (const cls of Object.keys(rule)) for (let L = 1; L <= 20; L++) for (const sc
       finally { window.sktD = keepD; T._tokenFor = keepTok; window.showConfirm = keepAsk; T._armed = null;
         state.party = JSON.parse(keepP); state.combatants = JSON.parse(keepC); state.activeCombatantId = keepA; state.combatRound = keepR; save(); }
     }
+    // -- Round 576: a levelled spell's damage says its type, on the sheet and in the roll — Call Lightning "3d10 lightning" (it read "3d10", rolled with no type for the DM to resist); a spell whose type is chosen says none --
+    {
+      const keepP = JSON.stringify(state.party);
+      try {
+        const R = await sktRulesLoad('2024');
+        const sp = n => sktRulesSpell(R, n);
+        ok('the type after the dice: Call Lightning lightning, Fireball fire, Ice Knife’s first roll piercing', csSpellDamageType(sp('Call Lightning')) === 'lightning' && csSpellDamageType(sp('Fireball')) === 'fire' && csSpellDamageType(sp('Ice Knife')) === 'piercing',
+           JSON.stringify(['Call Lightning', 'Fireball', 'Ice Knife'].map(n => csSpellDamageType(sp(n)))));
+        ok('…none where it’s chosen (Chromatic Orb), and Fireball at 4th: 9d6 fire', csSpellDamageType(sp('Chromatic Orb')) === '' && csSpellDamageTyped(sp('Fireball'), 4) === '9d6 fire', csSpellDamageTyped(sp('Fireball'), 4));
+        let odd = [];
+        (R.spells || []).forEach(x => { const s = sktRulesSpell(R, x.name); if (!s || !/\{@damage /.test(JSON.stringify(s.entries || []))) return;
+          const t = csSpellDamageType(s), inf = [].concat(s.damageInflict || []).map(y => String(y).toLowerCase()); if (t && inf.length && !inf.includes(t)) odd.push(s.name + ':' + t); });
+        ok('…and every 2024 damage spell’s type is one it deals', !odd.length, odd.slice(0, 5).join(', '));
+        // on the sheet: the row, and the roll
+        const p = state.party.find(x => x.id === 'namroc');
+        p.rules = '2024'; p.sheet = Object.assign({}, p.sheet, { spells: ['Call Lightning'], spellSaveDc: 15, spellAtkBonus: '+7', spellSlots: { 3: { total: 3, expended: 0 } } });
+        openCharSheet('namroc'); for (let k = 0; k < 40 && !(CS && CS.R); k++) await sleep(100);
+        csGoTab('spells'); await sleep(300);
+        const b = document.querySelector('#cs-root [data-cs-spdmg="Call Lightning"]');
+        ok('the sheet’s Call Lightning row: 3d10 lightning', !!b && /3d10\s*lightning/i.test(b.textContent), b && b.textContent);
+        if (b){ b.click(); await sleep(100); }
+        ok('…and its roll is lightning damage', !!CS.log[0] && CS.log[0].kind === 'dmg' && CS.log[0].type === 'lightning', JSON.stringify(CS.log[0] && { k: CS.log[0].kind, t: CS.log[0].type, l: CS.log[0].label }));
+      } catch(e){ ok('round 576 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
+      finally { try { csClose(); } catch(e){} state.party = JSON.parse(keepP); save(); }
+    }
     // -- Class features: represented, not just text ------------------------
     {
       try {

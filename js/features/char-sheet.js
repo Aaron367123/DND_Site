@@ -991,7 +991,7 @@ CS_TAB_RENDER.actions = pc => {
   const spl = [...new Set(sh.spells || [])].map(n => csSpell(n)).filter(s => s && s.level > 0 && ((s.spellAttack || []).length || (s.savingThrow || []).length) && csSpellDamage(s, s.level));
   if (spl.length) h += '<h4>Spells</h4><div class="cs-atks">' + spl.map(s => '<div class="cs-atk"><b>' + csE(s.name) + ' <span class="cb-dim">' + CS_ORD[s.level] + '</span></b>'
     + ((s.spellAttack || []).length ? '<button class="btn small" data-cs-spatk="1">' + csE(csAtkText(sh.spellAtkBonus)) + '</button>' : '<span>DC ' + (sh.spellSaveDc || '?') + ' ' + csE(String(s.savingThrow[0]).slice(0, 3).toUpperCase()) + '</span>')
-    + '<button class="btn small" data-cs-spdmg="' + csE(s.name) + '">' + csDmgHtml(csSpellDamage(s, s.level)) + '</button><span class="cb-dim">' + csE(csSpellMeta(s)) + '</span></div>').join('') + '</div>';
+    + '<button class="btn small" data-cs-spdmg="' + csE(s.name) + '">' + csDmgHtml(csSpellDamageTyped(s, s.level)) + '</button><span class="cb-dim">' + csE(csSpellMeta(s)) + '</span></div>').join('') + '</div>';
   h += csExtraDamageHtml(pc) + '</div>';
   const acts = typeof sktShownActivations === 'function' ? sktShownActivations(sh.activations) : (sh.activations || []);
   // A 2024 Magic action is an action.
@@ -1940,6 +1940,27 @@ function csSpellDamage(s, slot){
     if (sd && sd[s.school]) expr += (sd[s.school] > 0 ? '+' : '') + sd[s.school]; }
   return expr;
 }
+// The type of a spell's damage roll: the word after its dice in the text
+// ("{@damage 3d10} lightning damage"), or the one type the spell deals. None
+// for a spell whose type is chosen (Chromatic Orb). A levelled spell's damage
+// read "3d10" with no type, and was rolled that way — a cantrip's said
+// "2d6 psychic" — so the DM's screen had no type to resist.
+function csSpellDamageType(s){
+  if (!s || s.custom) return '';
+  const txt = JSON.stringify(s.entries || []), m = /\{@damage ([^}|]+)/.exec(txt);
+  if (!m) return '';
+  const after = txt.slice(m.index + m[0].length).slice(0, 40);
+  const ty = (new RegExp('^[^a-z]*(' + SKT_DMG_TYPE_RE.source + ')\\b', 'i').exec(after) || [])[1];
+  if (ty) return ty.toLowerCase();
+  const inf = [].concat(s.damageInflict || []);
+  return inf.length === 1 ? String(inf[0]).toLowerCase() : '';
+}
+// A spell's damage at a slot level with its type, as it's shown and rolled.
+function csSpellDamageTyped(s, slot){
+  const d = csSpellDamage(s, slot); if (!d) return '';
+  const ty = csSpellDamageType(s);
+  return ty && !new RegExp('\\b' + ty + '\\b', 'i').test(d) ? d + ' ' + ty : d;
+}
 // A healing spell's dice at a slot level: {@dice} where the text says hit
 // points are regained, plus the {@scaledice} step above its level, plus the
 // caster's spellcasting modifier when the text adds it.
@@ -2052,7 +2073,7 @@ function csSpellsHtml(pc){
       const atk = s && (s.spellAttack || []).length
         ? (cantripAtk ? '<button class="btn small" data-cs-atk="' + (sh.attacks || []).indexOf(cantripAtk) + '">Attack ' + csE(csAtkText(cantripAtk.atkBonus)) + '</button>'
                       : '<button class="btn small" data-cs-spatk="1">Attack ' + csE(csAtkText(sh.spellAtkBonus)) + '</button>') : '';
-      const dmg = l && csSpellDamage(s, l) ? '<button class="btn small" data-cs-spdmg="' + csE(n) + '" title="At the slot level chosen beside Cast">' + csDmgHtml(csSpellDamage(s, at)) + '</button>' : '';
+      const dmg = l && csSpellDamage(s, l) ? '<button class="btn small" data-cs-spdmg="' + csE(n) + '" title="At the slot level chosen beside Cast">' + csDmgHtml(csSpellDamageTyped(s, at)) + '</button>' : '';
       const scMod = (parseInt(sh.spellAtkBonus, 10) || 0) - (sh.profBonus || 0);
       const heal = l && csSpellHeal(s, at, scMod) ? '<button class="btn small cs-heal" data-cs-spheal="' + csE(n) + '">Heal ' + csE(csSpellHeal(s, at, scMod)) + '</button>' : '';
       const info = [sv ? '<span class="cs-save">' + csE(sv) + '</span>' : '', atk, dmg, heal,
@@ -2192,7 +2213,7 @@ function csSpellsClick(e, t, d, pc){
     const s = csSpell(d.csSpdmg); if (!s) return true;
     const sel = document.querySelector('#cs-root [data-cs-castlvl="' + CSS.escape(d.csSpdmg) + '"]');
     const lvl = sel ? +sel.value : s.level;
-    csRollDamage(s.name + (lvl > s.level ? ' (level ' + lvl + ')' : ''), csSpellDamage(s, lvl), false);
+    csRollDamage(s.name + (lvl > s.level ? ' (level ' + lvl + ')' : ''), csSpellDamageTyped(s, lvl), false);
     csRender(); return true;
   }
   if (d.csSpheal){
