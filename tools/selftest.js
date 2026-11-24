@@ -33190,7 +33190,9 @@ for (const cls of Object.keys(rule)) for (let L = 1; L <= 20; L++) for (const sc
       const keepM = localStorage.getItem(SKT_MSG_KEY), keepTab = paTab, keepSub = paMoreSub;
       try {
         if (paMyIdx() < 0) paSetPc('zoey');
-        paTab = 'more'; paMoreSub = 'msg'; paRender(); await sleep(300);
+        // (a phone: More → Message the DM; a wide screen: its own Messages tab)
+        if (paVisibleTabs().some(t => t.id === 'msg')){ paTab = 'msg'; paMoreSub = null; } else { paTab = 'more'; paMoreSub = 'msg'; }
+        paRender(); await sleep(300);
         const el = document.getElementById('pa-screen');
         let i = el.querySelector('[data-msg-input]');
         i.focus(); i.value = 'R565 I pocket the gem';
