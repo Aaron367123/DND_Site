@@ -28473,6 +28473,42 @@ for (const cls of Object.keys(rule)) for (let L = 1; L <= 20; L++) for (const sc
       } catch(e){ ok('round 576 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
       finally { try { csClose(); } catch(e){} state.party = JSON.parse(keepP); save(); }
     }
+    // -- Round 577: a spell that deals two damages at once rolls both — Flame Strike's 5d6 fire and 5d6 radiant (it rolled the fire alone, half the spell), on the sheet and in the saves Turn View runs; one that comes later (Vitriolic Sphere's next-turn 5d4) doesn't join; Ice Knife's saves take its burst --
+    {
+      const keepP = JSON.stringify(state.party), keepC = JSON.stringify(state.combatants), C = panelDefs.combat, keepOpen = C.openAreaSave;
+      try {
+        const R = await sktRulesLoad('2024'), R14 = await sktRulesLoad('2014'), sp = (n, r) => sktRulesSpell(r || R, n);
+        const fs = csSpellDamageParts(sp('Flame Strike'), 5), fs6 = csSpellDamageParts(sp('Flame Strike'), 6), fs14 = csSpellDamageParts(sp('Flame Strike', R14), 6);
+        ok('Flame Strike: 5d6 fire and 5d6 radiant; at 6th both grow (2024), the one chosen (2014: the fire)', JSON.stringify(fs) === '[{"dice":"5d6","type":"fire"},{"dice":"5d6","type":"radiant"}]'
+           && JSON.stringify(fs6.map(x => x.dice)) === '["6d6","6d6"]' && JSON.stringify(fs14.map(x => x.dice)) === '["5d6","4d6"]', JSON.stringify([fs, fs6, fs14]));
+        ok('…Ice Storm and Meteor Swarm both too; 2014 Destructive Wave’s “as well as”', csSpellDamageParts(sp('Ice Storm'), 4).length === 2 && csSpellDamageParts(sp('Meteor Swarm'), 9).length === 2 && csSpellDamageParts(sp('Destructive Wave', R14), 5).length === 2, '');
+        const later = ['Vitriolic Sphere', 'Melf’s Acid Arrow', "Melf's Acid Arrow", 'Delayed Blast Fireball', 'Spirit Guardians', 'Wall of Thorns'].map(n => sp(n)).filter(Boolean).map(s => s.name + ':' + csSpellDamageParts(s, s.level).length);
+        ok('…but not what comes later or instead (Vitriolic Sphere, Acid Arrow, Delayed Blast Fireball, Spirit Guardians, Wall of Thorns)', later.length >= 4 && later.every(x => /:1$/.test(x)), later.join(', '));
+        const fake = t => ({ name: 'R577', level: 3, entries: [t], damageInflict: [] });
+        ok('…nor one or the other ("radiant damage or … necrotic"), nor "and another"', csSpellDamageParts(fake('takes {@damage 3d8} radiant damage or {@damage 3d8} necrotic damage'), 3).length === 1
+           && csSpellDamageParts(fake('takes {@damage 2d6} fire damage and another {@damage 2d6} fire damage'), 3).length === 1, '');
+        ok('Ice Knife: the shard is 1d10 piercing, the saves are its 2d6 cold burst', csSpellDamageTyped(sp('Ice Knife'), 1) === '1d10 piercing' && JSON.stringify(csSpellDamageParts(sp('Ice Knife'), 1, true)) === '[{"dice":"2d6","type":"cold"}]', JSON.stringify(csSpellDamageParts(sp('Ice Knife'), 1, true)));
+        // the sheet: the button, and two rolls with their types
+        const p = state.party.find(x => x.id === 'namroc');
+        p.rules = '2024'; p.sheet = Object.assign({}, p.sheet, { spells: ['Flame Strike'], spellSaveDc: 15, spellAtkBonus: '+7', spellSlots: { 5: { total: 1, expended: 0 } } });
+        openCharSheet('namroc'); for (let k = 0; k < 40 && !(CS && CS.R); k++) await sleep(100);
+        csGoTab('spells'); await sleep(300);
+        const b = document.querySelector('#cs-root [data-cs-spdmg="Flame Strike"]');
+        ok('the sheet’s Flame Strike: 5d6 fire + 5d6 radiant', !!b && /5d6\s*fire\s*\+\s*5d6\s*radiant/i.test(b.textContent), b && b.textContent);
+        if (b){ b.click(); await sleep(100); }
+        ok('…rolled as two, the fire and the radiant, each with its type', CS.log[0] && CS.log[1] && CS.log[1].type === 'fire' && CS.log[0].type === 'radiant' && /5d6/.test(CS.log[0].detail) && /5d6/.test(CS.log[1].detail),
+           JSON.stringify(CS.log.slice(0, 2).map(x => [x.label, x.type, x.detail])));
+        try { csClose(); } catch(e){}
+        // the saves Turn View runs for it
+        state.combatants = [{ id: 'namroc', name: 'Namroc', isPC: true, hp: 30, hpMax: 30, ac: 15, initiative: 10, conditions: [] }];
+        const rq = csSaveRequest(p, sp('Flame Strike'), 5);
+        ok('the save request carries both: fire and radiant', !!rq && JSON.stringify(rq.parts) === '[{"dice":"5d6","type":"fire"},{"dice":"5d6","type":"radiant"}]' && rq.ab === 'DEX' && rq.dc === 15, JSON.stringify(rq));
+        let got = null; C.openAreaSave = o => { got = o; };
+        p.castReq = [rq]; panelDefs.turnview._castReqAct('namroc', rq.id, true);
+        ok('…and Turn View’s saves roll each with its own type', !!got && JSON.stringify(got.parts.map(x => [x.dice, x.type])) === '[["5d6","fire"],["5d6","radiant"]]', JSON.stringify(got && got.parts));
+      } catch(e){ ok('round 577 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
+      finally { C.openAreaSave = keepOpen; try { csClose(); } catch(e){} state.party = JSON.parse(keepP); state.combatants = JSON.parse(keepC); save(); }
+    }
     // -- Class features: represented, not just text ------------------------
     {
       try {

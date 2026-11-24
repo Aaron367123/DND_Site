@@ -1955,8 +1955,42 @@ function csSpellDamageType(s){
   const inf = [].concat(s.damageInflict || []);
   return inf.length === 1 ? String(inf[0]).toLowerCase() : '';
 }
-// A spell's damage at a slot level with its type, as it's shown and rolled.
+// A spell's damage rolls at a slot level, each with its type: one, or the
+// ones dealt together — Flame Strike's "5d6 Fire damage and 5d6 Radiant
+// damage", Ice Storm's, Meteor Swarm's. Only the first was rolled, half of
+// Flame Strike. A second roll counts when the text joins it to the first
+// with "and" / "plus" in the same sentence (not Wall of Thorns' second
+// sentence, nor Spirit Guardians' "or"). `forSave`: the roll its saves take
+// — Ice Knife's burst (2d6 cold), not the shard's attack (1d10 piercing).
+function csSpellDamageParts(s, slot, forSave){
+  if (!s) return [];
+  if (s.custom) return s.entriesDamage ? [{ dice: s.entriesDamage, type: '' }] : [];
+  const txt = JSON.stringify(s.entries || []);
+  let from = 0;
+  if (forSave && (s.spellAttack || []).length){ const k = txt.search(/saving throw/i); if (k > 0) from = k; }
+  const re = /\{@damage ([^}|]+)[^}]*\}/g; re.lastIndex = from;
+  const raw = []; let m, end = -1;
+  while ((m = re.exec(txt))){
+    // (not one that comes later: Vitriolic Sphere's "another 5d4 … at the
+    // end of its next turn", Melf's Acid Arrow's, Delayed Blast Fireball's
+    // "the damage increases by 1d6 whenever")
+    if (raw.length){ const gap = txt.slice(end, m.index), next = txt.slice(m.index + m[0].length, m.index + m[0].length + 60);
+      if (gap.length > 40 || /[.;]/.test(gap) || !/\b(and|plus|as well as)\b/i.test(gap) || /\b(another|increases?)\b/i.test(gap)
+          || /\b(at the (?:end|start) of|whenever|next turn)\b/i.test(next)) break; }
+    end = m.index + m[0].length;
+    const ty = (new RegExp('^[^a-z]*(' + SKT_DMG_TYPE_RE.source + ')\\b', 'i').exec(txt.slice(end, end + 40)) || [])[1];
+    raw.push({ dice: m[1].trim(), type: ty ? ty.toLowerCase() : '' });
+  }
+  if (!raw.length) return [];
+  // One roll, from the start: as it always was (its own growth and bonus).
+  if (raw.length === 1 && !from) return [{ dice: csSpellDamage(s, slot), type: raw[0].type || csSpellDamageType(s) }];
+  const up = Math.max(0, (slot || s.level) - s.level);
+  return raw.map((x, i) => ({ dice: up && typeof sktSpellStepped === 'function' ? sktSpellStepped(x.dice, sktSpellStep(s, from ? 0 : i, x.type), up) : x.dice, type: x.type }));
+}
+// A spell's damage at a slot level with its type(s), as it's shown.
 function csSpellDamageTyped(s, slot){
+  const parts = csSpellDamageParts(s, slot);
+  if (parts.length > 1) return parts.map(x => x.dice + (x.type ? ' ' + x.type : '')).join(' + ');
   const d = csSpellDamage(s, slot); if (!d) return '';
   const ty = csSpellDamageType(s);
   return ty && !new RegExp('\\b' + ty + '\\b', 'i').test(d) ? d + ' ' + ty : d;
@@ -2213,7 +2247,11 @@ function csSpellsClick(e, t, d, pc){
     const s = csSpell(d.csSpdmg); if (!s) return true;
     const sel = document.querySelector('#cs-root [data-cs-castlvl="' + CSS.escape(d.csSpdmg) + '"]');
     const lvl = sel ? +sel.value : s.level;
-    csRollDamage(s.name + (lvl > s.level ? ' (level ' + lvl + ')' : ''), csSpellDamageTyped(s, lvl), false);
+    // Each of its rolls on its own line, each with its type (Flame Strike's
+    // fire and its radiant), so each meets the target's resistances.
+    const parts = csSpellDamageParts(s, lvl), nm = s.name + (lvl > s.level ? ' (level ' + lvl + ')' : '');
+    if (parts.length > 1) parts.forEach(x => csRollDamage(nm + (x.type ? ' — ' + x.type : ''), x.dice + (x.type ? ' ' + x.type : ''), false));
+    else csRollDamage(nm, csSpellDamageTyped(s, lvl), false);
     csRender(); return true;
   }
   if (d.csSpheal){
@@ -2346,9 +2384,12 @@ function csSaveRequest(p, s, lvl){
   const ab = [].concat(s.savingThrow || [])[0]; if (!ab) return null;
   const dc = parseInt((p.sheet || {}).spellSaveDc, 10); if (!(dc > 0)) return null;
   if (!(typeof state !== 'undefined' && (state.combatants || []).some(c => c && c.id === p.id))) return null;
-  const dice = csSpellDamage(s, lvl) || '';
+  // The rolls its saves take, each with its type: both of Flame Strike's,
+  // Ice Knife's burst rather than its shard.
+  const parts = csSpellDamageParts(s, lvl, true).filter(x => x.dice);
+  const dice = parts.map(x => x.dice).join(' + ');
   return { id: typeof uid === 'function' ? uid() : String(Date.now()), spell: s.name, lvl: lvl || s.level,
-    ab: String(ab).slice(0, 3).toUpperCase(), dc, dice, type: dice ? String([].concat(s.damageInflict || [])[0] || '') : '',
+    ab: String(ab).slice(0, 3).toUpperCase(), dc, dice, type: dice ? (parts[0].type || String([].concat(s.damageInflict || [])[0] || '')) : '', parts,
     half: /half as much damage/i.test(JSON.stringify(s.entries || [])), at: Date.now(),
     // what a failed save inflicts (Hold Person: paralyzed, a save at the end
     // of each turn, held by concentration)

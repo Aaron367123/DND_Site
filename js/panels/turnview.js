@@ -4150,7 +4150,9 @@ registerPanel('turnview', {
     const drop = () => { const q = (state.party || []).find(x => x.id === pid); if (q && Array.isArray(q.castReq)) q.castReq = q.castReq.filter(x => x.id !== rid); save(); this._render(); };
     if (!run) return drop();
     const C = panelDefs.combat; if (!C || typeof C.openAreaSave !== 'function') return;
-    const parts = r.dice ? String(r.dice).split(/\s*\+\s*(?=\d*d\d)/).map(d => ({ dice: d.replace(/\s+/g, ''), type: r.type || '' })) : [];
+    // (each roll with its own type when the request says: Flame Strike's fire and radiant)
+    const parts = Array.isArray(r.parts) && r.parts.length ? r.parts.map(x => ({ dice: String(x.dice).replace(/\s+/g, ''), type: x.type || r.type || '' }))
+      : r.dice ? String(r.dice).split(/\s*\+\s*(?=\d*d\d)/).map(d => ({ dice: d.replace(/\s+/g, ''), type: r.type || '' })) : [];
     C.openAreaSave({ name: p.name + ' · ' + r.spell, ab: r.ab, dc: r.dc, parts, half: r.half !== false, exclude: p.id, spell: true, cond: r.cond || null,
       targets: this._armed && this._armed !== p.id ? [this._armed] : [], src: { id: p.id, name: p.name },
       onApplied: () => { drop(); } });
