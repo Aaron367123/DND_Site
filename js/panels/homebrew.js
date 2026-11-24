@@ -67,7 +67,11 @@ function _hbMonsterRecord(m){
     str: +ab.str || 10, dex: +ab.dex || 10, con: +ab.con || 10, int: +ab.int || 10, wis: +ab.wis || 10, cha: +ab.cha || 10,
     save: _hbBonuses(m.saves, true), skill: _hbBonuses(m.skills, false),
     resist: _HB_LIST(m.resist), immune: _HB_LIST(m.immune), vulnerable: _HB_LIST(m.vulnerable), conditionImmune: _HB_LIST(m.condImmune),
-    senses: _HB_LIST(m.senses), passive: m.passive !== '' && m.passive != null ? +m.passive : 10 + Math.floor(((+ab.wis || 10) - 10) / 2),
+    // Left blank, passive Perception is 10 + the Perception skill when it
+    // has one ("Perception +4": 14), as the books' own are — it was 10 + Wis
+    // whatever the skill said.
+    senses: _HB_LIST(m.senses), passive: m.passive !== '' && m.passive != null ? +m.passive
+      : 10 + (/^[+-]?\d+$/.test(String(_hbBonuses(m.skills, false).perception || '')) ? parseInt(_hbBonuses(m.skills, false).perception, 10) : Math.floor(((+ab.wis || 10) - 10) / 2)),
     languages: m.languages ? [m.languages] : [], cr: String(m.cr || '0'),
     trait: _hbBlocks(m.traits), action: _hbBlocks(m.actions), bonus: _hbBlocks(m.bonus), reaction: _hbBlocks(m.reactions), legendary: _hbBlocks(m.legendary),
   };
@@ -77,14 +81,57 @@ const _HB_ITEM_TYPES = [['wondrous', 'Wondrous item'], ['M', 'Weapon (melee)'], 
   ['S', 'Shield'], ['P', 'Potion'], ['RG', 'Ring'], ['RD', 'Rod'], ['SC', 'Scroll'], ['ST', 'Staff'], ['WD', 'Wand'], ['G', 'Adventuring gear']];
 const _HB_RARITY = ['none', 'common', 'uncommon', 'rare', 'very rare', 'legendary', 'artifact'];
 const _HB_DMG = [['', '—'], ['B', 'bludgeoning'], ['P', 'piercing'], ['S', 'slashing'], ['A', 'acid'], ['C', 'cold'], ['F', 'fire'], ['O', 'force'], ['L', 'lightning'], ['N', 'necrotic'], ['I', 'poison'], ['Y', 'psychic'], ['R', 'radiant'], ['T', 'thunder']];
+// A weapon's properties as the DM writes them ("Finesse, Light, Thrown
+// (20/60)", "Versatile (1d10)") and as the books keep them (F, L, T, V, with
+// the range and the two-handed damage beside). They were kept as typed, and
+// the rules read the codes: a homebrew finesse blade never used Dexterity, a
+// "light" one was no off-hand weapon. And "Start from" a rapier put "F" in
+// the box.
+const _HB_PROPS = [['F', 'Finesse'], ['L', 'Light'], ['H', 'Heavy'], ['R', 'Reach'], ['T', 'Thrown'], ['2H', 'Two-Handed'], ['V', 'Versatile'],
+  ['A', 'Ammunition'], ['LD', 'Loading'], ['S', 'Special'], ['RLD', 'Reload'], ['BF', 'Burst Fire'], ['AF', 'Ammunition (futuristic)']];
+const _hbPropKey = s => String(s || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+function _hbPropCode(word){
+  const k = _hbPropKey(word);
+  const hit = _HB_PROPS.find(([c, l]) => _hbPropKey(l) === k || _hbPropKey(c) === k);
+  return hit ? hit[0] : null;
+}
+function _hbProps(s){
+  const out = { property: [], dmg2: null, range: null };
+  _HB_LIST(s).forEach(p => {
+    let code = _hbPropCode(p), arg = null;
+    if (!code){ const m = /^(.+?)\s*\((.*)\)\s*$/.exec(p); if (m){ code = _hbPropCode(m[1]); arg = m[2].trim(); } }
+    if (!code){ out.property.push(p); return; }
+    if (!out.property.includes(code)) out.property.push(code);
+    if (arg && code === 'V'){ const d = /\d*d\d+/i.exec(arg); if (d) out.dmg2 = d[0]; }
+    if (arg && (code === 'T' || code === 'A' || code === 'AF')){ const r = /(\d+)\s*\/\s*(\d+)/.exec(arg); if (r) out.range = r[1] + '/' + r[2]; }
+  });
+  return out;
+}
+// The books' codes back to words, with the versatile damage and the range.
+function _hbPropsText(r){
+  return (r.property || []).map(p => {
+    const c = String((p && p.uid) || p).split('|')[0], hit = _HB_PROPS.find(x => x[0] === c);
+    if (!hit) return c;
+    if (c === 'V' && r.dmg2) return hit[1] + ' (' + r.dmg2 + ')';
+    if ((c === 'T' || c === 'A' || c === 'AF') && r.range) return hit[1] + ' (' + r.range + ')';
+    return hit[1];
+  }).join(', ');
+}
 function _hbItemRecord(m){
   const rec = { name: m.name || 'Unnamed', source: SKT_HB_SOURCE, rarity: m.rarity || 'none', entries: _HB_PARAS(m.text) };
   if (m.kind === 'wondrous' || !m.kind) rec.wondrous = true; else rec.type = m.kind;
   if (m.attune) rec.reqAttune = m.attuneBy ? 'by ' + String(m.attuneBy).replace(/^by\s+/i, '') : true;
   if (+m.value) rec.value = Math.round(+m.value * 100);
   if (+m.weight) rec.weight = +m.weight;
-  if (/^[MR]$/.test(m.kind || '') && m.dmg1){ rec.dmg1 = m.dmg1; if (m.dmgType) rec.dmgType = m.dmgType; rec.weaponCategory = 'martial'; rec.weapon = true; }
-  if (m.properties) rec.property = _HB_LIST(m.properties);
+  // Simple or martial as the DM says (a homebrew dagger was martial, so a
+  // wizard wasn't proficient with it).
+  if (/^[MR]$/.test(m.kind || '') && m.dmg1){ rec.dmg1 = m.dmg1; if (m.dmgType) rec.dmgType = m.dmgType; rec.weaponCategory = m.weaponCat === 'simple' ? 'simple' : 'martial'; rec.weapon = true; }
+  if (m.properties){
+    const pr = _hbProps(m.properties);
+    if (pr.property.length) rec.property = pr.property;
+    if (pr.dmg2) rec.dmg2 = pr.dmg2;
+    if (pr.range) rec.range = pr.range;
+  }
   if (/^(LA|MA|HA|S)$/.test(m.kind || '') && +m.ac){ rec.ac = +m.ac; rec.armor = m.kind !== 'S'; }
   if (+m.charges) rec.charges = +m.charges;
   if (m.bonusWeapon) rec.bonusWeapon = '+' + String(m.bonusWeapon).replace(/^\+/, '');
@@ -198,7 +245,7 @@ function sktHomebrewFromCatalog(kind, row){
     const t = String(r.type || '').split('|')[0];
     return { name, kind: _HB_ITEM_TYPES.some(x => x[0] === t) ? t : 'wondrous', rarity: _HB_RARITY.includes(r.rarity) ? r.rarity : 'none',
       attune: !!r.reqAttune, attuneBy: typeof r.reqAttune === 'string' ? r.reqAttune.replace(/^by\s+/i, '') : '', value: r.value_cp ? r.value_cp / 100 : '',
-      weight: r.weight || '', dmg1: r.dmg1 || '', dmgType: r.dmgType || '', properties: (r.property || []).map(p => String(p).split('|')[0]).join(', '),
+      weight: r.weight || '', dmg1: r.dmg1 || '', dmgType: r.dmgType || '', properties: _hbPropsText(r), weaponCat: r.weaponCategory === 'simple' ? 'simple' : 'martial',
       ac: r.ac || '', charges: '', text: (r.desc || []).join('\n') };
   }
   // A spell: the rules' own record when there is one (structured), else the
@@ -242,7 +289,8 @@ const _HB_FORMS = {
   item: [
     ['name', 'text', 'Name', 'Barrow-Blade'], ['kind', 'sel', 'Type', _HB_ITEM_TYPES], ['rarity', 'sel', 'Rarity', _HB_RARITY.map(r => [r, r === 'none' ? 'not magic' : r])],
     ['attune', 'chk', 'Requires attunement'], ['attuneBy', 'text', 'Attunement by', 'a paladin'], ['value', 'num', 'Value (gp)'], ['weight', 'num', 'Weight (lb)'],
-    ['dmg1', 'text', 'Damage', '1d8'], ['dmgType', 'sel', 'Damage type', _HB_DMG], ['properties', 'text', 'Properties', 'versatile (1d10)'],
+    ['dmg1', 'text', 'Damage', '1d8'], ['dmgType', 'sel', 'Damage type', _HB_DMG], ['weaponCat', 'sel', 'Weapon', [['martial', 'martial'], ['simple', 'simple']]],
+    ['properties', 'text', 'Properties', 'Versatile (1d10), Thrown (20/60)'],
     ['bonusWeapon', 'num', 'Attack and damage bonus'], ['ac', 'num', 'AC'], ['bonusAc', 'num', 'AC bonus'], ['charges', 'num', 'Charges'],
     ['text', 'area', 'What it does', 'While holding it, you…'],
   ],

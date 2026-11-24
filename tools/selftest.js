@@ -28323,6 +28323,36 @@ for (const cls of Object.keys(rule)) for (let L = 1; L <= 20; L++) for (const sc
       } catch(e){ ok('round 566 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
       finally { G._npc = keepN; G._locks = keepL; G._filters = keepF; }
     }
+    // -- Round 567: a homebrew weapon's properties work — "Finesse, Light, Thrown (20/60)" as the rules' own (a homebrew finesse blade never used Dexterity), "Start from" a rapier reads "Finesse" not "F", simple or martial as the DM says; a homebrew monster's passive Perception counts its Perception skill --
+    {
+      try {
+        const knife = _hbItemRecord({ name: 'R567 Barrow Knife', kind: 'M', dmg1: '1d4', dmgType: 'P', properties: 'finesse, light, Thrown (20/60)', weaponCat: 'simple' });
+        ok('typed properties become the rules’ own: finesse, light, thrown, with the range', JSON.stringify(knife.property) === '["F","L","T"]' && knife.range === '20/60' && knife.weaponCategory === 'simple', JSON.stringify([knife.property, knife.range, knife.weaponCategory]));
+        const sword = _hbItemRecord({ name: 'R567 Barrow Blade', kind: 'M', dmg1: '1d8', dmgType: 'S', properties: 'Versatile (1d10); two handed', weaponCat: 'martial' });
+        ok('…versatile with its two-handed damage, and “two handed” as Two-Handed', JSON.stringify(sword.property) === '["V","2H"]' && sword.dmg2 === '1d10' && sword.weaponCategory === 'martial', JSON.stringify([sword.property, sword.dmg2]));
+        const R14 = await sktRulesLoad('2014');
+        const fx = { pb: 2, mod: { str: 1, dex: 3, con: 0, int: 0, wis: 0, cha: 0 }, weaponProf: new Set(['simple']), weaponPropRules: [], build: { masteries: [] }, edition: '2014', R: R14,
+                     rangedAttackBonus: 0, duelingBonus: 0, weaponHit: 0, rageOn: 0, damageBonusAll: 0, level: 2 };
+        const rows = sktBuildAttacks(fx, { weapons: [Object.assign({}, knife, { type: 'M' })] }, null);
+        const k = rows.find(a => a.name === 'R567 Barrow Knife');
+        ok('a homebrew finesse knife is swung with Dexterity on the sheet', !!k && k.str === false, JSON.stringify(k));
+        // "Start from" one of the books' weapons: words, not codes
+        const row = n => _5eData.find(r => r.cat === 'item' && r.name === n && r._raw && Array.isArray(r._raw.property));
+        const fr = n => { const r = row(n); return r ? sktHomebrewFromCatalog('item', r) : null; };
+        const rap = fr('Rapier'), ls = fr('Longsword'), dg = fr('Dagger');
+        ok('“Start from” a rapier: its properties read “Finesse”, not “F”', !!rap && rap.properties === 'Finesse' && rap.weaponCat === 'martial', rap && rap.properties);
+        ok('…a longsword: “Versatile (1d10)”', !!ls && ls.properties === 'Versatile (1d10)', ls && ls.properties);
+        ok('…a dagger: simple, and thrown with its range', !!dg && dg.weaponCat === 'simple' && /Thrown \(20\/60\)/.test(dg.properties) && /Finesse/.test(dg.properties) && /Light/.test(dg.properties), dg && dg.properties + ' ' + dg.weaponCat);
+        const back = ls && _hbItemRecord(Object.assign({}, ls, { kind: 'M' }));
+        ok('…and saved again, the longsword is versatile 1d10 still', !!back && JSON.stringify(back.property) === '["V"]' && back.dmg2 === '1d10', back && JSON.stringify([back.property, back.dmg2]));
+        // passive Perception
+        const scout = _hbMonsterRecord({ name: 'R567 Scout', ab: { wis: 12 }, skills: 'Nature +4, Perception +5', passive: '' });
+        const lout = _hbMonsterRecord({ name: 'R567 Lout', ab: { wis: 12 }, skills: 'Athletics +4', passive: '' });
+        const set = _hbMonsterRecord({ name: 'R567 Set', ab: { wis: 12 }, skills: 'Perception +5', passive: 9 });
+        ok('a homebrew monster with Perception +5 has passive Perception 15 (it was 10 + Wisdom: 11)', scout.passive === 15, scout.passive);
+        ok('…without the skill, 10 + its Wisdom; one typed in stays as typed', lout.passive === 11 && set.passive === 9, JSON.stringify([lout.passive, set.passive]));
+      } catch(e){ ok('round 567 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
+    }
     // -- Class features: represented, not just text ------------------------
     {
       try {
