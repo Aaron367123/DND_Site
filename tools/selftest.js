@@ -33239,6 +33239,37 @@ for (const cls of Object.keys(rule)) for (let L = 1; L <= 20; L++) for (const sc
         paTab = keepTab; paMoreSub = keepSub; try { paRender(); } catch(e){}
       }
     }
+    // -- Round 568: the phone's game log roller — the box is empty after a roll (it kept "2d6+3 fire"), and a "+3" typed for one d8 isn't added to the next die tapped --
+    if (PLAYER){
+      const keepL = localStorage.getItem(SKT_LOG_KEY), keepP = localStorage.getItem(SKT_LOG_PRIVATE_KEY), keepTab = paTab, keepSub = paMoreSub;
+      try {
+        // (after the rules data has loaded: that redraws the whole screen once)
+        for (let k = 0; k < 100 && !(typeof _5eLoaded !== 'undefined' && _5eLoaded); k++) await sleep(100);
+        await sleep(300);
+        if (paMyIdx() < 0) paSetPc('zoey');
+        if (paVisibleTabs().some(t => t.id === 'log')){ paTab = 'log'; paMoreSub = null; } else { paTab = 'more'; paMoreSub = 'log'; }
+        paRender(); await sleep(300);
+        const el = document.getElementById('pa-screen'), box = () => el.querySelector('[data-glog-input]');
+        box().value = '2d6+3 fire';
+        el.querySelector('[data-glog-form] button[type=submit]').click(); await sleep(150);
+        const e1 = sktLogEntries().slice(-1)[0];
+        ok('a typed roll is rolled, and the box is empty after', !!e1 && e1.label === 'fire' && box().value === '', JSON.stringify([e1 && e1.label, box().value]));
+        box().value = '+3';
+        el.querySelector('[data-glog-die="8"]').click(); await sleep(150);
+        const e2 = sktLogEntries().slice(-1)[0];
+        ok('…"+3" then the d8: 1d8 + 3, and the box is empty after', !!e2 && e2.expr === '1d8 + 3' && box().value === '', JSON.stringify([e2 && e2.expr, box().value]));
+        el.querySelector('[data-glog-die="20"]').click(); await sleep(150);
+        const e3 = sktLogEntries().slice(-1)[0];
+        ok('…so the d20 tapped next is a plain d20, not d20 + 3', !!e3 && e3.expr === '1d20', e3 && e3.expr);
+        box().value = 'not dice';
+        el.querySelector('[data-glog-form] button[type=submit]').click(); await sleep(150);
+        ok('…and what isn’t a roll stays in the box to be fixed', box().value === 'not dice', box().value);
+      } catch(e){ ok('round 568 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
+      finally {
+        try { localStorage.setItem(SKT_LOG_KEY, keepL == null ? '[]' : keepL); localStorage.setItem(SKT_LOG_PRIVATE_KEY, keepP == null ? '[]' : keepP); } catch(e){}
+        paTab = keepTab; paMoreSub = keepSub; try { paRender(); } catch(e){}
+      }
+    }
   }
 
   // ══════════════════════════════════════════════════════════ mobile / phone

@@ -164,17 +164,23 @@ function sktLogHiddenPref(){ try { return localStorage.getItem('skt-gamelog-hide
 function sktLogWireRoller(root, opts){
   const form = root.querySelector('[data-glog-form]'), inp = root.querySelector('[data-glog-input]');
   const hidden = () => { const c = root.querySelector('[data-glog-hidden]'); return !!(c && c.checked); };
+  // The box is emptied BEFORE the roll: the roll redraws the log, and on the
+  // phone that rebuilds the screen and puts back what was in the box — so
+  // "2d6+3 fire" stayed after rolling, and a "+3" typed for one d8 rode
+  // along on every die tapped after it.
   if (form) form.addEventListener('submit', e => {
     e.preventDefault();
     const v = inp.value.trim(); if (!v) return;
-    if (sktQuickRoll(v, { hidden: hidden() })){ inp.value = ''; if (opts && opts.onRoll) opts.onRoll(); }
+    inp.value = '';
+    if (sktQuickRoll(v, { hidden: hidden() })){ if (opts && opts.onRoll) opts.onRoll(); }
+    else inp.value = v;
   });
   root.querySelectorAll('[data-glog-die]').forEach(b => b.addEventListener('click', () => {
     // A typed modifier or label still applies: "+3" then d8 rolls 1d8+3.
     const extra = inp && inp.value.trim();
     const expr = '1d' + b.dataset.glogDie + (extra && /^[+\-−]/.test(extra) ? extra : extra ? ' ' + extra : '');
-    sktQuickRoll(expr, { hidden: hidden() });
     if (inp) inp.value = '';
+    sktQuickRoll(expr, { hidden: hidden() });
     if (opts && opts.onRoll) opts.onRoll();
   }));
   const hc = root.querySelector('[data-glog-hidden]');
