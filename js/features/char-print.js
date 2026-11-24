@@ -35,7 +35,10 @@ function cpSaveOf(pc, k){
 }
 function cpSkillOf(pc, k){
   const sh = pc.sheet || {};
-  return sh.skills && sh.skills[k] != null ? sh.skills[k] : csMod((pc.abilities || {})[CS_SKILLS[k][1]]);
+  // (csSkillVal: a built character keys Sleight of Hand sleightOfHand, and
+  // the printout showed the bare Dexterity modifier for it)
+  const v = csSkillVal(sh, k);
+  return v != null ? v : csMod((pc.abilities || {})[CS_SKILLS[k][1]]);
 }
 // What gives advantage, in words, for the side column ("Initiative: Feral
 // Instinct").
@@ -62,7 +65,7 @@ function csPrintSheet(pc){
     + '<div class="cp-mini"><div><b>' + csSigned(pb) + '</b><small>Proficiency bonus</small></div><div><i class="cp-box"></i><small>Heroic inspiration</small></div></div>'
     + '<div class="cp-block"><h3>Saving throws</h3>' + CP_AB.map(([k, l]) => '<div class="cp-row"><i class="cp-dot' + ((sh.saveProf || []).includes(k) ? ' on' : '') + '"></i><span>' + l + '</span><b>' + csSigned(cpSaveOf(pc, k)) + '</b></div>').join('') + '</div>'
     + '<div class="cp-block"><h3>Skills</h3>' + Object.keys(CS_SKILLS).map(k => {
-      const p = (sh.skillProf || {})[k] || 0;
+      const p = csSkillProf(sh, k);
       return '<div class="cp-row"><i class="cp-dot' + (p >= 2 ? ' exp' : p ? ' on' : '') + '"></i><span>' + CS_SKILLS[k][0] + ' <small>' + CS_SKILLS[k][1].toUpperCase() + '</small></span><b>' + csSigned(cpSkillOf(pc, k)) + '</b></div>';
     }).join('') + '<div class="cp-key"><i class="cp-dot on"></i> proficient <i class="cp-dot exp"></i> expertise</div></div></div>';
 
@@ -178,8 +181,8 @@ function csCharacterText(pc){
   out.push(['AC ' + (pc.ac ?? '—'), 'HP ' + (pc.hpMax || 0), 'Speed ' + (pc.spd ?? 30) + ' ft', 'Initiative ' + csSigned(pc.init ?? csMod(ab.dex)), 'Proficiency ' + csSigned(sh.profBonus || 2)].join(' · '));
   out.push(CP_AB.map(([k]) => k.toUpperCase() + ' ' + (ab[k] ?? '—') + ' (' + csSigned(csMod(ab[k])) + ')').join('  '));
   out.push('Saving throws: ' + CP_AB.map(([k, l]) => l.slice(0, 3) + ' ' + csSigned(cpSaveOf(pc, k)) + ((sh.saveProf || []).includes(k) ? '*' : '')).join(', ') + '  (* proficient)');
-  const sk = Object.keys(CS_SKILLS).filter(k => (sh.skillProf || {})[k]);
-  if (sk.length) out.push('Skills: ' + sk.map(k => CS_SKILLS[k][0] + ' ' + csSigned(cpSkillOf(pc, k)) + ((sh.skillProf || {})[k] >= 2 ? ' (expertise)' : '')).join(', '));
+  const sk = Object.keys(CS_SKILLS).filter(k => csSkillProf(sh, k));
+  if (sk.length) out.push('Skills: ' + sk.map(k => CS_SKILLS[k][0] + ' ' + csSigned(cpSkillOf(pc, k)) + (csSkillProf(sh, k) >= 2 ? ' (expertise)' : '')).join(', '));
   out.push('Passive Perception ' + (sh.passivePerception || 10 + cpSkillOf(pc, 'perception')) + (sh.senses ? ' · ' + sh.senses : ''));
   const def = [['Resistant', pc.resistances], ['Immune', pc.immunities], ['Vulnerable', pc.vulnerabilities]].filter(([, v]) => v && v.length);
   if (def.length) out.push(def.map(([l, v]) => l + ': ' + v.join(', ')).join(' · '));

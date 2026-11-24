@@ -28370,6 +28370,27 @@ for (const cls of Object.keys(rule)) for (let L = 1; L <= 20; L++) for (const sc
         ok('the printout carries what the sheet does, of what the sheet can (14 Strength, Powerful Build: 420 lb)', !!m && +m[1] === Math.round(want.lb * 10) / 10 && +m[2] === 420 && want.cap === 420 && want.lb >= 12, JSON.stringify([m && m.slice(1), want]));
       } catch(e){ ok('round 569 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
     }
+    // -- Round 570: Sleight of Hand and Animal Handling on a built character (kept as sleightOfHand / animalHandling) — the sheet's proficiency dot, the printout's number and dot, and the text copy's Skills line all see them (Zoey's Sleight of Hand printed +4 for +10, without its expertise) --
+    {
+      try {
+        const pc = { id: 'r570', name: 'R570 Rogue', abilities: { str: 10, dex: 16, con: 12, int: 10, wis: 12, cha: 10 },
+          sheet: { profBonus: 3, skills: { sleightOfHand: 9, animalHandling: 4, stealth: 9 }, skillProf: { sleightOfHand: 2, animalHandling: 1, stealth: 2 }, saveProf: [], featureList: [] }, inventory: [] };
+        ok('how proficient: Sleight of Hand kept as sleightOfHand reads as expertise', csSkillProf(pc.sheet, 'sleight_of_hand') === 2 && csSkillProf(pc.sheet, 'animal_handling') === 1 && csSkillProf(pc.sheet, 'stealth') === 2 && csSkillProf(pc.sheet, 'arcana') === 0, '');
+        const host = document.createElement('div'); host.innerHTML = csSide(pc);
+        const row = name => [...host.querySelectorAll('.cs-row')].find(r => r.textContent.includes(name));
+        const soh = row('Sleight of Hand'), ah = row('Animal Handling');
+        ok('the sheet: Sleight of Hand has its expertise dot, Animal Handling its proficiency dot', !!soh && !!soh.querySelector('.cs-dot.exp') && !!ah && !!ah.querySelector('.cs-dot.on'), soh && soh.innerHTML);
+        const pr = document.createElement('div'); pr.innerHTML = csPrintSheet(pc);
+        const prow = [...pr.querySelectorAll('.cp-row')].find(r => /Sleight of Hand/.test(r.textContent));
+        ok('the printout: Sleight of Hand +9 with the expertise dot (it printed the Dexterity modifier, +3)', !!prow && /\+9$/.test(prow.textContent.trim()) && !!prow.querySelector('.cp-dot.exp'), prow && prow.textContent);
+        const t = csCharacterText(pc);
+        ok('the text copy lists Sleight of Hand +9 (expertise) and Animal Handling +4', /Sleight of Hand \+9 \(expertise\)/.test(t) && /Animal Handling \+4/.test(t), (/Skills:.*/.exec(t) || [''])[0]);
+        // Reliable Talent: a 3 on the die for proficient Sleight of Hand counts as 10
+        const rt = Object.assign({}, pc, { sheet: Object.assign({}, pc.sheet, { featureList: [{ name: 'Reliable Talent', from: 'class' }] }) });
+        const r1 = sktRollD20For(rt, 'Sleight of Hand', 9, 'check:sleight_of_hand', null, 3), r2 = sktRollD20For(rt, 'Arcana', 0, 'check:arcana', null, 3);
+        ok('Reliable Talent steadies Sleight of Hand too (a 3 counts as 10), not a skill without proficiency', r1.natural === 10 && r2.natural === 3, JSON.stringify([r1.natural, r2.natural]));
+      } catch(e){ ok('round 570 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
+    }
     // -- Class features: represented, not just text ------------------------
     {
       try {
@@ -33286,6 +33307,17 @@ for (const cls of Object.keys(rule)) for (let L = 1; L <= 20; L++) for (const sc
         try { localStorage.setItem(SKT_LOG_KEY, keepL == null ? '[]' : keepL); localStorage.setItem(SKT_LOG_PRIVATE_KEY, keepP == null ? '[]' : keepP); } catch(e){}
         paTab = keepTab; paMoreSub = keepSub; try { paRender(); } catch(e){}
       }
+    }
+    // -- Round 571: on the phone, Reliable Talent steadies Sleight of Hand and Animal Handling too (a built character keeps them as sleightOfHand / animalHandling, and the phone looked for sleight_of_hand) --
+    if (PLAYER){
+      try {
+        const pc = { id: 'r571', name: 'R571 Rogue', abilities: { dex: 16 },
+          sheet: { profBonus: 4, skills: { sleightOfHand: 11 }, skillProf: { sleightOfHand: 2 }, featureList: [{ name: 'Reliable Talent', from: 'class' }] } };
+        sktSetRandom(() => 2 / 20 + 1e-9);   // every d20 a 3
+        const r1 = paRollD20(pc, 11, 'check:sleight_of_hand'), r2 = paRollD20(pc, 3, 'check:arcana');
+        ok('the phone: a 3 for proficient Sleight of Hand counts as 10 (Reliable Talent); not for Arcana', r1.nat === 10 && r2.nat === 3, JSON.stringify([r1.nat, r2.nat]));
+      } catch(e){ ok('round 571 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
+      finally { sktSetRandom(null); }
     }
   }
 

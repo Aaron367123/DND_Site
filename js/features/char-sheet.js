@@ -522,6 +522,16 @@ function csSkillVal(sh, k){
   const camel = k.replace(/_([a-z])/g, (m, c) => c.toUpperCase());
   return s[camel] != null ? s[camel] : null;
 }
+// How proficient in a skill: 0, 0.5, 1 or 2. Keyed as the skill's value is —
+// a character built here has sleightOfHand / animalHandling — so the two
+// two-word skills showed no proficiency dot on the sheet, Reliable Talent
+// didn't steady them, and the printout and text copy dropped them.
+function csSkillProf(sh, k){
+  const p = sh && sh.skillProf; if (!p) return 0;
+  if (p[k] != null) return +p[k] || 0;
+  const camel = k.replace(/_([a-z])/g, (m, c) => c.toUpperCase());
+  return +p[camel] || 0;
+}
 // A passive score: 10 + the skill as the sheet shows it (an imported
 // sheet's own Passive Perception box wins), +5 when what's on the character
 // gives that check advantage and -5 for disadvantage (Poisoned, Frightened,
@@ -579,7 +589,7 @@ function csSide(pc){
     + '<span class="cs-dot' + ((sh.saveProf || []).includes(k) ? ' on' : '') + '"></span><span>' + CS_AB[k] + csAdvMark(pc, 'save:' + k) + '</span><b>' + csSigned(saveOf(k)) + '</b></button>').join('') + '</div>'
     + ((sh.saveMods || []).length ? '<div class="cs-savemods"><b>Saving throw modifiers</b>' + sh.saveMods.map(m => '<div>' + csE(m.text) + ' <i>— ' + csE(m.src) + '</i></div>').join('') + '</div>' : '');
   h += '<h5>Skills</h5><div class="cs-list">' + Object.keys(CS_SKILLS).map(k => {
-    const p = (sh.skillProf || {})[k] || 0;
+    const p = csSkillProf(sh, k);
     const disad = k === 'stealth' && sh.stealthDis;
     return '<button class="cs-row" data-cs-roll="skill:' + k + '"><span class="cs-dot' + (p >= 2 ? ' exp' : p >= 1 ? ' on' : p ? ' half' : '') + '" title="' + (p >= 2 ? 'Expertise' : p >= 1 ? 'Proficient' : p ? 'Half proficiency' : '') + '"></span>'
       + '<span>' + CS_SKILLS[k][0] + ' <i>' + CS_SKILLS[k][1].toUpperCase() + '</i>' + (disad ? ' <i class="cs-dis" title="Disadvantage from armour">D</i>' : '') + csAdvMark(pc, 'check:' + k) + '</span><b>' + csSigned(skillOf(k)) + '</b></button>';
@@ -737,7 +747,7 @@ function sktRollD20For(pcNow, label, mod, kind, pick, table){
   let nat = b == null ? a : mode === 'adv' ? Math.max(a, b) : Math.min(a, b);
   // Reliable Talent: a proficient ability check treats a roll under 10 as 10.
   const skillKey = /^check:/.test(kind || '') ? kind.slice(6) : '';
-  if (skillKey && has('Reliable Talent') && ((pcNow.sheet || {}).skillProf || {})[skillKey] && nat < 10){ fx._reliable = nat; nat = 10; }
+  if (skillKey && has('Reliable Talent') && csSkillProf(pcNow.sheet, skillKey) && nat < 10){ fx._reliable = nat; nat = 10; }
   mod = (+mod || 0) + fx.bonus;
   // Dice a state adds (Bless's d4).
   const tags = csRollTags(kind);

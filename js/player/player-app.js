@@ -1971,7 +1971,7 @@ function paRollD20(pc, mod, kind, pick){
   let nat = b == null ? a : mode === 'adv' ? Math.max(a, b) : Math.min(a, b);
   const sk = /^check:/.test(kind) ? kind.slice(6) : '';
   let reliable = null;
-  if (sk && feats.some(f => f.name === 'Reliable Talent' && !f.info) && (sh.skillProf || {})[sk] && nat < 10){ reliable = nat; nat = 10; }
+  if (sk && feats.some(f => f.name === 'Reliable Talent' && !f.info) && (typeof csSkillProf === 'function' ? csSkillProf(sh, sk) : (sh.skillProf || {})[sk]) && nat < 10){ reliable = nat; nat = 10; }
   const tags = typeof csRollTags === 'function' ? csRollTags(kind) : [kind];
   const extra = (sh.rollDice || []).filter(x => (x.on || []).some(t => tags.includes(t))).map(x => ({ label: x.label, die: x.die, n: sktD(x.die) }));
   const m = (+mod || 0) + (fx.bonus || 0);
