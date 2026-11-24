@@ -2001,16 +2001,38 @@ function csSpellDamageTyped(s, slot){
 function csSpellHeal(s, slot, mod){
   if (!s) return '';
   const txt = JSON.stringify(s.entries || []);
-  if (!/regain/i.test(txt)) return '';
-  const m = /\{@dice ([^}|]+)/.exec(txt); if (!m) return '';
-  let expr = m[1].trim();
+  // "regain", or "restore": Aura of Vitality's "restore 2d6 Hit Points",
+  // Healing Spirit's, and Heal's "restoring 70 Hit Points" — none of which
+  // had a heal button. A fixed amount is the heal (not a berry's single
+  // point: Goodberry's is eating one, not the casting).
+  // The dice the healing is ("regains a number of Hit Points equal to 2d8"),
+  // not any roll in the text: Prismatic Spray's 1d8 for a colour, Wish's
+  // stress, Reincarnate's d100 had heal buttons.
+  const m = /\b(?:regains?|restor(?:e|es|ing))\b[^.]{0,70}?\{@dice ([^}|]+)\}/i.exec(txt);
+  let expr;
+  if (m) expr = m[1].trim();
+  else {
+    const f = /\b(?:regains?|restor(?:es|ing|e))\s+(\d+)\s+(?:\{@variantrule )?hit points?/i.exec(txt);
+    if (!f || +f[1] < 2) return '';
+    expr = f[1];
+  }
   const sc = /\{@scaledice [^|]+\|[^|]+\|([^}|]+)/.exec(JSON.stringify(s.higher || []));
   const up = Math.max(0, (slot || s.level) - s.level);
   if (sc && up){
     const st = /^(\d+)d(\d+)$/.exec(sc[1].trim()), bm = /^(\d+)d(\d+)(.*)$/.exec(expr);
     if (st && bm && st[2] === bm[2]) expr = (+bm[1] + up * +st[1]) + 'd' + bm[2] + bm[3];
+    // (a fixed amount grows by a fixed step: Heal's 10 a slot level)
+    else if (/^\d+$/.test(expr) && /^\d+$/.test(sc[1].trim())) expr = String(+expr + up * +sc[1].trim());
   }
-  if (/spellcasting ability modifier/i.test(txt) && mod) expr += (mod >= 0 ? '+' : '') + mod;
+  // (2014 Heal says it in words: "increases by 10 for each slot level above 6th")
+  else if (up && /^\d+$/.test(expr)){
+    const w = /increases by (\d+) for each (?:spell )?slot level/i.exec(JSON.stringify(s.higher || []));
+    if (w) expr = String(+expr + up * +w[1]);
+  }
+  // The modifier when it's added to these dice ("2d8 plus your spellcasting
+  // ability modifier") — not Healing Spirit's "1 + your spellcasting ability
+  // modifier" times it can heal.
+  if (m && mod && new RegExp('\\{@dice ' + m[1].replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '[^}]*\\}\\s*(?:\\+|plus)\\s*your spellcasting ability modifier', 'i').test(txt)) expr += (mod >= 0 ? '+' : '') + mod;
   return expr;
 }
 // The casting ability: the sheet's, or for a character brought in from a PDF

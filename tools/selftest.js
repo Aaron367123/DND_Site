@@ -28509,6 +28509,21 @@ for (const cls of Object.keys(rule)) for (let L = 1; L <= 20; L++) for (const sc
       } catch(e){ ok('round 577 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
       finally { C.openAreaSave = keepOpen; try { csClose(); } catch(e){} state.party = JSON.parse(keepP); state.combatants = JSON.parse(keepC); save(); }
     }
+    // -- Round 578: healing spells — "restore" heals as "regain" does (Aura of Vitality, Healing Spirit had no heal button), Heal's 70 and its 10 a level, the modifier only where it's added to the dice (Healing Spirit's isn't), and no heal from a roll that isn't one (Prismatic Spray's colour, Wish, Reincarnate) --
+    {
+      try {
+        const R = await sktRulesLoad('2024'), R14 = await sktRulesLoad('2014');
+        const h = (n, lv, r) => { const s = sktRulesSpell(r || R, n); return s ? csSpellHeal(s, lv == null ? s.level : lv, 3) : 'missing'; };
+        ok('Aura of Vitality restores 2d6; Healing Spirit 1d6, 2d6 at 3rd (not 1d6+3)', h('Aura of Vitality') === '2d6' && h('Healing Spirit', null, R14) === '1d6' && h('Healing Spirit', 3, R14) === '2d6',
+           JSON.stringify([h('Aura of Vitality'), h('Healing Spirit', null, R14), h('Healing Spirit', 3, R14)]));
+        ok('Heal: 70, and 80 from a 7th-level slot (2024 and 2014)', h('Heal') === '70' && h('Heal', 7) === '80' && h('Heal', null, R14) === '70' && h('Heal', 7, R14) === '80', JSON.stringify([h('Heal'), h('Heal', 7), h('Heal', null, R14), h('Heal', 7, R14)]));
+        ok('Cure Wounds 2d8+3, Healing Word 2d4+3 (2024); 1d8+3 (2014); Prayer of Healing 2024 2d8 with no modifier', h('Cure Wounds') === '2d8+3' && h('Healing Word') === '2d4+3' && h('Cure Wounds', null, R14) === '1d8+3' && h('Prayer of Healing') === '2d8' && h('Prayer of Healing', null, R14) === '2d8+3',
+           JSON.stringify([h('Cure Wounds'), h('Healing Word'), h('Cure Wounds', null, R14), h('Prayer of Healing'), h('Prayer of Healing', null, R14)]));
+        const none = ['Prismatic Spray', 'Wish', 'Goodberry', 'Ceremony'].map(n => [n, h(n), h(n, null, R14)]).filter(x => (x[1] && x[1] !== 'missing') || (x[2] && x[2] !== 'missing'));
+        const none2 = h('Reincarnate', null, R14);
+        ok('no heal from Prismatic Spray, Wish, Goodberry, Ceremony or Reincarnate', !none.length && (!none2 || none2 === 'missing'), JSON.stringify([none, none2]));
+      } catch(e){ ok('round 578 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
+    }
     // -- Class features: represented, not just text ------------------------
     {
       try {
