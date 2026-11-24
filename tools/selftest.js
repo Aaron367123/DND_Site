@@ -32318,7 +32318,8 @@ for (const cls of Object.keys(rule)) for (let L = 1; L <= 20; L++) for (const sc
         const p = at(2.5, 2.5), q = at(5.5, 2.5);
         el.dispatchEvent(new TouchEvent('touchstart', { bubbles: true, cancelable: true, touches: [T(p)], changedTouches: [T(p)] }));
         for (let k = 1; k <= 8; k++){ const m = { x: p.x + (q.x - p.x) * k / 8, y: p.y }; document.dispatchEvent(new TouchEvent('touchmove', { bubbles: true, cancelable: true, touches: [T(m)], changedTouches: [T(m)] })); await sleep(8); }
-        await sleep(150);
+        // (sent a frame or two later: in a long run that can be past 150 ms)
+        for (let k = 0; k < 20 && !sent.length; k++) await sleep(50);
         const mid = sent[sent.length - 1];
         ok('phone: dragging her creature, its way and feet go out as she goes', !!mid && /ft/.test(mid[1].t) && /zoey/i.test(mid[1].by) && mid[1].p.length >= 4, JSON.stringify(mid));
         document.dispatchEvent(new TouchEvent('touchend', { bubbles: true, cancelable: true, touches: [], changedTouches: [T(q)] })); await sleep(250);
