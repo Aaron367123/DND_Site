@@ -1925,7 +1925,7 @@ function csSpellDamage(s, slot){
   const m = /\{@damage ([^}|]+)/.exec(JSON.stringify(s.entries || []));
   if (!m) return '';
   let expr = m[1].trim();
-  const up = Math.max(0, (slot || s.level) - s.level);
+  const up = typeof sktSpellUp === 'function' ? sktSpellUp(s, 0, slot || s.level) : Math.max(0, (slot || s.level) - s.level);
   // Only when the text grows this roll: Ice Knife's first is the piercing
   // shard, and "1d10 + 1d6" at 2nd level put the cold dice on it.
   if (up && typeof sktSpellStep === 'function'){
@@ -1984,8 +1984,8 @@ function csSpellDamageParts(s, slot, forSave){
   if (!raw.length) return [];
   // One roll, from the start: as it always was (its own growth and bonus).
   if (raw.length === 1 && !from) return [{ dice: csSpellDamage(s, slot), type: raw[0].type || csSpellDamageType(s) }];
-  const up = Math.max(0, (slot || s.level) - s.level);
-  return raw.map((x, i) => ({ dice: up && typeof sktSpellStepped === 'function' ? sktSpellStepped(x.dice, sktSpellStep(s, from ? 0 : i, x.type), up) : x.dice, type: x.type }));
+  const up = typeof sktSpellUp === 'function' ? sktSpellUp(s, 0, slot || s.level) : Math.max(0, (slot || s.level) - s.level);
+  return raw.map((x, i) => ({ dice: up && typeof sktSpellStepped === 'function' ? sktSpellStepped(x.dice, sktSpellStep(s, from ? 0 : i, x.type), typeof sktSpellUp === 'function' ? sktSpellUp(s, from ? 0 : i, slot || s.level) : up) : x.dice, type: x.type }));
 }
 // A spell's damage at a slot level with its type(s), as it's shown.
 function csSpellDamageTyped(s, slot){
@@ -2017,7 +2017,7 @@ function csSpellHeal(s, slot, mod){
     expr = f[1];
   }
   const sc = /\{@scaledice [^|]+\|[^|]+\|([^}|]+)/.exec(JSON.stringify(s.higher || []));
-  const up = Math.max(0, (slot || s.level) - s.level);
+  const up = typeof sktSpellUp === 'function' ? sktSpellUp(s, 0, slot || s.level) : Math.max(0, (slot || s.level) - s.level);
   if (sc && up){
     const st = /^(\d+)d(\d+)$/.exec(sc[1].trim()), bm = /^(\d+)d(\d+)(.*)$/.exec(expr);
     if (st && bm && st[2] === bm[2]) expr = (+bm[1] + up * +st[1]) + 'd' + bm[2] + bm[3];

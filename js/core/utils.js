@@ -1955,6 +1955,20 @@ function sktSpellStep(s, i, type){
   const pick = /\bor\b/i.test(plain) ? named.slice(0, 1) : named;
   return pick.includes(String(type || '').toLowerCase()) ? steps[0] : null;
 }
+// How many times a spell's roll grows from its own level to `slot`: one a
+// slot level, or only at the levels its text lists — 2014 Spiritual Weapon
+// and Flame Blade "for every two slot levels" (2,4,6,8), Spirit Shroud's
+// (3,5,7,9). Every level was counted: Spiritual Weapon from a 3rd-level slot
+// read 2d8, which is a 4th-level one's.
+function sktSpellUp(s, i, slot){
+  const base = +((s && s.level) || 0), up = Math.max(0, (+slot || base) - base);
+  if (!up) return 0;
+  const hi = JSON.stringify((s && (s.higher || s.entriesHigherLevel)) || []);
+  const ms = [...hi.matchAll(/\{@scale(?:damage|dice) [^|]+\|([^|]+)\|[^}|]+/g)];
+  const lv = ms.length ? String((ms[i] || ms[0])[1]).trim() : '';
+  if (/^\d+(\s*,\s*\d+)+$/.test(lv)) return lv.split(',').map(Number).filter(n => n > base && n <= +slot).length;
+  return up;
+}
 // "4d10" grown by `up` steps of "1d10" → "6d10"; a different die is added on.
 function sktSpellStepped(dice, step, up){
   if (!step || !up) return dice;
@@ -1994,7 +2008,7 @@ function sktMonsterSpellRows(raw, R){
       let dice = d0;
       if (!lvl && !i && typeof _sktCantripDice === 'function') dice = _sktCantripDice(s, cl) || dice;
       // The higher-level step, on the rolls the spell's text grows.
-      if (lvl && up) dice = sktSpellStepped(dice, sktSpellStep(s, i, types[i] || types[0] || ''), up);
+      if (lvl && up) dice = sktSpellStepped(dice, sktSpellStep(s, i, types[i] || types[0] || ''), sktSpellUp(s, i, castAt));
       return { avg: _sktDiceAvg(dice), dice, type: types[i] || types[0] || '' };
     });
     const isAtk = (s.spellAttack || []).length > 0, save = (s.savingThrow || [])[0];

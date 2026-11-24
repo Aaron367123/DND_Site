@@ -28524,6 +28524,19 @@ for (const cls of Object.keys(rule)) for (let L = 1; L <= 20; L++) for (const sc
         ok('no heal from Prismatic Spray, Wish, Goodberry, Ceremony or Reincarnate', !none.length && (!none2 || none2 === 'missing'), JSON.stringify([none, none2]));
       } catch(e){ ok('round 578 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
     }
+    // -- Round 579: a spell that grows "for every two slot levels" grows only at those — 2014 Spiritual Weapon is 1d8 from a 3rd-level slot and 2d8 from a 4th (it read 2d8 at 3rd), Flame Blade, Spirit Shroud; 2024 Spiritual Weapon still grows every level --
+    {
+      try {
+        const R = await sktRulesLoad('2024'), R14 = await sktRulesLoad('2014');
+        const d = (n, lv, r) => { const s = sktRulesSpell(r || R, n); return s ? csSpellDamageTyped(s, lv) : 'missing'; };
+        ok('2014 Spiritual Weapon: 1d8 at 2nd and 3rd, 2d8 at 4th, 3d8 at 6th', [2, 3, 4, 5, 6].map(l => d('Spiritual Weapon', l, R14)).join() === '1d8 force,1d8 force,2d8 force,2d8 force,3d8 force', [2, 3, 4, 5, 6].map(l => d('Spiritual Weapon', l, R14)).join());
+        ok('…2014 Flame Blade 3d6 at 3rd, 4d6 at 4th', d('Flame Blade', 3, R14) === '3d6 fire' && d('Flame Blade', 4, R14) === '4d6 fire', d('Flame Blade', 3, R14) + ' / ' + d('Flame Blade', 4, R14));
+        const ss = sktRulesSpell(R, 'Spirit Shroud');
+        ok('…Spirit Shroud 1d8 at 4th, 2d8 at 5th', !!ss && csSpellDamage(ss, 4) === '1d8' && csSpellDamage(ss, 5) === '2d8', ss && csSpellDamage(ss, 4) + ' / ' + csSpellDamage(ss, 5));
+        ok('…2024 Spiritual Weapon grows every level: 2d8 at 3rd', d('Spiritual Weapon', 3) === '2d8 force' && d('Fireball', 5) === '10d6 fire', d('Spiritual Weapon', 3) + ' / ' + d('Fireball', 5));
+        ok('how many steps: listed levels only (2,4,6,8 from 2nd to 5th: 1), every level otherwise', sktSpellUp(sktRulesSpell(R14, 'Spiritual Weapon'), 0, 5) === 1 && sktSpellUp(sktRulesSpell(R, 'Spiritual Weapon'), 0, 5) === 3 && sktSpellUp(sktRulesSpell(R, 'Fireball'), 0, 3) === 0, '');
+      } catch(e){ ok('round 579 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
+    }
     // -- Class features: represented, not just text ------------------------
     {
       try {
