@@ -28391,6 +28391,19 @@ for (const cls of Object.keys(rule)) for (let L = 1; L <= 20; L++) for (const sc
         ok('Reliable Talent steadies Sleight of Hand too (a 3 counts as 10), not a skill without proficiency', r1.natural === 10 && r2.natural === 3, JSON.stringify([r1.natural, r2.natural]));
       } catch(e){ ok('round 570 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
     }
+    // -- Round 572: a Sleight of Hand check the DM asks for (named sleightOfHand) is still a Sleight of Hand and a Dexterity check — what gives advantage on either applies — and an imported sheet's sleight_of_hand proficiency is found either way --
+    {
+      try {
+        const tags = csRollTags('check:sleightOfHand');
+        ok('the check the DM asks for carries the sheet’s skill tag and Dexterity’s', tags.includes('check:sleight_of_hand') && tags.includes('ab:dex'), JSON.stringify(tags));
+        const pc = { id: 'r572', name: 'R572', abilities: { dex: 14 }, conditions: [],
+          sheet: { skillProf: { sleight_of_hand: 2 }, rollAdv: [{ on: ['check:sleight_of_hand'], label: 'R572 Gloves' }, { on: ['ab:dex'], label: 'R572 Cat’s Grace' }] } };
+        const fx = csRollEffects(pc, 'check:sleightOfHand');
+        ok('…so the advantage on Sleight of Hand and on Dexterity checks applies to it', fx.adv.includes('R572 Gloves') && fx.adv.includes('R572 Cat’s Grace'), JSON.stringify(fx.adv));
+        ok('…and an imported sheet’s sleight_of_hand proficiency reads for sleightOfHand', csSkillProf(pc.sheet, 'sleightOfHand') === 2 && csSkillProf(pc.sheet, 'sleight_of_hand') === 2, '');
+        ok('…a one-word skill is as it was', JSON.stringify(csRollTags('check:stealth')) === JSON.stringify(['check:stealth', 'check', 'skill:stealth', 'ab:dex']), JSON.stringify(csRollTags('check:stealth')));
+      } catch(e){ ok('round 572 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
+    }
     // -- Class features: represented, not just text ------------------------
     {
       try {

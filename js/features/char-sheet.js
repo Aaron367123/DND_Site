@@ -529,8 +529,10 @@ function csSkillVal(sh, k){
 function csSkillProf(sh, k){
   const p = sh && sh.skillProf; if (!p) return 0;
   if (p[k] != null) return +p[k] || 0;
-  const camel = k.replace(/_([a-z])/g, (m, c) => c.toUpperCase());
-  return +p[camel] || 0;
+  // (either way round: a roll the DM asks for names it sleightOfHand, and an
+  // imported sheet keeps sleight_of_hand)
+  const camel = k.replace(/_([a-z])/g, (m, c) => c.toUpperCase()), snake = k.replace(/[A-Z]/g, c => '_' + c.toLowerCase());
+  return +(p[camel] != null ? p[camel] : p[snake]) || 0;
 }
 // A passive score: 10 + the skill as the sheet shows it (an imported
 // sheet's own Passive Perception box wins), +5 when what's on the character
@@ -689,7 +691,14 @@ function csRollTags(kind){
   if (/^attack/.test(kind)) t.push('attack');
   if (/^save:/.test(kind)) t.push('save');
   if (kind === 'conc') t.push('save', 'save:con');
-  if (/^check:/.test(kind)){ const sk = kind.slice(6); t.push('check', 'skill:' + sk); if (CS_SKILLS[sk]) t.push('ab:' + CS_SKILLS[sk][1]); }
+  // A skill as the sheet names it (sleight_of_hand): a roll the DM asks for
+  // says sleightOfHand, and so missed what's tagged for the skill and for
+  // Dexterity checks (an advantage on them, a penalty).
+  if (/^check:/.test(kind)){
+    const sk = kind.slice(6).replace(/[A-Z]/g, c => '_' + c.toLowerCase());
+    if (sk !== kind.slice(6)) t.push('check:' + sk);
+    t.push('check', 'skill:' + sk); if (CS_SKILLS[sk]) t.push('ab:' + CS_SKILLS[sk][1]);
+  }
   if (/^abcheck:/.test(kind)) t.push('check', 'ab:' + kind.slice(8));
   return t;
 }
