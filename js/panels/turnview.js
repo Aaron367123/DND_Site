@@ -4952,7 +4952,12 @@ registerPanel('turnview', {
     if (o.isPC){
       const p = this._partyOf(o) || {}, sh = p.sheet || {};
       const v = p.pp ?? sh.passivePerception ?? (typeof csSkillVal === 'function' && csSkillVal(sh, 'perception') != null ? 10 + (+csSkillVal(sh, 'perception') || 0) : null);
-      return v == null || isNaN(+v) ? null : +v;
+      if (v == null || isNaN(+v)) return null;
+      // −5 with disadvantage on the check (Poisoned, Frightened), +5 with
+      // advantage — the rule for a passive score, as the party card shows it.
+      // A poisoned character's full score set the 2014 Hide DC.
+      const s = typeof sktPassive === 'function' ? sktPassive(p, 'perception') : null;
+      return +v + ((s && s.adj) || 0);
     }
     const sn = ((this._entryOf(o) || {})._raw || {}).senses;
     const v = sn && typeof sn === 'object' ? sn.passive_perception : (/passive Perception (\d+)/i.exec(String(sn || '')) || [])[1];

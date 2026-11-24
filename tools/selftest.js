@@ -28404,6 +28404,20 @@ for (const cls of Object.keys(rule)) for (let L = 1; L <= 20; L++) for (const sc
         ok('…a one-word skill is as it was', JSON.stringify(csRollTags('check:stealth')) === JSON.stringify(['check:stealth', 'check', 'skill:stealth', 'ab:dex']), JSON.stringify(csRollTags('check:stealth')));
       } catch(e){ ok('round 572 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
     }
+    // -- Round 573: Turn View's passive Perception for a character (the 2014 Hide DC) is 5 lower when Poisoned, as the party card shows it — it took the full score --
+    {
+      const keepP = state.party, keepRule = typeof sktRuleOn === 'function' ? sktRuleOn('condRolls') : true;
+      try {
+        const pc = { id: 'r573', name: 'R573 Lookout', abilities: { wis: 14 }, pp: 15, conditions: [], sheet: { passivePerception: 15, skills: { perception: 5 }, skillProf: { perception: 1 } } };
+        state.party = keepP.concat([pc]);
+        const T = panelDefs.turnview, o = { id: 'r573', isPC: true, name: pc.name };
+        const a = T._passivePerception(o);
+        pc.conditions = ['Poisoned'];
+        const b = T._passivePerception(o), card = sktPassive(pc, 'perception');
+        ok('Turn View: 15, and 10 while Poisoned — what the party card says (' + (card && card.value) + ')', a === 15 && (!keepRule || (b === 10 && card.value === 10)), JSON.stringify([a, b, card && card.value]));
+      } catch(e){ ok('round 573 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
+      finally { state.party = keepP; }
+    }
     // -- Class features: represented, not just text ------------------------
     {
       try {
