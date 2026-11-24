@@ -28577,6 +28577,16 @@ for (const cls of Object.keys(rule)) for (let L = 1; L <= 20; L++) for (const sc
            JSON.stringify([dur('Control Flames', R14), dur('Fireball'), dur('Aid'), dur('Guiding Bolt')]));
       } catch(e){ ok('round 582 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
     }
+    // -- Round 583: a spell's casting time — "8 hours", "10 minutes" (they read "8 hour", "10 minute"), each way to cast it ("1 action or 8 hours"), and "1 bonus action", "1 reaction" as they were --
+    {
+      try {
+        const R = await sktRulesLoad('2024');
+        const tm = n => { const s = sktRulesSpell(R, n); return s ? csSpellMeta(s).split(' · ')[0] : 'missing'; };
+        ok('Awaken 8 hours, Clairvoyance 10 minutes, Alarm 1 minute', tm('Awaken') === '8 hours' && tm('Clairvoyance') === '10 minutes' && tm('Alarm') === '1 minute', JSON.stringify([tm('Awaken'), tm('Clairvoyance'), tm('Alarm')]));
+        ok('…Plant Growth 1 action or 8 hours; Counterspell 1 reaction; Healing Word 1 bonus action', tm('Plant Growth') === '1 action or 8 hours' && tm('Counterspell') === '1 reaction' && tm('Healing Word') === '1 bonus action',
+           JSON.stringify([tm('Plant Growth'), tm('Counterspell'), tm('Healing Word')]));
+      } catch(e){ ok('round 583 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
+    }
     // -- Class features: represented, not just text ------------------------
     {
       try {

@@ -1907,7 +1907,10 @@ function csSpell(name){
 function csSpellMeta(s){
   if (!s) return '';
   const t = [].concat(s.time || [])[0], r = s.range || {}, du = [].concat(s.duration || [])[0] || {};
-  const time = t ? t.number + ' ' + String(t.unit).replace('bonus', 'bonus action') : '';
+  // "8 hours", "10 minutes" (they read "8 hour", "10 minute"), and each way
+  // to cast it (Plant Growth: "1 action or 8 hours").
+  const timeOf = x => { const u = String(x.unit || '').replace('bonus', 'bonus action'); return x.number + ' ' + u + (+x.number > 1 && /^(minute|hour|round|day|action)$/.test(u) ? 's' : ''); };
+  const time = t ? [...new Set([].concat(s.time || []).filter(x => x && x.unit).map(timeOf))].join(' or ') : '';
   // An area from you with its size, as the book's range line has it: "Self
   // (15-ft cone)" — it read "Cone", with no size and no "Self". A distance of
   // one mile is "1 mile".
