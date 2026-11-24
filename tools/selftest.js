@@ -28567,6 +28567,16 @@ for (const cls of Object.keys(rule)) for (let L = 1; L <= 20; L++) for (const sc
         ok('…a line and a 2014 sphere: Lightning Bolt Self (100-ft line)', rng('Lightning Bolt') === 'Self (100-ft line)', rng('Lightning Bolt'));
       } catch(e){ ok('round 581 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
     }
+    // -- Round 582: a spell's duration line — "Until dispelled" (Arcane Lock read "Permanent"), "Until dispelled or triggered" (Glyph of Warding), and both of Control Flames' ("Instantaneous or 1 hour") --
+    {
+      try {
+        const R = await sktRulesLoad('2024'), R14 = await sktRulesLoad('2014');
+        const dur = (n, r) => { const s = sktRulesSpell(r || R, n); if (!s) return 'missing'; const p = csSpellMeta(s).split(' · '); return p[p.length - 1]; };
+        ok('Arcane Lock: Until dispelled; Glyph of Warding: Until dispelled or triggered', dur('Arcane Lock') === 'Until dispelled' && dur('Glyph of Warding') === 'Until dispelled or triggered', JSON.stringify([dur('Arcane Lock'), dur('Glyph of Warding')]));
+        ok('…Control Flames: Instantaneous or 1 hour; Fireball Instantaneous, Aid 8 hours, Guiding Bolt 1 round', dur('Control Flames', R14) === 'Instantaneous or 1 hour' && dur('Fireball') === 'Instantaneous' && dur('Aid') === '8 hours' && dur('Guiding Bolt') === '1 round',
+           JSON.stringify([dur('Control Flames', R14), dur('Fireball'), dur('Aid'), dur('Guiding Bolt')]));
+      } catch(e){ ok('round 582 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
+    }
     // -- Class features: represented, not just text ------------------------
     {
       try {

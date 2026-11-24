@@ -1916,7 +1916,14 @@ function csSpellMeta(s){
   const range = r.type === 'point' && r.distance ? (r.distance.amount ? r.distance.amount + ' ' + unit(r.distance) : _csTitle(r.distance.type))
     : AREA[r.type] && r.distance && r.distance.amount ? 'Self (' + r.distance.amount + '-' + (r.distance.type === 'miles' ? 'mile' : 'ft') + ' ' + r.type + ')'
     : r.type ? _csTitle(r.type) : '';
-  const dur = du.type === 'timed' && du.duration ? du.duration.amount + ' ' + du.duration.type + (du.duration.amount > 1 ? 's' : '') : du.type === 'instant' ? 'Instantaneous' : _csTitle(du.type || '');
+  // "Until dispelled" (Arcane Lock read "Permanent"), "… or triggered"
+  // (Glyph of Warding); and each of a spell's durations (Control Flames:
+  // "Instantaneous or 1 hour", which showed the first alone).
+  const durOf = x => x.type === 'timed' && x.duration ? x.duration.amount + ' ' + x.duration.type + (x.duration.amount > 1 ? 's' : '')
+    : x.type === 'instant' ? 'Instantaneous'
+    : x.type === 'permanent' && (x.ends || []).length ? 'Until ' + x.ends.map(e => ({ dispel: 'dispelled', trigger: 'triggered', discharge: 'discharged' })[e] || e).join(' or ')
+    : _csTitle(x.type || '');
+  const dur = [...new Set([].concat(s.duration || []).filter(Boolean).map(durOf).filter(Boolean))].join(' or ') || durOf(du);
   const c = s.components || {};
   const comp = [c.v ? 'V' : '', c.s ? 'S' : '', c.m ? 'M' : ''].filter(Boolean).join(', ');
   return [time, range, comp, dur].filter(Boolean).join(' · ');
