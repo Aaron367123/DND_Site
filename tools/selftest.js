@@ -28418,6 +28418,36 @@ for (const cls of Object.keys(rule)) for (let L = 1; L <= 20; L++) for (const sc
       } catch(e){ ok('round 573 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
       finally { state.party = keepP; }
     }
+    // -- Round 574: a 2024 monk's Grapple and Shove use Dexterity for the DC when it's better (Martial Arts) — Creambak's was 8 − 1 + 3 = 10, not 14; anyone else's is Strength's --
+    if (!PLAYER){
+      const keepC = JSON.stringify(state.combatants), keepA = state.activeCombatantId, keepP = JSON.stringify(state.party), keepR = state.combatRound;
+      const T = panelDefs.turnview, C = panelDefs.combat, keepD = window.sktD, keepTok = T._tokenFor, keepAsk = window.showConfirm;
+      try {
+        for (let k = 0; k < 100 && !(typeof _5eLoaded !== 'undefined' && _5eLoaded); k++) await sleep(100);
+        const find = (n, src) => _5eData.find(r => r.cat === 'monster' && r.name === n && r._source === src);
+        const pc = (id, feats) => ({ id, name: id, hp: 40, hpMax: 40, ac: 15, spd: 30, rules: '2024', level: 6,
+          abilities: { str: 8, dex: 18, con: 14, int: 10, wis: 14, cha: 10 }, sheet: { size: 'Medium', profBonus: 3, featureList: feats } });
+        state.party.push(pc('r574m', [{ name: 'Martial Arts', from: 'class' }]), pc('r574f', []));
+        state.combatants = [{ id: 'r574m', name: 'r574m', isPC: true, hp: 40, hpMax: 40, ac: 15, initiative: 20, conditions: [] },
+                            { id: 'r574f', name: 'r574f', isPC: true, hp: 40, hpMax: 40, ac: 15, initiative: 19, conditions: [] }];
+        C.addMonster(find('Ogre', 'MM')); await sleep(20);
+        const ogId = state.combatants[2].id, og = () => state.combatants.find(c => c.id === ogId), get = id => state.combatants.find(c => c.id === id);
+        state.combatRound = 1; state.activeCombatantId = 'r574m'; save();
+        openPanel('turnview'); await sleep(200);
+        T._tokenFor = () => null; T._actAs = null;
+        window.showConfirm = async () => false;
+        window.sktD = d => d === 20 ? 2 : 1;   // the ogre's save: 2 + 4 = 6, always short
+        T._armed = ogId;
+        await T._grapple(get('r574m'), 'grapple');
+        ok('a 2024 monk (Str 8, Dex 18): grapple DC 8 + 4 + 3 = 15, and its escape DC 15', /DC 15/.test(T._result) && og().grappledBy && og().grappledBy.escape === 15, JSON.stringify([T._result, og().grappledBy]));
+        sktUndo(); await sleep(10);
+        state.activeCombatantId = 'r574f'; T._armed = ogId;
+        await T._grapple(get('r574f'), 'grapple');
+        ok('…anyone else with the same scores: Strength’s, DC 8 − 1 + 3 = 10', /DC 10/.test(T._result) && og().grappledBy && og().grappledBy.escape === 10, JSON.stringify([T._result, og().grappledBy]));
+      } catch(e){ ok('round 574 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
+      finally { window.sktD = keepD; T._tokenFor = keepTok; window.showConfirm = keepAsk; T._armed = null;
+        state.party = JSON.parse(keepP); state.combatants = JSON.parse(keepC); state.activeCombatantId = keepA; state.combatRound = keepR; save(); }
+    }
     // -- Class features: represented, not just text ------------------------
     {
       try {

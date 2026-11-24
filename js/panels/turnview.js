@@ -5041,7 +5041,13 @@ registerPanel('turnview', {
     } else {
       const md = n => Math.floor(((+n || 10) - 10) / 2);
       let str, pb;
-      if (c.isPC){ const p = this._partyOf(c) || {}; str = md((p.abilities || {}).str); pb = +((p.sheet || {}).profBonus) || this._pb(p.level || 1); }
+      if (c.isPC){
+        const p = this._partyOf(c) || {}; str = md((p.abilities || {}).str); pb = +((p.sheet || {}).profBonus) || this._pb(p.level || 1);
+        // A 2024 monk's Martial Arts: "you can use your Dexterity modifier
+        // instead of your Strength modifier to determine the save DC" of a
+        // Grapple or Shove. Creambak's was 8 − 1 + 3 = 10, not 14.
+        if (((p.sheet || {}).featureList || []).some(f => f && f.name === 'Martial Arts' && !f.info)) str = Math.max(str, md((p.abilities || {}).dex));
+      }
       else { const e = this._entryOf(c) || {}, raw = e._raw || {}; str = md(raw.strength); pb = +raw.proficiency_bonus || (typeof sktPbForCR === 'function' ? sktPbForCR(raw.challenge_rating != null ? raw.challenge_rating : e._cr) : 2); }
       const dc = 8 + str + pb; escape = dc;
       const sb = C.saveBonus(t, 'str'), db = C.saveBonus(t, 'dex'), sab = db > sb ? 'DEX' : 'STR';
