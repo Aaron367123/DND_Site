@@ -28632,6 +28632,41 @@ for (const cls of Object.keys(rule)) for (let L = 1; L <= 20; L++) for (const sc
       } catch(e){ ok('round 585 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
       finally { state.party = JSON.parse(keepP); }
     }
+    // -- Round 587: 2024 Durable's Speedy Recovery spends a Hit Point Die and heals its roll (no Constitution) — in Turn View and from the sheet; it spent the bonus action and nothing else --
+    if (!PLAYER){
+      const keepP = JSON.stringify(state.party), keepC = JSON.stringify(state.combatants), keepA = state.activeCombatantId, keepR = state.combatRound;
+      const T = panelDefs.turnview, keepAsk = window.showConfirm, keepD = window.sktD;
+      try {
+        for (let k = 0; k < 100 && !(typeof _5eLoaded !== 'undefined' && _5eLoaded); k++) await sleep(100);
+        const R = await sktRulesLoad('2024');
+        const b = Object.assign(sktBlankBuild('2024'), { name: 'R587 Durable', cls: 'Druid', level: 6, abilities: { method: 'manual', base: { str: 10, dex: 12, con: 16, int: 10, wis: 16, cha: 8 } }, asi: { 4: { type: 'feat', feat: 'Durable' } } });
+        const pc = sktComputeCharacter(b, R); pc.id = 'r587'; pc.name = 'R587 Durable'; pc.build = b; pc.hp = 20;
+        pc.hitDice = Object.assign({}, pc.hitDice, { current: pc.hitDice.max });
+        ok('Durable (2024) gives Speedy Recovery', (pc.sheet.activations || []).some(a => a.name === 'Speedy Recovery'), (pc.sheet.activations || []).map(a => a.name).join(', '));
+        state.party = JSON.parse(keepP).concat([pc]);
+        state.combatants = [{ id: 'r587', name: pc.name, isPC: true, hp: 20, hpMax: pc.hpMax, ac: pc.ac, initiative: 15, conditions: [] }];
+        state.combatRound = 1; state.activeCombatantId = 'r587'; save();
+        openPanel('turnview'); await sleep(250);
+        window.showConfirm = async () => 5;
+        const hd0 = pc.hitDice.current, me = () => state.party.find(p => p.id === 'r587');
+        const a = T._activationsFor(T._order().find(c => c.id === 'r587')).find(x => x.name === 'Speedy Recovery');
+        await T._useActivation('r587', a.i); await sleep(50);
+        ok('Turn View: a 5 on the die heals 5 (no +3 Constitution), and one Hit Point Die is spent', me().hp === 25 && me().hitDice.current === hd0 - 1 && state.combatants[0].bonusUsed === true,
+           JSON.stringify([me().hp, me().hitDice.current, hd0, state.combatants[0].bonusUsed]));
+        sktUndo(); await sleep(20);
+        ok('…undo gives back the die and the hit points', me().hp === 20 && me().hitDice.current === hd0, JSON.stringify([me().hp, me().hitDice.current]));
+        // the sheet's Use button
+        window.sktD = () => 3;
+        openCharSheet('r587'); for (let k = 0; k < 40 && !(CS && CS.R); k++) await sleep(100);
+        csGoTab('actions'); await sleep(250);
+        const btn = document.querySelector('#cs-root [data-cs-speedy]');
+        ok('the sheet shows Speedy Recovery with a Use button', !!btn && !btn.disabled, btn ? btn.outerHTML.slice(0, 120) : 'none');
+        if (btn){ btn.click(); await sleep(80); }
+        ok('…which spends a die and heals the roll (a 3: 23)', me().hp === 23 && me().hitDice.current === hd0 - 1, JSON.stringify([me().hp, me().hitDice.current]));
+      } catch(e){ ok('round 587 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
+      finally { window.showConfirm = keepAsk; window.sktD = keepD; try { csClose(); } catch(e){}
+        state.party = JSON.parse(keepP); state.combatants = JSON.parse(keepC); state.activeCombatantId = keepA; state.combatRound = keepR; save(); }
+    }
     // -- Class features: represented, not just text ------------------------
     {
       try {

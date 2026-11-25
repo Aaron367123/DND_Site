@@ -1087,6 +1087,13 @@ function csExtraDamageHtml(pc){
   return rows.length ? '<h4>Extra damage</h4>' + rows.join('') : '';
 }
 function csActHtml(pc, a){
+  // Speedy Recovery: a Hit Point Die spent and its roll healed (no resource
+  // of its own, so it had no Use button — only its text).
+  if (/^Speedy Recovery$/i.test(a.name)){
+    const hd = pc.hitDice || {}, can = !CS.readOnly && (+hd.current || 0) > 0 && (pc.hp || 0) < (pc.hpMax || 0);
+    return '<div class="cs-act"><div class="cs-act-h"><b>' + csE(a.name) + '</b><span class="cb-dim">1 Hit Point Die · ' + (+hd.current || 0) + ' left</span>'
+      + '<button class="btn small" data-cs-speedy="1"' + (can ? '' : ' disabled') + '>Use</button></div>' + (a.desc ? '<div class="cs-act-d">' + csE(a.desc) + '</div>' : '') + '</div>';
+  }
   const r = a.resource ? (pc.resources || []).find(x => x.name === a.resource) : null;
   const can = !CS.readOnly && r && (r.current || 0) >= (a.amount || 1);
   return '<div class="cs-act"><div class="cs-act-h"><b>' + csE(a.name) + '</b>'
@@ -1588,6 +1595,15 @@ function csOnClick(e){
     const a = (pc.sheet.activations || []).find(x => x.name === d.csActroll); if (!a || !a.dice) return;
     csRollDamage(a.name, a.dice, false);
     return csRender();
+  }
+  if (d.csSpeedy){
+    const P = panelDefs.party, i = csIdx();
+    if (!P || typeof P._rollHitDie !== 'function' || i < 0 || CS.readOnly) return true;
+    const r = P._rollHitDie(i, null, null, { noMod: true });
+    if (!r){ if (typeof showToast === 'function') showToast('No Hit Point Dice left'); return true; }
+    if (CS.embed && typeof paMarkEcon === 'function') paMarkEcon('bonus');
+    csLog({ kind: 'dmg', label: 'Speedy Recovery heals', total: r.heal, dice: r.roll, type: '', detail: r.die + ' [' + r.roll + ']' });
+    csRender(); return true;
   }
   if (d.csUse){
     const a = (pc.sheet.activations || []).find(x => x.name === d.csUse); if (!a) return;

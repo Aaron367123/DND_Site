@@ -2741,7 +2741,9 @@ registerPanel('party',{
   // given: the number on a die rolled at the table, in place of the app's.
   _undoQuiet(label, fn){ return typeof sktUndoable === 'function' ? sktUndoable(label, fn, { quiet: true }) : fn(); },
   // die: the size to spend ('d6'); the largest left when not given.
-  _rollHitDie(i, given, die){
+  // opts.noMod: the roll alone (2024 Durable's Speedy Recovery: "regain a
+  // number of Hit Points equal to the roll" — no Constitution).
+  _rollHitDie(i, given, die, opts){
     const c = state.party[i]; if (!c || !c.hitDice || c.hitDice.current <= 0) return null;
     const conMod = (c.abilities && typeof c.abilities.con === 'number') ? Math.floor((c.abilities.con-10)/2) : 0;
     const pools = sktHdPools(c);
@@ -2758,7 +2760,8 @@ registerPanel('party',{
     // Recorded rather than left as a bare "house rule" note so the next
     // pass over the rest rules does not raise it again.
     // (Table rules: the house rule off — the book's minimum, 0.)
-    const heal = Math.max(sktRuleOn('hdMin1') ? 1 : 0, roll + conMod);
+    const cm = opts && opts.noMod ? 0 : conMod;
+    const heal = Math.max(sktRuleOn('hdMin1') ? 1 : 0, roll + cm);
     pool.current -= 1; sktHdSetPools(c, pools);
     // Same cap expression as the heal path in _applyHpDelta. This used
     // c.hpMax directly, so a character with no hpMax recorded got
@@ -2769,7 +2772,7 @@ registerPanel('party',{
     c.hp = Math.min(cap, Math.max(0, c.hp || 0) + heal);
     save();
     syncPartyToCombat(i);
-    return { roll, conMod, heal, sides };
+    return { roll, conMod: cm, heal, sides, die: pool.die };
   },
 
   // Render the hit-dice pip row when the character has imported hit dice.

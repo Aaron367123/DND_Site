@@ -718,6 +718,22 @@ registerPanel('turnview', {
       heal = { amt: Math.max(0, r.total + wis), detail: (r.detail || die + ' ' + r.total) + (wis ? (wis > 0 ? ' + ' : ' − ') + Math.abs(wis) : ''), tgt,
         cure: (sh.featureList || []).some(f => f && /^Physician.s Touch$/.test(f.name) && !f.info) };
     }
+    // Speedy Recovery (2024 Durable): a Bonus Action that spends one Hit Point
+    // Die and heals its roll. It spent the bonus action and nothing else —
+    // no die gone, no hit points back.
+    let speedy = null;
+    if (/^Speedy Recovery$/i.test(a.name) && who.isPC){
+      const p = this._partyOf(who), pools = p && typeof sktHdPools === 'function' ? sktHdPools(p).filter(x => x.current > 0) : [];
+      if (!pools.length){ this._setResult(`<span class="dim">${esc(who.name)} has no Hit Point Dice left to spend.</span>`, true); this._render(); return; }
+      let n = typeof typed === 'number' ? typed : null;
+      if (n == null && typed !== 'roll' && typeof showConfirm === 'function'){
+        const v = await showConfirm(who.name + ' spends a ' + pools[0].die + ' Hit Point Die (Speedy Recovery) and regains what it rolls.', { title: a.name, confirmLabel: 'Heal',
+          input: { label: 'The ' + pools[0].die + ' rolled (blank: roll it here)', min: 1, max: 12 } });
+        if (v === false) return;
+        if (typeof v === 'number') n = v;
+      }
+      speedy = { pi: state.party.indexOf(p), n, die: pools[0].die };
+    }
     let spent = '';
     if (a.pool){
       a.pool.current = Math.max(0, a.pool.current - (a.amount || 1));
@@ -788,6 +804,12 @@ registerPanel('turnview', {
       who.actionUsed = false;
       extra = had ? ' — its Action is ready again' : ' — one more action this turn';
       if (this._edOf(who) !== '2014') extra += ' (not the Magic action)';
+    }
+    if (speedy && speedy.pi >= 0 && panelDefs.party && typeof panelDefs.party._rollHitDie === 'function'){
+      const P = panelDefs.party, cb = state.combatants.find(x => x.id === who.id), before = (cb || who).hp || 0;
+      const r = P._rollHitDie(speedy.pi, speedy.n, speedy.die, { noMod: true });
+      if (r){ const now = (state.combatants.find(x => x.id === who.id) || who).hp || 0;
+        extra = ' — spends a ' + esc(r.die) + ' Hit Point Die and regains <strong>' + Math.max(0, now - before) + '</strong> hit points <span class="dim">(' + esc(r.die) + ' ' + r.roll + (speedy.n != null ? ', theirs' : '') + ')</span>'; }
     }
     if (heal){
       const C = panelDefs.combat, tg = heal.tgt || who, i = state.combatants.findIndex(x => x.id === tg.id);
@@ -3204,6 +3226,8 @@ registerPanel('turnview', {
         sheet: p.sheet && p.sheet.spellSlots ? JSON.parse(JSON.stringify(p.sheet.spellSlots)) : null,
         // the dice a character holds: Bardic Inspiration, Heroic Inspiration
         bardicInspiration: p.bardicInspiration, bardicFrom: p.bardicFrom, inspiration: p.inspiration,
+        // the Hit Point Dice (Speedy Recovery spends one)
+        hitDice: p.hitDice ? JSON.parse(JSON.stringify(p.hitDice)) : p.hitDice,
         // a Rage, a feature's switch, a concentration: an undone Bladesong
         // takes its AC with it
         rage: !!p.rage, rageRounds: p.rageRounds, active: p.active ? {...p.active} : null, concentration: p.concentration || null,
@@ -3230,6 +3254,7 @@ registerPanel('turnview', {
       p.resources = s.resources.map(r => ({...r}));
       if (s.sheet && p.sheet) p.sheet.spellSlots = s.sheet;
       if ('bardicInspiration' in s){ p.bardicInspiration = s.bardicInspiration; p.bardicFrom = s.bardicFrom; p.inspiration = s.inspiration; }
+      if ('hitDice' in s && s.hitDice) p.hitDice = JSON.parse(JSON.stringify(s.hitDice));
       if ('active' in s){ p.rage = s.rage; p.rageRounds = s.rageRounds; p.active = s.active ? {...s.active} : null; p.concentration = s.concentration; }
     });
     state.combatRound = u.round;
