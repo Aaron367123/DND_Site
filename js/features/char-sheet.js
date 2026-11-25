@@ -1631,6 +1631,19 @@ function csOnClick(e){
       panelDefs.party._editWildShape(csIdx(), () => csRender());
       return;
     }
+    // One that moves another pool or a spell slot (Persistent Rage, Create
+    // Spell Slot, Magical Cunning, Wild Resurgence's slot): that too. Only
+    // the use was spent.
+    const fx = typeof sktFeatureUse === 'function' ? sktFeatureUse(JSON.parse(JSON.stringify(pc)), a) : null;
+    if (fx){
+      if (!fx.ok){ if (typeof showToast === 'function') showToast('Can’t — ' + fx.why); return; }
+      csEdit('Used ' + a.name, p => {
+        sktFeatureUse(p, a);
+        if (CS.embed && typeof paMarkEcon === 'function' && typeof paActKind === 'function') paMarkEcon(paActKind(a.action));
+      });
+      if (typeof showToast === 'function') showToast(a.name + ': ' + fx.text);
+      return;
+    }
     // Rage turns on what raging does (resistances, the damage bonus) via the
     // party card's own switch, told the use is already spent here.
     const rage = /^Rage$/i.test(a.name) && !pc.rage;

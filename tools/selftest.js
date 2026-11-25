@@ -28879,6 +28879,71 @@ for (const cls of Object.keys(rule)) for (let L = 1; L <= 20; L++) for (const sc
       finally { window.showConfirm = keepAsk; window.showModal = keepModal; T._armed = keepArm;
         state.party = JSON.parse(keepP); state.combatants = JSON.parse(keepC); state.activeCombatantId = keepA; state.combatRound = keepR; save(); }
     }
+    // -- Round 592: features that move another pool or a spell slot do it — Persistent Rage (every Rage back), Create Spell Slot and Convert Spell Slot, Magical Cunning (half the Pact slots, rounded up), Wild Resurgence's slot — in Turn View and from the sheet. They spent the use and nothing else --
+    if (!PLAYER){
+      const keepP = JSON.stringify(state.party), keepC = JSON.stringify(state.combatants), keepA = state.activeCombatantId, keepR = state.combatRound;
+      const T = panelDefs.turnview, keepModal = window.showModal;
+      try {
+        for (let k = 0; k < 100 && !(typeof _5eLoaded !== 'undefined' && _5eLoaded); k++) await sleep(100);
+        const R = await sktRulesLoad('2024');
+        const mk = (id, cls, sub, lv) => { const b = Object.assign(sktBlankBuild('2024'), { name: id, cls, subclass: sub || '', level: lv, abilities: { method: 'manual', base: { str: 16, dex: 14, con: 14, int: 10, wis: 16, cha: 16 } } });
+          const pc = sktComputeCharacter(b, R); pc.id = id; pc.name = id; pc.build = b; return pc; };
+        const all = [mk('r592b', 'barbarian', 'Berserker', 15), mk('r592s', 'sorcerer', 'Draconic', 5), mk('r592w', 'warlock', 'Fiend', 5), mk('r592d', 'druid', 'Moon', 5)];
+        const start = (active, fn) => {
+          state.party = JSON.parse(keepP).concat(JSON.parse(JSON.stringify(all)));
+          state.combatants = all.map((p, k) => ({ id: p.id, name: p.id, isPC: true, hp: 30, hpMax: 40, ac: 15, initiative: 20 - k, conditions: [] }));
+          if (fn) fn(id => state.party.find(p => p.id === id));
+          state.combatRound = 1; state.activeCombatantId = active; T._actAs = null; save(); };
+        const P = id => state.party.find(p => p.id === id);
+        const pool = (id, n) => (P(id).resources.find(r => r.name === n) || {}).current;
+        const ex = (id, l) => +(P(id).sheet.spellSlots[l] || {}).expended || 0;
+        const setPool = (p, n, v) => { p.resources.find(r => r.name === n).current = v; };
+        const setEx = (p, l, v) => { p.sheet.spellSlots[l].expended = v; };
+        const use = async (id, n) => { const a = T._activationsFor(T._order().find(c => c.id === id)).find(x => x.name === n); if (!a) return false; await T._useActivation(id, a.i); await sleep(30); return true; };
+        openPanel('turnview'); await sleep(200);
+        // Persistent Rage
+        start('r592b', g => setPool(g('r592b'), 'Rage', 0));
+        const had = await use('r592b', 'Persistent Rage');
+        ok('Persistent Rage: every use of Rage back, its own use spent', had && pool('r592b', 'Rage') === P('r592b').resources.find(r => r.name === 'Rage').max && pool('r592b', 'Persistent Rage') === 0,
+           JSON.stringify([had, pool('r592b', 'Rage'), pool('r592b', 'Persistent Rage')]));
+        sktUndo(); await sleep(30);
+        ok('…an undo takes them back and gives its use back', pool('r592b', 'Rage') === 0 && pool('r592b', 'Persistent Rage') === 1, JSON.stringify([pool('r592b', 'Rage'), pool('r592b', 'Persistent Rage')]));
+        start('r592b'); await use('r592b', 'Persistent Rage');
+        ok('…with every Rage use there it is refused, nothing spent', pool('r592b', 'Persistent Rage') === 1 && /already there/.test(T._result), JSON.stringify([pool('r592b', 'Persistent Rage'), T._result]));
+        // Create Spell Slot
+        start('r592s', g => { setEx(g('r592s'), 2, 1); setPool(g('r592s'), 'Sorcery Points', 5); });
+        await use('r592s', 'Create Spell Slot (level 2)');
+        ok('Create Spell Slot (level 2): 3 Sorcery Points into the spent level 2 slot, as the Bonus Action', ex('r592s', 2) === 0 && pool('r592s', 'Sorcery Points') === 2 && state.combatants.find(c => c.id === 'r592s').bonusUsed === true,
+           JSON.stringify([ex('r592s', 2), pool('r592s', 'Sorcery Points')]));
+        start('r592s', g => setPool(g('r592s'), 'Sorcery Points', 5));
+        await use('r592s', 'Create Spell Slot (level 1)');
+        ok('…with no level 1 slot spent: refused, no points spent', ex('r592s', 1) === 0 && pool('r592s', 'Sorcery Points') === 5 && /no spent level 1/.test(T._result), JSON.stringify([ex('r592s', 1), pool('r592s', 'Sorcery Points'), T._result]));
+        // Convert Spell Slot
+        start('r592s', g => setPool(g('r592s'), 'Sorcery Points', 1));
+        let offered = null; window.showModal = async (t, f) => { offered = f[0].options.map(o => o.value); return { l: '3' }; };
+        await use('r592s', 'Convert Spell Slot');
+        ok('Convert Spell Slot: the level asked for, spent for that many points', JSON.stringify(offered) === '["1","2","3"]' && ex('r592s', 3) === 1 && pool('r592s', 'Sorcery Points') === 4,
+           JSON.stringify([offered, ex('r592s', 3), pool('r592s', 'Sorcery Points')]));
+        // Magical Cunning: half of the 2 Pact slots, rounded up
+        start('r592w', g => setEx(g('r592w'), 3, 2));
+        await use('r592w', 'Magical Cunning');
+        ok('Magical Cunning: one of its two spent Pact Magic slots back (half, rounded up)', ex('r592w', 3) === 1 && pool('r592w', 'Magical Cunning') === 0, JSON.stringify([ex('r592w', 3), pool('r592w', 'Magical Cunning'), T._result]));
+        // Wild Resurgence's slot
+        start('r592d', g => { setEx(g('r592d'), 1, 1); setPool(g('r592d'), 'Wild Shape', 2); });
+        await use('r592d', 'Wild Resurgence: Spell Slot');
+        ok('Wild Resurgence: a Wild Shape use for a level 1 spell slot', ex('r592d', 1) === 0 && pool('r592d', 'Wild Shape') === 1 && pool('r592d', 'Wild Resurgence') === 0,
+           JSON.stringify([ex('r592d', 1), pool('r592d', 'Wild Shape'), pool('r592d', 'Wild Resurgence')]));
+        // the sheet's Use button
+        start('r592s', g => { setEx(g('r592s'), 1, 2); setPool(g('r592s'), 'Sorcery Points', 5); });
+        openCharSheet('r592s'); for (let k = 0; k < 40 && !(CS && CS.R); k++) await sleep(100);
+        csGoTab('actions'); await sleep(250);
+        const btn = document.querySelector('#cs-root [data-cs-use="Create Spell Slot (level 1)"]');
+        if (btn) btn.click(); await sleep(80);
+        ok('the sheet: Create Spell Slot (level 1)’s Use makes the slot as well as spending the points', !!btn && ex('r592s', 1) === 1 && pool('r592s', 'Sorcery Points') === 3, JSON.stringify([!!btn, ex('r592s', 1), pool('r592s', 'Sorcery Points')]));
+      } catch(e){ ok('round 592 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
+      finally { try { csClose(); } catch(e){} window.showModal = keepModal;
+        state.party = JSON.parse(keepP); state.combatants = JSON.parse(keepC); state.activeCombatantId = keepA; state.combatRound = keepR; save(); }
+    }
     // -- Class features: represented, not just text ------------------------
     {
       try {

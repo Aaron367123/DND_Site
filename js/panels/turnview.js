@@ -639,6 +639,31 @@ registerPanel('turnview', {
       save(); panelDefs.party?._render?.(); this._render();
       return;
     }
+    // A feature that moves another pool or a spell slot (sktFeatureUse):
+    // Persistent Rage, Font of Magic, Magical Cunning, Wild Resurgence's slot.
+    if (who.isPC && typeof sktFeatureUse === 'function'){
+      const p = this._partyOf(who);
+      let opts = null;
+      if (p && /^Convert Spell Slot$/i.test(a.name) && typed !== 'applied'){
+        const sl = (p.sheet || {}).spellSlots || {}, lv = Object.keys(sl).map(Number).filter(l => l >= 1 && (+sl[l].total || 0) - (+sl[l].expended || 0) > 0).sort((x, y) => x - y);
+        if (lv.length > 1 && typeof showModal === 'function'){
+          const r = await showModal(a.name, [{ id: 'l', label: 'Spend which spell slot?', type: 'select', value: String(lv[0]), options: lv.map(l => ({ value: String(l), label: 'Level ' + l + ' → ' + l + ' Sorcery Point' + (l === 1 ? '' : 's') })) }], 'Convert');
+          if (!r) return;
+          opts = { level: +r.l };
+        }
+      }
+      const t = p ? sktFeatureUse(JSON.parse(JSON.stringify(p)), a, opts) : null;
+      if (t){
+        if (!t.ok){ this._setResult(`<span class="dim">${esc(who.name)} can't — ${esc(t.why)}.</span>`, true); this._render(); return; }
+        this._snapshot(`${who.name} · ${a.name}`);
+        const r = sktFeatureUse(p, a, opts);
+        const flag = this._actFlag(a); if (flag) who[flag] = true;
+        this._log.unshift(`<strong>${esc(who.name)}</strong> — ${esc(a.name)}${a.action ? ' (' + esc(a.action) + ')' : ''} · ${esc(r.text)}`);
+        this._setResult(`<strong>${esc(who.name)}</strong> uses <strong>${esc(a.name)}</strong> — ${esc(r.text)}.`, true);
+        save(); panelDefs.party?._render?.(); panelDefs.combat?._render?.(); this._render();
+        return;
+      }
+    }
     // Cunning Action ("Dash, Disengage or Hide"), Nimble Escape ("Disengage
     // or Hide"): which one, taken as the Bonus Action. The button spent the
     // bonus action and did nothing — a rogue who used it to Disengage still

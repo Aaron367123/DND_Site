@@ -3956,6 +3956,72 @@ function sktRegainBySlot(pc, pool){
   r.current = (+r.current || 0) + 1;
   return { ok: true, lvl };
 }
+// What using a feature does beyond its own use and its action, for the ones
+// that move another pool or a spell slot: Persistent Rage (every Rage use
+// back), Font of Magic's Create Spell Slot (the points into a spent slot) and
+// Convert Spell Slot (a slot into points, opts.level), Magical Cunning (Pact
+// Magic slots back — half of them, rounded up, or all where it says so),
+// Wild Resurgence's slot (a Wild Shape use for a level 1 slot). Each spent
+// its use, from the sheet and in Turn View, and nothing else happened.
+// Changes `pc` in place, the use spent too. → { ok, text }, { ok: false,
+// why }, or null for a feature that isn't one of these.
+function sktFeatureUse(pc, a, opts){
+  if (!pc || !a) return null;
+  const res = n => (pc.resources || []).find(x => x && x.name === n);
+  const slots = (pc.sheet || {}).spellSlots || {};
+  const own = a.resource ? res(a.resource) : null, cost = a.amount || 1;
+  const setSlot = (l, ex) => { pc.sheet = Object.assign({}, pc.sheet, { spellSlots: Object.assign({}, pc.sheet.spellSlots, { [l]: Object.assign({}, pc.sheet.spellSlots[l], { expended: ex }) }) }); };
+  const left = l => (+(slots[l] || {}).total || 0) - (+(slots[l] || {}).expended || 0);
+  const go = (fn) => { if (own && (+own.current || 0) < cost) return { ok: false, why: 'no ' + a.resource + ' left' }; const r = fn(); if (r.ok && own) own.current = (+own.current || 0) - cost; return r; };
+  if (/^Persistent Rage$/i.test(a.name)) return go(() => {
+    const r = res('Rage'); if (!r) return { ok: false, why: 'no Rage to regain' };
+    if ((+r.current || 0) >= (+r.max || 0)) return { ok: false, why: 'every Rage use is already there' };
+    r.current = +r.max || 0;
+    return { ok: true, text: 'regains every use of Rage (' + r.current + '/' + r.max + ')' };
+  });
+  const cs = /^Create Spell Slot \(level (\d)\)$/i.exec(a.name);
+  if (cs) return go(() => {
+    const l = +cs[1];
+    if (!slots[l] || !((+slots[l].expended || 0) > 0)) return { ok: false, why: 'no spent level ' + l + ' spell slot to make' };
+    setSlot(l, (+slots[l].expended || 0) - 1);
+    return { ok: true, text: 'makes a level ' + l + ' spell slot (' + (left(l) + 1) + '/' + slots[l].total + ')' };
+  });
+  if (/^Convert Spell Slot$/i.test(a.name)) return go(() => {
+    const sp = res('Sorcery Points'); if (!sp) return { ok: false, why: 'no Sorcery Points' };
+    if ((+sp.current || 0) >= (+sp.max || 0)) return { ok: false, why: 'every Sorcery Point is already there' };
+    const lv = Object.keys(slots).map(Number).filter(l => l >= 1 && left(l) > 0).sort((x, y) => x - y);
+    const l = opts && opts.level != null ? +opts.level : lv[0];
+    if (!lv.includes(l)) return { ok: false, why: lv.length ? 'no level ' + l + ' spell slot left' : 'no spell slot left' };
+    setSlot(l, (+slots[l].expended || 0) + 1);
+    const was = +sp.current || 0; sp.current = Math.min(+sp.max || 0, was + l);
+    return { ok: true, text: 'spends a level ' + l + ' spell slot for ' + (sp.current - was) + ' Sorcery Point' + (sp.current - was === 1 ? '' : 's') + ' (' + sp.current + '/' + sp.max + ')' };
+  });
+  if (/^Magical Cunning$/i.test(a.name)){
+    const pact = Object.keys(slots).map(Number).filter(l => slots[l] && slots[l].pact);
+    if (!pact.length) return null;
+    return go(() => {
+      const all = /\bregain all\b/i.test(String(a.desc || ''));
+      const total = pact.reduce((t, l) => t + (slots[l].pact === true ? (+slots[l].total || 0) : (+slots[l].pact || 0)), 0);
+      let n = all ? total : Math.ceil(total / 2), got = 0;
+      pact.forEach(l => {
+        const s = slots[l], mine = s.pact === true ? (+s.total || 0) : (+s.pact || 0);
+        const k = Math.min(n, Math.min(+s.expended || 0, mine));
+        if (k > 0){ setSlot(l, (+s.expended || 0) - k); n -= k; got += k; }
+      });
+      if (!got) return { ok: false, why: 'no Pact Magic slot spent' };
+      return { ok: true, text: 'regains ' + got + ' Pact Magic slot' + (got === 1 ? '' : 's') };
+    });
+  }
+  if (/^Wild Resurgence: Spell Slot$/i.test(a.name)) return go(() => {
+    const ws = res('Wild Shape');
+    if (!ws || !((+ws.current || 0) > 0)) return { ok: false, why: 'no Wild Shape use to spend' };
+    if (!slots[1] || !((+slots[1].expended || 0) > 0)) return { ok: false, why: 'no spent level 1 spell slot' };
+    ws.current = (+ws.current || 0) - 1;
+    setSlot(1, (+slots[1].expended || 0) - 1);
+    return { ok: true, text: 'spends a Wild Shape use (' + ws.current + '/' + ws.max + ') for a level 1 spell slot' };
+  });
+  return null;
+}
 function sktHdSetPools(pc, pools){
   const hd = Object.assign({}, pc.hitDice);
   hd.current = pools.reduce((s, p) => s + p.current, 0);
