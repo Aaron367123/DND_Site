@@ -4303,9 +4303,19 @@ registerPanel('turnview', {
   _renderDmgRolls(){
     const list = this._dmgRolls(); if (!list.length) return '';
     const t = this._armed && this._order().find(x => x.id === this._armed);
-    return list.map(({ p, r }) => r.kind === 'attack' ? this._renderAtkRoll(p, r, t) : `<div class="tv-readied tv-dmgroll">🎲 <span><strong>${esc(p.name)}</strong> rolled <strong>${+r.total}</strong>${r.type ? ' ' + esc(r.type) : ''} damage${r.crit ? ' (crit)' : ''} <span class="dim">— ${esc(r.label)}</span></span>
+    return list.map(({ p, r }) => r.kind === 'attack' ? this._renderAtkRoll(p, r, t) : r.type === 'hit points' ? this._renderHealRoll(p, r, t) : `<div class="tv-readied tv-dmgroll">🎲 <span><strong>${esc(p.name)}</strong> rolled <strong>${+r.total}</strong>${r.type ? ' ' + esc(r.type) : ''} damage${r.crit ? ' (crit)' : ''} <span class="dim">— ${esc(r.label)}</span></span>
         <button class="btn small primary" data-tv="dmgapply" data-p="${esc(p.id)}" data-id="${esc(r.id || '')}"${t && t.id !== p.id ? '' : ' disabled title="Pick the creature it hit on the right"'}>${t && t.id !== p.id ? 'Apply to ' + esc(t.name) : 'Apply to…'}</button>
         <button class="btn small" data-tv="dmgdrop" data-p="${esc(p.id)}" data-id="${esc(r.id || '')}" title="Not for this fight">Dismiss</button></div>`).join('');
+  },
+  // A heal a player rolled (Cure Wounds, Healing Word): to the creature
+  // picked on the right — the caster too — or the caster. It was offered as
+  // damage: "rolled 6 hit points damage — Apply to Ally" took 6 hit points
+  // off the ally it was meant to heal.
+  _renderHealRoll(p, r, t){
+    const c = this._order().find(x => x.id === p.id), to = t || c;
+    return `<div class="tv-readied tv-dmgroll tv-healroll">💚 <span><strong>${esc(p.name)}</strong> rolled <strong>${+r.total}</strong> hit points of healing <span class="dim">— ${esc(r.label)}</span></span>
+        <button class="btn small primary" data-tv="dmgapply" data-p="${esc(p.id)}" data-id="${esc(r.id || '')}"${to ? '' : ' disabled'}>${to ? 'Heal ' + esc(to.name) : 'Heal…'}</button>
+        <button class="btn small" data-tv="dmgdrop" data-p="${esc(p.id)}" data-id="${esc(r.id || '')}" title="Not for this fight">Dismiss</button></div>`;
   },
   // A player's attack roll against the creature picked on the right: hit or
   // miss on its AC, with the cover the panel knows of (a natural 20 always
@@ -4328,6 +4338,19 @@ registerPanel('turnview', {
     const r = (p.rolls || []).find(x => x && (x.kind === 'damage' || (!apply && x.kind === 'attack')) && (x.id || '') === (rid || '')); if (!r || r.applied) return;
     if (!apply){ r.dropped = true; save(); this._render(); return; }
     const t = this._order().find(x => x.id === this._armed); const c = this._order().find(x => x.id === pid);
+    if (r.type === 'hit points'){
+      const to = t || c, C = panelDefs.combat, i = to ? state.combatants.findIndex(x => x.id === to.id) : -1;
+      if (!to || i < 0 || !C || typeof C._applyHpDelta !== 'function') return;
+      this._snapshot(`${p.name} · ${r.label} → ${to.name}`);
+      r.applied = true;
+      const before = +state.combatants[i].hp || 0;
+      C._applyHpDelta(i, Math.max(0, +r.total || 0), null);
+      const got = Math.max(0, (+state.combatants[i].hp || 0) - before);
+      this._log.unshift(`<strong>${esc(p.name)}</strong> — ${esc(r.label)} → ${esc(to.name)} · +${got} HP`);
+      this._setResult(`<strong>${esc(to.name)}</strong> regains <strong>${got}</strong> hit points <span class="dim">(${esc(r.label)}, ${+r.total} rolled)</span>.`, true);
+      save(); panelDefs.combat?._render?.(); this._render();
+      return;
+    }
     if (!t || !c || t.id === c.id) return;
     // Magical when the sheet's weapon is, or a spell: past "nonmagical" resistance.
     const sh = p.sheet || {}, base = String(r.label || '').replace(/\s*\((crit|two hands|level \d+)\)/gi, '').replace(/\s+damage$/i, '').trim();

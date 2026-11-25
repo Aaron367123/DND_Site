@@ -918,7 +918,8 @@ function sktKeepRoll(pc, text, r){
   const from = document.body.classList.contains('player-mode') ? 'player' : 'dm';
   // (a damage roll keeps its type: the DM's Turn View can apply it)
   pc.rolls = [Object.assign({ label: r.label, total: r.total, text, at: Date.now(), from },
-    r.kind === 'dmg' ? { kind: 'damage', type: r.type || '', crit: !!r.crit, id: typeof uid === 'function' ? uid() : String(Date.now()) }
+    // (a heal already given — a potion drunk — is not one to give again)
+    r.kind === 'dmg' ? Object.assign({ kind: 'damage', type: r.type || '', crit: !!r.crit, id: typeof uid === 'function' ? uid() : String(Date.now()) }, r.applied ? { applied: true } : {})
     // (and an attack roll its die: the Turn View says hit or miss)
     : /^attack/.test(r.kindTag || '') ? { kind: 'attack', natural: r.natural, crit: !!r.crit, fumble: !!r.fumble, id: typeof uid === 'function' ? uid() : String(Date.now()) } : {})].concat(pc.rolls || []).slice(0, 6);
   save();
@@ -2977,7 +2978,7 @@ function csDrink(pc, key, typed){
   const dice = csPotionHeal(m, csItemInfo(m)); if (!dice) return;
   const r = typed != null ? { kind: 'dmg', label: m.name + ' heals', total: typed, detail: typed + ' (rolled at the table)' }
     : Object.assign({ kind: 'dmg', label: m.name + ' heals' }, sktDamageRoll(dice, false));
-  r.type = 'hit points'; r.noAsk = true;          // (it has its own box for the roll)
+  r.type = 'hit points'; r.noAsk = true; r.applied = true;   // (it has its own box for the roll; healed below)
   take();
   panelDefs.party._applyHpDelta(csIdx(), r.total, null); csLog(r); csCommit();
 }

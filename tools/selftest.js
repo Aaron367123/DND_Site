@@ -29060,6 +29060,48 @@ for (const cls of Object.keys(rule)) for (let L = 1; L <= 20; L++) for (const sc
       } catch(e){ ok('round 595 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
       finally { state.party = JSON.parse(keepP); state.combatants = JSON.parse(keepC); state.activeCombatantId = keepA; state.combatRound = keepR; save(); }
     }
+    // -- Round 596: a heal a player rolled (Cure Wounds) is offered in Turn View as a heal — to the creature picked, or the caster — not as damage ("rolled 6 hit points damage — Apply to Ally" took 6 off the ally); a potion drunk, already healed, isn't offered again --
+    if (!PLAYER){
+      const keepP = JSON.stringify(state.party), keepC = JSON.stringify(state.combatants), keepA = state.activeCombatantId, keepR = state.combatRound;
+      const T = panelDefs.turnview, keepArm = T._armed;
+      try {
+        for (let k = 0; k < 100 && !(typeof _5eLoaded !== 'undefined' && _5eLoaded); k++) await sleep(100);
+        const R = await sktRulesLoad('2024');
+        const b = Object.assign(sktBlankBuild('2024'), { name: 'r596c', cls: 'cleric', level: 5, abilities: { method: 'manual', base: { str: 10, dex: 10, con: 14, int: 10, wis: 16, cha: 10 } } });
+        const pc = sktComputeCharacter(b, R); pc.id = 'r596c'; pc.name = 'r596c'; pc.build = b;
+        const roll = (total, type, label) => ({ label, total, text: '', at: Date.now(), from: 'player', kind: 'damage', type, crit: false, id: 'r596' + Math.random().toString(36).slice(2, 7) });
+        const start = (rolls) => {
+          state.party = JSON.parse(keepP).concat([Object.assign(JSON.parse(JSON.stringify(pc)), { rolls })]);
+          state.combatants = [{ id: 'r596c', name: 'r596c', isPC: true, hp: 20, hpMax: 38, ac: 15, initiative: 20, conditions: [] }, { id: 'r596a', name: 'r596a', isPC: false, hp: 5, hpMax: 40, ac: 12, initiative: 10, conditions: [] }];
+          state.combatRound = 1; state.activeCombatantId = 'r596c'; T._actAs = null; save(); };
+        const hp = id => state.combatants.find(c => c.id === id).hp;
+        const btn = () => document.querySelector('.window[data-panel="turnview"] [data-tv="dmgapply"]');
+        openPanel('turnview'); await sleep(200);
+        start([roll(9, 'hit points', 'Cure Wounds heals')]); T._armed = 'r596a'; T._render(); await sleep(30);
+        let b1 = btn();
+        ok('a player’s heal roll is offered as a heal, to the creature picked', !!b1 && /^Heal r596a$/.test(b1.textContent.trim()) && !/damage/.test(b1.closest('.tv-dmgroll').textContent), b1 ? b1.closest('.tv-dmgroll').textContent.replace(/\s+/g, ' ') : 'no button');
+        if (b1) b1.click(); await sleep(50);
+        ok('…and heals it (5 → 14), not damage', hp('r596a') === 14, JSON.stringify(hp('r596a')));
+        sktUndo(); await sleep(30);
+        ok('…an undo takes the hit points back', hp('r596a') === 5, JSON.stringify(hp('r596a')));
+        start([roll(9, 'hit points', 'Healing Word heals')]); T._armed = null; T._render(); await sleep(30);
+        b1 = btn(); if (b1) b1.click(); await sleep(50);
+        ok('…with no one picked, the caster', !!b1 && hp('r596c') === 29 && hp('r596a') === 5, JSON.stringify([!!b1, hp('r596c'), hp('r596a')]));
+        start([roll(7, 'slashing', 'Mace')]); T._armed = 'r596a'; T._render(); await sleep(30);
+        b1 = btn(); if (b1) b1.click(); await sleep(50);
+        ok('…a damage roll still damages', hp('r596a') === 0 || hp('r596a') === -2 || hp('r596a') < 5, JSON.stringify(hp('r596a')));
+        // a potion drunk on the sheet: healed there, not offered again
+        start([]); const me = state.party.find(p => p.id === 'r596c'); me.build = Object.assign({}, me.build, { items: [{ name: 'Potion of Healing', qty: 1 }], equipment: Object.assign({}, me.build.equipment, { materialized: true }) }); me.hp = 20; save();
+        openCharSheet('r596c'); for (let k = 0; k < 40 && !(CS && CS.R); k++) await sleep(100);
+        csDrink(state.party.find(p => p.id === 'r596c'), 'i:Potion of Healing', 7); await sleep(50);
+        csClose(); await sleep(30);
+        const kept = (state.party.find(p => p.id === 'r596c').rolls || [])[0] || {};
+        kept.from = 'player'; save(); T._render(); await sleep(30);
+        ok('a potion drunk: healed on the sheet, and its roll not offered in Turn View again', kept.applied === true && !T._dmgRolls().some(x => x.p.id === 'r596c'), JSON.stringify([kept.label, kept.applied, T._dmgRolls().length]));
+      } catch(e){ ok('round 596 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
+      finally { try { csClose(); } catch(e){} T._armed = keepArm;
+        state.party = JSON.parse(keepP); state.combatants = JSON.parse(keepC); state.activeCombatantId = keepA; state.combatRound = keepR; save(); }
+    }
     // -- Class features: represented, not just text ------------------------
     {
       try {
