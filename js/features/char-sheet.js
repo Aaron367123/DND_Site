@@ -919,7 +919,7 @@ function sktKeepRoll(pc, text, r){
   // (a damage roll keeps its type: the DM's Turn View can apply it)
   pc.rolls = [Object.assign({ label: r.label, total: r.total, text, at: Date.now(), from },
     // (a heal already given — a potion drunk — is not one to give again)
-    r.kind === 'dmg' && !r.plain ? Object.assign({ kind: 'damage', type: r.type || '', crit: !!r.crit, id: typeof uid === 'function' ? uid() : String(Date.now()) }, r.applied ? { applied: true } : {})
+    r.kind === 'dmg' && !r.plain ? Object.assign({ kind: 'damage', type: r.type || '', crit: !!r.crit, id: typeof uid === 'function' ? uid() : String(Date.now()) }, r.applied ? { applied: true } : {}, r.many > 1 ? { many: r.many } : {})
     // (and an attack roll its die: the Turn View says hit or miss)
     : /^attack/.test(r.kindTag || '') ? { kind: 'attack', natural: r.natural, crit: !!r.crit, fumble: !!r.fumble, id: typeof uid === 'function' ? uid() : String(Date.now()) } : {})].concat(pc.rolls || []).slice(0, 6);
   save();
@@ -2374,7 +2374,12 @@ function csSpellsClick(e, t, d, pc){
     const sel = document.querySelector('#cs-root [data-cs-castlvl="' + CSS.escape(d.csSpheal) + '"]');
     const lvl = sel ? +sel.value : s.level;
     const r = Object.assign({ kind: 'dmg', label: s.name + ' heals' }, sktDamageRoll(csSpellHeal(s, lvl, scMod), false));
-    r.type = 'hit points'; csLog(r); csRender(); return true;
+    r.type = 'hit points';
+    // "Up to six creatures" (Mass Healing Word, Mass Cure Wounds, Prayer of
+    // Healing): the one roll heals each, in Turn View.
+    const nm = /\bup to (two|three|four|five|six|seven|eight|nine|ten|\d+) creatures\b/i.exec(typeof csSpellText === 'function' ? csSpellText(s) : '');
+    if (nm){ const n = { two: 2, three: 3, four: 4, five: 5, six: 6, seven: 7, eight: 8, nine: 9, ten: 10 }[nm[1].toLowerCase()] || +nm[1]; if (n > 1) r.many = n; }
+    csLog(r); csRender(); return true;
   }
   if (CS.readOnly) return false;
   if (d.cs === 'recover'){

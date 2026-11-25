@@ -29168,6 +29168,51 @@ for (const cls of Object.keys(rule)) for (let L = 1; L <= 20; L++) for (const sc
       } catch(e){ ok('round 598 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
       finally { try { csClose(); } catch(e){} state.party = JSON.parse(keepP); save(); }
     }
+    // -- Round 599: a heal for several (Mass Healing Word: "up to six creatures") stays in Turn View to heal each one picked, once each; one for one creature (Cure Wounds) goes when given --
+    if (!PLAYER){
+      const keepP = JSON.stringify(state.party), keepC = JSON.stringify(state.combatants), keepA = state.activeCombatantId, keepR = state.combatRound;
+      const T = panelDefs.turnview, keepArm = T._armed;
+      try {
+        for (let k = 0; k < 100 && !(typeof _5eLoaded !== 'undefined' && _5eLoaded); k++) await sleep(100);
+        const R = await sktRulesLoad('2024');
+        const b = Object.assign(sktBlankBuild('2024'), { name: 'r599c', cls: 'cleric', level: 5, spells: ['Mass Healing Word', 'Cure Wounds'], abilities: { method: 'manual', base: { str: 10, dex: 10, con: 14, int: 10, wis: 16, cha: 10 } } });
+        const pc = sktComputeCharacter(b, R); pc.id = 'r599c'; pc.name = 'r599c'; pc.build = b;
+        state.party = JSON.parse(keepP).concat([pc]);
+        state.combatants = [{ id: 'r599c', name: 'r599c', isPC: true, hp: 30, hpMax: 38, ac: 15, initiative: 20, conditions: [] },
+          { id: 'r599a', name: 'r599a', isPC: false, hp: 5, hpMax: 40, ac: 12, initiative: 10, conditions: [] }, { id: 'r599b', name: 'r599b', isPC: false, hp: 5, hpMax: 40, ac: 12, initiative: 9, conditions: [] }];
+        state.combatRound = 1; state.activeCombatantId = 'r599c'; T._actAs = null; save();
+        const hp = id => state.combatants.find(c => c.id === id).hp;
+        const cast = async name => {
+          openCharSheet('r599c'); for (let k = 0; k < 40 && !(CS && CS.R); k++) await sleep(100);
+          csGoTab('spells'); await sleep(300);
+          const bt = document.querySelector('#cs-root [data-cs-spheal="' + name + '"]'); if (bt) bt.click(); await sleep(80);
+          csClose(); await sleep(30);
+          const r = (state.party.find(p => p.id === 'r599c').rolls || [])[0]; if (r) r.from = 'player'; save();
+          return r || {};
+        };
+        const btn = () => document.querySelector('.window[data-panel="turnview"] .tv-healroll [data-tv="dmgapply"]');
+        const r1 = await cast('Mass Healing Word');
+        openPanel('turnview'); await sleep(200);
+        T._armed = 'r599a'; T._render(); await sleep(30);
+        let b1 = btn();
+        ok('Mass Healing Word: kept for six, and the button says the first of six', r1.many === 6 && !!b1 && /Heal r599a \(1 of 6\)/.test(b1.textContent), JSON.stringify([r1.many, b1 && b1.textContent.trim()]));
+        if (b1) b1.click(); await sleep(50);
+        const got = r1.total;
+        T._armed = 'r599a'; T._render(); await sleep(30); b1 = btn();
+        ok('…it heals the first, stays, and won’t heal the same one twice', hp('r599a') === Math.min(40, 5 + got) && !!b1 && b1.disabled, JSON.stringify([hp('r599a'), got, !!b1, b1 && b1.disabled]));
+        T._armed = 'r599b'; T._render(); await sleep(30); b1 = btn();
+        if (b1) b1.click(); await sleep(50);
+        ok('…and heals the next one picked with the same roll', hp('r599b') === Math.min(40, 5 + got) && !!btn(), JSON.stringify([hp('r599b'), !!btn()]));
+        // Cure Wounds: one creature
+        state.party.find(p => p.id === 'r599c').rolls = []; save();
+        await cast('Cure Wounds');
+        T._armed = 'r599a'; T._render(); await sleep(30); b1 = btn();
+        if (b1) b1.click(); await sleep(50);
+        ok('Cure Wounds: one creature, and then it’s gone', !!b1 && !/of \d/.test(b1.textContent) && !btn(), JSON.stringify([!!b1, b1 && b1.textContent.trim(), !!btn()]));
+      } catch(e){ ok('round 599 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
+      finally { try { csClose(); } catch(e){} T._armed = keepArm;
+        state.party = JSON.parse(keepP); state.combatants = JSON.parse(keepC); state.activeCombatantId = keepA; state.combatRound = keepR; save(); }
+    }
     // -- Class features: represented, not just text ------------------------
     {
       try {

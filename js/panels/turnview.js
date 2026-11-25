@@ -4313,8 +4313,10 @@ registerPanel('turnview', {
   // off the ally it was meant to heal.
   _renderHealRoll(p, r, t){
     const c = this._order().find(x => x.id === p.id), to = t || c;
-    return `<div class="tv-readied tv-dmgroll tv-healroll">💚 <span><strong>${esc(p.name)}</strong> rolled <strong>${+r.total}</strong> hit points of healing <span class="dim">— ${esc(r.label)}</span></span>
-        <button class="btn small primary" data-tv="dmgapply" data-p="${esc(p.id)}" data-id="${esc(r.id || '')}"${to ? '' : ' disabled'}>${to ? 'Heal ' + esc(to.name) : 'Heal…'}</button>
+    // A spell that heals several ("up to six creatures"): each picked in turn, once.
+    const done = r.healed || [], again = !!to && done.includes(to.id), many = +r.many > 1 ? ' (' + (done.length + 1) + ' of ' + r.many + ')' : '';
+    return `<div class="tv-readied tv-dmgroll tv-healroll">💚 <span><strong>${esc(p.name)}</strong> rolled <strong>${+r.total}</strong> hit points of healing <span class="dim">— ${esc(r.label)}${done.length ? ' · ' + done.length + ' healed' : ''}</span></span>
+        <button class="btn small primary" data-tv="dmgapply" data-p="${esc(p.id)}" data-id="${esc(r.id || '')}"${to && !again ? '' : ' disabled'}${again ? ' title="Already healed by this one"' : ''}>${to ? 'Heal ' + esc(to.name) + many : 'Heal…'}</button>
         <button class="btn small" data-tv="dmgdrop" data-p="${esc(p.id)}" data-id="${esc(r.id || '')}" title="Not for this fight">Dismiss</button></div>`;
   },
   // A player's attack roll against the creature picked on the right: hit or
@@ -4340,9 +4342,10 @@ registerPanel('turnview', {
     const t = this._order().find(x => x.id === this._armed); const c = this._order().find(x => x.id === pid);
     if (r.type === 'hit points'){
       const to = t || c, C = panelDefs.combat, i = to ? state.combatants.findIndex(x => x.id === to.id) : -1;
-      if (!to || i < 0 || !C || typeof C._applyHpDelta !== 'function') return;
+      if (!to || i < 0 || !C || typeof C._applyHpDelta !== 'function' || (r.healed || []).includes(to.id)) return;
       this._snapshot(`${p.name} · ${r.label} → ${to.name}`);
-      r.applied = true;
+      r.healed = (r.healed || []).concat([to.id]);
+      if (!(+r.many > 1) || r.healed.length >= +r.many) r.applied = true;
       const before = +state.combatants[i].hp || 0;
       C._applyHpDelta(i, Math.max(0, +r.total || 0), null);
       const got = Math.max(0, (+state.combatants[i].hp || 0) - before);
