@@ -29102,6 +29102,31 @@ for (const cls of Object.keys(rule)) for (let L = 1; L <= 20; L++) for (const sc
       finally { try { csClose(); } catch(e){} T._armed = keepArm;
         state.party = JSON.parse(keepP); state.combatants = JSON.parse(keepC); state.activeCombatantId = keepA; state.combatRound = keepR; save(); }
     }
+    // -- Round 597: a feature's dice rolled on the sheet say what they are — Healing Light's a heal, Portent's and Protective Field's a plain roll, the Stars druid's Archer damage. Every one reached Turn View as damage to apply --
+    if (!PLAYER){
+      const keepP = JSON.stringify(state.party);
+      try {
+        for (let k = 0; k < 100 && !(typeof _5eLoaded !== 'undefined' && _5eLoaded); k++) await sleep(100);
+        const R = await sktRulesLoad('2024');
+        const mk = (id, cls, sub, lv) => { const b = Object.assign(sktBlankBuild('2024'), { name: id, cls, subclass: sub, level: lv, abilities: { method: 'manual', base: { str: 10, dex: 14, con: 14, int: 16, wis: 16, cha: 16 } } });
+          const pc = sktComputeCharacter(b, R); pc.id = id; pc.name = id; pc.build = b; return pc; };
+        const cases = [['r597w', 'warlock', 'Celestial', 3, 'Healing Light', 'heal'], ['r597d', 'wizard', 'Diviner', 3, 'Portent', 'plain'],
+                       ['r597f', 'fighter', 'Psi Warrior', 3, 'Protective Field', 'plain'], ['r597s', 'druid', 'Stars', 3, 'Archer', 'damage']];
+        state.party = JSON.parse(keepP).concat(cases.map(c => mk(c[0], c[1], c[2], c[3]))); save();
+        for (const [id, , , , name, want] of cases){
+          openCharSheet(id); for (let k = 0; k < 40 && !(CS && CS.R); k++) await sleep(100);
+          csGoTab('actions'); await sleep(200);
+          const b = document.querySelector('#cs-root [data-cs-actroll="' + name + '"]');
+          if (b) b.click(); await sleep(60);
+          document.querySelectorAll('.modal-backdrop').forEach(x => x.remove());
+          csClose(); await sleep(30);
+          const r = (state.party.find(p => p.id === id).rolls || [])[0] || {};
+          const got = r.kind === 'damage' ? (r.type === 'hit points' ? 'heal' : 'damage') : r.label ? 'plain' : 'none';
+          ok('the sheet: ' + name + '’s dice are kept as ' + want, !!b && got === want, JSON.stringify([!!b, got, r.label, r.kind, r.type]));
+        }
+      } catch(e){ ok('round 597 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
+      finally { try { csClose(); } catch(e){} state.party = JSON.parse(keepP); save(); }
+    }
     // -- Class features: represented, not just text ------------------------
     {
       try {

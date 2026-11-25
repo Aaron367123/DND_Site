@@ -919,7 +919,7 @@ function sktKeepRoll(pc, text, r){
   // (a damage roll keeps its type: the DM's Turn View can apply it)
   pc.rolls = [Object.assign({ label: r.label, total: r.total, text, at: Date.now(), from },
     // (a heal already given — a potion drunk — is not one to give again)
-    r.kind === 'dmg' ? Object.assign({ kind: 'damage', type: r.type || '', crit: !!r.crit, id: typeof uid === 'function' ? uid() : String(Date.now()) }, r.applied ? { applied: true } : {})
+    r.kind === 'dmg' && !r.plain ? Object.assign({ kind: 'damage', type: r.type || '', crit: !!r.crit, id: typeof uid === 'function' ? uid() : String(Date.now()) }, r.applied ? { applied: true } : {})
     // (and an attack roll its die: the Turn View says hit or miss)
     : /^attack/.test(r.kindTag || '') ? { kind: 'attack', natural: r.natural, crit: !!r.crit, fumble: !!r.fumble, id: typeof uid === 'function' ? uid() : String(Date.now()) } : {})].concat(pc.rolls || []).slice(0, 6);
   save();
@@ -1603,7 +1603,16 @@ function csOnClick(e){
   }
   if (d.csActroll){
     const a = (pc.sheet.activations || []).find(x => x.name === d.csActroll); if (!a || !a.dice) return;
-    csRollDamage(a.name, a.dice, false);
+    // What the dice are for. A heal (Healing Light, Indestructible Life) is
+    // a heal; a roll that is no damage (Portent, Bend Luck, Cutting Words'
+    // subtraction, Protective Field's reduction) is a plain roll. Every one
+    // reached the DM's Turn View as damage to apply to someone.
+    const t = String(a.desc || '');
+    const heal = !/temporary hit points/i.test(t) && /\b(?:regains?|restores?|restoring|heals?)\b[^.]{0,40}\bhit points\b|\bheal (?:yourself|one|a|the|each)\b/i.test(t);
+    const dmg = !heal && /\bdamage\b/i.test(t) && !/\b(?:reduc\w*|subtract\w*|halve\w*|prevent\w*)\b/i.test(t);
+    const r = Object.assign({ kind: 'dmg', label: a.name }, sktDamageRoll(a.dice, false));
+    if (heal) r.type = 'hit points'; else if (!dmg) r.plain = true;
+    csLog(r);
     return csRender();
   }
   if (d.csRegain){
