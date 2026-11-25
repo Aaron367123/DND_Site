@@ -885,7 +885,14 @@ function paRenderSheet(el){
   else el.innerHTML = paYouScreen();
 }
 
+// What's half-typed on the screen survives a redraw: the DM changing someone's
+// hit points redraws every phone, and a player mid-way through a note, a
+// message to the DM or a roll lost the text and the keyboard (sktKeepTyping
+// puts the text, the caret and the focus back on the same field).
 function paRenderScreen(){
+  return typeof sktKeepTyping === 'function' ? sktKeepTyping(_paRenderScreen) : _paRenderScreen();
+}
+function _paRenderScreen(){
   const el = document.getElementById('pa-screen'); if (!el) return;
   el.classList.toggle('pa-screen-sheet', paTab === 'you' && !!paPc());
   if (paTab === 'you'){ paRenderSheet(el); return; }

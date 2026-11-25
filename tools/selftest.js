@@ -33561,6 +33561,41 @@ for (const cls of Object.keys(rule)) for (let L = 1; L <= 20; L++) for (const sc
       } catch(e){ ok('round 571 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
       finally { sktSetRandom(null); }
     }
+    // -- Round 586: on a phone, a redraw (the DM changing someone's hit points) keeps what the player is half-way through typing — a note, a message to the DM, a roll — with the caret and the keyboard; it emptied the box --
+    if (PLAYER){
+      const keepTab = paTab, keepSub = paMoreSub, keepN = localStorage.getItem('skt-notes-v2');
+      try {
+        for (let k = 0; k < 100 && !(typeof _5eLoaded !== 'undefined' && _5eLoaded); k++) await sleep(100);
+        await sleep(300);
+        if (paMyIdx() < 0) paSetPc('zoey');
+        const el = document.getElementById('pa-screen'), out = {};
+        const trial = async (name, sel) => {
+          paRender(); await sleep(350);
+          const f = el.querySelector(sel); if (!f){ out[name] = 'no field'; return; }
+          f.focus(); f.value = 'R586 the innkeeper lied'; f.setSelectionRange(f.value.length, f.value.length); f.dispatchEvent(new Event('input', { bubbles: true }));
+          paRender(); await sleep(60);
+          const g = el.querySelector(sel);
+          out[name] = !!g && g.value === 'R586 the innkeeper lied' && document.activeElement === g && g.selectionStart === g.value.length;
+        };
+        paTab = 'notes'; paMoreSub = null; paRender(); await sleep(400);
+        if (!el.querySelector('#note-player-text')){ const nb = el.querySelector('[data-player-new]'); if (nb){ nb.click(); await sleep(300); } }
+        await trial('a note', '#note-player-text');
+        await sleep(600);
+        const N = panelDefs.notes, mine = N && N._data && (N._data.items || []).find(i => i.id === N._playerNoteId);
+        ok('a phone note: a redraw while typing keeps the text, the caret and the keyboard', out['a note'] === true, JSON.stringify(out));
+        ok('…and the note is saved with it', !!mine && mine.content === 'R586 the innkeeper lied', mine && mine.content);
+        // (a phone: under More; a wide screen: tabs of their own)
+        const tab = id => { if (paVisibleTabs().some(t => t.id === id)){ paTab = id; paMoreSub = null; } else { paTab = 'more'; paMoreSub = id; } };
+        tab('msg'); await trial('a message', '[data-msg-input]');
+        tab('log'); await trial('a roll', '[data-glog-input]');
+        ok('…a message to the DM, and a roll being typed, too', out['a message'] === true && out['a roll'] === true, JSON.stringify(out));
+        document.activeElement && document.activeElement.blur && document.activeElement.blur();
+      } catch(e){ ok('round 586 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
+      finally {
+        try { if (keepN == null) localStorage.removeItem('skt-notes-v2'); else localStorage.setItem('skt-notes-v2', keepN); if (panelDefs.notes) panelDefs.notes._data = null; } catch(e){}
+        paTab = keepTab; paMoreSub = keepSub; try { paRender(); } catch(e){}
+      }
+    }
   }
 
   // ══════════════════════════════════════════════════════════ mobile / phone
