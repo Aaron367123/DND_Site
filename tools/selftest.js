@@ -28994,6 +28994,39 @@ for (const cls of Object.keys(rule)) for (let L = 1; L <= 20; L++) for (const sc
       finally { try { csClose(); } catch(e){}
         state.party = JSON.parse(keepP); state.combatants = JSON.parse(keepC); state.activeCombatantId = keepA; state.combatRound = keepR; save(); }
     }
+    // -- Round 594: Turn View heals with Indestructible Life (1d8 + warlock level) and Unearthly Recovery (half the hit point maximum, under half only) — they spent the use and the Bonus Action and healed nothing --
+    if (!PLAYER){
+      const keepP = JSON.stringify(state.party), keepC = JSON.stringify(state.combatants), keepA = state.activeCombatantId, keepR = state.combatRound;
+      const T = panelDefs.turnview, keepAsk = window.showConfirm;
+      try {
+        for (let k = 0; k < 100 && !(typeof _5eLoaded !== 'undefined' && _5eLoaded); k++) await sleep(100);
+        const R = await sktRulesLoad('2014');
+        const mk = (id, cls, sub, lv) => { const b = Object.assign(sktBlankBuild('2014'), { name: id, cls, subclass: sub, level: lv, abilities: { method: 'manual', base: { str: 10, dex: 14, con: 14, int: 10, wis: 12, cha: 16 } } });
+          const pc = sktComputeCharacter(b, R); pc.id = id; pc.name = id; pc.build = b; return pc; };
+        const all = [mk('r594w', 'warlock', 'Undying', 14), mk('r594s', 'sorcerer', 'Divine Soul', 18)];
+        const start = (active, hp) => {
+          state.party = JSON.parse(keepP).concat(JSON.parse(JSON.stringify(all)));
+          state.combatants = all.map((p, k) => ({ id: p.id, name: p.id, isPC: true, hp, hpMax: 100, ac: 15, initiative: 20 - k, conditions: [] }));
+          state.party.forEach(p => { if (/^r594/.test(p.id)){ p.hp = hp; p.hpMax = 100; } });
+          state.combatRound = 1; state.activeCombatantId = active; T._actAs = null; save(); };
+        const cb = id => state.combatants.find(c => c.id === id);
+        const pool = (id, n) => (state.party.find(p => p.id === id).resources.find(r => r.name === n) || {}).current;
+        const use = async (id, n) => { const a = T._activationsFor(T._order().find(c => c.id === id)).find(x => x.name === n); if (!a) return false; await T._useActivation(id, a.i); await sleep(30); return true; };
+        openPanel('turnview'); await sleep(200);
+        start('r594w', 20); window.showConfirm = async () => 5;
+        const had = await use('r594w', 'Indestructible Life');
+        ok('Indestructible Life: the d8 rolled + the warlock level, as the Bonus Action', had && cb('r594w').hp === 39 && pool('r594w', 'Indestructible Life') === 0 && cb('r594w').bonusUsed === true,
+           JSON.stringify([had, cb('r594w').hp, pool('r594w', 'Indestructible Life'), cb('r594w').bonusUsed]));
+        start('r594s', 30);
+        const had2 = await use('r594s', 'Unearthly Recovery');
+        ok('Unearthly Recovery: half the hit point maximum back, under half', had2 && cb('r594s').hp === 80 && pool('r594s', 'Unearthly Recovery') === 0, JSON.stringify([had2, cb('r594s').hp, pool('r594s', 'Unearthly Recovery')]));
+        start('r594s', 60);
+        await use('r594s', 'Unearthly Recovery');
+        ok('…with half or more left: refused, nothing spent', cb('r594s').hp === 60 && pool('r594s', 'Unearthly Recovery') === 1 && !cb('r594s').bonusUsed, JSON.stringify([cb('r594s').hp, pool('r594s', 'Unearthly Recovery'), cb('r594s').bonusUsed]));
+      } catch(e){ ok('round 594 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
+      finally { window.showConfirm = keepAsk;
+        state.party = JSON.parse(keepP); state.combatants = JSON.parse(keepC); state.activeCombatantId = keepA; state.combatRound = keepR; save(); }
+    }
     // -- Class features: represented, not just text ------------------------
     {
       try {

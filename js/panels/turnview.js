@@ -844,6 +844,31 @@ registerPanel('turnview', {
         heal = { amt: Math.max(1, r.total + wis), detail: (r.detail || die + ' ' + r.total) + (wis ? (wis > 0 ? ' + ' : ' − ') + Math.abs(wis) : ''), tgt };
       }
     }
+    // A heal on oneself the text spells out: "regain hit points equal to 1d8
+    // + your warlock level" (Indestructible Life), "equal to half your hit
+    // point maximum" when under half (Unearthly Recovery). They spent the
+    // use and the Bonus Action and healed nothing.
+    const sd = !heal && who.isPC ? /regain (?:a number of )?hit points equal to (\d*d\d+) (?:\+|plus) your (\w+) level/i.exec(String(a.desc || '')) : null;
+    const half = !heal && !sd && who.isPC && /regain a number of hit points equal to half your hit point maximum/i.test(String(a.desc || ''));
+    if (sd || half){
+      const p = this._partyOf(who), sh = (p && p.sheet) || {}, cb = state.combatants.find(x => x.id === who.id) || who;
+      if (half){
+        if ((+cb.hp || 0) >= (+cb.hpMax || 0) / 2){ this._setResult(`<span class="dim">${esc(who.name)} can't — only with fewer than half its hit points left.</span>`, true); this._render(); return; }
+        heal = { amt: Math.floor((+cb.hpMax || 0) / 2), detail: 'half of ' + (+cb.hpMax || 0), tgt: who };
+      } else {
+        const lvl = ((sh.classLevels || []).find(x => x && x.cls === sd[2].toLowerCase()) || {}).level || (p && p.level) || 1;
+        const die = sd[1].replace(/^d/, '1d');
+        let n = typeof typed === 'number' ? typed : null;
+        if (n == null && typed !== 'roll' && typeof showConfirm === 'function'){
+          const v = await showConfirm(who.name + ' uses ' + a.name + ': ' + die + ' + ' + lvl + ' hit points.', { title: a.name, confirmLabel: 'Heal',
+            input: { label: 'Their ' + die + ' roll (blank: roll it here)', min: 1, max: 100 } });
+          if (v === false) return;
+          if (typeof v === 'number') n = v;
+        }
+        const r = n != null ? { total: n, detail: die + ' ' + n + ' (theirs)' } : sktRollDice(die);
+        heal = { amt: r.total + lvl, detail: (r.detail || die + ' ' + r.total) + ' + ' + lvl, tgt: who };
+      }
+    }
     // Speedy Recovery (2024 Durable): a Bonus Action that spends one Hit Point
     // Die and heals its roll. It spent the bonus action and nothing else —
     // no die gone, no hit points back.
