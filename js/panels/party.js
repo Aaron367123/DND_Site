@@ -4012,6 +4012,30 @@ function sktFeatureUse(pc, a, opts){
       return { ok: true, text: 'regains ' + got + ' Pact Magic slot' + (got === 1 ? '' : 's') };
     });
   }
+  // Arcane Recovery, Natural Recovery: spent slots worth up to half the
+  // class level (rounded up), none above level 5 — opts.pick ({ level:
+  // count }), or the highest first. Sorcerous Restoration: Sorcery Points,
+  // up to half the sorcerer level. The use was spent and nothing came back —
+  // and the sheet's Recover slots went with it.
+  const clsLvl = k => (((pc.sheet || {}).classLevels || []).find(x => x && x.cls === k) || {}).level || +pc.level || 1;
+  if (own && /^(Arcane|Natural) Recovery$/.test(a.resource || '') && /^(Arcane|Natural) Recovery$/.test(a.name)) return go(() => {
+    const budget = Math.ceil(clsLvl(/^Arcane/.test(a.name) ? 'wizard' : 'druid') / 2);
+    const spent = Object.keys(slots).map(Number).filter(l => l >= 1 && l <= 5 && (+slots[l].expended || 0) > 0).sort((x, y) => y - x);
+    if (!spent.length) return { ok: false, why: 'no spent spell slot of level 5 or lower' };
+    let pick = opts && opts.pick;
+    if (!pick){ pick = {}; let b = budget; spent.forEach(l => { let n = 0; while (n < (+slots[l].expended || 0) && b >= l){ n++; b -= l; } if (n) pick[l] = n; }); }
+    const used = Object.keys(pick).reduce((t, l) => t + l * pick[l], 0);
+    if (!used || used > budget || Object.keys(pick).some(l => +l > 5 || pick[l] > (+(slots[l] || {}).expended || 0))) return { ok: false, why: 'slots worth up to ' + budget + ' levels, none above level 5' };
+    Object.keys(pick).forEach(l => setSlot(l, (+slots[l].expended || 0) - pick[l]));
+    return { ok: true, text: 'gets back ' + Object.keys(pick).map(Number).sort((x, y) => y - x).map(l => (pick[l] > 1 ? pick[l] + ' level ' + l + ' slots' : 'a level ' + l + ' slot')).join(' and ') };
+  });
+  if (own && /^Sorcerous Restoration$/i.test(a.name)) return go(() => {
+    const sp = res('Sorcery Points'); if (!sp) return { ok: false, why: 'no Sorcery Points' };
+    const want = Math.min((+sp.max || 0) - (+sp.current || 0), Math.max(1, Math.floor(clsLvl('sorcerer') / 2)));
+    if (want <= 0) return { ok: false, why: 'every Sorcery Point is already there' };
+    sp.current = (+sp.current || 0) + want;
+    return { ok: true, text: 'regains ' + want + ' Sorcery Point' + (want === 1 ? '' : 's') + ' (' + sp.current + '/' + sp.max + ')' };
+  });
   if (/^Wild Resurgence: Spell Slot$/i.test(a.name)) return go(() => {
     const ws = res('Wild Shape');
     if (!ws || !((+ws.current || 0) > 0)) return { ok: false, why: 'no Wild Shape use to spend' };

@@ -1631,6 +1631,17 @@ function csOnClick(e){
       panelDefs.party._editWildShape(csIdx(), () => csRender());
       return;
     }
+    // Arcane Recovery, Natural Recovery: the Recover slots picker, on the
+    // spells, which spends the use when the slots are chosen. Use spent it
+    // with nothing back — and the picker went with the use.
+    if (/^(Arcane|Natural) Recovery$/.test(a.name) && /^(Arcane|Natural) Recovery$/.test(a.resource || '')){
+      const rec = csRecoveryBudget(pc), sl = (pc.sheet || {}).spellSlots || {};
+      if (!rec) return;
+      if (!Object.keys(sl).some(l => +l >= 1 && +l <= 5 && (+sl[l].expended || 0) > 0)){ if (typeof showToast === 'function') showToast('No spent spell slots of level 5 or lower to get back'); return; }
+      CS.recPick = csRecSuggest(pc, rec.budget);
+      csGoTab('spells');
+      return;
+    }
     // One that moves another pool or a spell slot (Persistent Rage, Create
     // Spell Slot, Magical Cunning, Wild Resurgence's slot): that too. Only
     // the use was spent.

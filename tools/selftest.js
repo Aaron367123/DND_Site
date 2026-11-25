@@ -28944,6 +28944,56 @@ for (const cls of Object.keys(rule)) for (let L = 1; L <= 20; L++) for (const sc
       finally { try { csClose(); } catch(e){} window.showModal = keepModal;
         state.party = JSON.parse(keepP); state.combatants = JSON.parse(keepC); state.activeCombatantId = keepA; state.combatRound = keepR; save(); }
     }
+    // -- Round 593: Arcane Recovery, Natural Recovery and Sorcerous Restoration give back what they say — the sheet's Use opens the Recover slots picker (it spent the use, got nothing back, and the picker went with it); Turn View gets the highest slots back; Sorcerous Restoration the points --
+    if (!PLAYER){
+      const keepP = JSON.stringify(state.party), keepC = JSON.stringify(state.combatants), keepA = state.activeCombatantId, keepR = state.combatRound;
+      const T = panelDefs.turnview;
+      try {
+        for (let k = 0; k < 100 && !(typeof _5eLoaded !== 'undefined' && _5eLoaded); k++) await sleep(100);
+        const R = await sktRulesLoad('2024');
+        const mk = (id, cls, sub) => { const b = Object.assign(sktBlankBuild('2024'), { name: id, cls, subclass: sub, level: 6, abilities: { method: 'manual', base: { str: 10, dex: 14, con: 14, int: 16, wis: 16, cha: 16 } } });
+          const pc = sktComputeCharacter(b, R); pc.id = id; pc.name = id; pc.build = b; return pc; };
+        const all = [mk('r593w', 'wizard', 'Evoker'), mk('r593s', 'sorcerer', 'Draconic'), mk('r593d', 'druid', 'Land')];
+        const start = (active, spend) => {
+          state.party = JSON.parse(keepP).concat(JSON.parse(JSON.stringify(all)));
+          state.party.filter(p => /^r593/.test(p.id)).forEach(p => { if (spend){ p.sheet.spellSlots[1].expended = 2; p.sheet.spellSlots[2].expended = 1; } const sp = p.resources.find(r => r.name === 'Sorcery Points'); if (sp) sp.current = 0; });
+          state.combatants = all.map((p, k) => ({ id: p.id, name: p.id, isPC: true, hp: 30, hpMax: 40, ac: 15, initiative: 20 - k, conditions: [] }));
+          state.combatRound = 1; state.activeCombatantId = active; T._actAs = null; save(); };
+        const P = id => state.party.find(p => p.id === id);
+        const pool = (id, n) => (P(id).resources.find(r => r.name === n) || {}).current;
+        const ex = (id, l) => +(P(id).sheet.spellSlots[l] || {}).expended || 0;
+        const sheet = async id => { openCharSheet(id); for (let k = 0; k < 40 && !(CS && CS.R); k++) await sleep(100); csGoTab('actions'); await sleep(250); };
+        // the sheet: Use opens the picker, spends nothing
+        start(null, true); await sheet('r593w');
+        let b = document.querySelector('#cs-root [data-cs-use="Arcane Recovery"]'); if (b) b.click(); await sleep(200);
+        const go = document.querySelector('#cs-root [data-cs="recgo"]');
+        ok('the sheet: Arcane Recovery’s Use opens Recover slots on the spells, nothing spent yet', !!b && !!go && pool('r593w', 'Arcane Recovery') === 1 && JSON.stringify(CS.recPick) === '{"1":1,"2":1}',
+           JSON.stringify([!!b, !!go, pool('r593w', 'Arcane Recovery'), CS.recPick]));
+        if (go) go.click(); await sleep(100);
+        ok('…Recover gets the slots back and spends the use', ex('r593w', 2) === 0 && ex('r593w', 1) === 1 && pool('r593w', 'Arcane Recovery') === 0, JSON.stringify([ex('r593w', 2), ex('r593w', 1), pool('r593w', 'Arcane Recovery')]));
+        csClose(); await sleep(50);
+        start(null, false); await sheet('r593w');
+        b = document.querySelector('#cs-root [data-cs-use="Arcane Recovery"]'); if (b) b.click(); await sleep(100);
+        ok('…with no slot spent, Use spends nothing', !!b && pool('r593w', 'Arcane Recovery') === 1, JSON.stringify([!!b, pool('r593w', 'Arcane Recovery')]));
+        csClose(); await sleep(50);
+        start(null, false); await sheet('r593s');
+        b = document.querySelector('#cs-root [data-cs-use="Sorcerous Restoration"]'); if (b) b.click(); await sleep(100);
+        ok('the sheet: Sorcerous Restoration gives back half the sorcerer level in Sorcery Points', !!b && pool('r593s', 'Sorcery Points') === 3 && pool('r593s', 'Sorcerous Restoration') === 0, JSON.stringify([!!b, pool('r593s', 'Sorcery Points'), pool('r593s', 'Sorcerous Restoration')]));
+        csClose(); await sleep(50);
+        // Turn View: the highest slots first
+        openPanel('turnview'); await sleep(200);
+        const use = async (id, n) => { const a = T._activationsFor(T._order().find(c => c.id === id)).find(x => x.name === n); if (!a) return false; await T._useActivation(id, a.i); await sleep(30); return true; };
+        start('r593w', true); await use('r593w', 'Arcane Recovery');
+        ok('Turn View: Arcane Recovery gets the highest spent slots back, up to half the wizard level', ex('r593w', 2) === 0 && ex('r593w', 1) === 1 && pool('r593w', 'Arcane Recovery') === 0, JSON.stringify([ex('r593w', 2), ex('r593w', 1), pool('r593w', 'Arcane Recovery'), T._result]));
+        start('r593d', true); await use('r593d', 'Natural Recovery');
+        ok('…Natural Recovery the same, for a druid', ex('r593d', 2) === 0 && ex('r593d', 1) === 1 && pool('r593d', 'Natural Recovery') === 0, JSON.stringify([ex('r593d', 2), ex('r593d', 1), pool('r593d', 'Natural Recovery'), T._result]));
+        start('r593s', false); P('r593s').resources.find(r => r.name === 'Sorcery Points').current = 6; save();
+        await use('r593s', 'Sorcerous Restoration');
+        ok('…Sorcerous Restoration with every point there: refused, nothing spent', pool('r593s', 'Sorcerous Restoration') === 1 && /already there/.test(T._result), JSON.stringify([pool('r593s', 'Sorcerous Restoration'), T._result]));
+      } catch(e){ ok('round 593 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
+      finally { try { csClose(); } catch(e){}
+        state.party = JSON.parse(keepP); state.combatants = JSON.parse(keepC); state.activeCombatantId = keepA; state.combatRound = keepR; save(); }
+    }
     // -- Class features: represented, not just text ------------------------
     {
       try {
@@ -30394,9 +30444,14 @@ for (const cls of Object.keys(rule)) for (let L = 1; L <= 20; L++) for (const sc
               for (const nm of [...new Set(qa('[data-cs-use]:not([disabled])').map(x => x.dataset.csUse))]){
                 const a = (pc().sheet.activations || []).find(x => x.name === nm), r = a && (pc().resources || []).find(x => x.name === a.resource), before = r ? r.current : null;
                 const b = q('[data-cs-use="' + CSS.escape(nm) + '"]:not([disabled])'); if (!b) continue;
+                // (refused with nothing for it to do — Create Spell Slot with no
+                // slot spent — or the Recover slots picker opened: nothing spent)
+                const fx = a && typeof sktFeatureUse === 'function' ? sktFeatureUse(JSON.parse(JSON.stringify(pc())), a) : null;
+                const waits = (fx && !fx.ok) || /^(Arcane|Natural) Recovery$/.test(nm);
                 b.click(); await sleep(20); closeModals();
                 const r2 = a && (pc().resources || []).find(x => x.name === a.resource);
-                if (r && nm !== 'Bardic Inspiration' && r2 && r2.current !== Math.max(0, before - (a.amount || 1))) bad.push(nm + ' did not spend (' + before + '→' + r2.current + ')');
+                if (r && nm !== 'Bardic Inspiration' && !waits && r2 && r2.current !== Math.max(0, before - (a.amount || 1))) bad.push(nm + ' did not spend (' + before + '→' + r2.current + ')');
+                if (waits && r2 && r2.current !== before) bad.push(nm + ' spent with nothing for it to do (' + before + '→' + r2.current + ')');
               }
               (pc().resources || []).forEach((r, i) => { if ((r.max || 0) > 0 && r.type !== 'toggle' && !q('[data-cs-res^="' + i + ':"]')) bad.push(r.name + ' has uses but no pips'); });
               // Spells
