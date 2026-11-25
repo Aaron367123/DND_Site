@@ -625,6 +625,25 @@ registerPanel('turnview', {
       this._setResult(`<span class="dim">${esc(who.name)} can't — ${esc(problem)}.</span>`, true);
       return;
     }
+    // Cunning Action ("Dash, Disengage or Hide"), Nimble Escape ("Disengage
+    // or Hide"): which one, taken as the Bonus Action. The button spent the
+    // bonus action and did nothing — a rogue who used it to Disengage still
+    // drew every opportunity attack, and a Dash didn't double her move.
+    const stdOpts = /^(Cunning Action|Nimble Escape)$/i.test(a.name)
+      ? ['Dash', 'Disengage', 'Hide'].filter(n => new RegExp('\\b' + n + '\\b').test(String(a.desc || '')) || (/^Cunning Action$/i.test(a.name) && !a.desc)) : [];
+    if (stdOpts.length && typed !== 'applied'){
+      let pick = typeof typed === 'string' && stdOpts.includes(typed) ? typed : null;
+      if (!pick && typeof showModal === 'function'){
+        const r = await showModal(a.name, [{ id: 'what', label: 'Take which, as the Bonus Action?', type: 'select', value: stdOpts[0], options: stdOpts.map(n => ({ value: n, label: n })) }], 'Take it');
+        if (!r) return;
+        pick = stdOpts.includes(r.what) ? r.what : null;
+      }
+      if (!pick) pick = stdOpts[0];
+      if (who.bonusUsed){ this._setResult(`<span class="dim">${esc(who.name)} has already used its Bonus Action this turn.</span>`, true); this._render(); return; }
+      this._forceBonus = true;
+      try { await this._takeStandardAction(pick, who); } finally { this._forceBonus = false; }
+      return;
+    }
     // Wild Shape: the party card's form picker, as the sheet's button opens.
     // The form taken spends the use (party.js _applyWildShape) and then the
     // Bonus Action; closed without one, nothing is. Only the use and the
@@ -4243,8 +4262,10 @@ registerPanel('turnview', {
     this._setResult(`<strong>${esc(c.name)}</strong> stands up${cost ? ` &mdash; <strong>${cost} ft</strong> of its movement` : ' &mdash; half its Speed'}.`, true);
     this._render();
   },
-  _takeStandardAction(name){
-    const c = this._active(); if (!c) return;
+  // `who`: the creature taking it (Cunning Action used for whoever it is),
+  // else the one whose turn it is.
+  _takeStandardAction(name, who){
+    const c = who || this._active(); if (!c) return;
     if (name === 'Hide') return this._hide(c);
     if (name === 'Escape') return this._escape(c);
     if (name === 'Grapple') return this._grapple(c, 'grapple');
@@ -4346,6 +4367,8 @@ registerPanel('turnview', {
   // (Dash, Disengage, Hide): once the action is gone, the bonus action pays.
   // → true when it was the bonus action.
   _spendStd(c, name){
+    // (taken through Cunning Action's own button: the Bonus Action, whatever the Action's state)
+    if (this._forceBonus && !c.bonusUsed){ this._spend(c, 'bonusUsed'); return true; }
     if (c.actionUsed && !c.bonusUsed && this._bonusStd(c).includes(name)){ this._spend(c, 'bonusUsed'); return true; }
     this._spend(c, 'actionUsed'); return false;
   },

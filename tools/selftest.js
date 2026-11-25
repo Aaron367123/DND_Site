@@ -28667,6 +28667,45 @@ for (const cls of Object.keys(rule)) for (let L = 1; L <= 20; L++) for (const sc
       finally { window.showConfirm = keepAsk; window.sktD = keepD; try { csClose(); } catch(e){}
         state.party = JSON.parse(keepP); state.combatants = JSON.parse(keepC); state.activeCombatantId = keepA; state.combatRound = keepR; save(); }
     }
+    // -- Round 588: Cunning Action and Nimble Escape in Turn View take the Dash, Disengage or Hide chosen, as the Bonus Action — the button spent the bonus action and did nothing (no Disengage: every opportunity attack still came) --
+    if (!PLAYER){
+      const keepP = JSON.stringify(state.party), keepC = JSON.stringify(state.combatants), keepA = state.activeCombatantId, keepR = state.combatRound;
+      const T = panelDefs.turnview, C = panelDefs.combat, keepAsk = window.showConfirm, keepModal = window.showModal;
+      try {
+        for (let k = 0; k < 100 && !(typeof _5eLoaded !== 'undefined' && _5eLoaded); k++) await sleep(100);
+        const R = await sktRulesLoad('2024');
+        const mk = (id, cls, extra) => { const b = Object.assign(sktBlankBuild('2024'), { name: id, cls, level: 5, abilities: { method: 'manual', base: { str: 10, dex: 16, con: 14, int: 10, wis: 12, cha: 8 } } }, extra || {});
+          const pc = sktComputeCharacter(b, R); pc.id = id; pc.name = id; pc.build = b; return pc; };
+        const rogue = mk('r588r', 'Rogue');
+        ok('a 2024 rogue has Cunning Action to use', (rogue.sheet.activations || []).some(a => a.name === 'Cunning Action'), (rogue.sheet.activations || []).map(a => a.name).join(', '));
+        state.party = JSON.parse(keepP).concat([rogue]);
+        const gob = _5eData.find(r => r.cat === 'monster' && r.name === 'Goblin' && r._source === 'MM');
+        const start = () => { state.combatants = [{ id: 'r588r', name: 'r588r', isPC: true, hp: 30, hpMax: 30, ac: 14, initiative: 18, conditions: [] }]; C.addMonster(gob);
+          state.combatRound = 1; state.activeCombatantId = 'r588r'; save(); };
+        const me = () => state.combatants.find(c => c.id === 'r588r');
+        const use = async (pick) => { const a = T._activationsFor(T._order().find(c => c.id === 'r588r')).find(x => x.name === 'Cunning Action');
+          window.showModal = async () => ({ what: pick }); await T._useActivation('r588r', a.i); await sleep(30); };
+        start(); openPanel('turnview'); await sleep(200);
+        await use('Disengage');
+        ok('Cunning Action → Disengage: disengaged, the Bonus Action spent, the Action still free', me().disengaged === true && me().bonusUsed === true && !me().actionUsed, JSON.stringify([me().disengaged, me().bonusUsed, me().actionUsed]));
+        start(); await sleep(20); await use('Dash');
+        ok('…→ Dash: one Dash, as the Bonus Action', (me().dashes || 0) === 1 && me().bonusUsed === true && !me().actionUsed, JSON.stringify([me().dashes, me().bonusUsed, me().actionUsed]));
+        start(); await sleep(20); window.showConfirm = async () => 25; await use('Hide');
+        ok('…→ Hide: a Stealth check, hidden on a 25, as the Bonus Action', !!me().hidden && me().bonusUsed === true && !me().actionUsed, JSON.stringify([me().hidden, me().bonusUsed, me().actionUsed]));
+        start(); await sleep(20); me().bonusUsed = true; await use('Dash');
+        ok('…not with the Bonus Action already used', !me().dashes && !me().actionUsed, JSON.stringify([me().dashes, me().actionUsed]));
+        // a goblin's Nimble Escape: Disengage or Hide only
+        rogue.sheet.activations = (rogue.sheet.activations || []).concat([{ name: 'Nimble Escape', action: 'Bonus Action', desc: 'You can take the Disengage or Hide action as a bonus action on each of your turns.' }]);
+        let offered = null; window.showModal = async (t, f) => { offered = f[0].options.map(o => o.value); return { what: 'Disengage' }; };
+        start(); await sleep(20);
+        const ne = T._activationsFor(T._order().find(c => c.id === 'r588r')).find(x => x.name === 'Nimble Escape');
+        if (ne){ await T._useActivation('r588r', ne.i); await sleep(30); }
+        ok('Nimble Escape offers Disengage or Hide, and takes it as the Bonus Action', !!ne && JSON.stringify(offered) === '["Disengage","Hide"]' && me().disengaged === true && me().bonusUsed === true && !me().actionUsed,
+           JSON.stringify([!!ne, offered, me().disengaged, me().bonusUsed, me().actionUsed]));
+      } catch(e){ ok('round 588 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
+      finally { window.showConfirm = keepAsk; window.showModal = keepModal;
+        state.party = JSON.parse(keepP); state.combatants = JSON.parse(keepC); state.activeCombatantId = keepA; state.combatRound = keepR; save(); }
+    }
     // -- Class features: represented, not just text ------------------------
     {
       try {
