@@ -29213,6 +29213,44 @@ for (const cls of Object.keys(rule)) for (let L = 1; L <= 20; L++) for (const sc
       finally { try { csClose(); } catch(e){} T._armed = keepArm;
         state.party = JSON.parse(keepP); state.combatants = JSON.parse(keepC); state.activeCombatantId = keepA; state.combatRound = keepR; save(); }
     }
+    // -- Round 600: Turn View: a feature that heals several — Fortifying Soul (Wis-mod creatures, 1d10 + ranger level), Group Recovery (Cha-mod allies, 1d4 + fighter level) — rolls once and heals each creature picked, up to its number; they spent the use and healed nobody --
+    if (!PLAYER){
+      const keepP = JSON.stringify(state.party), keepC = JSON.stringify(state.combatants), keepA = state.activeCombatantId, keepR = state.combatRound;
+      const T = panelDefs.turnview, keepAsk = window.showConfirm, keepArm = T._armed;
+      try {
+        for (let k = 0; k < 100 && !(typeof _5eLoaded !== 'undefined' && _5eLoaded); k++) await sleep(100);
+        const R = await sktRulesLoad('2024');
+        const mk = (id, cls, sub) => { const b = Object.assign(sktBlankBuild('2024'), { name: id, cls, subclass: sub, level: 20, abilities: { method: 'manual', base: { str: 16, dex: 14, con: 14, int: 10, wis: 16, cha: 16 } } });
+          const pc = sktComputeCharacter(b, R); pc.id = id; pc.name = id; pc.build = b; return pc; };
+        const all = [mk('r600r', 'ranger', 'Winter Walker'), mk('r600f', 'fighter', 'Banneret')];
+        const others = ['r600a', 'r600b', 'r600c', 'r600d'];
+        const start = active => {
+          state.party = JSON.parse(keepP).concat(JSON.parse(JSON.stringify(all)));
+          state.combatants = all.map((p, k) => ({ id: p.id, name: p.id, isPC: true, hp: 30, hpMax: 200, ac: 15, initiative: 30 - k, conditions: [] }))
+            .concat(others.map((id, k) => ({ id, name: id, isPC: false, hp: 5, hpMax: 100, ac: 12, initiative: 10 - k, conditions: [] })));
+          state.combatRound = 1; state.activeCombatantId = active; T._actAs = null; T._armed = null; save(); };
+        const hp = id => state.combatants.find(c => c.id === id).hp;
+        const pool = (id, n) => (state.party.find(p => p.id === id).resources.find(r => r.name === n) || {}).current;
+        const use = async (id, n) => { const a = T._activationsFor(T._order().find(c => c.id === id)).find(x => x.name === n); if (!a) return false; await T._useActivation(id, a.i); await sleep(30); return true; };
+        const btn = () => document.querySelector('.window[data-panel="turnview"] .tv-healroll [data-tv="dmgapply"]');
+        const give = async id => { T._armed = id; T._render(); await sleep(30); const b = btn(); if (b && !b.disabled) b.click(); await sleep(40); return !!b; };
+        openPanel('turnview'); await sleep(200);
+        start('r600r'); window.showConfirm = async () => 6;
+        const fs0 = pool('r600r', 'Fortifying Soul');
+        const had = await use('r600r', 'Fortifying Soul');
+        ok('Fortifying Soul: its use spent, and 6 + the ranger level (26) to give', had && pool('r600r', 'Fortifying Soul') === fs0 - 1 && !!btn() && /26/.test(btn().closest('.tv-healroll').textContent),
+           JSON.stringify([had, fs0, pool('r600r', 'Fortifying Soul'), btn() && btn().closest('.tv-healroll').textContent.replace(/\s+/g, ' ')]));
+        for (const id of others) await give(id);
+        ok('…26 to each creature picked, up to the Wisdom modifier (3), then no more', hp('r600a') === 31 && hp('r600b') === 31 && hp('r600c') === 31 && hp('r600d') === 5 && !btn(),
+           JSON.stringify(others.map(hp).concat([!!btn()])));
+        start('r600f'); window.showConfirm = async () => 2;
+        const gr = await use('r600f', 'Group Recovery');
+        await give('r600a');
+        ok('Group Recovery: 2 + the fighter level (22) to an ally picked', gr && hp('r600a') === 27, JSON.stringify([gr, hp('r600a')]));
+      } catch(e){ ok('round 600 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
+      finally { window.showConfirm = keepAsk; T._armed = keepArm;
+        state.party = JSON.parse(keepP); state.combatants = JSON.parse(keepC); state.activeCombatantId = keepA; state.combatRound = keepR; save(); }
+    }
     // -- Class features: represented, not just text ------------------------
     {
       try {

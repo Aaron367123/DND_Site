@@ -888,6 +888,32 @@ registerPanel('turnview', {
         heal = { amt: r.total + lvl, detail: (r.detail || die + ' ' + r.total) + ' + ' + lvl, tgt: who };
       }
     }
+    // A heal for several, from a feature: Fortifying Soul ("a number of
+    // creatures equal to your Wisdom modifier… regains 1d10 plus your Ranger
+    // level"), Group Recovery, Turn the Tide ("each creature of your
+    // choice"). One roll, then a heal to give each creature picked, as a
+    // Mass Healing Word's is. They spent the use and healed nobody.
+    let group = null;
+    const gt = String(a.desc || '');
+    const gm = !heal && who.isPC && a.dice && /\bregains? (?:a number of )?hit points equal to (\d*d\d+) (?:\+|plus) your (\w+) (level|modifier)/i.exec(gt);
+    if (gm && /\b(?:a number of (?:creatures|allies)|each (?:creature|of those allies)|creatures of your choice|allies within)\b/i.test(gt)){
+      const p = this._partyOf(who), sh = (p && p.sheet) || {}, AB = { strength: 'str', dexterity: 'dex', constitution: 'con', intelligence: 'int', wisdom: 'wis', charisma: 'cha' };
+      const mod = k => Math.floor((((p && p.abilities) || {})[k] || 10) / 2) - 5;
+      const plus = gm[3].toLowerCase() === 'level' ? (((sh.classLevels || []).find(x => x && x.cls === gm[2].toLowerCase()) || {}).level || (p && p.level) || 1)
+        : AB[gm[2].toLowerCase()] ? Math.max(1, mod(AB[gm[2].toLowerCase()])) : 0;
+      const cm = /(?:a number of (?:creatures|allies)[^.]*?|up to a number of allies) equal to your (\w+) modifier/i.exec(gt);
+      const many = cm && AB[cm[1].toLowerCase()] ? Math.max(1, mod(AB[cm[1].toLowerCase()])) : 20;
+      const die = gm[1].replace(/^d/, '1d');
+      let n = typeof typed === 'number' ? typed : null;
+      if (n == null && typed !== 'roll' && typeof showConfirm === 'function'){
+        const v = await showConfirm(who.name + ' uses ' + a.name + ': ' + die + ' + ' + plus + ' hit points, to each creature picked' + (many < 20 ? ' (up to ' + many + ')' : '') + '.', { title: a.name, confirmLabel: 'Roll it',
+          input: { label: 'Their ' + die + ' roll (blank: roll it here)', min: 1, max: 100 } });
+        if (v === false) return;
+        if (typeof v === 'number') n = v;
+      }
+      const r = n != null ? { total: n, detail: die + ' ' + n + ' (theirs)' } : sktRollDice(die);
+      group = { p, total: r.total + plus, many, text: (r.detail || die + ' ' + r.total) + ' + ' + plus };
+    }
     // Speedy Recovery (2024 Durable): a Bonus Action that spends one Hit Point
     // Die and heals its roll. It spent the bonus action and nothing else —
     // no die gone, no hit points back.
@@ -998,6 +1024,11 @@ registerPanel('turnview', {
         const cond = ['paralyzed', 'stunned', 'blinded', 'poisoned', 'deafened'].map(k => (now.conditions || []).find(x => String(x).toLowerCase() === k)).find(Boolean);
         if (cond){ C._removeCond(i, cond); extra += ' and is no longer ' + esc(String(cond).toLowerCase()) + ' (Physician’s Touch)'; }
       }
+    }
+    if (group && group.p){
+      group.p.rolls = [{ label: a.name + ' heals', total: group.total, text: group.text, at: Date.now(), from: 'tv', kind: 'damage', type: 'hit points', crit: false,
+        id: typeof uid === 'function' ? uid() : String(Date.now()), many: group.many }].concat(group.p.rolls || []).slice(0, 6);
+      extra += ' — <strong>' + group.total + '</strong> hit points to give each creature picked' + (group.many < 20 ? ', up to ' + group.many : '') + ' <span class="dim">(' + esc(group.text) + ')</span>';
     }
     if (raged) extra += ' — raging';
     // A feature that is a switch on the sheet (Bladesong, Innate Sorcery,
@@ -4296,7 +4327,8 @@ registerPanel('turnview', {
     const now = Date.now();
     return (state.party || []).filter(p => p && this._order().some(c => c.id === p.id)).map(p => {
       // Its latest: an attack waiting on its damage, or the damage itself.
-      const r = (p.rolls || []).find(x => x && (x.kind === 'damage' || x.kind === 'attack') && x.from === 'player' && now - (x.at || 0) < 10 * 60 * 1000);
+      // (and a heal for several rolled here, by a feature: 'tv')
+      const r = (p.rolls || []).find(x => x && (x.kind === 'damage' || x.kind === 'attack') && (x.from === 'player' || x.from === 'tv') && now - (x.at || 0) < 10 * 60 * 1000);
       return r && !r.applied && !r.dropped ? { p, r } : null;
     }).filter(Boolean);
   },
