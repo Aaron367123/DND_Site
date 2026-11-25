@@ -1087,6 +1087,15 @@ function csExtraDamageHtml(pc){
   return rows.length ? '<h4>Extra damage</h4>' + rows.join('') : '';
 }
 function csActHtml(pc, a){
+  // A spell slot for a use back (Regain Wild Shape, Regain Bardic
+  // Inspiration): a Use button, where there was only the text.
+  if (typeof SKT_SLOT_REGAIN !== 'undefined' && SKT_SLOT_REGAIN[a.name]){
+    const pool = (pc.resources || []).find(x => x.name === SKT_SLOT_REGAIN[a.name]) || {};
+    const slotLeft = Object.keys((pc.sheet || {}).spellSlots || {}).some(l => +l >= 1 && (+pc.sheet.spellSlots[l].total || 0) - (+pc.sheet.spellSlots[l].expended || 0) > 0);
+    const can = !CS.readOnly && slotLeft && (+pool.current || 0) < (+pool.max || 0) && !(SKT_SLOT_REGAIN[a.name] === 'Wild Shape' && (+pool.current || 0) > 0);
+    return '<div class="cs-act"><div class="cs-act-h"><b>' + csE(a.name) + '</b><span class="cb-dim">a spell slot · ' + (+pool.current || 0) + '/' + (+pool.max || 0) + ' ' + csE(SKT_SLOT_REGAIN[a.name]) + '</span>'
+      + '<button class="btn small" data-cs-regain="' + csE(a.name) + '"' + (can ? '' : ' disabled') + '>Use</button></div>' + (a.desc ? '<div class="cs-act-d">' + csE(a.desc) + '</div>' : '') + '</div>';
+  }
   // Speedy Recovery: a Hit Point Die spent and its roll healed (no resource
   // of its own, so it had no Use button — only its text).
   if (/^Speedy Recovery$/i.test(a.name)){
@@ -1595,6 +1604,13 @@ function csOnClick(e){
     const a = (pc.sheet.activations || []).find(x => x.name === d.csActroll); if (!a || !a.dice) return;
     csRollDamage(a.name, a.dice, false);
     return csRender();
+  }
+  if (d.csRegain){
+    const pool = typeof SKT_SLOT_REGAIN !== 'undefined' && SKT_SLOT_REGAIN[d.csRegain]; if (!pool || CS.readOnly || typeof sktRegainBySlot !== 'function') return true;
+    let why = '';
+    csEdit(d.csRegain, p => { const r = sktRegainBySlot(p, pool); if (!r.ok) why = r.why; });
+    if (why && typeof showToast === 'function') showToast('Can’t — ' + why);
+    return true;
   }
   if (d.csSpeedy){
     const P = panelDefs.party, i = csIdx();

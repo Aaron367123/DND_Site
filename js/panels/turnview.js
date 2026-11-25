@@ -625,6 +625,20 @@ registerPanel('turnview', {
       this._setResult(`<span class="dim">${esc(who.name)} can't — ${esc(problem)}.</span>`, true);
       return;
     }
+    // A spell slot for a use back (Regain Wild Shape, Regain Bardic
+    // Inspiration): it spent nothing and gave nothing back.
+    if (who.isPC && typeof SKT_SLOT_REGAIN !== 'undefined' && SKT_SLOT_REGAIN[a.name] && typeof sktRegainBySlot === 'function'){
+      const p = this._partyOf(who); if (!p) return;
+      // (tried on a copy first: a refusal leaves no undo step behind)
+      const t = sktRegainBySlot(JSON.parse(JSON.stringify(p)), SKT_SLOT_REGAIN[a.name]);
+      if (!t.ok){ this._setResult(`<span class="dim">${esc(who.name)} can't — ${esc(t.why)}.</span>`, true); this._render(); return; }
+      this._snapshot(`${who.name} · ${a.name}`);
+      const r = sktRegainBySlot(p, SKT_SLOT_REGAIN[a.name]);
+      const pool = (p.resources || []).find(x => x.name === SKT_SLOT_REGAIN[a.name]) || {};
+      this._setResult(`<strong>${esc(who.name)}</strong> spends a level ${r.lvl} spell slot and regains a use of ${esc(SKT_SLOT_REGAIN[a.name])} (${pool.current}/${pool.max}).`, true);
+      save(); panelDefs.party?._render?.(); this._render();
+      return;
+    }
     // Cunning Action ("Dash, Disengage or Hide"), Nimble Escape ("Disengage
     // or Hide"): which one, taken as the Bonus Action. The button spent the
     // bonus action and did nothing — a rogue who used it to Disengage still

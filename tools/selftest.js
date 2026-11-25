@@ -28706,6 +28706,44 @@ for (const cls of Object.keys(rule)) for (let L = 1; L <= 20; L++) for (const sc
       finally { window.showConfirm = keepAsk; window.showModal = keepModal;
         state.party = JSON.parse(keepP); state.combatants = JSON.parse(keepC); state.activeCombatantId = keepA; state.combatRound = keepR; save(); }
     }
+    // -- Round 589: Regain Wild Shape and Regain Bardic Inspiration spend the lowest spell slot for one use back — in Turn View and from the sheet; they did nothing. Not with a Wild Shape use still there, nor with no slot left --
+    if (!PLAYER){
+      const keepP = JSON.stringify(state.party), keepC = JSON.stringify(state.combatants), keepA = state.activeCombatantId, keepR = state.combatRound;
+      const T = panelDefs.turnview;
+      try {
+        for (let k = 0; k < 100 && !(typeof _5eLoaded !== 'undefined' && _5eLoaded); k++) await sleep(100);
+        const R = await sktRulesLoad('2024');
+        const mk = (id, cls) => { const b = Object.assign(sktBlankBuild('2024'), { name: id, cls, level: 5, abilities: { method: 'manual', base: { str: 10, dex: 14, con: 14, int: 10, wis: 16, cha: 16 } } });
+          const pc = sktComputeCharacter(b, R); pc.id = id; pc.name = id; pc.build = b; return pc; };
+        const dru = mk('r589d', 'Druid'), bard = mk('r589b', 'Bard');
+        ok('a 2024 druid and bard of 5th level have the two actions', (dru.sheet.activations || []).some(a => a.name === 'Regain Wild Shape') && (bard.sheet.activations || []).some(a => a.name === 'Regain Bardic Inspiration'), '');
+        const ws = () => state.party.find(p => p.id === 'r589d').resources.find(r => r.name === 'Wild Shape');
+        const slot = (id, l) => state.party.find(p => p.id === id).sheet.spellSlots[l].expended || 0;
+        dru.resources.find(r => r.name === 'Wild Shape').current = 0;
+        state.party = JSON.parse(keepP).concat([dru, bard]);
+        state.combatants = [{ id: 'r589d', name: 'r589d', isPC: true, hp: 30, hpMax: 30, ac: 13, initiative: 15, conditions: [] }, { id: 'r589b', name: 'r589b', isPC: true, hp: 30, hpMax: 30, ac: 13, initiative: 14, conditions: [] }];
+        state.combatRound = 1; state.activeCombatantId = 'r589d'; save();
+        openPanel('turnview'); await sleep(200);
+        const use = async (id, n) => { const a = T._activationsFor(T._order().find(c => c.id === id)).find(x => x.name === n); await T._useActivation(id, a.i); await sleep(30); };
+        await use('r589d', 'Regain Wild Shape');
+        ok('Turn View: the druid with no Wild Shape left spends a 1st-level slot for one back', ws().current === 1 && slot('r589d', 1) === 1, JSON.stringify([ws().current, slot('r589d', 1)]));
+        await use('r589d', 'Regain Wild Shape');
+        ok('…not again while a use is there (no slot spent)', ws().current === 1 && slot('r589d', 1) === 1 && /still has a Wild Shape use/.test(T._result), JSON.stringify([ws().current, slot('r589d', 1), T._result]));
+        sktUndo(); await sleep(20);
+        ok('…undo gives back the slot and takes the use', ws().current === 0 && slot('r589d', 1) === 0, JSON.stringify([ws().current, slot('r589d', 1)]));
+        // the bard, from the sheet
+        const bi = () => state.party.find(p => p.id === 'r589b').resources.find(r => r.name === 'Bardic Inspiration');
+        bi().current = Math.max(0, bi().max - 2); save();
+        openCharSheet('r589b'); for (let k = 0; k < 40 && !(CS && CS.R); k++) await sleep(100);
+        csGoTab('actions'); await sleep(250);
+        const btn = document.querySelector('#cs-root [data-cs-regain="Regain Bardic Inspiration"]');
+        const was = bi().current;
+        if (btn) btn.click(); await sleep(80);
+        ok('the sheet: Regain Bardic Inspiration has a Use button that spends a 1st-level slot for a use', !!btn && bi().current === was + 1 && slot('r589b', 1) === 1, JSON.stringify([!!btn, was, bi().current, slot('r589b', 1)]));
+      } catch(e){ ok('round 589 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
+      finally { try { csClose(); } catch(e){}
+        state.party = JSON.parse(keepP); state.combatants = JSON.parse(keepC); state.activeCombatantId = keepA; state.combatRound = keepR; save(); }
+    }
     // -- Class features: represented, not just text ------------------------
     {
       try {

@@ -3939,6 +3939,23 @@ function sktHdPools(pc){
   }
   return pools;
 }
+// A spell slot spent for a use back: 2024 Wild Resurgence (a Wild Shape use,
+// only with none left) and Font of Inspiration (a Bardic Inspiration). The
+// lowest slot there is. These were buttons that did nothing — no slot gone,
+// no use back. → { ok, lvl } or { ok: false, why }. Changes `pc` in place.
+const SKT_SLOT_REGAIN = { 'Regain Wild Shape': 'Wild Shape', 'Regain Bardic Inspiration': 'Bardic Inspiration' };
+function sktRegainBySlot(pc, pool){
+  const r = ((pc && pc.resources) || []).find(x => x && x.name === pool);
+  if (!r) return { ok: false, why: 'no ' + pool + ' to regain' };
+  if (pool === 'Wild Shape' && (+r.current || 0) > 0) return { ok: false, why: 'it still has a Wild Shape use' };
+  if ((+r.current || 0) >= (+r.max || 0)) return { ok: false, why: 'every ' + pool + ' use is already there' };
+  const slots = (pc.sheet || {}).spellSlots || {};
+  const lvl = Object.keys(slots).map(Number).filter(l => l >= 1 && (+(slots[l] || {}).total || 0) - (+(slots[l] || {}).expended || 0) > 0).sort((a, b) => a - b)[0];
+  if (!lvl) return { ok: false, why: 'no spell slot left to spend' };
+  pc.sheet = Object.assign({}, pc.sheet, { spellSlots: Object.assign({}, slots, { [lvl]: Object.assign({}, slots[lvl], { expended: (+slots[lvl].expended || 0) + 1 }) }) });
+  r.current = (+r.current || 0) + 1;
+  return { ok: true, lvl };
+}
 function sktHdSetPools(pc, pools){
   const hd = Object.assign({}, pc.hitDice);
   hd.current = pools.reduce((s, p) => s + p.current, 0);
