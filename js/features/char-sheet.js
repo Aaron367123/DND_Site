@@ -1553,7 +1553,7 @@ function csOnClick(e){
     // Rolling your own dice: asked like any other roll, and spent once the
     // number is in (✕ keeps it). It was always the app's roll.
     if (!CS.readOnly && csOwnDice()){
-      csLog({ kind: 'dmg', label: 'Bardic Inspiration', total: n, dice: n, type: '', detail: '1' + die + (from ? ' from ' + from : '') + ' — add it to the roll' }, () => spend());
+      csLog({ kind: 'dmg', plain: true, label: 'Bardic Inspiration', total: n, dice: n, type: '', detail: '1' + die + (from ? ' from ' + from : '') + ' — add it to the roll' }, () => spend());
       return csRender();
     }
     spend();
@@ -1628,7 +1628,7 @@ function csOnClick(e){
     const r = P._rollHitDie(i, null, null, { noMod: true });
     if (!r){ if (typeof showToast === 'function') showToast('No Hit Point Dice left'); return true; }
     if (CS.embed && typeof paMarkEcon === 'function') paMarkEcon('bonus');
-    csLog({ kind: 'dmg', label: 'Speedy Recovery heals', total: r.heal, dice: r.roll, type: '', detail: r.die + ' [' + r.roll + ']' });
+    csLog({ kind: 'dmg', label: 'Speedy Recovery heals', total: r.heal, dice: r.roll, type: 'hit points', applied: true, detail: r.die + ' [' + r.roll + ']' });
     csRender(); return true;
   }
   if (d.csUse){
@@ -2950,7 +2950,7 @@ function csDawnApply(pc, name, typed){
   if (p.item && !(pc.resources || []).some(x => x.name === name)){
     // An imported character's item, which counts its own spent charges.
     const roll = typed != null ? { total: typed, detail: typed + ' (rolled at the table)' } : sktDamageRoll(p.dice, false);
-    csLog({ kind: 'dmg', label: name + ' regains charges', total: roll.total, detail: roll.detail, type: 'charges' });
+    csLog({ kind: 'dmg', plain: true, label: name + ' regains charges', total: roll.total, detail: roll.detail, type: 'charges' });
     return csEdit(name + ': ' + roll.total + ' charges back', q => {
       [q.inventory, q.build && q.build.items].forEach(l => (l || []).forEach(m => {
         if (!m || m.name !== name || !m.used) return;
@@ -2962,7 +2962,7 @@ function csDawnApply(pc, name, typed){
     });
   }
   const roll = typed != null ? { total: typed, detail: typed + ' (rolled at the table)' } : sktDamageRoll(p.dice, false);
-  csLog({ kind: 'dmg', label: name + ' regains charges', total: roll.total, detail: roll.detail, type: 'charges' });
+  csLog({ kind: 'dmg', plain: true, label: name + ' regains charges', total: roll.total, detail: roll.detail, type: 'charges' });
   csEdit(name + ': ' + roll.total + ' charges back', q => {
     const r = (q.resources || []).find(x => x.name === name);
     if (r) r.current = Math.min(+r.max || 0, (+r.current || 0) + roll.total);

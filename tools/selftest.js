@@ -29127,6 +29127,47 @@ for (const cls of Object.keys(rule)) for (let L = 1; L <= 20; L++) for (const sc
       } catch(e){ ok('round 597 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
       finally { try { csClose(); } catch(e){} state.party = JSON.parse(keepP); save(); }
     }
+    // -- Round 598: rolls on the sheet that are no damage aren't kept as damage for Turn View to apply — an item's charges back at dawn, Speedy Recovery's heal (already given), a Bardic Inspiration die --
+    if (!PLAYER){
+      const keepP = JSON.stringify(state.party);
+      try {
+        for (let k = 0; k < 100 && !(typeof _5eLoaded !== 'undefined' && _5eLoaded); k++) await sleep(100);
+        const R = await sktRulesLoad('2024');
+        const top = id => (state.party.find(p => p.id === id).rolls || [])[0] || {};
+        // charges at dawn
+        const rec = { id: 'r598w', name: 'R598 Wand', cls: 'wizard', level: 5, hp: 20, hpMax: 20, ac: 12, spd: 30, rules: '2024', build: null,
+          resources: [{ name: 'Wand of Magic Missiles', type: 'pool', current: 1, max: 7, recharge: 'dawn', item: true, note: 'Regains 1d6 + 1 at dawn' }],
+          dawnRegain: [{ name: 'Wand of Magic Missiles', dice: '1d6+1' }] };
+        // Speedy Recovery
+        const b = Object.assign(sktBlankBuild('2024'), { name: 'R598 Durable', cls: 'Druid', level: 6, abilities: { method: 'manual', base: { str: 10, dex: 12, con: 16, int: 10, wis: 16, cha: 8 } }, asi: { 4: { type: 'feat', feat: 'Durable' } } });
+        const pc = sktComputeCharacter(b, R); pc.id = 'r598d'; pc.name = 'R598 Durable'; pc.build = b; pc.hp = 20;
+        pc.hitDice = Object.assign({}, pc.hitDice, { current: pc.hitDice.max });
+        state.party = JSON.parse(keepP).concat([rec, pc]); save();
+        await openCharSheet('r598w'); await sleep(300);
+        csGoTab('actions'); await sleep(250);
+        const roll = document.querySelector('#cs-root [data-cs-dawnroll="Wand of Magic Missiles"]'); if (roll) roll.click(); await sleep(150);
+        csClose(); await sleep(30);
+        ok('a wand’s charges rolled at dawn aren’t kept as damage', !!roll && /charges/.test(top('r598w').label || '') && top('r598w').kind !== 'damage', JSON.stringify([!!roll, top('r598w').label, top('r598w').kind]));
+        await openCharSheet('r598d'); await sleep(300);
+        csGoTab('actions'); await sleep(250);
+        const sp = document.querySelector('#cs-root [data-cs-speedy]'); if (sp) sp.click(); await sleep(150);
+        csClose(); await sleep(30);
+        const t = top('r598d');
+        ok('Speedy Recovery’s heal, given on the sheet, is kept as a heal already applied', !!sp && /Speedy Recovery/.test(t.label || '') && t.type === 'hit points' && t.applied === true, JSON.stringify([!!sp, t.label, t.type, t.applied]));
+        // a Bardic Inspiration die, kept
+        const me = state.party.find(p => p.id === 'r598d'); me.rolls = []; save();
+        await openCharSheet('r598d'); await sleep(300);
+        const own0 = localStorage.getItem('skt-own-dice-v1'); localStorage.setItem('skt-own-dice-v1', '1');
+        try {
+          await csEdit('x', p => { p.bardicInspiration = 'd8'; }); await sleep(50);
+          const bb = document.querySelector('#cs-root [data-cs="bardic"]'); if (bb) bb.click(); await sleep(100);
+          const rf = document.querySelector('[data-cs="owndieroll"]'); if (rf) rf.click(); await sleep(100);
+        } finally { if (own0 == null) localStorage.removeItem('skt-own-dice-v1'); else localStorage.setItem('skt-own-dice-v1', own0); }
+        csClose(); await sleep(30);
+        ok('…a Bardic Inspiration die is a plain roll', top('r598d').label === 'Bardic Inspiration' && top('r598d').kind !== 'damage', JSON.stringify(top('r598d')));
+      } catch(e){ ok('round 598 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
+      finally { try { csClose(); } catch(e){} state.party = JSON.parse(keepP); save(); }
+    }
     // -- Class features: represented, not just text ------------------------
     {
       try {
