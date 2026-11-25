@@ -28744,6 +28744,69 @@ for (const cls of Object.keys(rule)) for (let L = 1; L <= 20; L++) for (const sc
       finally { try { csClose(); } catch(e){}
         state.party = JSON.parse(keepP); state.combatants = JSON.parse(keepC); state.activeCombatantId = keepA; state.combatRound = keepR; save(); }
     }
+    // -- Round 590: a "+ New quest" or "+ New faction" closed with nothing in it goes — it stayed for good as an "Untitled quest" (one is in the live data); one with anything typed stays, and an old blank one is not touched --
+    if (!PLAYER){
+      const q0 = localStorage.getItem('skt-quests-v1'), f0 = localStorage.getItem('skt-factions-v1'), Q = panelDefs.quests, F = panelDefs.factions;
+      try {
+        localStorage.setItem('skt-quests-v1', JSON.stringify([{ id: 'qold590', title: '', giver: '', reward: '', summary: '', notes: '', steps: [], status: 'active', shown: false, at: 1 }]));
+        localStorage.setItem('skt-factions-v1', '[]');
+        Q._view = 'active'; Q._open = null; Q._fresh = null; F._open = null; F._fresh = null;
+        openPanel('quests'); await sleep(150);
+        const w = () => document.querySelector('.window[data-panel="quests"]');
+        const set = (root, sel, v) => { const i = root.querySelector(sel); i.value = v; i.dispatchEvent(new Event('input', { bubbles: true })); };
+        const ids = () => sktQuests().map(q => q.id);
+        w().querySelector('[data-q-new]').click(); await sleep(30);
+        const n1 = Q._open;
+        ok('a new quest is there while it is open', ids().includes(n1) && ids().length === 2, JSON.stringify(ids()));
+        w().querySelector('[data-q-toggle="' + n1 + '"]').click(); await sleep(30);
+        ok('…closed with nothing in it, it goes (the old blank one stays)', !ids().includes(n1) && ids().includes('qold590'), JSON.stringify(ids()));
+        w().querySelector('[data-q-new]').click(); await sleep(30);
+        const n2 = Q._open;
+        w().querySelector('[data-q-new]').click(); await sleep(30);
+        ok('…a second "+ New quest" over an empty one leaves one new quest, not two', !ids().includes(n2) && ids().length === 2, JSON.stringify(ids()));
+        const n3 = Q._open;
+        w().querySelector('.qst-card.open [data-qs-add]').click(); await sleep(30);
+        set(w(), '.qst-card.open [data-qs-text]', 'Find the door');
+        w().querySelector('[data-q-toggle="' + n3 + '"]').click(); await sleep(30);
+        ok('…one with only a step written stays', ids().includes(n3), JSON.stringify(ids()));
+        w().querySelector('[data-q-new]').click(); await sleep(30);
+        const n4 = Q._open;
+        closePanel('quests'); await sleep(30);
+        ok('…closing the window with an empty new one open drops it', !ids().includes(n4) && ids().includes(n3) && ids().includes('qold590'), JSON.stringify(ids()));
+        openPanel('quests'); await sleep(150);
+        w().querySelector('[data-q-new]').click(); await sleep(30);
+        const n5 = Q._open;
+        set(w(), '.qst-card.open [data-qf="title"]', 'Rescue the duke');
+        w().querySelector('[data-q-toggle="' + n5 + '"]').click(); await sleep(30);
+        ok('…one with a title stays', ids().includes(n5), JSON.stringify(ids()));
+        closePanel('quests');
+        // factions
+        openPanel('factions'); await sleep(150);
+        const fw = () => document.querySelector('.window[data-panel="factions"]');
+        const fids = () => sktFactions().map(f => f.id);
+        fw().querySelector('[data-f-new]').click(); await sleep(30);
+        const g1 = F._open;
+        fw().querySelector('[data-f-toggle="' + g1 + '"]').click(); await sleep(30);
+        ok('factions: a new one closed with nothing in it goes', !fids().includes(g1) && fids().length === 0, JSON.stringify(fids()));
+        fw().querySelector('[data-f-new]').click(); await sleep(30);
+        const g2 = F._open;
+        set(fw(), '.qst-card.open [data-ff="name"]', 'The Harpers');
+        fw().querySelector('[data-f-toggle="' + g2 + '"]').click(); await sleep(30);
+        ok('…one with a name stays', fids().includes(g2), JSON.stringify(fids()));
+        fw().querySelector('[data-f-new]').click(); await sleep(30);
+        const g3 = F._open;
+        fw().querySelector('.qst-card.open [data-f-shift="1"]').click(); await sleep(30);
+        fw().querySelector('[data-f-toggle="' + g3 + '"]').click(); await sleep(30);
+        ok('…one with its standing moved stays', fids().includes(g3), JSON.stringify(fids()));
+        closePanel('factions');
+      } catch(e){ ok('round 590 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
+      finally {
+        try { closePanel('quests'); closePanel('factions'); } catch(e){}
+        Q._fresh = null; F._fresh = null; Q._open = null; F._open = null;
+        if (q0 == null) localStorage.removeItem('skt-quests-v1'); else localStorage.setItem('skt-quests-v1', q0);
+        if (f0 == null) localStorage.removeItem('skt-factions-v1'); else localStorage.setItem('skt-factions-v1', f0);
+      }
+    }
     // -- Class features: represented, not just text ------------------------
     {
       try {

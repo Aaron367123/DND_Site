@@ -41,6 +41,11 @@ function sktFactionUpdate(id, patch){
   return f;
 }
 function sktFactionRemove(id){ _sktFactionsSave(sktFactions().filter(f => f.id !== id)); }
+// Nothing typed, never shown, no standing or history: a "+ New faction"
+// clicked and left. Those stayed for good as "Unnamed faction".
+function sktFactionBlank(f){
+  return !!f && !['name', 'summary', 'notes'].some(k => String(f[k] || '').trim()) && !f.shown && !(+f.standing || 0) && !(f.log || []).length;
+}
 function sktStandingName(n){ return SKT_STANDING[Math.max(-2, Math.min(2, +n || 0)) + 2]; }
 // Today in the campaign's calendar, for a history entry.
 function _sktFactionDate(){
@@ -108,10 +113,18 @@ function sktFactionListHtml(fs){
 registerPanel('factions', {
   title: 'Factions', icon: '⚜',
   _open: null,
+  _fresh: null,    // the one "+ New faction" made, until something is in it
   mount(body){ this._body = body; this._render(); },
-  unmount(){ this._body = null; },
+  unmount(){ this._dropFresh(true); this._body = null; },
+  _dropFresh(closing){
+    const id = this._fresh; if (!id || (!closing && this._open === id)) return;
+    this._fresh = null;
+    const f = sktFactions().find(x => x.id === id);
+    if (sktFactionBlank(f)){ sktFactionRemove(id); if (this._open === id) this._open = null; }
+  },
   _render(){
     const b = this._body; if (!b) return;
+    this._dropFresh(false);
     const f0 = document.activeElement && b.contains(document.activeElement) ? document.activeElement : null;
     const fk = f0 && f0.dataset.ff ? f0.dataset.ff : f0 && f0.dataset.fWhy != null ? 'why' : null;
     const sel = fk && 'selectionStart' in f0 ? [f0.selectionStart, f0.selectionEnd] : null;
@@ -155,7 +168,8 @@ registerPanel('factions', {
   },
   _wire(b){
     b.querySelector('[data-f-new]').addEventListener('click', () => {
-      const f = sktFactionAdd(); this._open = f.id; this._render();
+      this._dropFresh(true);
+      const f = sktFactionAdd(); this._open = f.id; this._fresh = f.id; this._render();
       const t = b.querySelector('.qst-card.open [data-ff="name"]'); if (t) t.focus();
     });
     b.querySelector('[data-f-starters]')?.addEventListener('click', () => {

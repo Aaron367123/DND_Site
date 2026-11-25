@@ -34,6 +34,12 @@ function sktQuestUpdate(id, patch){
   return q;
 }
 function sktQuestRemove(id){ _sktQuestsSave(sktQuests().filter(q => q.id !== id)); }
+// Nothing typed, no step written, never shown or finished: a "+ New quest"
+// clicked and left. Those stayed for good as "Untitled quest".
+function sktQuestBlank(q){
+  return !!q && !['title', 'giver', 'reward', 'summary', 'notes'].some(k => String(q[k] || '').trim())
+    && !(q.steps || []).some(s => s && String(s.text || '').trim()) && !q.shown && (q.status || 'active') === 'active';
+}
 const _sktQuestOrder = { active: 0, done: 1, failed: 2 };
 function _sktQuestSort(a, b){ return (_sktQuestOrder[a.status] || 0) - (_sktQuestOrder[b.status] || 0) || (b.at || 0) - (a.at || 0); }
 // What the players may see: shown quests, the DM's notes left out.
@@ -87,10 +93,20 @@ registerPanel('quests', {
   title: 'Quests', icon: '⚑',
   _view: 'active',
   _open: null,     // the quest being edited
+  _fresh: null,    // the one "+ New quest" made, until something is in it
   mount(body){ this._body = body; this._render(); },
-  unmount(){ this._body = null; },
+  unmount(){ this._dropFresh(true); this._body = null; },
+  // A new quest closed (or another opened, or the window shut) with nothing
+  // in it goes; one with anything in it stays.
+  _dropFresh(closing){
+    const id = this._fresh; if (!id || (!closing && this._open === id)) return;
+    this._fresh = null;
+    const q = sktQuests().find(x => x.id === id);
+    if (sktQuestBlank(q)){ sktQuestRemove(id); if (this._open === id) this._open = null; }
+  },
   _render(){
     const b = this._body; if (!b) return;
+    this._dropFresh(false);
     // Keep the field being typed in, and where in it, across a redraw.
     const f = document.activeElement && b.contains(document.activeElement) ? document.activeElement : null;
     const fk = f && (f.dataset.qf ? 'qf:' + f.dataset.qf : f.dataset.qsText ? 'qs:' + f.dataset.qsText : null);
@@ -141,7 +157,8 @@ registerPanel('quests', {
   },
   _wire(b){
     b.querySelector('[data-q-new]').addEventListener('click', () => {
-      const q = sktQuestAdd(); this._open = q.id; this._view = 'active'; this._render();
+      this._dropFresh(true);
+      const q = sktQuestAdd(); this._open = q.id; this._fresh = q.id; this._view = 'active'; this._render();
       const t = b.querySelector('.qst-card.open [data-qf="title"]'); if (t) t.focus();
     });
     b.querySelectorAll('[data-q-view]').forEach(x => x.addEventListener('click', () => { this._view = x.dataset.qView; this._render(); }));
