@@ -28807,6 +28807,78 @@ for (const cls of Object.keys(rule)) for (let L = 1; L <= 20; L++) for (const sc
         if (f0 == null) localStorage.removeItem('skt-factions-v1'); else localStorage.setItem('skt-factions-v1', f0);
       }
     }
+    // -- Round 591: Turn View heals with the pools that heal — Lay on Hands (points, to the creature picked; 5 more for Poisoned), Healing Light (d6s, no more than Cha), Warrior of the Gods (d12s, self), Wholeness of Body (Martial Arts die + Wis; 2014 3 × level). They spent the use and healed nobody. And an undo gives the use back --
+    if (!PLAYER){
+      const keepP = JSON.stringify(state.party), keepC = JSON.stringify(state.combatants), keepA = state.activeCombatantId, keepR = state.combatRound;
+      const T = panelDefs.turnview, keepAsk = window.showConfirm, keepModal = window.showModal, keepArm = T._armed;
+      try {
+        for (let k = 0; k < 100 && !(typeof _5eLoaded !== 'undefined' && _5eLoaded); k++) await sleep(100);
+        const R = await sktRulesLoad('2024'), R14 = await sktRulesLoad('2014');
+        const mk = (id, cls, sub, lv, ed) => { const b = Object.assign(sktBlankBuild(ed || '2024'), { name: id, cls, subclass: sub || '', level: lv, abilities: { method: 'manual', base: { str: 16, dex: 14, con: 14, int: 10, wis: 16, cha: 16 } } });
+          const pc = sktComputeCharacter(b, ed === '2014' ? R14 : R); pc.id = id; pc.name = id; pc.build = b; return pc; };
+        const pal = mk('r591p', 'paladin', '', 5), ally = mk('r591a', 'fighter', '', 5), wl = mk('r591w', 'warlock', 'Celestial', 5),
+              zl = mk('r591z', 'barbarian', 'Zealot', 3), mo = mk('r591m', 'monk', 'Open Hand', 6), mo14 = mk('r591n', 'monk', 'Open Hand', 6, '2014');
+        const all = [pal, ally, wl, zl, mo, mo14];
+        const start = (active) => {
+          state.party = JSON.parse(keepP).concat(JSON.parse(JSON.stringify(all)));
+          state.combatants = all.map((p, k) => ({ id: p.id, name: p.id, isPC: true, hp: 10, hpMax: 40, ac: 15, initiative: 20 - k, conditions: [] }));
+          state.party.forEach(p => { if (/^r591/.test(p.id)){ p.hp = 10; p.hpMax = 40; } });
+          state.combatRound = 1; state.activeCombatantId = active; T._actAs = null; T._armed = null; save(); };
+        const cb = id => state.combatants.find(c => c.id === id);
+        const pool = (id, n) => (state.party.find(p => p.id === id).resources.find(r => r.name === n) || {}).current;
+        const use = async (id, n) => { const a = T._activationsFor(T._order().find(c => c.id === id)).find(x => x.name === n); if (!a) return false; await T._useActivation(id, a.i); await sleep(30); return true; };
+        openPanel('turnview'); await sleep(200);
+        // Lay on Hands: 12 points to the ally picked
+        start('r591p'); const lp = pool('r591p', 'Lay on Hands');
+        T._armed = 'r591a'; window.showModal = async () => ({ n: 12 });
+        await use('r591p', 'Lay on Hands');
+        ok('Lay on Hands: the points asked for, to the creature picked, from the pool, as the Bonus Action', lp === 25 && cb('r591a').hp === 22 && pool('r591p', 'Lay on Hands') === 13 && cb('r591p').bonusUsed === true && cb('r591p').hp === 10,
+           JSON.stringify([lp, cb('r591a').hp, pool('r591p', 'Lay on Hands'), cb('r591p').bonusUsed, cb('r591p').hp]));
+        sktUndo(); await sleep(30);
+        ok('…an undo gives the points and the Bonus Action back, and takes the hit points', cb('r591a').hp === 10 && pool('r591p', 'Lay on Hands') === 25 && !cb('r591p').bonusUsed, JSON.stringify([cb('r591a').hp, pool('r591p', 'Lay on Hands'), cb('r591p').bonusUsed]));
+        // Poisoned: 5 points end it
+        start('r591p'); cb('r591a').conditions = ['Poisoned']; T._armed = 'r591a';
+        let asked = null; window.showModal = async (t, f) => { asked = f.map(x => x.id); return { n: 0, cure: true }; };
+        await use('r591p', 'Lay on Hands');
+        ok('…on a poisoned creature it offers to end Poisoned for 5 points', JSON.stringify(asked) === '["n","cure"]' && !cb('r591a').conditions.includes('Poisoned') && pool('r591p', 'Lay on Hands') === 20 && cb('r591a').hp === 10,
+           JSON.stringify([asked, cb('r591a').conditions, pool('r591p', 'Lay on Hands'), cb('r591a').hp]));
+        // more than the pool holds: refused
+        start('r591p'); T._armed = 'r591a'; window.showModal = async () => ({ n: 30 });
+        await use('r591p', 'Lay on Hands');
+        ok('…more than the pool holds: refused, nothing spent', cb('r591a').hp === 10 && pool('r591p', 'Lay on Hands') === 25 && !cb('r591p').bonusUsed, JSON.stringify([cb('r591a').hp, pool('r591p', 'Lay on Hands'), cb('r591p').bonusUsed]));
+        // 3 left in the pool still heals 3
+        start('r591p'); state.party.find(p => p.id === 'r591p').resources.find(r => r.name === 'Lay on Hands').current = 3;
+        window.showModal = async () => ({ n: 3 });
+        await use('r591p', 'Lay on Hands');
+        ok('…with 3 left in the pool it heals 3 (no one picked: the paladin)', cb('r591p').hp === 13 && pool('r591p', 'Lay on Hands') === 0, JSON.stringify([cb('r591p').hp, pool('r591p', 'Lay on Hands')]));
+        // Healing Light: no more dice than the Charisma modifier (+3)
+        start('r591w'); T._armed = 'r591a'; const hl = pool('r591w', 'Healing Light');
+        window.showModal = async () => ({ n: 5, roll: 14 });
+        await use('r591w', 'Healing Light');
+        ok('Healing Light: the roll typed in, to the creature picked; no more d6s spent than the Charisma modifier', hl === 6 && cb('r591a').hp === 24 && pool('r591w', 'Healing Light') === 3,
+           JSON.stringify([hl, cb('r591a').hp, pool('r591w', 'Healing Light')]));
+        // Warrior of the Gods: the pool's d12s, on the barbarian
+        start('r591z'); T._armed = 'r591a'; const wg = pool('r591z', 'Warrior of the Gods');
+        window.showModal = async () => ({ n: 2, roll: 15 });
+        await use('r591z', 'Warrior of the Gods');
+        ok('Warrior of the Gods: two of the d12s, the roll, on the barbarian (not the one picked)', wg === 4 && cb('r591z').hp === 25 && cb('r591a').hp === 10 && pool('r591z', 'Warrior of the Gods') === 2,
+           JSON.stringify([wg, cb('r591z').hp, cb('r591a').hp, pool('r591z', 'Warrior of the Gods')]));
+        // Wholeness of Body (2024): Martial Arts die + Wisdom
+        start('r591m'); window.showConfirm = async () => 4; const wb = pool('r591m', 'Wholeness of Body');
+        await use('r591m', 'Wholeness of Body');
+        ok('Wholeness of Body (2024): the Martial Arts die rolled + the Wisdom modifier, on the monk', cb('r591m').hp === 17 && pool('r591m', 'Wholeness of Body') === wb - 1, JSON.stringify([cb('r591m').hp, wb, pool('r591m', 'Wholeness of Body')]));
+        // Wholeness of Body (2014): three times the monk level
+        start('r591n');
+        const had = await use('r591n', 'Wholeness of Body');
+        ok('Wholeness of Body (2014): three times the monk level', had && cb('r591n').hp === 28 && pool('r591n', 'Wholeness of Body') === 0, JSON.stringify([had, cb('r591n').hp, pool('r591n', 'Wholeness of Body')]));
+        // any feature: an undo gives its use back
+        start('r591a'); window.showConfirm = async () => true; const sw = pool('r591a', 'Second Wind');
+        await use('r591a', 'Second Wind'); sktUndo(); await sleep(30);
+        ok('an undo of Second Wind gives its use back with the hit points', pool('r591a', 'Second Wind') === sw && cb('r591a').hp === 10, JSON.stringify([sw, pool('r591a', 'Second Wind'), cb('r591a').hp]));
+      } catch(e){ ok('round 591 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
+      finally { window.showConfirm = keepAsk; window.showModal = keepModal; T._armed = keepArm;
+        state.party = JSON.parse(keepP); state.combatants = JSON.parse(keepC); state.activeCombatantId = keepA; state.combatRound = keepR; save(); }
+    }
     // -- Class features: represented, not just text ------------------------
     {
       try {

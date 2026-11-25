@@ -548,7 +548,7 @@ registerPanel('turnview', {
     // An untracked pool is not a blocker, for the same reason _costProblem
     // does not treat one as one: refusing something the character really has
     // because nobody typed the pool in would be worse than allowing it.
-    if (a.pool && a.pool.current < (a.amount || 1)) return 'no ' + a.res.toLowerCase() + ' left';
+    if (a.pool && a.pool.current < (/^Lay on Hands$/i.test(a.name) ? 1 : (a.amount || 1))) return 'no ' + a.res.toLowerCase() + ' left';
     if (/^Rage$/i.test(a.name) && c.isPC && (this._partyOf(c) || {}).rage) return 'already raging';
     return null;
   },
@@ -751,6 +751,74 @@ registerPanel('turnview', {
       heal = { amt: Math.max(0, r.total + wis), detail: (r.detail || die + ' ' + r.total) + (wis ? (wis > 0 ? ' + ' : ' − ') + Math.abs(wis) : ''), tgt,
         cure: (sh.featureList || []).some(f => f && /^Physician.s Touch$/.test(f.name) && !f.info) };
     }
+    // A pool spent on healing, as much of it as is wanted: Lay on Hands (hit
+    // points from the pool — and 5 more to end Poisoned), Healing Light (d6s
+    // from the pool, no more than the Charisma modifier), Warrior of the Gods
+    // (the pool's d12s, on the barbarian). And Wholeness of Body: the Martial
+    // Arts die + Wisdom (2014: three times the monk level), on the monk. Each
+    // spent its use and healed nobody. The creature picked on the right, or
+    // the one using it.
+    let cost = a.amount || 1;
+    const ph = who.isPC && a.pool ? /^(Lay on Hands|Healing Light|Warrior of the Gods)$/i.exec(a.name) : null;
+    const wob = who.isPC && /^Wholeness of Body$/i.test(a.name);
+    if (ph || wob){
+      const p = this._partyOf(who), sh = (p && p.sheet) || {}, AB = (p && p.abilities) || {};
+      const mod = k => Math.floor(((+AB[k] || 10) - 10) / 2);
+      const self = /^Warrior of the Gods$/i.test(a.name) || wob;
+      const tgt = self ? who : (this._order().find(x => x.id === this._armed && !x.dead) || who);
+      const cb = state.combatants.find(x => x.id === tgt.id) || tgt;
+      const missing = Math.max(0, (+cb.hpMax || 0) - (+cb.hp || 0));
+      const on = tgt.id === who.id ? '' : ' on ' + tgt.name;
+      if (ph && /^Lay on Hands$/i.test(a.name)){
+        const left = a.pool.current, poisoned = (cb.conditions || []).some(x => /^poisoned$/i.test(String(x)));
+        let n = typeof typed === 'number' ? typed : null, cure = false;
+        if (n == null && typeof showModal === 'function'){
+          const f = [{ id: 'n', label: 'Hit points to restore' + on + ' (' + left + ' in the pool)', type: 'number', value: Math.min(left, missing || left), min: 0, max: left }];
+          if (poisoned) f.push({ id: 'cure', type: 'checkbox', label: 'End the Poisoned condition too (5 more points)', value: left >= 5 });
+          const r = await showModal(a.name, f, 'Heal');
+          if (!r) return;
+          n = Math.max(0, Math.floor(+r.n || 0)); cure = !!r.cure;
+        }
+        if (n == null) n = Math.min(left, missing || left);
+        cost = n + (cure ? 5 : 0);
+        if (!cost){ this._setResult(`<span class="dim">${esc(who.name)} restores nothing.</span>`, true); this._render(); return; }
+        if (cost > left){ this._setResult(`<span class="dim">${esc(who.name)} has only ${left} in the Lay on Hands pool.</span>`, true); this._render(); return; }
+        heal = { amt: n, detail: cost + ' from the pool' + (cure ? ', 5 of them for the poison' : ''), tgt, curePoison: cure };
+      } else if (ph){
+        const die = String(a.pool.die || (/^Healing Light$/i.test(a.name) ? 'd6' : 'd12')).replace(/^\d*/, '');
+        const most = /^Healing Light$/i.test(a.name) ? Math.min(a.pool.current, Math.max(1, mod('cha'))) : a.pool.current;
+        const avg = (+die.slice(1) + 1) / 2;
+        let n = Math.min(most, Math.max(1, Math.ceil(missing / avg))), roll = typeof typed === 'number' ? typed : null;
+        if (roll == null && typeof showModal === 'function'){
+          const r = await showModal(a.name, [
+            { id: 'n', label: 'How many ' + die + 's' + on + ' (up to ' + most + ')', type: 'number', value: n, min: 1, max: most },
+            { id: 'roll', label: 'Their roll, all the dice together (blank: roll it here)', type: 'number', min: 0 }], 'Heal');
+          if (!r) return;
+          n = Math.max(1, Math.min(most, Math.floor(+r.n || 1)));
+          if (+r.roll > 0) roll = +r.roll;
+        }
+        cost = n;
+        const r = roll != null ? { total: roll, detail: n + die + ' ' + roll + ' (theirs)' } : sktRollDice(n + die);
+        heal = { amt: r.total, detail: r.detail || (n + die + ' ' + r.total), tgt };
+      } else if (this._edOf(who) === '2014'){
+        const lvl = ((sh.classLevels || []).find(x => x.cls === 'monk') || {}).level || (p && p.level) || 1;
+        heal = { amt: 3 * lvl, detail: '3 × monk level ' + lvl, tgt };
+      } else {
+        const ma = (sh.activations || []).find(x => /^Unarmed Strike \(Martial Arts\)/.test(x.name));
+        const lvl = ((sh.classLevels || []).find(x => x.cls === 'monk') || {}).level || (p && p.level) || 1;
+        const die = ((ma && /^\d*d\d+/.exec(String(ma.dice || ''))) || [])[0] || ['1d6', '1d8', '1d10', '1d12'][lvl >= 17 ? 3 : lvl >= 11 ? 2 : lvl >= 5 ? 1 : 0];
+        const wis = mod('wis');
+        let n = typeof typed === 'number' ? typed : null;
+        if (n == null && typed !== 'roll' && typeof showConfirm === 'function'){
+          const v = await showConfirm(who.name + ' uses ' + a.name + ': ' + die + (wis ? (wis > 0 ? ' + ' : ' − ') + Math.abs(wis) : '') + ' hit points.', { title: a.name, confirmLabel: 'Heal',
+            input: { label: 'Their ' + die + ' roll (blank: roll it here)', min: 1, max: 12 } });
+          if (v === false) return;
+          if (typeof v === 'number') n = v;
+        }
+        const r = n != null ? { total: n, detail: die + ' ' + n + ' (theirs)' } : sktRollDice(die);
+        heal = { amt: Math.max(1, r.total + wis), detail: (r.detail || die + ' ' + r.total) + (wis ? (wis > 0 ? ' + ' : ' − ') + Math.abs(wis) : ''), tgt };
+      }
+    }
     // Speedy Recovery (2024 Durable): a Bonus Action that spends one Hit Point
     // Die and heals its roll. It spent the bonus action and nothing else —
     // no die gone, no hit points back.
@@ -767,14 +835,16 @@ registerPanel('turnview', {
       }
       speedy = { pi: state.party.indexOf(p), n, die: pools[0].die };
     }
+    const flag = this._actFlag(a);
+    // The snapshot before the use is spent: an undo gave back the action and
+    // the hit points, and not the use — Second Wind's, a Focus Point, a Rage.
+    this._snapshot(`${who.name} · ${a.name}`);
     let spent = '';
     if (a.pool){
-      a.pool.current = Math.max(0, a.pool.current - (a.amount || 1));
+      a.pool.current = Math.max(0, a.pool.current - cost);
       spent = ` · ${a.res} ${a.pool.current}/${a.pool.max}`;
       panelDefs.party?._render?.();
     }
-    const flag = this._actFlag(a);
-    this._snapshot(`${who.name} · ${a.name}`);
     if (flag) who[flag] = true;
     // Rage: the party card's own switch, as the sheet's is — its damage and
     // its resistances read that. Only the use was spent here before, so a
@@ -851,6 +921,10 @@ registerPanel('turnview', {
       let now = state.combatants[i] || tg;
       extra = ' — ' + (tg.id === who.id ? '' : '<strong>' + esc(tg.name) + '</strong> ') + 'regains <strong>' + Math.max(0, (now.hp || 0) - before) + '</strong> hit points <span class="dim">(' + esc(heal.detail) + ')</span>'
         + (heal.refill ? ' and all its ' + esc(heal.refill) : '');
+      if (heal.curePoison && C && i >= 0){
+        const cond = ((state.combatants[i] || {}).conditions || []).find(x => /^poisoned$/i.test(String(x)));
+        if (cond){ C._removeCond(i, cond); extra += ' and is no longer poisoned'; }
+      }
       if (heal.cure && C && i >= 0){
         const cond = ['paralyzed', 'stunned', 'blinded', 'poisoned', 'deafened'].map(k => (now.conditions || []).find(x => String(x).toLowerCase() === k)).find(Boolean);
         if (cond){ C._removeCond(i, cond); extra += ' and is no longer ' + esc(String(cond).toLowerCase()) + ' (Physician’s Touch)'; }
