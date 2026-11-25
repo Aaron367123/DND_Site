@@ -524,6 +524,18 @@ registerPanel('turnview', {
       return { ...a, i, res, pool: res ? this._pool(c, res) : null };
     });
   },
+  // A feature that is used on a hit, from the hit's offers (_pcExtraOptions):
+  // Stunning Strike, Hand of Harm, Divine Smite and Paladin's Smite, and a
+  // strike's extra damage with no action of its own (Psionic Strike, a Gloom
+  // Stalker's Dreadful Strike). Not one with its own action to take first
+  // (Giant's Might, Slayer's Prey, Elemental Cleaver).
+  _onHitFeature(who, a){
+    if (!who || !who.isPC || !a) return false;
+    if (/^(Stunning Strike|Hand of Harm|Divine Smite|Paladin.s Smite)$/i.test(a.name)) return true;
+    if (!/^(Free|Special|)$/i.test(String(a.action || ''))) return false;
+    const sh = (this._partyOf(who) || {}).sheet || {};
+    return (sh.extraDamage || []).some(x => x && x.dice && x.label === a.name);
+  },
   // Which of action / bonus action / reaction this consumes, as the flag the
   // rest of the panel already tracks. Null for anything else — "Special" is
   // the sheet saying it does not fit the action economy, not an error.
@@ -624,6 +636,13 @@ registerPanel('turnview', {
     if (problem){
       this._setResult(`<span class="dim">${esc(who.name)} can't — ${esc(problem)}.</span>`, true);
       return;
+    }
+    // Used on a hit, and offered under the hit once one lands: pressed here
+    // it spent the Focus Point, the free smite or the use and did nothing —
+    // and the hit's offer then had none left to spend.
+    if (who.isPC && typed !== 'applied' && this._onHitFeature(who, a)){
+      this._setResult(`<span class="dim">${esc(a.name)} is used on a hit — it’s offered under the hit once one lands. Nothing spent.</span>`, true);
+      this._render(); return;
     }
     // A spell slot for a use back (Regain Wild Shape, Regain Bardic
     // Inspiration): it spent nothing and gave nothing back.

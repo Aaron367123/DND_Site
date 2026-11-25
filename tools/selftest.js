@@ -29027,6 +29027,39 @@ for (const cls of Object.keys(rule)) for (let L = 1; L <= 20; L++) for (const sc
       finally { window.showConfirm = keepAsk;
         state.party = JSON.parse(keepP); state.combatants = JSON.parse(keepC); state.activeCombatantId = keepA; state.combatRound = keepR; save(); }
     }
+    // -- Round 595: Turn View's feature buttons for what is used on a hit — Stunning Strike, Divine Smite, Psionic Strike — spend nothing and say where it is (they spent the Focus Point or the free smite and did nothing, leaving the hit's offer none); Giant's Might, with its own Bonus Action, still goes on --
+    if (!PLAYER){
+      const keepP = JSON.stringify(state.party), keepC = JSON.stringify(state.combatants), keepA = state.activeCombatantId, keepR = state.combatRound;
+      const T = panelDefs.turnview;
+      try {
+        for (let k = 0; k < 100 && !(typeof _5eLoaded !== 'undefined' && _5eLoaded); k++) await sleep(100);
+        const R = await sktRulesLoad('2024'), R14 = await sktRulesLoad('2014');
+        const mk = (id, cls, sub, lv, ed) => { const b = Object.assign(sktBlankBuild(ed || '2024'), { name: id, cls, subclass: sub || '', level: lv, abilities: { method: 'manual', base: { str: 16, dex: 14, con: 14, int: 10, wis: 16, cha: 16 } } });
+          const pc = sktComputeCharacter(b, ed === '2014' ? R14 : R); pc.id = id; pc.name = id; pc.build = b; return pc; };
+        const all = [mk('r595m', 'monk', 'Open Hand', 5), mk('r595p', 'paladin', 'Devotion', 5), mk('r595f', 'fighter', 'Psi Warrior', 3), mk('r595g', 'fighter', 'Rune Knight', 3, '2014')];
+        const start = (active) => {
+          state.party = JSON.parse(keepP).concat(JSON.parse(JSON.stringify(all)));
+          state.combatants = all.map((p, k) => ({ id: p.id, name: p.id, isPC: true, hp: 30, hpMax: 40, ac: 15, initiative: 20 - k, conditions: [] }));
+          state.combatRound = 1; state.activeCombatantId = active; T._actAs = null; save(); };
+        const cb = id => state.combatants.find(c => c.id === id);
+        const pool = (id, n) => (state.party.find(p => p.id === id).resources.find(r => r.name === n) || {}).current;
+        const use = async (id, n) => { const a = T._activationsFor(T._order().find(c => c.id === id)).find(x => x.name === n); if (!a) return false; await T._useActivation(id, a.i); await sleep(30); return true; };
+        openPanel('turnview'); await sleep(200);
+        start('r595m'); const fp = pool('r595m', 'Focus Points');
+        const h1 = await use('r595m', 'Stunning Strike');
+        ok('Stunning Strike’s button: no Focus Point spent, and it says the hit offers it', h1 && pool('r595m', 'Focus Points') === fp && /used on a hit/.test(T._result), JSON.stringify([h1, fp, pool('r595m', 'Focus Points'), T._result]));
+        start('r595p'); const sm = pool('r595p', 'Paladin’s Smite') ?? pool('r595p', "Paladin's Smite");
+        const h2 = await use('r595p', 'Divine Smite');
+        ok('…Divine Smite’s: the free smite and the Bonus Action kept', h2 && (pool('r595p', 'Paladin’s Smite') ?? pool('r595p', "Paladin's Smite")) === sm && !cb('r595p').bonusUsed, JSON.stringify([h2, sm, cb('r595p').bonusUsed, T._result]));
+        start('r595f'); const pe = pool('r595f', 'Psionic Energy');
+        const h3 = await use('r595f', 'Psionic Strike');
+        ok('…Psionic Strike’s: no Psionic Energy spent', h3 && pool('r595f', 'Psionic Energy') === pe, JSON.stringify([h3, pe, pool('r595f', 'Psionic Energy')]));
+        start('r595g'); const gm = pool('r595g', "Giant's Might");
+        const h4 = await use('r595g', "Giant's Might");
+        ok('…Giant’s Might, with its own Bonus Action, is still used from its button', h4 && pool('r595g', "Giant's Might") === gm - 1 && cb('r595g').bonusUsed === true, JSON.stringify([h4, gm, pool('r595g', "Giant's Might"), cb('r595g').bonusUsed]));
+      } catch(e){ ok('round 595 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
+      finally { state.party = JSON.parse(keepP); state.combatants = JSON.parse(keepC); state.activeCombatantId = keepA; state.combatRound = keepR; save(); }
+    }
     // -- Class features: represented, not just text ------------------------
     {
       try {
