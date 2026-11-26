@@ -29574,6 +29574,48 @@ for (const cls of Object.keys(rule)) for (let L = 1; L <= 20; L++) for (const sc
       } catch(e){ ok('round 611 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
       finally { state.party = JSON.parse(keepP); state.combatants = JSON.parse(keepC); state.activeCombatantId = keepA; save(); }
     }
+    // -- Round 612: a goliath's Giant Ancestry is offered on a hit — Fire's Burn (1d10 fire), Frost's Chill (1d6 cold and slowed), Hill's Tumble (Prone, Large or smaller) — a use spent; its button spends nothing and says the hit offers it --
+    if (!PLAYER){
+      const keepP = JSON.stringify(state.party), keepC = JSON.stringify(state.combatants), keepA = state.activeCombatantId, keepR = state.combatRound, keepD = window.sktD;
+      const T = panelDefs.turnview, C = panelDefs.combat;
+      try {
+        const find = (n, s) => _5eData.find(r => r.cat === 'monster' && r.name === n && r._source === s) || _5eData.find(r => r.cat === 'monster' && r.name === n);
+        const gol = (id, k) => ({ id, name: id, hp: 40, hpMax: 40, ac: 16, rules: '2024', sheet: { attacks: [{ name: 'Greatsword', atkBonus: '+6', damage: '2d6+3 slashing' }], activations: [{ name: 'Giant Ancestry (' + k + ')', action: 'Special', resource: 'Giant Ancestry (' + k + ')', amount: 1 }] },
+          resources: [{ name: 'Giant Ancestry (' + k + ')', type: 'pool', current: 3, max: 3, recharge: 'long' }] });
+        state.party = JSON.parse(keepP).concat([gol('r612f', 'Fire'), gol('r612i', 'Frost'), gol('r612h', 'Hill')]);
+        const start = (id, mon) => {
+          state.combatants = [{ id, name: id, isPC: true, hp: 40, hpMax: 40, ac: 16, initiative: 20, conditions: [] }];
+          C.addMonster(find(mon, 'MM')); const m = state.combatants[1]; m.hp = 300; m.hpMax = 300; m.ac = 5;
+          state.combatRound = 1; state.activeCombatantId = id; T._actAs = null; save(); return m; };
+        const pool = id => state.party.find(p => p.id === id).resources[0].current;
+        const hit = async (id, m) => { const c = state.combatants.find(x => x.id === id); const ai = T._attacksFor(c).findIndex(a => a.name === 'Greatsword'); T._rollAttack(ai, { attacker: c, target: m, mode: 0 }); await sleep(30); };
+        openPanel('turnview'); await sleep(200);
+        window.sktD = n => (n === 20 ? 15 : 4);
+        let m = start('r612f', 'Ogre'); await hit('r612f', m);
+        let o = T._pcExtraOptions(T._lastPcHit).find(x => x.key === 'ga');
+        const hp0 = state.combatants.find(x => x.id === m.id).hp;
+        T._usePcExtra('ga'); await sleep(30);
+        ok('Fire’s Burn: offered on the hit, 1d10 fire on top, a use spent', !!o && o.label === 'Fire’s Burn' && hp0 - state.combatants.find(x => x.id === m.id).hp === 4 && pool('r612f') === 2,
+           JSON.stringify([o && o.label, hp0, state.combatants.find(x => x.id === m.id).hp, pool('r612f')]));
+        m = start('r612i', 'Ogre'); await hit('r612i', m);
+        T._usePcExtra('ga'); await sleep(30);
+        ok('Frost’s Chill: and the target is slowed', !!(state.combatants.find(x => x.id === m.id).slowed) && pool('r612i') === 2, JSON.stringify([state.combatants.find(x => x.id === m.id).slowed, pool('r612i')]));
+        m = start('r612h', 'Ogre'); await hit('r612h', m);
+        ok('Hill’s Tumble: offered against a Large ogre', T._pcExtraOptions(T._lastPcHit).some(x => x.key === 'ga' && x.label === 'Hill’s Tumble'), '');
+        m = start('r612h', 'Hill Giant'); await hit('r612h', m);
+        ok('…not against a Huge giant', !T._pcExtraOptions(T._lastPcHit).some(x => x.key === 'ga'), '');
+        // the button
+        const R = await sktRulesLoad('2024');
+        const gb = Object.assign(sktBlankBuild('2024'), { name: 'r612g', cls: 'fighter', level: 5, species: 'Goliath', subspecies: 'Fire Giant Ancestry', speciesChoice: { lineage: 'Fire Giant Ancestry', ancestry: 'Fire Giant Ancestry', legacy: 'Fire Giant Ancestry' }, abilities: { method: 'manual', base: { str: 16, dex: 14, con: 14, int: 10, wis: 10, cha: 10 } } });
+        const g = sktComputeCharacter(gb, R); g.id = 'r612g'; g.name = 'r612g'; g.build = gb; state.party.push(g);
+        start('r612g', 'Ogre');
+        const gp = () => (state.party.find(p => p.id === 'r612g').resources.find(r => r.name === 'Giant Ancestry (Fire)') || {}).current;
+        const a = T._activationsFor(T._order().find(c => c.id === 'r612g')).find(x => x.name === 'Giant Ancestry (Fire)');
+        const before = gp(); if (a){ await T._useActivation('r612g', a.i); await sleep(30); }
+        ok('…its button spends nothing and says the hit offers it', !!a && gp() === before && /used on a hit/.test(T._result), JSON.stringify([!!a, before, gp(), T._result]));
+      } catch(e){ ok('round 612 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
+      finally { window.sktD = keepD; state.party = JSON.parse(keepP); state.combatants = JSON.parse(keepC); state.activeCombatantId = keepA; state.combatRound = keepR; save(); }
+    }
     // -- Class features: represented, not just text ------------------------
     {
       try {

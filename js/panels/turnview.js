@@ -532,7 +532,7 @@ registerPanel('turnview', {
   // (Giant's Might, Slayer's Prey, Elemental Cleaver).
   _onHitFeature(who, a){
     if (!who || !who.isPC || !a) return false;
-    if (/^(Stunning Strike|Hand of Harm|Divine Smite|Paladin.s Smite|Fury of the Small)$/i.test(a.name)) return true;
+    if (/^(Stunning Strike|Hand of Harm|Divine Smite|Paladin.s Smite|Fury of the Small|Giant Ancestry \((?:Fire|Frost|Hill)\))$/i.test(a.name)) return true;
     if (!/^(Free|Special|)$/i.test(String(a.action || ''))) return false;
     const sh = (this._partyOf(who) || {}).sheet || {};
     return (sh.extraDamage || []).some(x => x && x.dice && x.label === a.name);
@@ -5127,6 +5127,21 @@ registerPanel('turnview', {
           why: t.name + ' is ' + tSize + ', larger than you (' + fury.current + ' left)' });
       }
     }
+    // A goliath's Giant Ancestry, on a hit: Fire's Burn (1d10 fire), Frost's
+    // Chill (1d6 cold, its Speed 10 lower until the start of your next turn),
+    // Hill's Tumble (a Large or smaller creature knocked Prone). Its button
+    // spent a use and did nothing; the hit offered none.
+    const ga = (p.resources || []).find(r => r && /^Giant Ancestry \((Fire|Frost|Hill)\)$/.test(r.name) && (+r.current || 0) > 0);
+    if (ga){
+      const k = /\((\w+)\)/.exec(ga.name)[1], left = ' (' + ga.current + ' left)';
+      if (k === 'Fire') out.push({ key: 'ga', label: 'Fire’s Burn', dice: '1d10', type: 'fire', ok: true, res: ga.name, why: 'Giant Ancestry' + left });
+      if (k === 'Frost') out.push({ key: 'ga', label: 'Frost’s Chill', dice: '1d6', type: 'cold', ok: true, res: ga.name, slowT: true, why: 'Giant Ancestry: and its Speed 10 lower until the start of your next turn' + left });
+      if (k === 'Hill'){
+        const SZ = ['tiny', 'small', 'medium', 'large', 'huge', 'gargantuan'];
+        const tSize = String(t.isPC ? (((this._partyOf(t) || {}).sheet || {}).size || 'Medium') : ((((this._entryOf(t) || {})._raw) || {}).size || t.size || 'Medium')).toLowerCase().split(/\s/)[0];
+        if (SZ.indexOf(tSize) <= SZ.indexOf('large')) out.push({ key: 'ga', label: 'Hill’s Tumble', dice: '', ok: true, res: ga.name, queue: [{ cond: 'Prone' }], why: 'Giant Ancestry: knocked Prone' + left });
+      }
+    }
     // A Valor bard's die, held: Combat Inspiration — "roll the Bardic
     // Inspiration die and add the number rolled to a weapon's damage roll it
     // just made". Only its AC use was offered (the reaction, when hit).
@@ -5389,6 +5404,8 @@ registerPanel('turnview', {
     // Distracting Strike: someone else's next attack on it, before the
     // fighter's next turn.
     if (o.distract) t.distracted = { by: c.id, name: c.name };
+    // Frost's Chill: its Speed 10 lower until the start of the goliath's next turn.
+    if (o.slowT) t.slowed = { by: c.id };
     h.cun = [];
     const spent = pool ? ` · ${pool.name === 'Focus Points' ? '1 Focus Point' : /^Ki/.test(pool.name) ? '1 ki point' : 'a use of ' + pool.name} spent (${pool.current} left)` : '';
     if (!o.dice && !(o.picked || []).length){
