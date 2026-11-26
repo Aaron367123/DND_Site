@@ -5003,6 +5003,17 @@ registerPanel('turnview', {
           why: t.name + ' is ' + tSize + ', larger than you (' + fury.current + ' left)' });
       }
     }
+    // A Valor bard's die, held: Combat Inspiration — "roll the Bardic
+    // Inspiration die and add the number rolled to a weapon's damage roll it
+    // just made". Only its AC use was offered (the reaction, when hit).
+    if (p.bardicInspiration && weapon){
+      const giver = p.bardicFrom ? (state.party || []).find(b => b && b.name === p.bardicFrom && b.id !== p.id) : null;
+      if (giver && /valor/i.test(String(giver.subclass || (giver.build && giver.build.subclass) || ''))){
+        const die = typeof p.bardicInspiration === 'string' ? p.bardicInspiration.replace(/^1?d/, 'd') : 'd6';
+        out.push({ key: 'ci', label: 'Combat Inspiration', dice: '1' + die, type: h.type, ok: true, bardic: true, noCrit: true,
+          why: 'the ' + die + ' from ' + giver.name + ', added to the damage — and used up' });
+      }
+    }
     // A beast form's hit: Sneak Attack, a smite, Savage Attacker and the rest
     // are the character's, not the beast's. A Hunter's Mark or a Hex held
     // through the change still counts — "whenever you hit it with an attack".
@@ -5224,7 +5235,7 @@ registerPanel('turnview', {
       save(); panelDefs.combat?._render?.(); this._render();
       return;
     }
-    const r = o.dice ? sktDamageRoll(o.dice + (o.type && !/[a-z]{3,}/i.test(o.dice) ? ' ' + o.type : ''), h.crit) : { total: 0, detail: (o.picked || []).length ? 'every die spent on Cunning Strike' : '', type: '' };
+    const r = o.dice ? sktDamageRoll(o.dice + (o.type && !/[a-z]{3,}/i.test(o.dice) ? ' ' + o.type : ''), h.crit && !o.noCrit) : { total: 0, detail: (o.picked || []).length ? 'every die spent on Cunning Strike' : '', type: '' };
     const type = r.type || o.type || h.type || '';
     const before = t.hp;
     if (r.total) this._applyDamage(t, [{ amt: r.total, type }], h.magical || o.smite || key === 'hm' || key === 'hex', h.crit);
@@ -5235,6 +5246,8 @@ registerPanel('turnview', {
     // A Focus Point (or ki) spent.
     const pool = o.res && p ? (p.resources || []).find(x => x.name === o.res) : null;
     if (pool) pool.current = Math.max(0, (+pool.current || 0) - 1);
+    // (the Bardic Inspiration die is gone once rolled)
+    if (o.bardic && p){ p.bardicInspiration = false; p.bardicFrom = null; }
     // (2024: Divine Smite is a spell cast as a bonus action)
     if (o.smite && this._edOf(c) !== '2014') this._spend(c, 'bonusUsed');
     // Cunning Strike: a save-or-condition goes on the hit's queue (roll it

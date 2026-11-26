@@ -29341,6 +29341,38 @@ for (const cls of Object.keys(rule)) for (let L = 1; L <= 20; L++) for (const sc
       } catch(e){ ok('round 603 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
       finally { state.party = JSON.parse(keepP); state.combatants = JSON.parse(keepC); state.activeCombatantId = keepA; state.combatRound = keepR; save(); }
     }
+    // -- Round 604: Turn View: a Valor bard's die held (Combat Inspiration) is offered after a weapon hit, added to the damage and used up — only its AC use was there; not from another bard's die --
+    if (!PLAYER){
+      const keepP = JSON.stringify(state.party), keepC = JSON.stringify(state.combatants), keepA = state.activeCombatantId, keepR = state.combatRound, keepD = window.sktD;
+      const T = panelDefs.turnview, C = panelDefs.combat;
+      try {
+        const find = (n, s) => _5eData.find(r => r.cat === 'monster' && r.name === n && r._source === s) || _5eData.find(r => r.cat === 'monster' && r.name === n);
+        const ally = { id: 'r604f', name: 'R604 Fighter', hp: 40, hpMax: 40, ac: 18, rules: '2024', bardicInspiration: 'd8', bardicFrom: 'R604 Bard',
+          sheet: { attacks: [{ name: 'Longsword', atkBonus: '+6', damage: '1d8+3 slashing' }] } };
+        const bard = { id: 'r604b', name: 'R604 Bard', cls: 'bard', subclass: 'Valor', hp: 30, hpMax: 30, ac: 14, rules: '2024', sheet: {} };
+        state.party = JSON.parse(keepP).concat([ally, bard]);
+        state.combatants = [{ id: 'r604f', name: 'R604 Fighter', isPC: true, hp: 40, hpMax: 40, ac: 18, initiative: 20, conditions: [] }];
+        C.addMonster(find('Ogre', 'MM')); await sleep(20);
+        const get = id => state.combatants.find(c => c.id === id), ogre = state.combatants[1].id;
+        get(ogre).hp = 300; get(ogre).hpMax = 300; get(ogre).ac = 5;
+        state.combatRound = 1; state.activeCombatantId = 'r604f'; save();
+        openPanel('turnview'); await sleep(200);
+        window.sktD = n => (n === 20 ? 15 : 5);
+        const ai = T._attacksFor(get('r604f')).findIndex(a => a.name === 'Longsword');
+        T._rollAttack(ai, { attacker: get('r604f'), target: get(ogre), mode: 0 }); await sleep(30);
+        const o = T._pcExtraOptions(T._lastPcHit).find(x => x.key === 'ci');
+        ok('Combat Inspiration: offered after the weapon hit, the d8 held', !!o && o.dice === '1d8', JSON.stringify(o));
+        const hp0 = get(ogre).hp;
+        T._usePcExtra('ci'); await sleep(30);
+        const me = state.party.find(p => p.id === 'r604f');
+        ok('…rolled, added to the damage (5), and the die is used up', hp0 - get(ogre).hp === 5 && !me.bardicInspiration, JSON.stringify([hp0, get(ogre).hp, me.bardicInspiration]));
+        // another bard's die: no damage use
+        state.party.find(p => p.id === 'r604b').subclass = 'Lore'; me.bardicInspiration = 'd8'; me.bardicFrom = 'R604 Bard'; save();
+        T._rollAttack(ai, { attacker: get('r604f'), target: get(ogre), mode: 0 }); await sleep(30);
+        ok('…a Lore bard’s die: not offered for damage', !T._pcExtraOptions(T._lastPcHit).some(x => x.key === 'ci'), '');
+      } catch(e){ ok('round 604 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
+      finally { window.sktD = keepD; state.party = JSON.parse(keepP); state.combatants = JSON.parse(keepC); state.activeCombatantId = keepA; state.combatRound = keepR; save(); }
+    }
     // -- Class features: represented, not just text ------------------------
     {
       try {
