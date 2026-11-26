@@ -1965,6 +1965,8 @@ registerPanel('party',{
       c.exhaustion = Math.max(0, (+c.exhaustion || 0) - 1);
       // Concentration: dropped.
       c.concentration = null;
+      // A Bardic Inspiration die held: long gone (an hour at most).
+      if (c.bardicInspiration){ c.bardicInspiration = false; c.bardicFrom = null; }
       // Rage / Wild Shape: both end at any rest (rage lasts 1 minute;
       // wildshape ends at the druid's choice or when its hours expire).
       c.rage = false; c.rageRounds = null;
@@ -2037,6 +2039,9 @@ registerPanel('party',{
       if (!Object.keys(m.used).length) delete m.used;
     }));
     c.concentration = null;
+    // A Bardic Inspiration die held lasts an hour (2014: ten minutes): gone
+    // after a rest. It stayed for good.
+    if (c.bardicInspiration){ c.bardicInspiration = false; c.bardicFrom = null; }
     // A free cast that comes back on a short rest too (Aberrant Dragonmark).
     if (c.freeUsed){
       const sh = c.sheet || {};

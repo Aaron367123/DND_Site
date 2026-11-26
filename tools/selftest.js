@@ -29528,6 +29528,21 @@ for (const cls of Object.keys(rule)) for (let L = 1; L <= 20; L++) for (const sc
       } catch(e){ ok('round 609 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
       finally { window.sktD = keepD; T._armed = keepArm; state.party = JSON.parse(keepP); state.combatants = JSON.parse(keepC); state.activeCombatantId = keepA; state.combatRound = keepR; save(); }
     }
+    // -- Round 610: a Bardic Inspiration die held is gone after a short or a long rest (it lasts an hour, 2014 ten minutes) — it stayed for good --
+    if (!PLAYER){
+      const keepP = JSON.stringify(state.party);
+      try {
+        const P = panelDefs.party;
+        const mk = id => ({ id, name: id, hp: 20, hpMax: 20, ac: 12, rules: '2024', bardicInspiration: 'd8', bardicFrom: 'Zindle', sheet: {}, resources: [] });
+        state.party = JSON.parse(keepP).concat([mk('r610s'), mk('r610l')]); save();
+        const get = id => state.party.find(p => p.id === id);
+        P._shortRestOne(get('r610s'), state.party.findIndex(p => p.id === 'r610s'));
+        P._longRestOne(get('r610l'), state.party.findIndex(p => p.id === 'r610l'));
+        ok('a short rest: the Bardic Inspiration die held is gone', !get('r610s').bardicInspiration && !get('r610s').bardicFrom, JSON.stringify([get('r610s').bardicInspiration, get('r610s').bardicFrom]));
+        ok('a long rest: the same', !get('r610l').bardicInspiration && !get('r610l').bardicFrom, JSON.stringify([get('r610l').bardicInspiration, get('r610l').bardicFrom]));
+      } catch(e){ ok('round 610 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
+      finally { state.party = JSON.parse(keepP); save(); }
+    }
     // -- Class features: represented, not just text ------------------------
     {
       try {
