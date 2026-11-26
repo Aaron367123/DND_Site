@@ -29616,6 +29616,26 @@ for (const cls of Object.keys(rule)) for (let L = 1; L <= 20; L++) for (const sc
       } catch(e){ ok('round 612 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
       finally { window.sktD = keepD; state.party = JSON.parse(keepP); state.combatants = JSON.parse(keepC); state.activeCombatantId = keepA; state.combatRound = keepR; save(); }
     }
+    // -- Round 613: Turn View: a tabaxi's Feline Agility doubles its Speed for the turn (its Speed once more, as a Dash adds it) — only its use was spent --
+    if (!PLAYER){
+      const keepP = JSON.stringify(state.party), keepC = JSON.stringify(state.combatants), keepA = state.activeCombatantId, keepR = state.combatRound;
+      const T = panelDefs.turnview;
+      try {
+        for (let k = 0; k < 100 && !(typeof _5eLoaded !== 'undefined' && _5eLoaded); k++) await sleep(100);
+        const R = await sktRulesLoad('2024');
+        const b = Object.assign(sktBlankBuild('2024'), { name: 'r613', cls: 'rogue', level: 3, species: 'Tabaxi', allBooks: true, abilities: { method: 'manual', base: { str: 10, dex: 16, con: 14, int: 10, wis: 10, cha: 10 } } });
+        const pc = sktComputeCharacter(b, R); pc.id = 'r613'; pc.name = 'r613'; pc.build = b;
+        state.party = JSON.parse(keepP).concat([pc]);
+        state.combatants = [{ id: 'r613', name: 'r613', isPC: true, hp: 20, hpMax: 20, ac: 14, initiative: 20, conditions: [] }];
+        state.combatRound = 1; state.activeCombatantId = 'r613'; T._actAs = null; save();
+        openPanel('turnview'); await sleep(200);
+        const a = T._activationsFor(T._order().find(c => c.id === 'r613')).find(x => x.name === 'Feline Agility');
+        if (a){ await T._useActivation('r613', a.i); await sleep(30); }
+        const me = state.combatants.find(c => c.id === 'r613');
+        ok('Feline Agility: its Speed once more this turn, as a Dash adds it', !!a && me.dashes === 1 && !me.actionUsed && !me.bonusUsed && /Speed doubled/.test(T._result), JSON.stringify([!!a, me.dashes, me.actionUsed, me.bonusUsed, T._result]));
+      } catch(e){ ok('round 613 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
+      finally { state.party = JSON.parse(keepP); state.combatants = JSON.parse(keepC); state.activeCombatantId = keepA; state.combatRound = keepR; save(); }
+    }
     // -- Class features: represented, not just text ------------------------
     {
       try {

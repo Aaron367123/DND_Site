@@ -1112,6 +1112,12 @@ registerPanel('turnview', {
       al.forEach(x => { const live = state.combatants.find(y => y.id === x.id); if (live) live.zealous = { by: who.id, name: who.name }; });
       extra += al.length ? ' — advantage on attack rolls and saving throws for ' + al.map(x => esc(x.name)).join(', ') + ' until the start of its next turn' : ' — no one else on its side to inspire';
     }
+    // Feline Agility: "double your speed until the end of the turn" — its
+    // Speed once more, the way a Dash adds it. Only its use was spent.
+    if (a.name === 'Feline Agility'){
+      who.dashes = (who.dashes || 0) + 1;
+      extra += ' — its Speed doubled until the end of the turn';
+    }
     if (a.name === 'Fighting Spirit'){
       who.fspirit = this._turnKey();
       extra += ' — advantage on its weapon attacks this turn';
