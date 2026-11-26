@@ -29666,6 +29666,35 @@ for (const cls of Object.keys(rule)) for (let L = 1; L <= 20; L++) for (const sc
       } catch(e){ ok('round 614 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
       finally { window.sktD = keepD; state.party = JSON.parse(keepP); state.combatants = JSON.parse(keepC); state.activeCombatantId = keepA; state.combatRound = keepR; save(); }
     }
+    // -- Round 615: a spell cast from a magic item that its targets save against (a Wand of Fireballs' Fireball) puts the saves in Turn View, at the item's DC, as a spell from a slot does — it sent nothing --
+    if (!PLAYER){
+      const keepP = JSON.stringify(state.party), keepC = JSON.stringify(state.combatants), keepA = state.activeCombatantId, keepR = state.combatRound;
+      try {
+        for (let k = 0; k < 100 && !(typeof _5eLoaded !== 'undefined' && _5eLoaded); k++) await sleep(100);
+        const R = await sktRulesLoad('2024'), list = await sktMagicLoad('2024');
+        const e = list.find(x => x.name === 'Wand of Fireballs');
+        const it = sktMagicMake(R, e, ''); it.attuned = true; it.qty = 1;
+        const b = Object.assign(sktBlankBuild('2024'), { name: 'r615', cls: 'wizard', level: 9, abilities: { method: 'manual', base: { str: 10, dex: 14, con: 14, int: 18, wis: 12, cha: 10 } },
+          items: [it], equipment: { cls: 'A', bg: 'A', picks: {}, materialized: true } });
+        const pc = sktComputeCharacter(b, R); pc.id = 'r615'; pc.name = 'r615'; pc.build = b;
+        state.party = JSON.parse(keepP).concat([pc]);
+        state.combatants = [{ id: 'r615', name: 'r615', isPC: true, hp: 30, hpMax: 50, ac: 13, initiative: 20, conditions: [] }];
+        state.combatRound = 1; state.activeCombatantId = 'r615'; save();
+        openCharSheet('r615'); for (let k = 0; k < 40 && !(CS && CS.R); k++) await sleep(100);
+        csGoTab('actions'); await sleep(200);
+        for (let k = 0; k < 30 && !document.querySelector('#cs-root [data-cs-icast^="Wand of Fireballs|Fireball"]'); k++){ csRender(); await sleep(150); }
+        const btn = document.querySelector('#cs-root [data-cs-icast^="Wand of Fireballs|Fireball"]');
+        if (btn) btn.click(); await sleep(100);
+        csClose(); await sleep(30);
+        const me = state.party.find(p => p.id === 'r615'), rq = (me.castReq || [])[0];
+        const charges = (me.resources.find(r => r.name === 'Wand of Fireballs') || {}).current;
+        ok('a Wand of Fireballs’ Fireball: a charge spent, and the saves for Turn View — DEX, the wand’s DC 15, 8d6 fire, half on a save', !!btn && charges === 6 && !!rq && rq.spell === 'Fireball' && rq.ab === 'DEX' && rq.dc === 15 && /8d6/.test(rq.dice) && rq.half === true,
+           JSON.stringify([!!btn, charges, rq]));
+        const T = panelDefs.turnview; openPanel('turnview'); await sleep(200);
+        ok('…Turn View shows it to run', T._castReqs().some(x => x.p.id === 'r615' && x.r.spell === 'Fireball'), JSON.stringify(T._castReqs().map(x => x.r.spell)));
+      } catch(e){ ok('round 615 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
+      finally { try { csClose(); } catch(e){} state.party = JSON.parse(keepP); state.combatants = JSON.parse(keepC); state.activeCombatantId = keepA; state.combatRound = keepR; save(); }
+    }
     // -- Class features: represented, not just text ------------------------
     {
       try {

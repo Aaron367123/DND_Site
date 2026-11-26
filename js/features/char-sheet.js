@@ -2498,10 +2498,11 @@ function csSpellsClick(e, t, d, pc){
 // What the DM needs to run a cast spell's saves: the save, the caster's DC,
 // the damage at the slot it was cast with (and its type), and whether a
 // success halves it. Only a levelled spell, cast by someone in the fight.
-function csSaveRequest(p, s, lvl){
+function csSaveRequest(p, s, lvl, opts){
   if (!p || !s || !(s.level > 0)) return null;
   const ab = [].concat(s.savingThrow || [])[0]; if (!ab) return null;
-  const dc = parseInt((p.sheet || {}).spellSaveDc, 10); if (!(dc > 0)) return null;
+  // (an item's own DC — a Wand of Fireballs' 15 — when it gives one)
+  const dc = (opts && +opts.dc > 0) ? +opts.dc : parseInt((p.sheet || {}).spellSaveDc, 10); if (!(dc > 0)) return null;
   if (!(typeof state !== 'undefined' && (state.combatants || []).some(c => c && c.id === p.id))) return null;
   // The rolls its saves take, each with its type: both of Flame Strike's,
   // Ice Knife's burst rather than its shard.
@@ -3108,10 +3109,20 @@ function csItemClick(d, pc){
   }
   const parts = d.csIcast.split('|'), cost = +parts.pop() || 1, key = parts.pop(), spell = parts.pop(), name = parts.join('|');
   const s = csSpell(spell);
+  // A spell from an item that its targets save against (a Wand of
+  // Fireballs' Fireball): the DM's Turn View offers the saves, as a spell
+  // cast from a slot does — at the item's DC when it gives one. It sent
+  // nothing, and the DM ran the fireball by hand.
+  const mi = (csItems(pc) || []).find(x => x && x.name === name);
+  const idc = mi ? /\bsave DC (?:of |is )?(\d+)/i.exec(csItemInfo(mi).text || '') : null;
   let ok = true;
   csEdit('Cast ' + spell + ' from ' + name, p => {
     if (key && !spend(p, name, key, cost)){ ok = false; return; }
     if (s && s.concentration) p.concentration = csConcOn(p.concentration, s.name);
+    const rq = s && typeof csSaveRequest === 'function' ? csSaveRequest(p, s, s.level, { dc: idc ? +idc[1] : 0 }) : null;
+    if (rq){ rq.from = name; p.castReq = (p.castReq || []).slice(-2).concat([rq]); }
+    const t = s && [].concat(s.time || [])[0];
+    if (CS.embed && t && typeof paMarkEcon === 'function' && typeof paActKind === 'function') paMarkEcon(paActKind(t.unit));
   });
   if (ok && typeof showToast === 'function') showToast('Cast ' + spell + ' from ' + name);
   return true;
