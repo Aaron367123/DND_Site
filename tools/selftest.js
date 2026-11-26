@@ -29251,6 +29251,41 @@ for (const cls of Object.keys(rule)) for (let L = 1; L <= 20; L++) for (const sc
       finally { window.showConfirm = keepAsk; T._armed = keepArm;
         state.party = JSON.parse(keepP); state.combatants = JSON.parse(keepC); state.activeCombatantId = keepA; state.combatRound = keepR; save(); }
     }
+    // -- Round 601: Turn View: features that give their user temporary hit points do — Patient Defense at 10th (two Martial Arts dice), Tireless (1d8 + Wis), Form of Dread (1d10 + warlock level), Symbiotic Entity (4 × druid level), Fighting Spirit (15 at fighter 15); the higher stays --
+    if (!PLAYER){
+      const keepP = JSON.stringify(state.party), keepC = JSON.stringify(state.combatants), keepA = state.activeCombatantId, keepR = state.combatRound;
+      const T = panelDefs.turnview, keepAsk = window.showConfirm;
+      try {
+        for (let k = 0; k < 100 && !(typeof _5eLoaded !== 'undefined' && _5eLoaded); k++) await sleep(100);
+        const R = await sktRulesLoad('2024'), R14 = await sktRulesLoad('2014');
+        const mk = (id, cls, sub, lv, ed) => { const b = Object.assign(sktBlankBuild(ed || '2024'), { name: id, cls, subclass: sub || '', level: lv, abilities: { method: 'manual', base: { str: 16, dex: 14, con: 14, int: 10, wis: 16, cha: 16 } } });
+          const pc = sktComputeCharacter(b, ed === '2014' ? R14 : R); pc.id = id; pc.name = id; pc.build = b; return pc; };
+        const all = [mk('r601m', 'monk', 'Open Hand', 10), mk('r601r', 'ranger', 'Hunter', 10), mk('r601w', 'warlock', 'Undead', 6, '2014'), mk('r601d', 'druid', 'Spores', 6, '2014'), mk('r601f', 'fighter', 'Samurai', 15, '2014')];
+        const start = active => {
+          state.party = JSON.parse(keepP).concat(JSON.parse(JSON.stringify(all)));
+          state.combatants = all.map((p, k) => ({ id: p.id, name: p.id, isPC: true, hp: 30, hpMax: 80, ac: 15, initiative: 30 - k, conditions: [] }));
+          state.combatRound = 1; state.activeCombatantId = active; T._actAs = null; save(); };
+        const tmp = id => +state.party.find(p => p.id === id).tempHp || 0;
+        const use = async (id, n) => { const a = T._activationsFor(T._order().find(c => c.id === id)).find(x => x.name === n); if (!a) return false; await T._useActivation(id, a.i); await sleep(30); return true; };
+        openPanel('turnview'); await sleep(200);
+        const cases = [['r601m', 'Patient Defense', 9, 9], ['r601r', 'Tireless', 4, 7], ['r601w', 'Form of Dread', 5, 11], ['r601d', 'Symbiotic Entity', null, 24], ['r601f', 'Fighting Spirit', null, 15]];
+        for (const [id, n, roll, want] of cases){
+          start(id); window.showConfirm = async () => roll == null ? true : roll;
+          const had = await use(id, n);
+          ok(n + ': ' + want + ' temporary hit points', had && tmp(id) === want, JSON.stringify([had, tmp(id), T._result]));
+        }
+        start('r601r'); state.party.find(p => p.id === 'r601r').tempHp = 20; save(); window.showConfirm = async () => 4;
+        await use('r601r', 'Tireless');
+        ok('…they don’t stack: 20 already there stays', tmp('r601r') === 20, JSON.stringify(tmp('r601r')));
+        start('r601m'); window.showConfirm = async () => 9;
+        await use('r601m', 'Patient Defense');
+        ok('…Patient Defense’s are two rolls of the Martial Arts die (2d8 at 10th)', /2d8/.test(T._result), T._result);
+        sktUndo(); await sleep(30);
+        ok('…an undo takes them back', tmp('r601m') === 0, JSON.stringify(tmp('r601m')));
+      } catch(e){ ok('round 601 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
+      finally { window.showConfirm = keepAsk;
+        state.party = JSON.parse(keepP); state.combatants = JSON.parse(keepC); state.activeCombatantId = keepA; state.combatRound = keepR; save(); }
+    }
     // -- Class features: represented, not just text ------------------------
     {
       try {

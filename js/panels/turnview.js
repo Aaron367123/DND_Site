@@ -914,6 +914,45 @@ registerPanel('turnview', {
       const r = n != null ? { total: n, detail: die + ' ' + n + ' (theirs)' } : sktRollDice(die);
       group = { p, total: r.total + plus, many, text: (r.detail || die + ' ' + r.total) + ' + ' + plus };
     }
+    // Temporary hit points the feature gives the one using it: Patient
+    // Defense at 10th level ("two rolls of your Martial Arts die"), Tireless
+    // ("1d8 + 3"), Form of Dread ("1d10 + your warlock level"), Symbiotic
+    // Entity ("4 … for each level"), Fighting Spirit (5, 10 at fighter level
+    // 10, 15 at 15). Only the use and the action were spent. They don't
+    // stack: the higher stays.
+    let temp = null;
+    const tt = String(a.desc || '');
+    if (who.isPC && !heal && !group && /temporary hit points/i.test(tt) && /\b(?:you (?:also |can )?gain|and gain|^gain)\b[^.]*temporary hit points/i.test(tt)){
+      const p = this._partyOf(who), sh = (p && p.sheet) || {}, AB = { strength: 'str', dexterity: 'dex', constitution: 'con', intelligence: 'int', wisdom: 'wis', charisma: 'cha' };
+      const mod = k => Math.floor((((p && p.abilities) || {})[k] || 10) / 2) - 5;
+      const lvlOf = n => (((sh.classLevels || []).find(x => x && x.cls === String(n || '').toLowerCase()) || {}).level) || (p && p.level) || 1;
+      const NUM = { two: 2, three: 3, four: 4, five: 5 };
+      let die = '', plus = 0, flat = null, m;
+      if (/two rolls of your Martial Arts die/i.test(tt)){
+        const ma = (sh.activations || []).find(x => /^Unarmed Strike \(Martial Arts\)/.test(x.name));
+        const L = lvlOf('monk');
+        die = '2' + (((ma && /d\d+/.exec(String(ma.dice || ''))) || [])[0] || ['d6', 'd8', 'd10', 'd12'][L >= 17 ? 3 : L >= 11 ? 2 : L >= 5 ? 1 : 0]);
+      } else if ((m = /gain (\d*d\d+) \+ (\d+) temporary hit points/i.exec(tt))){ die = m[1]; plus = +m[2]; }
+      else if ((m = /temporary hit points equal to (\d*d\d+) (?:\+|plus) your (\w+) (level|modifier)/i.exec(tt))){
+        die = m[1]; plus = m[3].toLowerCase() === 'level' ? lvlOf(m[2]) : AB[m[2].toLowerCase()] ? mod(AB[m[2].toLowerCase()]) : 0;
+      } else if ((m = /(\d+|two|three|four|five) temporary hit points for each level you have in this class/i.exec(tt))){
+        const f = (sh.featureList || []).find(x => x && (x.name === a.name || x.name === a.feature));
+        flat = (NUM[String(m[1]).toLowerCase()] || +m[1]) * lvlOf((f && f.cls) || ((sh.classLevels || [])[0] || {}).cls);
+      } else if (/^Fighting Spirit$/i.test(a.name)){ const L = lvlOf('fighter'); flat = L >= 15 ? 15 : L >= 10 ? 10 : 5; }
+      else if ((m = /gain (\d+) temporary hit points/i.exec(tt))) flat = +m[1];
+      if (die){
+        die = die.replace(/^d/, '1d');
+        let n = typeof typed === 'number' ? typed : null;
+        if (n == null && typed !== 'roll' && typeof showConfirm === 'function'){
+          const v = await showConfirm(who.name + ' uses ' + a.name + ': ' + die + (plus ? ' + ' + plus : '') + ' temporary hit points.', { title: a.name, confirmLabel: 'Roll it',
+            input: { label: 'Their ' + die + ' roll (blank: roll it here)', min: 1, max: 100 } });
+          if (v === false) return;
+          if (typeof v === 'number') n = v;
+        }
+        const r = n != null ? { total: n, detail: die + ' ' + n + ' (theirs)' } : sktRollDice(die);
+        temp = { p, n: Math.max(0, r.total + plus), detail: (r.detail || die + ' ' + r.total) + (plus ? ' + ' + plus : '') };
+      } else if (flat != null) temp = { p, n: flat, detail: '' };
+    }
     // Speedy Recovery (2024 Durable): a Bonus Action that spends one Hit Point
     // Die and heals its roll. It spent the bonus action and nothing else —
     // no die gone, no hit points back.
@@ -1024,6 +1063,12 @@ registerPanel('turnview', {
         const cond = ['paralyzed', 'stunned', 'blinded', 'poisoned', 'deafened'].map(k => (now.conditions || []).find(x => String(x).toLowerCase() === k)).find(Boolean);
         if (cond){ C._removeCond(i, cond); extra += ' and is no longer ' + esc(String(cond).toLowerCase()) + ' (Physician’s Touch)'; }
       }
+    }
+    if (temp && temp.p){
+      const had = +temp.p.tempHp || 0;
+      if (temp.n > had) temp.p.tempHp = temp.n;
+      extra += ' — <strong>' + temp.n + '</strong> temporary hit points' + (temp.n > had ? '' : ' (it keeps its ' + had + ': they don’t stack)') + (temp.detail ? ' <span class="dim">(' + esc(temp.detail) + ')</span>' : '');
+      panelDefs.party?._render?.();
     }
     if (group && group.p){
       group.p.rolls = [{ label: a.name + ' heals', total: group.total, text: group.text, at: Date.now(), from: 'tv', kind: 'damage', type: 'hit points', crit: false,
