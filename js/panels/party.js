@@ -1699,6 +1699,10 @@ registerPanel('party',{
         // at -15, a 5-point Healing Word moved them to -10 and they stayed
         // down, when RAW says they wake at 5.
         c.hp = Math.max(0, (c.hp || 0) - taken);
+        if ((c.hp || 0) <= 0 && hpBefore > 0 && !c.dead && sktRelentless(c)){
+          c.hp = 1;
+          if (typeof showToast === 'function') showToast(c.name + ' — Relentless Endurance: up at 1 hit point', { alert: true });
+        }
       }
       // Rage ends when you fall unconscious (PHB). Left set, the B/P/S
       // resistance kept halving hits on a downed barbarian — the one time a
@@ -4050,6 +4054,16 @@ function sktFeatureUse(pc, a, opts){
     return { ok: true, text: 'spends a Wild Shape use (' + ws.current + '/' + ws.max + ') for a level 1 spell slot' };
   });
   return null;
+}
+// Relentless Endurance (an orc, a half-orc): "when you're reduced to 0 hit
+// points but not killed outright, you can drop to 1 hit point instead", once
+// a long rest. Its use spent, when there is one: true. Nothing did it — the
+// orc went down, and its button spent the use for nothing.
+function sktRelentless(pc){
+  const r = ((pc && pc.resources) || []).find(x => x && x.name === 'Relentless Endurance');
+  if (!r || !((+r.current || 0) > 0)) return false;
+  r.current = (+r.current || 0) - 1;
+  return true;
 }
 function sktHdSetPools(pc, pools){
   const hd = Object.assign({}, pc.hitDice);

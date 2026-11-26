@@ -2373,6 +2373,15 @@ registerPanel('combat',{
         // excess damage is discarded (except for the massive-damage rule
         // below). Same defect party.js had; see AUDIT.
         c.hp = Math.max(0, hpBefore - damageDealt);
+        // Relentless Endurance: dropped to 0 but not killed outright — 1 hit
+        // point instead, its once-a-rest use spent.
+        if (c.isPC && c.hp <= 0 && hpBefore > 0 && !c.dead && partySlot && typeof sktRelentless === 'function'
+            && !(sktRuleOn('massive') && (c.hpMax || 0) > 0 && damageDealt - hpBefore >= (c.hpMax || 0)) && sktRelentless(partySlot)){
+          c.hp = 1;
+          logParts.push('Relentless Endurance: 1 HP');
+          this._log(`${c.name}'s Relentless Endurance: it stays up at 1 HP`);
+          if (typeof showToast === 'function') showToast(`${c.name} stays up — Relentless Endurance`, { alert: true });
+        }
         // A zombie's Undead Fortitude: brought to 0 by anything but radiant
         // damage or a critical hit, a CON save (DC 5 + the damage taken)
         // leaves it at 1. One save for the whole blow (_blow, set by the Turn

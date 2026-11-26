@@ -29543,6 +29543,37 @@ for (const cls of Object.keys(rule)) for (let L = 1; L <= 20; L++) for (const sc
       } catch(e){ ok('round 610 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
       finally { state.party = JSON.parse(keepP); save(); }
     }
+    // -- Round 611: Relentless Endurance: an orc dropped to 0 (not killed outright) is up at 1 hit point, once a long rest — in a fight and on the party card; it went down --
+    if (!PLAYER){
+      const keepP = JSON.stringify(state.party), keepC = JSON.stringify(state.combatants), keepA = state.activeCombatantId;
+      try {
+        const C = panelDefs.combat, P = panelDefs.party;
+        const orc = id => ({ id, name: id, hp: 10, hpMax: 40, ac: 14, rules: '2024', sheet: {}, resources: [{ name: 'Relentless Endurance', type: 'pool', current: 1, max: 1, recharge: 'long' }] });
+        state.party = JSON.parse(keepP).concat([orc('r611f'), orc('r611m'), orc('r611p')]);
+        state.combatants = ['r611f', 'r611m'].map((id, k) => ({ id, name: id, isPC: true, hp: 10, hpMax: 40, ac: 14, initiative: 20 - k, conditions: [] }));
+        save();
+        const cb = id => state.combatants.find(c => c.id === id), use = id => (state.party.find(p => p.id === id).resources.find(r => r.name === 'Relentless Endurance') || {}).current;
+        C._applyHpDelta(state.combatants.findIndex(c => c.id === 'r611f'), -20, 'slashing'); await sleep(20);
+        ok('in a fight: dropped to 0, the orc stays up at 1 and the use is spent', cb('r611f').hp === 1 && use('r611f') === 0 && !cb('r611f').dead, JSON.stringify([cb('r611f').hp, use('r611f')]));
+        C._applyHpDelta(state.combatants.findIndex(c => c.id === 'r611f'), -20, 'slashing'); await sleep(20);
+        ok('…the second time, with no use left, it goes down', cb('r611f').hp === 0, JSON.stringify(cb('r611f').hp));
+        C._applyHpDelta(state.combatants.findIndex(c => c.id === 'r611m'), -60, 'slashing'); await sleep(20);
+        ok('…killed outright (massive damage): no Relentless Endurance, the use kept', cb('r611m').dead === true && use('r611m') === 1, JSON.stringify([cb('r611m').hp, cb('r611m').dead, use('r611m')]));
+        P._applyHpDelta(state.party.findIndex(p => p.id === 'r611p'), -20, null); await sleep(20);
+        const pp = state.party.find(p => p.id === 'r611p');
+        ok('on the party card, out of a fight: the same', pp.hp === 1 && use('r611p') === 0, JSON.stringify([pp.hp, use('r611p')]));
+        // its button in Turn View: nothing spent
+        const T = panelDefs.turnview, R = await sktRulesLoad('2024');
+        const b = Object.assign(sktBlankBuild('2024'), { name: 'r611o', cls: 'fighter', level: 3, species: 'Orc', abilities: { method: 'manual', base: { str: 16, dex: 14, con: 14, int: 10, wis: 10, cha: 10 } } });
+        const o = sktComputeCharacter(b, R); o.id = 'r611o'; o.name = 'r611o'; o.build = b;
+        state.party.push(o); state.combatants = [{ id: 'r611o', name: 'r611o', isPC: true, hp: 20, hpMax: 30, ac: 14, initiative: 20, conditions: [] }]; state.activeCombatantId = 'r611o'; save();
+        openPanel('turnview'); await sleep(200);
+        const a = T._activationsFor(T._order().find(c => c.id === 'r611o')).find(x => x.name === 'Relentless Endurance');
+        if (a){ await T._useActivation('r611o', a.i); await sleep(30); }
+        ok('…its button in Turn View spends nothing and says it works by itself', !!a && use('r611o') === 1 && /works by itself/.test(T._result), JSON.stringify([!!a, use('r611o'), T._result]));
+      } catch(e){ ok('round 611 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
+      finally { state.party = JSON.parse(keepP); state.combatants = JSON.parse(keepC); state.activeCombatantId = keepA; save(); }
+    }
     // -- Class features: represented, not just text ------------------------
     {
       try {

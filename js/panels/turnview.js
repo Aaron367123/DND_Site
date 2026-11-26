@@ -643,6 +643,11 @@ registerPanel('turnview', {
     // Used on a hit, and offered under the hit once one lands: pressed here
     // it spent the Focus Point, the free smite or the use and did nothing —
     // and the hit's offer then had none left to spend.
+    // Relentless Endurance happens by itself, as the orc drops to 0.
+    if (who.isPC && /^Relentless Endurance$/i.test(a.name)){
+      this._setResult(`<span class="dim">Relentless Endurance works by itself: dropped to 0 (not killed outright), ${esc(who.name)} is up at 1 hit point. Nothing spent.</span>`, true);
+      this._render(); return;
+    }
     if (who.isPC && typed !== 'applied' && this._onHitFeature(who, a)){
       this._setResult(`<span class="dim">${esc(a.name)} is used on a hit — it’s offered under the hit once one lands. Nothing spent.</span>`, true);
       this._render(); return;
