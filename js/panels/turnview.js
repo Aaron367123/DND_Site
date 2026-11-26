@@ -537,6 +537,8 @@ registerPanel('turnview', {
     const sh = (this._partyOf(who) || {}).sheet || {};
     return (sh.extraDamage || []).some(x => x && x.dice && x.label === a.name);
   },
+  // A creature's temporary hit points: a character's are on its party record.
+  _tempOf(x){ const q = x && x.isPC ? this._partyOf(x) : null; return +((q || (state.combatants || []).find(y => y.id === (x && x.id)) || {}).tempHp) || 0; },
   // Which of action / bonus action / reaction this consumes, as the flag the
   // rest of the panel already tracks. Null for anything else — "Special" is
   // the sheet saying it does not fit the action economy, not an error.
@@ -720,6 +722,48 @@ registerPanel('turnview', {
         said.push(esc(e.x.name) + ' +' + Math.max(0, (+state.combatants[i].hp || 0) - was));
       });
       const txt = `<strong>${esc(who.name)}</strong> uses <strong>${esc(a.name)}</strong>${a.pool ? ' · ' + esc(a.res) + ' ' + a.pool.current + '/' + a.pool.max : ''} — ${said.join(', ')} <span class="dim">(${total} of ${budget})</span>.`;
+      this._log.unshift(txt); this._setResult(txt, true);
+      save(); panelDefs.party?._render?.(); panelDefs.combat?._render?.(); this._render();
+      return;
+    }
+    // Inspiring Smite: 2d8 + the paladin level in temporary hit points,
+    // divided however the paladin likes among those on its side (itself
+    // too). It spent Channel Divinity and gave none.
+    if (who.isPC && /^Inspiring Smite$/i.test(a.name) && typed !== 'applied'){
+      const p = this._partyOf(who), sh = (p && p.sheet) || {};
+      const lvl = ((sh.classLevels || []).find(x => x && x.cls === 'paladin') || {}).level || (p && p.level) || 1;
+      let n = typeof typed === 'number' ? typed : null;
+      if (n == null && typed !== 'roll' && typeof showConfirm === 'function'){
+        const v = await showConfirm(who.name + ' uses ' + a.name + ': 2d8 + ' + lvl + ' temporary hit points to divide.', { title: a.name, confirmLabel: 'Roll it',
+          input: { label: 'Their 2d8 roll (blank: roll it here)', min: 2, max: 16 } });
+        if (v === false) return;
+        if (typeof v === 'number') n = v;
+      }
+      const rr = n != null ? { total: n, detail: '2d8 ' + n + ' (theirs)' } : sktRollDice('2d8');
+      const pool = rr.total + lvl, side = this._sideOf(who);
+      const can = this._order().filter(x => !x.dead && this._sideOf(x) === side);
+      const even = Math.floor(pool / can.length), extraOne = pool - even * can.length;
+      let amts = can.map((x, k) => even + (k < extraOne ? 1 : 0));
+      if (typeof showModal === 'function'){
+        const r = await showModal(a.name + ' — ' + pool + ' temporary hit points to divide', can.map((x, k) => ({ id: 't' + k, type: 'number', min: 0, max: pool, value: amts[k],
+          label: x.name + ((this._tempOf(x)) ? ' (has ' + this._tempOf(x) + ')' : '') })), 'Give');
+        if (!r) return;
+        amts = can.map((x, k) => Math.max(0, Math.floor(+r['t' + k] || 0)));
+      }
+      const total = amts.reduce((t, v) => t + v, 0);
+      if (total > pool){ this._setResult(`<span class="dim">${esc(who.name)} has only ${pool} temporary hit points to divide (${total} asked).</span>`, true); this._render(); return; }
+      this._snapshot(`${who.name} · ${a.name}`);
+      if (a.pool) a.pool.current = Math.max(0, a.pool.current - (a.amount || 1));
+      const flag = this._actFlag(a); if (flag) who[flag] = true;
+      const said = [];
+      can.forEach((x, k) => {
+        const v = amts[k]; if (!v) return;
+        const q = x.isPC ? this._partyOf(x) : null, i = state.combatants.findIndex(y => y.id === x.id);
+        const had = this._tempOf(x);
+        if (v > had){ if (q) q.tempHp = v; else if (i >= 0) state.combatants[i] = Object.assign({}, state.combatants[i], { tempHp: v }); }
+        said.push(esc(x.name) + ' ' + Math.max(v, had) + (v > had ? '' : ' (kept its own)'));
+      });
+      const txt = `<strong>${esc(who.name)}</strong> uses <strong>${esc(a.name)}</strong>${a.pool ? ' · ' + esc(a.res) + ' ' + a.pool.current + '/' + a.pool.max : ''} — temporary hit points: ${said.join(', ') || 'none given'} <span class="dim">(${esc(rr.detail || '2d8 ' + rr.total)} + ${lvl} = ${pool})</span>.`;
       this._log.unshift(txt); this._setResult(txt, true);
       save(); panelDefs.party?._render?.(); panelDefs.combat?._render?.(); this._render();
       return;

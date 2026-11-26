@@ -29466,6 +29466,35 @@ for (const cls of Object.keys(rule)) for (let L = 1; L <= 20; L++) for (const sc
       } catch(e){ ok('round 607 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
       finally { window.showConfirm = keepAsk; T._armed = keepArm; state.party = JSON.parse(keepP); state.combatants = JSON.parse(keepC); state.activeCombatantId = keepA; state.combatRound = keepR; save(); }
     }
+    // -- Round 608: Turn View: Inspiring Smite rolls 2d8 + the paladin level and divides that many temporary hit points among those on its side, as asked — it spent Channel Divinity and gave none --
+    if (!PLAYER){
+      const keepP = JSON.stringify(state.party), keepC = JSON.stringify(state.combatants), keepA = state.activeCombatantId, keepR = state.combatRound;
+      const T = panelDefs.turnview, keepAsk = window.showConfirm, keepModal = window.showModal;
+      try {
+        for (let k = 0; k < 100 && !(typeof _5eLoaded !== 'undefined' && _5eLoaded); k++) await sleep(100);
+        const R = await sktRulesLoad('2024');
+        const b = Object.assign(sktBlankBuild('2024'), { name: 'r608p', cls: 'paladin', subclass: 'Glory', level: 3, abilities: { method: 'manual', base: { str: 16, dex: 10, con: 14, int: 10, wis: 10, cha: 16 } } });
+        const pc = sktComputeCharacter(b, R); pc.id = 'r608p'; pc.name = 'r608p'; pc.build = b;
+        const al = { id: 'r608a', name: 'r608a', hp: 20, hpMax: 30, ac: 15, rules: '2024', sheet: {}, tempHp: 0 };
+        state.party = JSON.parse(keepP).concat([pc, al]);
+        state.combatants = [pc, al].map((p, k) => ({ id: p.id, name: p.name, isPC: true, hp: 20, hpMax: 30, ac: 15, initiative: 20 - k, conditions: [] }));
+        state.combatRound = 1; state.activeCombatantId = 'r608p'; T._actAs = null; save();
+        const tmp = id => +state.party.find(p => p.id === id).tempHp || 0;
+        const cd = () => state.party.find(p => p.id === 'r608p').resources.find(r => r.name === 'Channel Divinity').current;
+        openPanel('turnview'); await sleep(200);
+        window.showConfirm = async () => 9;
+        let offered = null; window.showModal = async (t, f) => { offered = [t, f.map(x => x.value)]; return { t0: 2, t1: 10 }; };
+        const cd0 = cd();
+        const a = T._activationsFor(T._order().find(c => c.id === 'r608p')).find(x => x.name === 'Inspiring Smite');
+        if (a){ await T._useActivation('r608p', a.i); await sleep(30); }
+        ok('Inspiring Smite: 9 + 3 = 12 to divide, offered evenly (6 and 6)', !!a && offered && /12 temporary hit points/.test(offered[0]) && JSON.stringify(offered[1]) === '[6,6]', JSON.stringify([!!a, offered]));
+        ok('…given as divided (2 and 10), Channel Divinity spent', tmp('r608p') === 2 && tmp('r608a') === 10 && cd() === cd0 - 1, JSON.stringify([tmp('r608p'), tmp('r608a'), cd0, cd()]));
+        window.showModal = async () => ({ t0: 10, t1: 10 });
+        await T._useActivation('r608p', a.i); await sleep(30);
+        ok('…more than the roll: refused, nothing spent', cd() === cd0 - 1 && tmp('r608a') === 10 && /only 12/.test(T._result), JSON.stringify([cd(), tmp('r608a'), T._result]));
+      } catch(e){ ok('round 608 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
+      finally { window.showConfirm = keepAsk; window.showModal = keepModal; state.party = JSON.parse(keepP); state.combatants = JSON.parse(keepC); state.activeCombatantId = keepA; state.combatRound = keepR; save(); }
+    }
     // -- Class features: represented, not just text ------------------------
     {
       try {
