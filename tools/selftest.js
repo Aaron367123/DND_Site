@@ -29636,6 +29636,36 @@ for (const cls of Object.keys(rule)) for (let L = 1; L <= 20; L++) for (const sc
       } catch(e){ ok('round 613 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
       finally { state.party = JSON.parse(keepP); state.combatants = JSON.parse(keepC); state.activeCombatantId = keepA; state.combatRound = keepR; save(); }
     }
+    // -- Round 614: a 2024 aasimar's Celestial Revelation is a switch: on (its use and Bonus Action), once a turn +PB radiant (necrotic with the Shroud) offered on a hit — its button spent the use and did nothing --
+    if (!PLAYER){
+      const keepP = JSON.stringify(state.party), keepC = JSON.stringify(state.combatants), keepA = state.activeCombatantId, keepR = state.combatRound, keepD = window.sktD;
+      const T = panelDefs.turnview, C = panelDefs.combat;
+      try {
+        for (let k = 0; k < 100 && !(typeof _5eLoaded !== 'undefined' && _5eLoaded); k++) await sleep(100);
+        const R = await sktRulesLoad('2024');
+        const b = Object.assign(sktBlankBuild('2024'), { name: 'r614', cls: 'fighter', level: 5, species: 'Aasimar', abilities: { method: 'manual', base: { str: 16, dex: 14, con: 14, int: 10, wis: 10, cha: 14 } } });
+        const pc = sktComputeCharacter(b, R); pc.id = 'r614'; pc.name = 'r614'; pc.build = b;
+        ok('a 2024 aasimar has Celestial Revelation as a switch, with its three forms', ((pc.sheet.states || []).find(s => s.key === 'Celestial Revelation') || {}).options && pc.sheet.states.find(s => s.key === 'Celestial Revelation').options.length === 3,
+           JSON.stringify((pc.sheet.states || []).map(s => s.key)));
+        state.party = JSON.parse(keepP).concat([pc]);
+        state.combatants = [{ id: 'r614', name: 'r614', isPC: true, hp: 40, hpMax: 40, ac: 16, initiative: 20, conditions: [] }];
+        C.addMonster(_5eData.find(r => r.cat === 'monster' && r.name === 'Ogre')); const m = state.combatants[1]; m.hp = 300; m.hpMax = 300; m.ac = 5;
+        state.combatRound = 1; state.activeCombatantId = 'r614'; T._actAs = null; save();
+        openPanel('turnview'); await sleep(200);
+        const a = T._activationsFor(T._order().find(c => c.id === 'r614')).find(x => x.name === 'Celestial Revelation');
+        const keepModal = window.showModal; window.showModal = async () => ({ f: 'Inner Radiance' });
+        try { if (a){ await T._useActivation('r614', a.i); await sleep(40); } } finally { window.showModal = keepModal; }
+        const me = () => state.party.find(p => p.id === 'r614');
+        ok('…its button asks the form and turns it on, spending its use and the Bonus Action', !!a && !!(me().active || {})['Celestial Revelation'] && me().active['Celestial Revelation:opt'] === 'Inner Radiance' && !document.querySelector('.as-modal, #area-save') && (me().resources.find(r => r.name === 'Celestial Revelation') || {}).current === 0 && state.combatants[0].bonusUsed === true,
+           JSON.stringify([!!a, me().active, state.combatants[0].bonusUsed, T._result, a && a.res, a && a.pool]));
+        window.sktD = n => (n === 20 ? 15 : 3);
+        const c = state.combatants[0], ai = T._attacksFor(c).findIndex(x => x.pc && !x.spell && !x.save && x.dmgText);
+        T._rollAttack(ai, { attacker: c, target: m, mode: 0 }); await sleep(30);
+        const o = T._pcExtraOptions(T._lastPcHit).find(x => x.label === 'Celestial Revelation');
+        ok('…a hit offers +3 radiant, once a turn', !!o && /^3 radiant$/.test(o.dice), JSON.stringify(o));
+      } catch(e){ ok('round 614 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
+      finally { window.sktD = keepD; state.party = JSON.parse(keepP); state.combatants = JSON.parse(keepC); state.activeCombatantId = keepA; state.combatRound = keepR; save(); }
+    }
     // -- Class features: represented, not just text ------------------------
     {
       try {

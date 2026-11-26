@@ -827,6 +827,26 @@ registerPanel('turnview', {
         onApplied: () => this._useActivation(id, idx, 'applied') });
       return;
     }
+    // Celestial Revelation: which form — on, as its switch (its use and the
+    // Bonus Action). Only the Necrotic Shroud makes anyone save; the save in
+    // its text opened that dialog whichever form was meant.
+    if (who.isPC && /^Celestial Revelation$/i.test(a.name) && typed !== 'applied'){
+      const p = this._partyOf(who); if (!p) return;
+      const forms = ['Heavenly Wings', 'Inner Radiance', 'Necrotic Shroud'];
+      let form = typeof typed === 'string' && forms.includes(typed) ? typed : forms[0];
+      if (typeof typed !== 'string' && typeof showModal === 'function'){
+        const r = await showModal(a.name, [{ id: 'f', label: 'Which form?', type: 'select', value: forms[0], options: forms.map(f => ({ value: f, label: f })) }], 'Transform');
+        if (!r) return;
+        if (forms.includes(r.f)) form = r.f;
+      }
+      const sv = form === 'Necrotic Shroud' ? this._actSave(who, a) : null;
+      p.active = Object.assign({}, p.active, { 'Celestial Revelation:opt': form });
+      await this._useActivation(id, idx, 'applied');
+      const C1 = panelDefs.combat;
+      if (sv && C1 && typeof C1.openAreaSave === 'function')
+        C1.openAreaSave(Object.assign(sv, { name: who.name + ' · Necrotic Shroud', exclude: who.id, targets: [], src: { id: who.id, name: who.name }, onApplied: () => {} }));
+      return;
+    }
     // A feature whose targets save: the area-save dialog, filled in from its
     // text. Its use and its action are spent when that is applied, as a
     // breath weapon's are; cancelled, nothing is.
@@ -5147,6 +5167,13 @@ registerPanel('turnview', {
         const tSize = String(t.isPC ? (((this._partyOf(t) || {}).sheet || {}).size || 'Medium') : ((((this._entryOf(t) || {})._raw) || {}).size || t.size || 'Medium')).toLowerCase().split(/\s/)[0];
         if (SZ.indexOf(tSize) <= SZ.indexOf('large')) out.push({ key: 'ga', label: 'Hill’s Tumble', dice: '', ok: true, res: ga.name, queue: [{ cond: 'Prone' }], why: 'Giant Ancestry: knocked Prone' + left });
       }
+    }
+    // Celestial Revelation on (a 2024 aasimar): once on each of its turns,
+    // the proficiency bonus in radiant damage — necrotic, with the Shroud.
+    if ((p.active || {})['Celestial Revelation'] && c.id === state.activeCombatantId && !once('Celestial Revelation')){
+      const shroud = (p.active || {})['Celestial Revelation:opt'] === 'Necrotic Shroud';
+      out.push({ key: 'crev', label: 'Celestial Revelation', dice: String(+sh.profBonus || 2) + ' ' + (shroud ? 'necrotic' : 'radiant'), type: shroud ? 'necrotic' : 'radiant', once: true, ok: true,
+        why: 'once on each of your turns (' + ((p.active || {})['Celestial Revelation:opt'] || 'transformed') + ')' });
     }
     // A Valor bard's die, held: Combat Inspiration — "roll the Bardic
     // Inspiration die and add the number rolled to a weapon's damage roll it

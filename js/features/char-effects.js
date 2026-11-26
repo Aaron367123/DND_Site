@@ -1045,6 +1045,15 @@
       ctx.acBonus.push({ label: 'Bladesong', value: b }); ctx.speedBonus += 10; ctx.concBonus += b;
       ctx.rollAdv.push({ on: ['skill:acrobatics'], label: 'Bladesong' });
     } });
+  // A 2024 aasimar's Celestial Revelation: a minute transformed — and once
+  // on each of its turns, the proficiency bonus in radiant damage (necrotic,
+  // with the Shroud) to one target it damages. Its button spent the use.
+  st({ key: 'Celestial Revelation', label: 'Celestial Revelation', resource: 'Celestial Revelation', edition: '2024', has: ctx => has(ctx, 'Celestial Revelation') && (ctx.build.level || ctx.level) >= 3,
+    options: () => ['Heavenly Wings', 'Inner Radiance', 'Necrotic Shroud'],
+    desc: (ctx, v) => (v === 'Necrotic Shroud' ? 'Creatures within 10 ft make a Charisma save or are frightened of you; ' : v === 'Inner Radiance' ? 'Bright light, and each creature within 10 ft takes ' + ctx.pb + ' radiant at the end of your turns; ' : 'A fly speed equal to your speed; ')
+      + 'once on each of your turns, +' + ctx.pb + ' ' + (v === 'Necrotic Shroud' ? 'necrotic' : 'radiant') + ' damage to one target.',
+    // (its damage: offered on a hit by the Turn View while it is on)
+    apply: () => {} });
   st({ key: 'Innate Sorcery', label: 'Innate Sorcery', resource: 'Innate Sorcery', edition: '2024', has: ctx => has(ctx, 'Innate Sorcery'),
     desc: '+1 to your sorcerer spell save DC and advantage on sorcerer spell attacks, for 1 minute.',
     apply: ctx => { ctx.spellDcBonus += 1; ctx.rollAdv.push({ on: ['attack:spell'], label: 'Innate Sorcery' }); } });
