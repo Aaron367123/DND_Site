@@ -2026,6 +2026,27 @@ function sktMonsterSpellRows(raw, R){
     const dms = tags.map(x => x.d).slice(0, types.length);
     tags.forEach((x, i) => { if (x.type) types[i] = x.type; });
     const cond = sktSpellSaveCond(s);
+    // A Bonus Action spell (Healing Word, Spiritual Weapon) spends the Bonus
+    // Action, not the Action.
+    const bonusAction = (((s.time || [])[0]) || {}).unit === 'bonus';
+    // A healing spell (Cure Wounds, Healing Word): a row to heal with — an
+    // acolyte or a priest had none. Its dice and the caster's spellcasting
+    // modifier; one creature (not "up to six creatures").
+    if (!dms.length && typeof csSpellHeal === 'function' && !/\bup to (?:two|three|four|five|six|\d+) creatures\b/i.test(txt)){
+      const cr = parseFloat(String(raw.challenge_rating || '1').replace(/^(\d+)\/(\d+)$/, (_, a, b) => +a / +b)) || 0;
+      const pb = 2 + Math.max(0, Math.floor((Math.max(1, cr) - 1) / 4));
+      const mod = sc.atk != null ? sc.atk - pb : sc.dc != null ? sc.dc - 8 - pb : 0;
+      const hd = csSpellHeal(s, castAt, mod);
+      if (hd && /d\d/.test(String(hd))){
+        const dice = String(hd).replace(/\s+/g, '');
+        out.push({ name: s.name + (castAt > lvl ? ' (' + ord(castAt) + ' level)' : ''), spellName: s.name, monsterSpell: true, spellLevel: lvl,
+          toHit: null, save: null, parts: [], alt: null, altLabel: '', recharge: null,
+          heal: { dice, avg: _sktDiceAvg(dice), self: false }, effect: 'regains ' + dice + ' hit points',
+          uses: sp.per === 'day' ? sp.n : 0, slotLevel: sp.per === 'slot' ? sp.level : 0, slotMax: sp.per === 'slot' ? sp.n : 0,
+          group: 'spell', spell: true, magical: true, bonusAction });
+        return;
+      }
+    }
     if (!dms.length && !cond && s.name !== 'Magic Missile') return;
     const up = Math.max(0, castAt - lvl);
     const parts = dms.map((d0, i) => {
@@ -2057,7 +2078,7 @@ function sktMonsterSpellRows(raw, R){
       conc: !!(((s.duration || [])[0] || {}).concentration),
       uses: sp.per === 'day' ? sp.n : 0, slotLevel: sp.per === 'slot' ? sp.level : 0, slotMax: sp.per === 'slot' ? sp.n : 0,
       // A spell: Magic Resistance applies to its save, and its damage is magical.
-      ranged: /\bR\b/.test((s.spellAttack || []).join(' ')), group: 'spell', spell: true, magical: true,
+      ranged: /\bR\b/.test((s.spellAttack || []).join(' ')), group: 'spell', spell: true, magical: true, bonusAction,
     });
   });
   return out;

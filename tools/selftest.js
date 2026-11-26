@@ -29373,6 +29373,35 @@ for (const cls of Object.keys(rule)) for (let L = 1; L <= 20; L++) for (const sc
       } catch(e){ ok('round 604 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
       finally { window.sktD = keepD; state.party = JSON.parse(keepP); state.combatants = JSON.parse(keepC); state.activeCombatantId = keepA; state.combatRound = keepR; save(); }
     }
+    // -- Round 605: Turn View: a monster's healing spell is a row to heal with (an acolyte's Cure Wounds: 1d8 + its Wisdom, a slot spent) — it had none; and a Bonus Action spell (a priest's Spiritual Weapon) spends the Bonus Action, not the Action --
+    if (!PLAYER){
+      const keepC = JSON.stringify(state.combatants), keepA = state.activeCombatantId, keepR = state.combatRound, keepD = window.sktD;
+      const T = panelDefs.turnview, C = panelDefs.combat, keepArm = T._armed;
+      try {
+        for (let k = 0; k < 100 && !(typeof _5eLoaded !== 'undefined' && _5eLoaded); k++) await sleep(100);
+        await sktRulesLoad('2014');
+        const find = (n, s) => _5eData.find(r => r.cat === 'monster' && r.name === n && r._source === s);
+        state.combatants = []; C.addMonster(find('Acolyte', 'MM')); C.addMonster(find('Goblin', 'MM')); C.addMonster(find('Priest', 'MM')); await sleep(20);
+        const [aco, gob, pri] = state.combatants;
+        gob.hp = 1; state.combatRound = 1; state.activeCombatantId = aco.id; save();
+        openPanel('turnview'); await sleep(200);
+        for (let k = 0; k < 30 && !T._attacksFor(aco).some(a => a.heal); k++){ T._render(); await sleep(100); }
+        const L = T._attacksFor(aco), ai = L.findIndex(a => a.spellName === 'Cure Wounds');
+        ok('an acolyte has Cure Wounds to heal with: 1d8 + 2', ai >= 0 && L[ai].heal && L[ai].heal.dice === '1d8+2' && L[ai].slotLevel === 1, JSON.stringify(L[ai]));
+        T._armed = gob.id; window.sktD = n => 5;
+        T._monsterHeal(ai); await sleep(30);
+        const g = state.combatants.find(c => c.id === gob.id), a2 = state.combatants.find(c => c.id === aco.id);
+        ok('…it heals the creature picked (1d8 + 2 on top of 1) and spends a 1st-level slot and its Action', g.hp >= 4 && g.hp <= 11 && a2.actionUsed === true && !a2.bonusUsed && (a2.slotsUsed || {})[1] === 1, JSON.stringify([g.hp, a2.actionUsed, a2.bonusUsed, a2.slotsUsed]));
+        // a priest's Spiritual Weapon: the Bonus Action
+        state.activeCombatantId = pri.id; save(); T._render(); await sleep(30);
+        const P = T._attacksFor(pri), si = P.findIndex(a => a.spellName === 'Spiritual Weapon');
+        ok('a priest’s Spiritual Weapon is a Bonus Action spell', si >= 0 && P[si].bonusAction === true, JSON.stringify(P[si] && P[si].bonusAction));
+        T._armed = gob.id; T._rollAttack(si); await sleep(30);
+        const p2 = state.combatants.find(c => c.id === pri.id);
+        ok('…cast, it spends the Bonus Action and leaves the Action (and isn’t called an off-hand attack)', p2.bonusUsed === true && !p2.actionUsed && !/after an attack with the first/.test(T._result), JSON.stringify([p2.bonusUsed, p2.actionUsed, T._result]));
+      } catch(e){ ok('round 605 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
+      finally { window.sktD = keepD; T._armed = keepArm; state.combatants = JSON.parse(keepC); state.activeCombatantId = keepA; state.combatRound = keepR; save(); }
+    }
     // -- Class features: represented, not just text ------------------------
     {
       try {

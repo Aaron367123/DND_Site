@@ -4061,7 +4061,7 @@ registerPanel('turnview', {
       if (nick){ c.onceTurn = Object.assign({}, c.onceTurn, { Nick: this._turnKey() }); this._spend(c, 'actionUsed'); }
       else this._spend(c, 'bonusUsed');
       hitNote = (hitNote ? hitNote + ' · ' : '') + (nick ? 'Nick: part of the Attack action' : a.offhand ? 'off-hand: its Bonus Action' : 'its Bonus Action')
-        + (after || a.feature ? '' : a.offhand ? ' (after the Attack action with a light weapon)' : ' (after an attack with the first)');
+        + (after || a.feature || a.spell ? '' : a.offhand ? ' (after the Attack action with a light weapon)' : ' (after an attack with the first)');
     }
     // (a reaction's attack — an opportunity attack, Sentinel's — spends the
     // reaction, already, and not the creature's Action)
