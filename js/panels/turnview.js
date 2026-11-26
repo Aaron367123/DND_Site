@@ -684,6 +684,46 @@ registerPanel('turnview', {
         return;
       }
     }
+    // Preserve Life: five times the cleric level in hit points, divided
+    // among the creatures on the cleric's side under half their maximum — none
+    // past half. It spent Channel Divinity and the action and healed nobody.
+    if (who.isPC && /^Preserve Life$/i.test(a.name) && typed !== 'applied'){
+      const p = this._partyOf(who), sh = (p && p.sheet) || {};
+      const lvl = ((sh.classLevels || []).find(x => x && x.cls === 'cleric') || {}).level || (p && p.level) || 1;
+      const budget = 5 * lvl, side = this._sideOf(who);
+      const kind = x => { const r = (this._entryOf(x) || {})._raw; return String(r && r.type && (r.type.type || r.type) || '').toLowerCase(); };
+      const can = this._order().filter(x => !x.dead && this._sideOf(x) === side && !/undead|construct/.test(kind(x)))
+        .map(x => { const cb = state.combatants.find(y => y.id === x.id) || x; return { x, hp: +cb.hp || 0, cap: Math.max(0, Math.floor((+cb.hpMax || 0) / 2) - (+cb.hp || 0)) }; })
+        .filter(e => e.cap > 0).sort((m, n) => m.hp - n.hp);
+      if (!can.length){ this._setResult(`<span class="dim">${esc(who.name)} can't — no one on its side is under half its hit points.</span>`, true); this._render(); return; }
+      let left = budget;
+      const give = can.map(e => { const n = Math.min(e.cap, left); left -= n; return n; });
+      let amts = give;
+      if (typeof showModal === 'function'){
+        const r = await showModal(a.name + ' — ' + budget + ' hit points to divide', can.map((e, k) => ({ id: 'h' + k, type: 'number', min: 0, max: e.cap, value: give[k],
+          label: e.x.name + ' (' + e.hp + ' hp, up to ' + e.cap + ' — half its maximum)' })), 'Heal');
+        if (!r) return;
+        amts = can.map((e, k) => Math.max(0, Math.min(e.cap, Math.floor(+r['h' + k] || 0))));
+      }
+      const total = amts.reduce((t, n) => t + n, 0);
+      if (total > budget){ this._setResult(`<span class="dim">${esc(who.name)} has only ${budget} hit points to divide (${total} asked).</span>`, true); this._render(); return; }
+      if (!total){ this._setResult(`<span class="dim">${esc(who.name)} restores nothing.</span>`, true); this._render(); return; }
+      this._snapshot(`${who.name} · ${a.name}`);
+      if (a.pool) a.pool.current = Math.max(0, a.pool.current - (a.amount || 1));
+      const flag = this._actFlag(a); if (flag) who[flag] = true;
+      const C = panelDefs.combat, said = [];
+      can.forEach((e, k) => {
+        if (!amts[k]) return;
+        const i = state.combatants.findIndex(y => y.id === e.x.id); if (i < 0 || !C) return;
+        const was = +state.combatants[i].hp || 0;
+        C._applyHpDelta(i, amts[k], null);
+        said.push(esc(e.x.name) + ' +' + Math.max(0, (+state.combatants[i].hp || 0) - was));
+      });
+      const txt = `<strong>${esc(who.name)}</strong> uses <strong>${esc(a.name)}</strong>${a.pool ? ' · ' + esc(a.res) + ' ' + a.pool.current + '/' + a.pool.max : ''} — ${said.join(', ')} <span class="dim">(${total} of ${budget})</span>.`;
+      this._log.unshift(txt); this._setResult(txt, true);
+      save(); panelDefs.party?._render?.(); panelDefs.combat?._render?.(); this._render();
+      return;
+    }
     // Cunning Action ("Dash, Disengage or Hide"), Nimble Escape ("Disengage
     // or Hide"): which one, taken as the Bonus Action. The button spent the
     // bonus action and did nothing — a rogue who used it to Disengage still

@@ -29402,6 +29402,41 @@ for (const cls of Object.keys(rule)) for (let L = 1; L <= 20; L++) for (const sc
       } catch(e){ ok('round 605 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
       finally { window.sktD = keepD; T._armed = keepArm; state.combatants = JSON.parse(keepC); state.activeCombatantId = keepA; state.combatRound = keepR; save(); }
     }
+    // -- Round 606: Turn View: Preserve Life divides five times the cleric level among those on its side under half their hit points, none past half — it spent Channel Divinity and healed nobody --
+    if (!PLAYER){
+      const keepP = JSON.stringify(state.party), keepC = JSON.stringify(state.combatants), keepA = state.activeCombatantId, keepR = state.combatRound;
+      const T = panelDefs.turnview, keepModal = window.showModal;
+      try {
+        for (let k = 0; k < 100 && !(typeof _5eLoaded !== 'undefined' && _5eLoaded); k++) await sleep(100);
+        const R = await sktRulesLoad('2024');
+        const b = Object.assign(sktBlankBuild('2024'), { name: 'r606c', cls: 'cleric', subclass: 'Life', level: 6, abilities: { method: 'manual', base: { str: 10, dex: 10, con: 14, int: 10, wis: 16, cha: 10 } } });
+        const pc = sktComputeCharacter(b, R); pc.id = 'r606c'; pc.name = 'r606c'; pc.build = b;
+        const ally = { id: 'r606a', name: 'r606a', hp: 4, hpMax: 40, ac: 15, rules: '2024', sheet: {} };
+        state.party = JSON.parse(keepP).concat([pc, ally]);
+        state.combatants = [{ id: 'r606c', name: 'r606c', isPC: true, hp: 30, hpMax: 40, ac: 15, initiative: 20, conditions: [] },
+          { id: 'r606a', name: 'r606a', isPC: true, hp: 4, hpMax: 40, ac: 15, initiative: 18, conditions: [] },
+          { id: 'r606b', name: 'r606b', isPC: true, hp: 10, hpMax: 30, ac: 15, initiative: 17, conditions: [] }];
+        state.party.push({ id: 'r606b', name: 'r606b', hp: 10, hpMax: 30, ac: 15, rules: '2024', sheet: {} });
+        state.combatRound = 1; state.activeCombatantId = 'r606c'; T._actAs = null; save();
+        const hp = id => state.combatants.find(c => c.id === id).hp;
+        const cd = () => state.party.find(p => p.id === 'r606c').resources.find(r => r.name === 'Channel Divinity').current;
+        const use = async () => { const a = T._activationsFor(T._order().find(c => c.id === 'r606c')).find(x => x.name === 'Preserve Life'); if (!a) return false; await T._useActivation('r606c', a.i); await sleep(30); return true; };
+        openPanel('turnview'); await sleep(200);
+        let asked = null; window.showModal = async (t, f) => { asked = f.map(x => [x.label.split(' ')[0], x.max, x.value]); const o = {}; f.forEach(x => o[x.id] = x.value); return o; };
+        const cd0 = cd();
+        const had = await use();
+        ok('Preserve Life: 30 to divide, offered to the two under half (not the cleric at 30/40), the lowest first, none past half', had && JSON.stringify(asked) === '[["r606a",16,16],["r606b",5,5]]',
+           JSON.stringify([had, asked]));
+        ok('…heals them to half (4 → 20, 10 → 15) and spends Channel Divinity and the action', hp('r606a') === 20 && hp('r606b') === 15 && cd() === cd0 - 1 && state.combatants.find(c => c.id === 'r606c').actionUsed === true,
+           JSON.stringify([hp('r606a'), hp('r606b'), cd0, cd()]));
+        sktUndo(); await sleep(30);
+        ok('…an undo takes it all back', hp('r606a') === 4 && hp('r606b') === 10 && cd() === cd0, JSON.stringify([hp('r606a'), hp('r606b'), cd()]));
+        window.showModal = async (t, f) => ({ h0: 16, h1: 20 });
+        await use();
+        ok('…more than half asked for one is held to half', hp('r606b') === 15, JSON.stringify(hp('r606b')));
+      } catch(e){ ok('round 606 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
+      finally { window.showModal = keepModal; state.party = JSON.parse(keepP); state.combatants = JSON.parse(keepC); state.activeCombatantId = keepA; state.combatRound = keepR; save(); }
+    }
     // -- Class features: represented, not just text ------------------------
     {
       try {
