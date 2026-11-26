@@ -955,6 +955,23 @@ registerPanel('turnview', {
       const r = n != null ? { total: n, detail: die + ' ' + n + ' (theirs)' } : sktRollDice(die);
       group = { p, total: r.total + plus, many, text: (r.detail || die + ' ' + r.total) + ' + ' + plus };
     }
+    // Mantle of Inspiration: a Bardic Inspiration die rolled, and twice the
+    // roll in temporary hit points to each of up to Charisma-modifier others.
+    // It spent the use and gave none.
+    if (!group && who.isPC && /^Mantle of Inspiration$/i.test(a.name)){
+      const p = this._partyOf(who);
+      const die = (typeof sktBardicDie === 'function' && p ? String(sktBardicDie(p)) : 'd6').replace(/^1?d/, '1d');
+      const cha = Math.floor((((p && p.abilities) || {}).cha || 10) / 2) - 5;
+      let n = typeof typed === 'number' ? typed : null;
+      if (n == null && typed !== 'roll' && typeof showConfirm === 'function'){
+        const v = await showConfirm(who.name + ' uses ' + a.name + ': a ' + die + ', twice the roll in temporary hit points to each of up to ' + Math.max(1, cha) + '.', { title: a.name, confirmLabel: 'Roll it',
+          input: { label: 'Their ' + die + ' roll (blank: roll it here)', min: 1, max: 12 } });
+        if (v === false) return;
+        if (typeof v === 'number') n = v;
+      }
+      const r = n != null ? { total: n, detail: die + ' ' + n + ' (theirs)' } : sktRollDice(die);
+      group = { p, total: 2 * r.total, many: Math.max(1, cha), text: '2 × ' + (r.detail || die + ' ' + r.total), temp: true };
+    }
     // Temporary hit points the feature gives the one using it: Patient
     // Defense at 10th level ("two rolls of your Martial Arts die"), Tireless
     // ("1d8 + 3"), Form of Dread ("1d10 + your warlock level"), Symbiotic
@@ -1124,8 +1141,8 @@ registerPanel('turnview', {
     }
     if (group && group.p){
       group.p.rolls = [{ label: a.name + ' heals', total: group.total, text: group.text, at: Date.now(), from: 'tv', kind: 'damage', type: 'hit points', crit: false,
-        id: typeof uid === 'function' ? uid() : String(Date.now()), many: group.many }].concat(group.p.rolls || []).slice(0, 6);
-      extra += ' — <strong>' + group.total + '</strong> hit points to give each creature picked' + (group.many < 20 ? ', up to ' + group.many : '') + ' <span class="dim">(' + esc(group.text) + ')</span>';
+        id: typeof uid === 'function' ? uid() : String(Date.now()), many: group.many, temp: !!group.temp }].concat(group.p.rolls || []).slice(0, 6);
+      extra += ' — <strong>' + group.total + '</strong> ' + (group.temp ? 'temporary ' : '') + 'hit points to give each creature picked' + (group.many < 20 ? ', up to ' + group.many : '') + ' <span class="dim">(' + esc(group.text) + ')</span>';
     }
     if (raged) extra += ' — raging';
     // A feature that is a switch on the sheet (Bladesong, Innate Sorcery,
@@ -4446,8 +4463,8 @@ registerPanel('turnview', {
     const c = this._order().find(x => x.id === p.id), to = t || c;
     // A spell that heals several ("up to six creatures"): each picked in turn, once.
     const done = r.healed || [], again = !!to && done.includes(to.id), many = +r.many > 1 ? ' (' + (done.length + 1) + ' of ' + r.many + ')' : '';
-    return `<div class="tv-readied tv-dmgroll tv-healroll">💚 <span><strong>${esc(p.name)}</strong> rolled <strong>${+r.total}</strong> hit points of healing <span class="dim">— ${esc(r.label)}${done.length ? ' · ' + done.length + ' healed' : ''}</span></span>
-        <button class="btn small primary" data-tv="dmgapply" data-p="${esc(p.id)}" data-id="${esc(r.id || '')}"${to && !again ? '' : ' disabled'}${again ? ' title="Already healed by this one"' : ''}>${to ? 'Heal ' + esc(to.name) + many : 'Heal…'}</button>
+    return `<div class="tv-readied tv-dmgroll tv-healroll">💚 <span><strong>${esc(p.name)}</strong> rolled <strong>${+r.total}</strong> ${r.temp ? 'temporary hit points' : 'hit points of healing'} <span class="dim">— ${esc(r.label)}${done.length ? ' · ' + done.length + ' healed' : ''}</span></span>
+        <button class="btn small primary" data-tv="dmgapply" data-p="${esc(p.id)}" data-id="${esc(r.id || '')}"${to && !again ? '' : ' disabled'}${again ? ' title="Already healed by this one"' : ''}>${to ? (r.temp ? 'Give ' : 'Heal ') + esc(to.name) + many : 'Heal…'}</button>
         <button class="btn small" data-tv="dmgdrop" data-p="${esc(p.id)}" data-id="${esc(r.id || '')}" title="Not for this fight">Dismiss</button></div>`;
   },
   // A player's attack roll against the creature picked on the right: hit or
@@ -4477,6 +4494,15 @@ registerPanel('turnview', {
       this._snapshot(`${p.name} · ${r.label} → ${to.name}`);
       r.healed = (r.healed || []).concat([to.id]);
       if (!(+r.many > 1) || r.healed.length >= +r.many) r.applied = true;
+      if (r.temp){
+        const n = Math.max(0, +r.total || 0), q = to.isPC ? this._partyOf(to) : null, rec = q || state.combatants[i];
+        const had = +rec.tempHp || 0;
+        if (n > had){ if (q) q.tempHp = n; else state.combatants[i] = Object.assign({}, state.combatants[i], { tempHp: n }); }
+        this._log.unshift(`<strong>${esc(p.name)}</strong> — ${esc(r.label)} → ${esc(to.name)} · ${n} temporary HP`);
+        this._setResult(`<strong>${esc(to.name)}</strong> has <strong>${Math.max(n, had)}</strong> temporary hit points${n > had ? '' : ' <span class="dim">(it kept its ' + had + ': they don’t stack)</span>'} <span class="dim">(${esc(r.label)})</span>.`, true);
+        save(); panelDefs.party?._render?.(); panelDefs.combat?._render?.(); this._render();
+        return;
+      }
       const before = +state.combatants[i].hp || 0;
       C._applyHpDelta(i, Math.max(0, +r.total || 0), null);
       const got = Math.max(0, (+state.combatants[i].hp || 0) - before);

@@ -29437,6 +29437,35 @@ for (const cls of Object.keys(rule)) for (let L = 1; L <= 20; L++) for (const sc
       } catch(e){ ok('round 606 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
       finally { window.showModal = keepModal; state.party = JSON.parse(keepP); state.combatants = JSON.parse(keepC); state.activeCombatantId = keepA; state.combatRound = keepR; save(); }
     }
+    // -- Round 607: Turn View: Mantle of Inspiration rolls the Bardic Inspiration die and gives twice the roll in temporary hit points to each of up to Cha-mod creatures picked (the higher stays) — it spent the use and gave none --
+    if (!PLAYER){
+      const keepP = JSON.stringify(state.party), keepC = JSON.stringify(state.combatants), keepA = state.activeCombatantId, keepR = state.combatRound;
+      const T = panelDefs.turnview, keepAsk = window.showConfirm, keepArm = T._armed;
+      try {
+        for (let k = 0; k < 100 && !(typeof _5eLoaded !== 'undefined' && _5eLoaded); k++) await sleep(100);
+        const R = await sktRulesLoad('2024');
+        const b = Object.assign(sktBlankBuild('2024'), { name: 'r607b', cls: 'bard', subclass: 'Glamour', level: 3, abilities: { method: 'manual', base: { str: 10, dex: 14, con: 14, int: 10, wis: 10, cha: 16 } } });
+        const pc = sktComputeCharacter(b, R); pc.id = 'r607b'; pc.name = 'r607b'; pc.build = b;
+        const al = { id: 'r607a', name: 'r607a', hp: 20, hpMax: 30, ac: 15, rules: '2024', sheet: {}, tempHp: 0 };
+        const al2 = { id: 'r607c', name: 'r607c', hp: 20, hpMax: 30, ac: 15, rules: '2024', sheet: {}, tempHp: 12 };
+        state.party = JSON.parse(keepP).concat([pc, al, al2]);
+        state.combatants = [pc, al, al2].map((p, k) => ({ id: p.id, name: p.name, isPC: true, hp: 20, hpMax: 30, ac: 15, initiative: 20 - k, conditions: [] }));
+        state.combatRound = 1; state.activeCombatantId = 'r607b'; T._actAs = null; T._armed = null; save();
+        const tmp = id => +state.party.find(p => p.id === id).tempHp || 0;
+        const btn = () => document.querySelector('.window[data-panel="turnview"] .tv-healroll [data-tv="dmgapply"]');
+        const give = async id => { T._armed = id; T._render(); await sleep(30); const x = btn(); if (x && !x.disabled) x.click(); await sleep(40); return x; };
+        openPanel('turnview'); await sleep(200);
+        window.showConfirm = async () => 4;
+        const a = T._activationsFor(T._order().find(c => c.id === 'r607b')).find(x => x.name === 'Mantle of Inspiration');
+        if (a){ await T._useActivation('r607b', a.i); await sleep(30); }
+        const b1 = await give('r607a');
+        ok('Mantle of Inspiration: 2 × the 4 rolled — 8 temporary hit points to give, up to 3 creatures', !!a && !!b1 && /Give r607a \(1 of 3\)/.test(b1.textContent) && tmp('r607a') === 8,
+           JSON.stringify([!!a, b1 && b1.textContent.trim(), tmp('r607a')]));
+        await give('r607c');
+        ok('…they don’t stack: 12 already there stays', tmp('r607c') === 12, JSON.stringify(tmp('r607c')));
+      } catch(e){ ok('round 607 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
+      finally { window.showConfirm = keepAsk; T._armed = keepArm; state.party = JSON.parse(keepP); state.combatants = JSON.parse(keepC); state.activeCombatantId = keepA; state.combatRound = keepR; save(); }
+    }
     // -- Class features: represented, not just text ------------------------
     {
       try {
