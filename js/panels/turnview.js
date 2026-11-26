@@ -525,13 +525,14 @@ registerPanel('turnview', {
     });
   },
   // A feature that is used on a hit, from the hit's offers (_pcExtraOptions):
-  // Stunning Strike, Hand of Harm, Divine Smite and Paladin's Smite, and a
+  // Stunning Strike, Hand of Harm, Divine Smite and Paladin's Smite, Fury of
+  // the Small (a goblin's hit on something larger), and a
   // strike's extra damage with no action of its own (Psionic Strike, a Gloom
   // Stalker's Dreadful Strike). Not one with its own action to take first
   // (Giant's Might, Slayer's Prey, Elemental Cleaver).
   _onHitFeature(who, a){
     if (!who || !who.isPC || !a) return false;
-    if (/^(Stunning Strike|Hand of Harm|Divine Smite|Paladin.s Smite)$/i.test(a.name)) return true;
+    if (/^(Stunning Strike|Hand of Harm|Divine Smite|Paladin.s Smite|Fury of the Small)$/i.test(a.name)) return true;
     if (!/^(Free|Special|)$/i.test(String(a.action || ''))) return false;
     const sh = (this._partyOf(who) || {}).sheet || {};
     return (sh.extraDamage || []).some(x => x && x.dice && x.label === a.name);

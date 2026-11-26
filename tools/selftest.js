@@ -29319,6 +29319,28 @@ for (const cls of Object.keys(rule)) for (let L = 1; L <= 20; L++) for (const sc
       finally { window.showConfirm = keepAsk; T._armed = keepArm;
         state.party = JSON.parse(keepP); state.combatants = JSON.parse(keepC); state.activeCombatantId = keepA; state.combatRound = keepR; save(); }
     }
+    // -- Round 603: Turn View: Fury of the Small's button (a goblin's, William's) spends nothing and says the hit offers it — it spent a use and did nothing, leaving one fewer for the hit --
+    if (!PLAYER){
+      const keepP = JSON.stringify(state.party), keepC = JSON.stringify(state.combatants), keepA = state.activeCombatantId, keepR = state.combatRound;
+      const T = panelDefs.turnview;
+      try {
+        for (let k = 0; k < 100 && !(typeof _5eLoaded !== 'undefined' && _5eLoaded); k++) await sleep(100);
+        const R = await sktRulesLoad('2024');
+        const b = Object.assign(sktBlankBuild('2024'), { name: 'r603', cls: 'fighter', level: 6, abilities: { method: 'manual', base: { str: 16, dex: 14, con: 14, int: 10, wis: 10, cha: 10 } } });
+        const pc = sktComputeCharacter(b, R); pc.id = 'r603'; pc.name = 'r603'; pc.build = b;
+        pc.sheet.activations = (pc.sheet.activations || []).concat([{ name: 'Fury of the Small', action: 'Special', resource: 'Fury of the Small', amount: 1, desc: 'Once per turn, when you hit a creature larger than you, deal extra damage equal to your Proficiency Bonus.' }]);
+        pc.resources = (pc.resources || []).concat([{ name: 'Fury of the Small', type: 'pool', current: 3, max: 3, recharge: 'long' }]);
+        state.party = JSON.parse(keepP).concat([pc]);
+        state.combatants = [{ id: 'r603', name: 'r603', isPC: true, hp: 30, hpMax: 40, ac: 15, initiative: 20, conditions: [] }];
+        state.combatRound = 1; state.activeCombatantId = 'r603'; T._actAs = null; save();
+        openPanel('turnview'); await sleep(200);
+        const a = T._activationsFor(T._order().find(c => c.id === 'r603')).find(x => x.name === 'Fury of the Small');
+        if (a){ await T._useActivation('r603', a.i); await sleep(30); }
+        const left = state.party.find(p => p.id === 'r603').resources.find(r => r.name === 'Fury of the Small').current;
+        ok('Fury of the Small’s button: no use spent, and it says the hit offers it', !!a && left === 3 && /used on a hit/.test(T._result), JSON.stringify([!!a, left, T._result]));
+      } catch(e){ ok('round 603 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
+      finally { state.party = JSON.parse(keepP); state.combatants = JSON.parse(keepC); state.activeCombatantId = keepA; state.combatRound = keepR; save(); }
+    }
     // -- Class features: represented, not just text ------------------------
     {
       try {
