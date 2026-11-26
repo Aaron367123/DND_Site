@@ -1727,6 +1727,7 @@ registerPanel('combat',{
     for (const p of state.party || []) for (const r of (p && p.resources) || []) if (r.recharge === 'turn' && (r.current || 0) < (r.max || 1)) r.current = r.max || 1;
     c.reactionUsed = false;
     // Sap lasts "before the start of your next turn": the sapper's turn begins.
+    (state.combatants || []).forEach(x => { if (x.zealous && x.zealous.by === id) x.zealous = undefined; });
     (state.combatants || []).forEach(x => { if (x.sapped && x.sapped.by === id) x.sapped = undefined; if (x.slowed && x.slowed.by === id) x.slowed = undefined; if (x.distracted && x.distracted.by === id) x.distracted = undefined; });
     c.actionUsed = false;
     c.bonusUsed = false;
@@ -2672,6 +2673,8 @@ registerPanel('combat',{
       if (typeof sktMonsterExh === 'function'){ const ex = sktMonsterExh(c, 'save'); extra += ex.bonus; if (ex.dis) dis.push('exhaustion'); }
     }
     if (auto) return { total: null, nat: null, passed: false, auto, detail: auto + ' — fails automatically' };
+    // A Zealot's Zealous Presence: advantage on saves until its next turn.
+    if (c && c.zealous) adv.push('Zealous Presence');
     // A save against a condition (opts.cond): advantage the creature has
     // against that one — Fey Ancestry against being charmed, a halfling's
     // Brave against fright, a dwarf's against poison.

@@ -29495,6 +29495,39 @@ for (const cls of Object.keys(rule)) for (let L = 1; L <= 20; L++) for (const sc
       } catch(e){ ok('round 608 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
       finally { window.showConfirm = keepAsk; window.showModal = keepModal; state.party = JSON.parse(keepP); state.combatants = JSON.parse(keepC); state.activeCombatantId = keepA; state.combatRound = keepR; save(); }
     }
+    // -- Round 609: Zealous Presence gives the others on the barbarian's side advantage on attack rolls and saving throws until the start of its next turn — it spent the use and the Bonus Action and changed no roll --
+    if (!PLAYER){
+      const keepP = JSON.stringify(state.party), keepC = JSON.stringify(state.combatants), keepA = state.activeCombatantId, keepR = state.combatRound, keepD = window.sktD;
+      const T = panelDefs.turnview, C = panelDefs.combat, keepArm = T._armed;
+      try {
+        for (let k = 0; k < 100 && !(typeof _5eLoaded !== 'undefined' && _5eLoaded); k++) await sleep(100);
+        const R = await sktRulesLoad('2024');
+        const b = Object.assign(sktBlankBuild('2024'), { name: 'r609z', cls: 'barbarian', subclass: 'Zealot', level: 10, abilities: { method: 'manual', base: { str: 16, dex: 14, con: 14, int: 10, wis: 10, cha: 10 } } });
+        const pc = sktComputeCharacter(b, R); pc.id = 'r609z'; pc.name = 'r609z'; pc.build = b;
+        const al = { id: 'r609a', name: 'r609a', hp: 30, hpMax: 30, ac: 15, rules: '2024', sheet: { attacks: [{ name: 'Mace', atkBonus: '+5', damage: '1d6+3 bludgeoning' }] } };
+        state.party = JSON.parse(keepP).concat([pc, al]);
+        state.combatants = [{ id: 'r609z', name: 'r609z', isPC: true, hp: 40, hpMax: 40, ac: 15, initiative: 20, conditions: [] }, { id: 'r609a', name: 'r609a', isPC: true, hp: 30, hpMax: 30, ac: 15, initiative: 18, conditions: [] }];
+        C.addMonster(_5eData.find(r => r.cat === 'monster' && r.name === 'Goblin')); await sleep(20);
+        const gob = state.combatants[2];
+        state.combatRound = 1; state.activeCombatantId = 'r609z'; T._actAs = null; save();
+        openPanel('turnview'); await sleep(200);
+        const a = T._activationsFor(T._order().find(c => c.id === 'r609z')).find(x => x.name === 'Zealous Presence');
+        if (a){ await T._useActivation('r609z', a.i); await sleep(30); }
+        const ally = () => state.combatants.find(c => c.id === 'r609a');
+        ok('Zealous Presence: the ally is inspired, the goblin isn’t', !!a && !!ally().zealous && !state.combatants.find(c => c.id === gob.id).zealous, JSON.stringify([!!a, ally().zealous]));
+        state.activeCombatantId = 'r609a'; save(); T._armed = gob.id; T._render(); await sleep(30);
+        const ai = T._attacksFor(ally()).findIndex(x => x.name === 'Mace');
+        T._rollAttack(ai); await sleep(30);
+        ok('…its attack has advantage', /Zealous Presence/.test(String(T._result)), String(T._result).slice(0, 200));
+        window.sktD = n => 10;
+        const sv = C.rollSave(ally(), 'wis', 15);
+        ok('…and its saving throw', /advantage: Zealous Presence/.test(sv.detail), sv.detail);
+        // the barbarian's next turn: gone
+        C._refreshTurnEconomy('r609z');
+        ok('…until the start of the barbarian’s next turn', !ally().zealous, JSON.stringify(ally().zealous));
+      } catch(e){ ok('round 609 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
+      finally { window.sktD = keepD; T._armed = keepArm; state.party = JSON.parse(keepP); state.combatants = JSON.parse(keepC); state.activeCombatantId = keepA; state.combatRound = keepR; save(); }
+    }
     // -- Class features: represented, not just text ------------------------
     {
       try {

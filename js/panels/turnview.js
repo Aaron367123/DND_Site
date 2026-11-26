@@ -1099,6 +1099,14 @@ registerPanel('turnview', {
       who.aimed = { k: sktMoveKey() || '', used: false, label: 'Moonlight Step' };
       extra += ' — advantage on its next attack this turn';
     }
+    // Zealous Presence: up to ten others on its side have advantage on attack
+    // rolls and saving throws until the start of the barbarian's next turn.
+    if (a.name === 'Zealous Presence'){
+      const side = this._sideOf(who);
+      const al = this._order().filter(x => x.id !== who.id && !x.dead && this._sideOf(x) === side).slice(0, 10);
+      al.forEach(x => { const live = state.combatants.find(y => y.id === x.id); if (live) live.zealous = { by: who.id, name: who.name }; });
+      extra += al.length ? ' — advantage on attack rolls and saving throws for ' + al.map(x => esc(x.name)).join(', ') + ' until the start of its next turn' : ' — no one else on its side to inspire';
+    }
     if (a.name === 'Fighting Spirit'){
       who.fspirit = this._turnKey();
       extra += ' — advantage on its weapon attacks this turn';
@@ -4084,6 +4092,7 @@ registerPanel('turnview', {
     if (c.aimed && !c.aimed.used && typeof sktMoveKey === 'function' && c.aimed.k === sktMoveKey()){ advWhy.push(c.aimed.label || 'Steady Aim'); c.aimed = Object.assign({}, c.aimed, { used: true }); }
     // Fighting Spirit: "advantage on weapon attack rolls until the end of the current turn".
     if (c.fspirit && c.fspirit === this._turnKey() && a.pc && !a.spell && !a.save) advWhy.push('Fighting Spirit');
+    if (c.zealous) advWhy.push('Zealous Presence');
     if (c.sapped){ disWhy.push('sapped'); c.sapped = undefined; }
     // Long range: disadvantage. Past its reach or range: rolled anyway (the
     // tokens may be loosely placed), and said.
