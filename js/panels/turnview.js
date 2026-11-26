@@ -990,6 +990,17 @@ registerPanel('turnview', {
     }
     // Action Surge: one more action this turn (2024: not the Magic action).
     let extra = '';
+    // Moonlight Step: "Advantage on the next attack roll you make before the
+    // end of this turn"; Fighting Spirit: on every weapon attack this turn.
+    // Only the use and the Bonus Action were spent.
+    if (a.name === 'Moonlight Step' && typeof sktMoveKey === 'function'){
+      who.aimed = { k: sktMoveKey() || '', used: false, label: 'Moonlight Step' };
+      extra += ' — advantage on its next attack this turn';
+    }
+    if (a.name === 'Fighting Spirit'){
+      who.fspirit = this._turnKey();
+      extra += ' — advantage on its weapon attacks this turn';
+    }
     if (a.name === 'Steady Aim' && typeof sktMoveKey === 'function'){
       who.aimed = { k: sktMoveKey() || '', used: false };
       extra = ' — advantage on its next attack this turn; its Speed is 0 until the turn ends';
@@ -3968,7 +3979,9 @@ registerPanel('turnview', {
     // Distracting Strike: the next attack on it by someone other than the fighter.
     if (t.distracted && t.distracted.by !== c.id){ advWhy.push('distracted by ' + t.distracted.name); t.distracted = undefined; }
     // Steady Aim: the next attack this turn.
-    if (c.aimed && !c.aimed.used && typeof sktMoveKey === 'function' && c.aimed.k === sktMoveKey()){ advWhy.push('Steady Aim'); c.aimed = Object.assign({}, c.aimed, { used: true }); }
+    if (c.aimed && !c.aimed.used && typeof sktMoveKey === 'function' && c.aimed.k === sktMoveKey()){ advWhy.push(c.aimed.label || 'Steady Aim'); c.aimed = Object.assign({}, c.aimed, { used: true }); }
+    // Fighting Spirit: "advantage on weapon attack rolls until the end of the current turn".
+    if (c.fspirit && c.fspirit === this._turnKey() && a.pc && !a.spell && !a.save) advWhy.push('Fighting Spirit');
     if (c.sapped){ disWhy.push('sapped'); c.sapped = undefined; }
     // Long range: disadvantage. Past its reach or range: rolled anyway (the
     // tokens may be loosely placed), and said.

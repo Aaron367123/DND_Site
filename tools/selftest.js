@@ -29286,6 +29286,39 @@ for (const cls of Object.keys(rule)) for (let L = 1; L <= 20; L++) for (const sc
       finally { window.showConfirm = keepAsk;
         state.party = JSON.parse(keepP); state.combatants = JSON.parse(keepC); state.activeCombatantId = keepA; state.combatRound = keepR; save(); }
     }
+    // -- Round 602: Turn View: Fighting Spirit gives advantage on weapon attacks for the turn, Moonlight Step on the next attack — they spent the use and the Bonus Action and changed no roll --
+    if (!PLAYER){
+      const keepP = JSON.stringify(state.party), keepC = JSON.stringify(state.combatants), keepA = state.activeCombatantId, keepR = state.combatRound;
+      const T = panelDefs.turnview, C = panelDefs.combat, keepAsk = window.showConfirm, keepArm = T._armed;
+      try {
+        for (let k = 0; k < 100 && !(typeof _5eLoaded !== 'undefined' && _5eLoaded); k++) await sleep(100);
+        const R = await sktRulesLoad('2024'), R14 = await sktRulesLoad('2014');
+        const mk = (id, cls, sub, lv, ed) => { const b = Object.assign(sktBlankBuild(ed), { name: id, cls, subclass: sub, level: lv, abilities: { method: 'manual', base: { str: 16, dex: 14, con: 14, int: 10, wis: 16, cha: 10 } } });
+          const pc = sktComputeCharacter(b, ed === '2014' ? R14 : R); pc.id = id; pc.name = id; pc.build = b; return pc; };
+        const all = [mk('r602f', 'fighter', 'Samurai', 3, '2014'), mk('r602d', 'druid', 'Moon', 10, '2024')];
+        const gob = _5eData.find(r => r.cat === 'monster' && r.name === 'Goblin');
+        const start = active => {
+          state.party = JSON.parse(keepP).concat(JSON.parse(JSON.stringify(all)));
+          state.combatants = all.map((p, k) => ({ id: p.id, name: p.id, isPC: true, hp: 30, hpMax: 40, ac: 15, initiative: 30 - k, conditions: [] }));
+          C.addMonster(gob);
+          state.combatRound = 1; state.activeCombatantId = active; T._actAs = null; save();
+          T._armed = state.combatants.find(c => !c.isPC).id; };
+        const use = async (id, n) => { const a = T._activationsFor(T._order().find(c => c.id === id)).find(x => x.name === n); if (!a) return false; await T._useActivation(id, a.i); await sleep(30); return true; };
+        const swing = async id => { const L = T._attacksFor(T._order().find(c => c.id === id)); const ai = L.findIndex(a => a && a.pc && !a.spell && !a.save && a.dmgText); if (ai < 0) return 'no attack'; T._rollAttack(ai); await sleep(30); return String(T._result || ''); };
+        openPanel('turnview'); await sleep(200);
+        window.showConfirm = async () => true;
+        start('r602f');
+        const h1 = await use('r602f', 'Fighting Spirit');
+        const s1 = await swing('r602f'), s2 = await swing('r602f');
+        ok('Fighting Spirit: advantage on its weapon attacks this turn — the first and the next', h1 && /Fighting Spirit/.test(s1) && /Fighting Spirit/.test(s2), JSON.stringify([h1, s1.slice(0, 160), s2.slice(0, 160)]));
+        start('r602d');
+        const h2 = await use('r602d', 'Moonlight Step');
+        const m1 = await swing('r602d'), m2 = await swing('r602d');
+        ok('Moonlight Step: advantage on the next attack, and only that one', h2 && /Moonlight Step/.test(m1) && !/Moonlight Step/.test(m2), JSON.stringify([h2, m1.slice(0, 160), m2.slice(0, 160)]));
+      } catch(e){ ok('round 602 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
+      finally { window.showConfirm = keepAsk; T._armed = keepArm;
+        state.party = JSON.parse(keepP); state.combatants = JSON.parse(keepC); state.activeCombatantId = keepA; state.combatRound = keepR; save(); }
+    }
     // -- Class features: represented, not just text ------------------------
     {
       try {
