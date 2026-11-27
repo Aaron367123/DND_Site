@@ -5031,7 +5031,7 @@ registerPanel('turnview', {
       const nOf = lv => (ed === '2014' ? Math.min(5, 1 + lv) : 1 + lv) + (fu ? 1 : 0);
       const ba = ed !== '2014' && c.bonusUsed, done = h.used.some(k => /^smite/.test(k));
       const why = s => s + (fu ? ', +1d8 against ' + (ty.includes('fiend') ? 'a fiend' : 'the undead') : '') + (ba ? ' — the Bonus Action is spent' : '');
-      if (!done && free) out.push({ key: 'smite:free', label: 'Divine Smite', dice: nOf(1) + 'd8', type: 'radiant', res: free.name, ok: !ba, smite: true, why: why('Paladin’s Smite: no slot (' + free.current + ' left)') });
+      if (!done && free) out.push({ key: 'smite:free', label: 'Divine Smite (free)', dice: nOf(1) + 'd8', type: 'radiant', res: free.name, ok: !ba, smite: true, why: why('Paladin’s Smite: no slot (' + free.current + ' left)') });
       if (!done) lvs.forEach((lv, k) => out.push({ key: k === 0 ? 'smite' : 'smite:' + lv, label: k === 0 ? 'Divine Smite' : 'Smite (' + ORD[lv] + ')', dice: nOf(lv) + 'd8', type: 'radiant', slot: lv, ok: !ba, smite: true,
         why: why('a ' + ORD[lv] + '-level slot') }));
     }
@@ -5083,6 +5083,14 @@ registerPanel('turnview', {
       // Someone else's hit (Violent Attraction), the drake's bite, the target
       // of a Divine Smite: not this hit's, or not until the smite.
       if (/^(?:\S+ ){0,6}When another creature\b|\bdrake's Bite\b/i.test(note)) return;
+      // The attack made as one drops to 0 (Blaze of Glory): not any hit's.
+      // (the trigger is in the feature's text, not always the damage's sentence)
+      const ft0 = String(((sh.featureList || []).find(f => f && f.name === x.label) || {}).text || '');
+      if (/\breduced to 0 hit points\b/i.test(note) || (/\bwhen you are reduced to 0 hit points\b/i.test(ft0) && /\b(?:the|that|this) attack\b/i.test(note))) return;
+      // "On your first turn of each combat" (2014 Dread Ambusher's 1d8): the
+      // first round only. It was offered on every hit of the fight.
+      const ftx = /\bthat (?:attack|turn)\b/i.test(note) ? String(((sh.featureList || []).find(f => f && f.name === x.label) || {}).text || '') : '';
+      if (/\bfirst turn\b/i.test(note + ' ' + ftx) && (+state.combatRound || 1) > 1) return;
       if (/target of your Divine Smite/i.test(note) && !h.used.some(k => /^smite/.test(k))) return;
       // Reckless Attack and a Strength attack (Frenzy, Brutal Strike) — and
       // Brutal Strike only on the roll that gave up its advantage for it.

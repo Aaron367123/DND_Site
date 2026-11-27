@@ -29970,6 +29970,40 @@ for (const cls of Object.keys(rule)) for (let L = 1; L <= 20; L++) for (const sc
       } catch(e){ ok('round 625 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
       finally { state.party = JSON.parse(keepP); state.combatants = JSON.parse(keepC); state.activeCombatantId = keepA; state.combatRound = keepR; save(); }
     }
+    // -- Round 626: after a hit, Turn View doesn't offer what that hit can't have — Blaze of Glory (the attack as one drops), a 2014 Dread Ambusher's 1d8 past the first round — and a 2024 paladin's free smite reads as such beside the slot one --
+    if (!PLAYER){
+      const keepP = JSON.stringify(state.party), keepC = JSON.stringify(state.combatants), keepA = state.activeCombatantId, keepR = state.combatRound, keepD = window.sktD;
+      const T = panelDefs.turnview, C = panelDefs.combat;
+      try {
+        for (let k = 0; k < 100 && !(typeof _5eLoaded !== 'undefined' && _5eLoaded); k++) await sleep(100);
+        const R14 = await sktRulesLoad('2014'), R = await sktRulesLoad('2024');
+        window.sktD = n => (n === 20 ? 15 : 3);
+        const ogre = _5eData.find(r => r.cat === 'monster' && r.name === 'Ogre' && r._source === 'MM');
+        const offers = async (ed, cls, sub, round) => {
+          const b = Object.assign(sktBlankBuild(ed), { name: 'r626', cls, subclass: sub, level: 20, abilities: { method: 'manual', base: { str: 16, dex: 16, con: 16, int: 16, wis: 16, cha: 16 } } });
+          const pc = sktComputeCharacter(b, ed === '2014' ? R14 : R); pc.id = 'r626'; pc.name = 'r626'; pc.build = b;
+          state.party = JSON.parse(keepP).concat([pc]);
+          state.combatants = [{ id: 'r626', name: 'r626', isPC: true, hp: 100, hpMax: 100, ac: 15, initiative: 20, conditions: [] }];
+          C.addMonster(ogre); const m = state.combatants[1]; m.hp = 999; m.hpMax = 999; m.ac = 1;
+          state.combatRound = round; state.activeCombatantId = 'r626'; save();
+          const c = state.combatants[0], ai = T._attacksFor(c).findIndex(a => a && a.pc && !a.spell && !a.save && a.dmgText);
+          T._rollAttack(ai, { attacker: c, target: m, mode: 1 }); await sleep(20);
+          return T._pcExtraOptions(T._lastPcHit).map(o => o.label);
+        };
+        openPanel('turnview'); await sleep(200);
+        let L = await offers('2014', 'cleric', 'Zeal (PSA)', 1);
+        ok('a Zeal cleric’s ordinary hit: no Blaze of Glory offered (but its Divine Strike is)', !L.includes('Blaze of Glory') && L.some(x => /Divine Strike|Blessed Strikes/.test(x)), JSON.stringify(L));
+        L = await offers('2014', 'ranger', 'Gloom Stalker', 1);
+        ok('a 2014 Gloom Stalker’s Dread Ambusher in the first round', L.includes('Dread Ambusher'), JSON.stringify(L));
+        L = await offers('2014', 'ranger', 'Gloom Stalker', 2);
+        ok('…not in the second', !L.includes('Dread Ambusher'), JSON.stringify(L));
+        L = await offers('2024', 'ranger', 'Gloom Stalker', 3);
+        ok('…a 2024 Gloom Stalker’s Dreadful Strike still in the third round (Kael’s)', L.includes('Dread Ambusher'), JSON.stringify(L));
+        L = await offers('2024', 'paladin', 'Devotion', 1);
+        ok('a 2024 paladin: the free smite and the slot one read apart', L.includes('Divine Smite (free)') && L.includes('Divine Smite') && L.filter(x => x === 'Divine Smite').length === 1, JSON.stringify(L));
+      } catch(e){ ok('round 626 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
+      finally { window.sktD = keepD; state.party = JSON.parse(keepP); state.combatants = JSON.parse(keepC); state.activeCombatantId = keepA; state.combatRound = keepR; save(); }
+    }
     // -- Class features: represented, not just text ------------------------
     {
       try {
