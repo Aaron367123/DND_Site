@@ -1885,6 +1885,7 @@ registerPanel('party',{
   // shorter one was wrong in five different ways.
   _longRestOne(c, i){
     {
+      this._potionsEnd(c);
       // Death-save state lives on the COMBATANT, not the party member, and
       // nothing used to clear it — so after a rest the combat card still
       // showed "⚕ Stable" with its pips filled while the party card showed a
@@ -1981,6 +1982,17 @@ registerPanel('party',{
     }
   },
 
+  // A potion drunk lasts an hour at most (a minute, some): a rest is past it.
+  // The character is worked out again without it (its score, its resistance).
+  _potionsEnd(c){
+    if (!c || !c.build || !(c.build.drunk || []).length) return;
+    const ed = c.build.edition || c.rules || '2024';
+    const R = typeof _sktRulesReady !== 'undefined' ? _sktRulesReady[ed] : null;
+    const b = JSON.parse(JSON.stringify(c.build)); delete b.drunk;
+    if (!R || typeof sktComputeCharacter !== 'function'){ c.build = b; return; }
+    const rec = sktComputeCharacter(b, R, c);
+    Object.assign(c, rec, { id: c.id, portrait: c.portrait });
+  },
   // Short rest applied to the whole party. 5e RAW: PCs spend hit dice to
   // heal. We don't auto-spend (varies wildly by player choice); instead we
   // restore Warlock-style "short rest" pact slots and recharge things like
@@ -2035,6 +2047,7 @@ registerPanel('party',{
   // Magic slots came back. Does not save — the caller does, once.
   _shortRestOne(c, i){
     let pactRestored = false;
+    this._potionsEnd(c);
     // Magic items' uses that come back on a short rest: a rune's "once per
     // short or long rest", an item's spells "per rest".
     [c.inventory, c.build && c.build.items].forEach(list => (list || []).forEach(m => {

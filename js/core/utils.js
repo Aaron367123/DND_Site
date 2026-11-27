@@ -1986,7 +1986,7 @@ function sktItemConsumable(m){
 }
 function sktItemAbilityOn(m, active){
   const n = String((m && m.name) || '');
-  if (sktItemConsumable(m)) return false;
+  if (sktItemConsumable(m) && !m.drunk) return false;
   if (/^Hammer of Thunderbolts/i.test(n)){
     const on = active || [];
     return !!m.attuned && on.some(x => /^Belt of .*Giant Strength/i.test(String(x && x.name))) && on.some(x => /^Gauntlets of Ogre Power/i.test(String(x && x.name)));

@@ -29754,6 +29754,37 @@ for (const cls of Object.keys(rule)) for (let L = 1; L <= 20; L++) for (const sc
       } catch(e){ ok('round 617 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
       finally { try { csClose(); } catch(e){} state.party = JSON.parse(keepP); state.combatants = JSON.parse(keepC); state.activeCombatantId = keepA; save(); }
     }
+    // -- Round 618: a potion drunk for what it does is in effect — a Potion of Hill Giant Strength's 21, a Potion of Fire Resistance's resistance — until ended or a rest; it did nothing, carried or drunk --
+    if (!PLAYER){
+      const keepP = JSON.stringify(state.party);
+      try {
+        for (let k = 0; k < 100 && !(typeof _5eLoaded !== 'undefined' && _5eLoaded); k++) await sleep(100);
+        const R = await sktRulesLoad('2024'), list = await sktMagicLoad('2024');
+        const make = n => { const e = list.find(x => x.name === n); const it = sktMagicMake(R, e, ''); it.qty = n === 'Potion of Fire Resistance' ? 2 : 1; return it; };
+        const b = Object.assign(sktBlankBuild('2024'), { name: 'r618', cls: 'fighter', level: 5, abilities: { method: 'manual', base: { str: 14, dex: 14, con: 14, int: 10, wis: 10, cha: 10 } },
+          items: [make('Potion of Hill Giant Strength'), make('Potion of Fire Resistance')], equipment: { cls: 'A', bg: 'A', picks: {}, materialized: true } });
+        const pc = sktComputeCharacter(b, R); pc.id = 'r618'; pc.name = 'r618'; pc.build = b;
+        state.party = JSON.parse(keepP).concat([pc]); save();
+        const me = () => state.party.find(p => p.id === 'r618');
+        const str0 = me().abilities.str;
+        ok('carried, the potions do nothing (Strength 14, no fire resistance)', str0 === 14 && !(me().resistances || []).includes('fire'), JSON.stringify([str0, me().resistances]));
+        openCharSheet('r618'); for (let k = 0; k < 40 && !(CS && CS.R); k++) await sleep(100);
+        csGoTab('actions'); await sleep(250);
+        let btn = document.querySelector('#cs-root [data-cs-quaff="Potion of Hill Giant Strength"]');
+        if (btn) btn.click(); await sleep(150);
+        ok('Drink: the Potion of Hill Giant Strength — Strength 21, and it’s gone from the pack', !!btn && me().abilities.str === 21 && !(me().build.items || []).some(x => x.name === 'Potion of Hill Giant Strength'),
+           JSON.stringify([!!btn, me().abilities.str, (me().build.items || []).map(x => x.name)]));
+        btn = document.querySelector('#cs-root [data-cs-quaff="Potion of Fire Resistance"]'); if (btn) btn.click(); await sleep(150);
+        ok('…a Potion of Fire Resistance: resistance to fire, one of the two left', (me().resistances || []).includes('fire') && ((me().build.items || []).find(x => x.name === 'Potion of Fire Resistance') || {}).qty === 1,
+           JSON.stringify([me().resistances, (me().build.items || []).find(x => x.name === 'Potion of Fire Resistance')]));
+        const end = document.querySelector('#cs-root [data-cs-unquaff="0"]'); if (end) end.click(); await sleep(150);
+        ok('…End: the strength potion over (back to 14), the resistance still on', !!end && me().abilities.str === 14 && (me().resistances || []).includes('fire'), JSON.stringify([!!end, me().abilities.str, me().resistances]));
+        csClose(); await sleep(30);
+        panelDefs.party._shortRestOne(me(), state.party.findIndex(p => p.id === 'r618')); save();
+        ok('…a short rest ends the rest of them', !(me().resistances || []).includes('fire') && !(me().build.drunk || []).length, JSON.stringify([me().resistances, me().build.drunk]));
+      } catch(e){ ok('round 618 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
+      finally { try { csClose(); } catch(e){} state.party = JSON.parse(keepP); save(); }
+    }
     // -- Class features: represented, not just text ------------------------
     {
       try {

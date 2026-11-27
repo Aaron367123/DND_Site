@@ -1006,7 +1006,7 @@ CS_TAB_RENDER.actions = pc => {
   if (other.length) h += '<div class="cs-asec" data-k="other"><h4>Other</h4>' + other.map(a => csActHtml(pc, a)).join('') + '</div>';
   if (csItems(pc).some(csMaybeMagic)) csEnsureMagic();
   const itemsH = csItemActionsHtml(pc);
-  h += itemsH;
+  h += csPotionsHtml(pc) + itemsH;
   const res = pc.resources || [];
   if (res.length){
     h += '<div class="cs-asec" data-k="limited"><h4>Limited use</h4>' + res.map((r, i) => '<div class="cs-res"><b>' + csE(sktResLabel(pc, r.name)) + '</b>'
@@ -1526,6 +1526,23 @@ function csOnClick(e){
     return csDawnApply(pc, d.csDawnset, v);
   }
   if (d.csDrink){ CS.drink = CS.drink === 'i:' + d.csDrink ? null : 'i:' + d.csDrink; return csRender(); }
+  if (d.csQuaff && !CS.readOnly){
+    const name = d.csQuaff;
+    csRebuild('Drank ' + name, b => {
+      const at = (b.items || []).findIndex(x => x && x.name === name && (+x.qty || 1) > 0); if (at < 0) return;
+      const x = b.items[at], q = +x.qty || 1;
+      const one = Object.assign({}, x, { qty: 1, at: Date.now() }); delete one.equipped;
+      if (q > 1) b.items[at] = Object.assign({}, x, { qty: q - 1 }); else b.items.splice(at, 1);
+      b.drunk = (b.drunk || []).concat([one]);
+    });
+    if (typeof showToast === 'function') showToast('Drank ' + name + ' — in effect until it ends (End, or a rest)');
+    return;
+  }
+  if (d.csUnquaff != null && !CS.readOnly){
+    const i = +d.csUnquaff;
+    csRebuild('Potion ends', b => { b.drunk = (b.drunk || []).filter((x, k) => k !== i); if (!b.drunk.length) delete b.drunk; });
+    return;
+  }
   if (d.csDrinkx){ CS.drink = null; return csRender(); }
   if (d.csDrinkroll || d.csDrinkgo){
     const key = CS.drink || ''; if (!key) return;
@@ -3022,6 +3039,25 @@ function csDrinkHtml(key, dice){
     + '<button class="btn small cs-heal" data-cs-drinkroll="1">🎲 Roll it</button>'
     + '<span class="cb-dim">or what you rolled</span><input type="number" min="0" class="cs-drinkamt" data-cs-drinkamt aria-label="Hit points rolled" placeholder="Total">'
     + '<button class="btn small" data-cs-drinkgo="1">Heal</button><button class="btn small" data-cs-drinkx="1">Cancel</button></div>';
+}
+// Potions drunk for what they do, not their healing (a Potion of Giant
+// Strength, of Fire Resistance, of Flying): Drink takes one from the pack and
+// puts it in effect (build.drunk) — its score, resistance, speed — until it
+// ends: by End, or a rest. A potion did nothing at all, carried or drunk.
+function csPotionsHtml(pc){
+  if (!pc.build) return '';
+  const ro = CS.readOnly;
+  const carried = csItems(pc).filter(m => m && /^(Potions?|Elixir|Philter) of\b/i.test(String(m.name || '')) && (+m.qty || 1) > 0 && !csPotionHeal(m, csItemInfo(m)));
+  const drunk = pc.build.drunk || [];
+  if (!carried.length && !drunk.length) return '';
+  const seen = new Set();
+  return '<div class="cs-asec" data-k="potions"><h4>Potions</h4>'
+    + drunk.map((m, i) => '<div class="cs-act cs-mi"><div class="cs-act-h"><b>' + csE(m.name) + '</b><span class="cs-mi-kind">in effect</span>'
+        + (ro ? '' : '<button class="btn small" data-cs-unquaff="' + i + '">End</button>') + '</div></div>').join('')
+    + carried.filter(m => !seen.has(m.name) && seen.add(m.name)).map(m => '<div class="cs-act cs-mi"><div class="cs-act-h"><b>' + csE(m.name) + '</b>'
+        + ((+m.qty || 1) > 1 ? '<span class="cb-dim">×' + (+m.qty || 1) + '</span>' : '')
+        + (ro ? '' : '<button class="btn small" data-cs-quaff="' + csE(m.name) + '">Drink</button>') + '</div></div>').join('')
+    + '</div>';
 }
 function csItemActionsHtml(pc){
   const list = csItemActions(pc); if (!list.length) return '';

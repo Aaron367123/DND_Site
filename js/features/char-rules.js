@@ -3879,7 +3879,9 @@ function _sktActiveItems(build){
     if (!m.reqAttune) return true;
     if (!m.attuned || attuned >= max) return false;
     attuned++; return true;
-  });
+  // …but one drunk is in effect until it ends (build.drunk): a Potion of
+  // Hill Giant Strength's 21, a Potion of Fire Resistance's resistance.
+  }).concat((build.drunk || []).filter(m => m && m.name).map(m => Object.assign({}, m, { drunk: true })));
 }
 function _sktItemSum(build, key){
   return _sktActiveItems(build).reduce((n, m) => n + (+m[key] || 0), 0);
