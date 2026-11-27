@@ -352,7 +352,10 @@ async function _sktRulesBuild(edition, read){
                   && (sc.source !== csrc || f.source === csrc)
                   // The copy's own entries repeat the 2014 ones, moved.
                   && !(sc._levels && f.classSource === csrc && f._copy))
-        .map(f => ({ name: _SKT_FEATURE_NAME[f.name + '|' + f.source] || f.name, level: sc._levels && f.classSource !== csrc ? sc._levels.get(f.level) : f.level, entries: f.entries || [] }))
+        .map(f => ({ name: _SKT_FEATURE_NAME[f.name + '|' + f.source] || f.name, level: sc._levels && f.classSource !== csrc ? sc._levels.get(f.level) : f.level, entries: f.entries || [],
+                     // Tasha's optional one (Blessed Strikes), and what it replaces.
+                     variant: f.isClassFeatureVariant ? true : undefined,
+                     replaces: f.isClassFeatureVariant ? ((/replaces the ([A-Z][\w' ]+?) feature/.exec(sktRulesText((f.entries || [])[0] || '')) || [])[1] || undefined) : undefined }))
         .filter(f => f.level),
     })).map(sc => _sktOptionFeatures(sc));
     R.classes.push({
@@ -1257,6 +1260,16 @@ function sktAbilityBreakdown(build, R){
 // its text, and whether this file applies it mechanically.
 // Features the data names differently from the book (and D&D Beyond).
 const _SKT_FEATURE_NAME = { 'Giant Power|BGG': 'Giant’s Power' };
+// A subclass's features up to a level: a Tasha's optional one (Blessed
+// Strikes) only when the build uses Tasha's optional class features, and then
+// in place of the one it replaces. A Death or Forge cleric had both Divine
+// Strike and Blessed Strikes, offered together on one hit.
+function sktSubclassFeaturesAt(sub, build, L){
+  const opt = !!(build && build.optionalFeatures);
+  const fs = ((sub && sub.features) || []).filter(f => f.level <= L);
+  const rep = opt ? fs.filter(f => f.variant && f.replaces).map(f => f.replaces) : [];
+  return fs.filter(f => f.variant ? opt : !rep.includes(f.name));
+}
 function sktBuildFeatures(build, R){
   const parts = sktClassLevels(build, R);
   const tag = (f, p) => (f.from === 'class' || f.from === 'subclass') ? Object.assign(f, { cls: p.key, clsLevel: p.level }) : f;
@@ -1310,7 +1323,7 @@ function _sktBuildFeaturesOne(build, R){
       push(f, 'class', f.level, slot);
     });
   }
-  if (sub) sub.features.filter(f => f.level <= L)
+  if (sub) sktSubclassFeaturesAt(sub, build, L)
     .filter(f => !f.optionOf || (build.featureChoices || {})[f.optionOf] === (f.optionValue || f.name))
     .forEach(f => push(f, 'subclass', f.level));
   const sp = sktRulesSpecies(R, build.species);
@@ -2039,6 +2052,14 @@ function sktPassiveFromText(text, name, ctx){
       const L = ctx.level || 1;
       // "to 2d8 at 14th level" (2014) or "to 1d6 when you reach Ranger level 11" (2024).
       (t.match(/(\d+d\d+) (?:at|when you reach) (?:\d+(?:st|nd|rd|th) level|[A-Za-z]+ level \d+)/gi) || []).forEach(x => { const q = /(\d+d\d+) \D*?(\d+)/i.exec(x); if (q && L >= +q[2]) dice = q[1]; });
+      // …or the level first: "When you reach 14th level, the extra damage
+      // increases to 2d8" (2014 Divine Strike, Planar Warrior), "When you
+      // reach Ranger level 11, this extra damage increases to 1d6". A
+      // 20th-level cleric's Divine Strike stayed 1d8.
+      (t.match(/when (?:you reach|the [a-z]+ reaches) (?:\d+(?:st|nd|rd|th) level|[A-Za-z]+ level \d+)[^.]*?\b(?:increases|becomes)\b[^.]*?\d+d\d+/gi) || []).forEach(x => {
+        const q = /(\d+)(?:st|nd|rd|th) level|level (\d+)/i.exec(x), d = /(\d+d\d+)[^d]*$/.exec(x), lv = q ? +(q[1] || q[2]) : 0;
+        if (lv && d && L >= lv) dice = d[1];
+      });
       const when = s.length > 170 ? s.slice(0, 167).replace(/\s\S*$/, '') + '…' : s;
       ctx.extraDamage.push({ label: name, dice: dice + (m[2] ? ' ' + m[2].toLowerCase() : ''), note: when,
         once: /only once per turn|once per turn|once on each of your turns/i.test(t) || undefined });
@@ -2939,6 +2960,23 @@ function sktComputeCharacter(build, R, prior){
       // And what it adds without being used: damage on a hit, initiative, advantage on checks.
       if (!fx && !f.info && read && sktPassiveFromText(f.text, f.name, ctx)) ctx.applied.add(f.name);
     } finally { [ctx.level, ctx.cls, ctx.sub] = was; }
+  });
+  // A later feature that raises an earlier one's die: "the extra damage you
+  // deal with your Giant's Might feature increases to 1d8" (Great Stature,
+  // Runic Juggernaut), "The Psychic damage of your Dreadful Strike becomes
+  // 2d8" (2024 Stalker's Flurry). Each feature read only its own text, so a
+  // 20th-level Rune Knight's Giant's Might stayed 1d6.
+  features.forEach(f => {
+    if (f.info) return;
+    const t = String(f.text || '').replace(/\{@\w+ ([^|}]+)[^}]*\}/g, '$1').replace(/\s+/g, ' ');
+    const re = /\bdamage (?:you deal with|of|from) (?:your |the )?([A-Z][\w'’ ]+?)(?: feature)? (?:increases to|becomes) (\d+d\d+)\b/g;
+    let m;
+    while ((m = re.exec(t))){
+      const nm = m[1].trim();
+      const x = ctx.extraDamage.find(e => e.label === nm)
+        || ctx.extraDamage.find(e => String((features.find(g => g.name === e.label) || {}).text || '').includes(nm));
+      if (x) x.dice = String(x.dice).replace(/^\d+d\d+/, m[2]);
+    }
   });
   // Primal Champion and the like raise a score after everything else.
   SKT_ABS.forEach(k => {

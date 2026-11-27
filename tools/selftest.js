@@ -30004,6 +30004,38 @@ for (const cls of Object.keys(rule)) for (let L = 1; L <= 20; L++) for (const sc
       } catch(e){ ok('round 626 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
       finally { window.sktD = keepD; state.party = JSON.parse(keepP); state.combatants = JSON.parse(keepC); state.activeCombatantId = keepA; state.combatRound = keepR; save(); }
     }
+    // -- Round 627: an on-hit die grows as the book says — "When you reach 14th level, the extra damage increases to 2d8" (2014 Divine Strike, Planar Warrior), a later feature's raise (Giant's Might by Great Stature and Runic Juggernaut, 2024 Dreadful Strike by Stalker's Flurry) — and a Death or Forge cleric has Tasha's Blessed Strikes only as the option, in place of Divine Strike --
+    if (!PLAYER){
+      try {
+        for (let k = 0; k < 100 && !(typeof _5eLoaded !== 'undefined' && _5eLoaded); k++) await sleep(100);
+        const R14 = await sktRulesLoad('2014'), R = await sktRulesLoad('2024');
+        const xd = (ed, cls, sub, level, more) => {
+          const b = Object.assign(sktBlankBuild(ed), { name: 'r627', cls, subclass: sub, level, abilities: { method: 'manual', base: { str: 16, dex: 16, con: 16, int: 16, wis: 16, cha: 16 } } }, more || {});
+          const pc = sktComputeCharacter(b, ed === '2014' ? R14 : R);
+          const o = {}; ((pc.sheet || pc).extraDamage || []).forEach(x => { o[x.label] = x.dice; });
+          return o;
+        };
+        let o = xd('2014', 'cleric', 'Life Domain', 13);
+        ok('a 13th-level Life cleric’s Divine Strike: 1d8', o['Divine Strike'] === '1d8 radiant', JSON.stringify(o));
+        o = xd('2014', 'cleric', 'Life Domain', 14);
+        ok('…at 14th, 2d8 (“When you reach 14th level, the extra damage increases to 2d8”)', o['Divine Strike'] === '2d8 radiant', JSON.stringify(o));
+        o = xd('2014', 'cleric', 'Death Domain', 20);
+        ok('a Death cleric (the DMG’s “When the cleric reaches 14th level”): 2d8, and no Blessed Strikes beside it', o['Divine Strike'] === '2d8 necrotic' && !o['Blessed Strikes'], JSON.stringify(o));
+        o = xd('2014', 'cleric', 'Forge Domain', 20, { optionalFeatures: true });
+        ok('…a Forge cleric using Tasha’s options: Blessed Strikes in place of Divine Strike', o['Blessed Strikes'] === '1d8 radiant' && !o['Divine Strike'], JSON.stringify(o));
+        o = xd('2014', 'ranger', 'Horizon Walker', 11);
+        ok('a Horizon Walker’s Planar Warrior at 11th: 2d8 force', o['Planar Warrior'] === '2d8 force', JSON.stringify(o));
+        o = xd('2014', 'fighter', 'Rune Knight', 9);
+        const o10 = xd('2014', 'fighter', 'Rune Knight', 10), o18 = xd('2014', 'fighter', 'Rune Knight', 18);
+        ok('a Rune Knight’s Giant’s Might: 1d6, 1d8 at 10th (Great Stature), 1d10 at 18th (Runic Juggernaut)', o['Giant\'s Might'] === '1d6' && o10['Giant\'s Might'] === '1d8' && o18['Giant\'s Might'] === '1d10', JSON.stringify([o, o10, o18]));
+        o = xd('2024', 'ranger', 'Gloom Stalker', 10);
+        const g11 = xd('2024', 'ranger', 'Gloom Stalker', 11);
+        ok('a 2024 Gloom Stalker’s Dreadful Strike: 2d6, 2d8 from 11th (Stalker’s Flurry)', o['Dread Ambusher'] === '2d6 psychic' && g11['Dread Ambusher'] === '2d8 psychic', JSON.stringify([o, g11]));
+        o = xd('2024', 'ranger', 'Winter Walker', 11);
+        ok('a Winter Walker’s Frigid Explorer at Ranger level 11: 1d6 cold', o['Frigid Explorer'] === '1d6 cold', JSON.stringify(o));
+      } catch(e){ ok('round 627 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
+    }
+
     // -- Class features: represented, not just text ------------------------
     {
       try {

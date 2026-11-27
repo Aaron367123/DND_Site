@@ -799,7 +799,7 @@ CB_RENDER.class = () => {
       const sub = sktRulesSubclass(cls, b.subclass);
       const pk = sktSubclassSpellPick(sub);
       if (pk) html += '<h4>' + cbEsc(pk.label) + '</h4>' + cbCards(pk.options.map(o => ({ value: o.value, label: o.value })), b.subclassPick, 'cb-subpick');
-      if (sub) html += sub.features.filter(f => f.level <= b.level).map(f => '<div class="cb-feat"><b>' + cbEsc(f.name) + '</b> <span class="cb-dim">level ' + f.level + '</span>' + cbFeatureText(sktRulesText(f.entries)) + '</div>').join('');
+      if (sub) html += sktSubclassFeaturesAt(sub, b, b.level).map(f => '<div class="cb-feat"><b>' + cbEsc(f.name) + '</b> <span class="cb-dim">level ' + f.level + '</span>' + cbFeatureText(sktRulesText(f.entries)) + '</div>').join('');
     } else {
       html += '<div class="cb-dim">' + cbEsc(title) + ' is chosen at level ' + cls.subclassLevel + '.</div>';
     }
