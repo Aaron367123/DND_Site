@@ -1073,6 +1073,15 @@
     apply: ctx => { ctx.acBonus.push({ label: 'Haste', value: 2 }); ctx.speedMult *= 2; ctx.rollAdv.push({ on: ['save:dex'], label: 'Haste' }); } });
   st({ key: 'Bless', label: 'Bless', spell: 'Bless', desc: '+1d4 to attack rolls and saving throws.',
     apply: ctx => ctx.rollDice.push({ on: ['attack', 'save'], die: 4, label: 'Bless' }) });
+  // Enlarge/Reduce (and a Potion of Growth): Enlarge — advantage on Strength
+  // checks and saves, +1d4 on weapon hits; Reduce — disadvantage on them (and
+  // 1d4 less on weapon hits, said). It had no switch: the potion did nothing.
+  st({ key: 'Enlarge/Reduce', label: 'Enlarge/Reduce', spell: 'Enlarge/Reduce', options: () => ['Enlarge', 'Reduce'],
+    desc: (ctx, v) => v === 'Reduce' ? 'Half size: disadvantage on Strength checks and saves, 1d4 less damage with weapons.' : 'Larger: advantage on Strength checks and saves, +1d4 damage with weapons.',
+    apply: (ctx, v) => {
+      if (v === 'Reduce') ctx.rollDis.push({ on: ['ab:str', 'save:str'], label: 'Reduce' });
+      else { ctx.rollAdv.push({ on: ['ab:str', 'save:str'], label: 'Enlarge' }); ctx.extraDamage.push({ label: 'Enlarge', dice: '1d4', note: 'every hit with a weapon, enlarged' }); }
+    } });
   st({ key: 'Longstrider', label: 'Longstrider', spell: 'Longstrider', desc: '+10 ft speed.', apply: ctx => { ctx.speedBonus += 10; } });
   st({ key: 'Stoneskin', label: 'Stoneskin', spell: 'Stoneskin', desc: ctx => 'Resistance to ' + (ctx.edition === '2014' ? 'nonmagical ' : '') + 'bludgeoning, piercing and slashing damage.',
     apply: ctx => ['bludgeoning', 'piercing', 'slashing'].forEach(t => ctx.resist.add(t)) });

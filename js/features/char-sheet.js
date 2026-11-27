@@ -731,6 +731,8 @@ function csRollEffects(pc, kind){
   // Rage, Haste, Bladesong…
   const tags = csRollTags(kind);
   ((pc.sheet || {}).rollAdv || []).forEach(x => { if ((x.on || []).some(t => tags.includes(t))) adv.push(x.label); });
+  // …and what puts one at disadvantage (Reduce).
+  ((pc.sheet || {}).rollDis || []).forEach(x => { if ((x.on || []).some(t => tags.includes(t))) dis.push(x.label); });
   return { adv: [...new Set(adv)], dis: [...new Set(dis)], bonus, autoFail };
 }
 // A line for the next roll's card (a weapon's mastery), used once.

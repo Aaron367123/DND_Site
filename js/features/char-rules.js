@@ -2754,7 +2754,7 @@ function sktComputeCharacter(build, R, prior){
     senses: { darkvision: 0 }, skillBonus: {}, immune: new Set(), cantripDamageBonus: 0,
     // What an on/off state changes (SKT_STATES).
     acBonus: [], acFloor: null, speedMult: 1, spellDcBonus: 0, spellAtkBonus: 0, weaponHit: 0, rageOn: 0, damageBonusAll: 0,
-    shillelagh: null, rollAdv: [], rollDice: [], extraDamage: [], concBonus: 0, saveMods: [],
+    shillelagh: null, rollAdv: [], rollDis: [], rollDice: [], extraDamage: [], concBonus: 0, saveMods: [],
     // Other ways of moving a feature gives: 'walk' (equal to the speed) or feet.
     moveExtra: {}, moveUnlessHeavy: {}, bardicUnarmed: null, applied: new Set(), schoolDamage: {},
   };
@@ -3302,7 +3302,7 @@ function sktComputeCharacter(build, R, prior){
       states: states.map(x => ({ key: x.s.key, label: x.s.label, on: x.on, conc: x.conc, spell: x.s.spell || '', resource: x.s.resource || '',
         desc: typeof x.s.desc === 'function' ? x.s.desc(ctx, x.value) : (x.s.desc || ''), options: x.s.options && x.s.options(ctx).length ? x.s.options(ctx) : null, value: x.value })),
       schoolDamage: Object.keys(ctx.schoolDamage).length ? ctx.schoolDamage : undefined,
-      stateSig: sktStateSig(prior), saveMods: ctx.saveMods, rollAdv: ctx.rollAdv, rollDice: ctx.rollDice, extraDamage: ctx.extraDamage, concBonus: ctx.concBonus,
+      stateSig: sktStateSig(prior), saveMods: ctx.saveMods, rollAdv: ctx.rollAdv, rollDis: ctx.rollDis, rollDice: ctx.rollDice, extraDamage: ctx.extraDamage, concBonus: ctx.concBonus,
       // A half-orc's Savage Attacks adds a weapon die on a melee crit, as does Brutal Critical.
       critExtraDice: (ctx.critExtraDice || 0) + (features.some(f => f.from === 'species' && f.name === 'Savage Attacks') ? 1 : 0),
       greatWeaponFighting: !!ctx.gwf,

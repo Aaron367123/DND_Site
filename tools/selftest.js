@@ -29867,6 +29867,34 @@ for (const cls of Object.keys(rule)) for (let L = 1; L <= 20; L++) for (const sc
       } catch(e){ ok('round 621 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
       finally { try { csClose(); } catch(e){} state.party = JSON.parse(keepP); state.combatants = JSON.parse(keepC); state.activeCombatantId = keepA; save(); }
     }
+    // -- Round 622: Enlarge/Reduce is a switch — Enlarge: advantage on Strength checks and saves, +1d4 on weapon hits; Reduce: disadvantage on them — for a caster who knows it, and a Potion of Growth (which did nothing) --
+    if (!PLAYER){
+      const keepP = JSON.stringify(state.party);
+      try {
+        for (let k = 0; k < 100 && !(typeof _5eLoaded !== 'undefined' && _5eLoaded); k++) await sleep(100);
+        const R = await sktRulesLoad('2024'), list = await sktMagicLoad('2024');
+        const e = list.find(x => x.name === 'Potion of Growth'), it = sktMagicMake(R, e, ''); it.qty = 1;
+        const b = Object.assign(sktBlankBuild('2024'), { name: 'r622', cls: 'fighter', level: 5, abilities: { method: 'manual', base: { str: 16, dex: 14, con: 14, int: 10, wis: 10, cha: 10 } },
+          items: [it], equipment: { cls: 'A', bg: 'A', picks: {}, materialized: true } });
+        const pc = sktComputeCharacter(b, R); pc.id = 'r622'; pc.name = 'r622'; pc.build = b;
+        state.party = JSON.parse(keepP).concat([pc]); save();
+        const me = () => state.party.find(p => p.id === 'r622');
+        openCharSheet('r622'); for (let k = 0; k < 40 && !(CS && CS.R); k++) await sleep(100);
+        csGoTab('actions'); await sleep(250);
+        const btn = document.querySelector('#cs-root [data-cs-quaff="Potion of Growth"]'); if (btn) btn.click(); await sleep(200);
+        csClose(); await sleep(30);
+        const st = (me().sheet.states || []).find(s => s.key === 'Enlarge/Reduce') || {};
+        const fx = csRollEffects(me(), 'save:str'), fxa = csRollEffects(me(), 'abcheck:str');
+        ok('a Potion of Growth: Enlarge on — advantage on Strength saves and checks, +1d4 on weapon hits', !!btn && st.on === true && fx.adv.includes('Enlarge') && fxa.adv.includes('Enlarge') && (me().sheet.extraDamage || []).some(x => x.label === 'Enlarge' && x.dice === '1d4'),
+           JSON.stringify([!!btn, st.on, fx, fxa]));
+        // a wizard who knows it, Reduce chosen and concentrating
+        const wb = Object.assign(sktBlankBuild('2024'), { name: 'r622w', cls: 'wizard', level: 5, spells: ['Enlarge/Reduce'], abilities: { method: 'manual', base: { str: 10, dex: 14, con: 14, int: 16, wis: 10, cha: 10 } } });
+        const w = sktComputeCharacter(wb, R, { concentration: 'Enlarge/Reduce', active: { 'Enlarge/Reduce:opt': 'Reduce' } });
+        const fr = csRollEffects(w, 'save:str');
+        ok('…Reduce on a wizard concentrating on it: disadvantage on Strength saves', ((w.sheet.states || []).find(s => s.key === 'Enlarge/Reduce') || {}).on === true && fr.dis.includes('Reduce'), JSON.stringify([((w.sheet.states || []).find(s => s.key === 'Enlarge/Reduce') || {}), fr]));
+      } catch(e){ ok('round 622 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
+      finally { try { csClose(); } catch(e){} state.party = JSON.parse(keepP); save(); }
+    }
     // -- Class features: represented, not just text ------------------------
     {
       try {
