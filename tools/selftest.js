@@ -30091,6 +30091,46 @@ for (const cls of Object.keys(rule)) for (let L = 1; L <= 20; L++) for (const sc
       finally { window.sktD = keepD; state.party = JSON.parse(keepP); state.combatants = JSON.parse(keepC); state.activeCombatantId = keepA; state.combatRound = keepR; save(); }
     }
 
+    // -- Round 629: a Rune Knight's Giant's Might is a switch — its button turns it on (Large, advantage on Strength checks and saves), and only then is its extra damage offered on a hit; it was offered on every hit, enlarged or not --
+    if (!PLAYER){
+      const keepP = JSON.stringify(state.party), keepC = JSON.stringify(state.combatants), keepA = state.activeCombatantId, keepR = state.combatRound, keepD = window.sktD;
+      const T = panelDefs.turnview, C = panelDefs.combat;
+      try {
+        for (let k = 0; k < 100 && !(typeof _5eLoaded !== 'undefined' && _5eLoaded); k++) await sleep(100);
+        const R = await sktRulesLoad('2024');
+        window.sktD = n => (n === 20 ? 15 : 3);
+        const ogre = _5eData.find(r => r.cat === 'monster' && r.name === 'Ogre' && r._source === 'MM');
+        const b = Object.assign(sktBlankBuild('2024'), { name: 'r629', cls: 'fighter', subclass: 'Rune Knight', level: 10, abilities: { method: 'manual', base: { str: 16, dex: 14, con: 14, int: 10, wis: 10, cha: 10 } } });
+        const pc = sktComputeCharacter(b, R); pc.id = 'r629'; pc.name = 'r629'; pc.build = b;
+        state.party = JSON.parse(keepP).concat([pc]);
+        state.combatants = [{ id: 'r629', name: 'r629', isPC: true, hp: 80, hpMax: 80, ac: 16, initiative: 20, conditions: [] }];
+        C.addMonster(ogre); const m = state.combatants[1]; m.hp = 999; m.hpMax = 999; m.ac = 1; m.name = 'Ogre r629';
+        state.combatRound = 2; state.activeCombatantId = 'r629'; save();
+        const st = ((pc.sheet || {}).states || []).find(s => s.key === 'Giant\'s Might');
+        ok('a Rune Knight’s sheet has Giant’s Might as a switch, its 1d8 said', !!st && /1d8/.test(st.desc || ''), JSON.stringify(st));
+        const adv = on => ((sktComputeCharacter(b, R, on ? { active: { 'Giant\'s Might': true } } : {}).sheet || {}).rollAdv || []).some(x => /Giant/.test(x.label) && x.on.includes('save:str'));
+        ok('…on: advantage on Strength saves (off: none)', adv(true) && !adv(false), JSON.stringify([adv(true), adv(false)]));
+        openPanel('turnview'); await sleep(200);
+        const c = () => state.combatants.find(x => x.id === 'r629'), p = () => state.party.find(x => x.id === 'r629');
+        const hit = () => { const A = T._attacksFor(c()), ai = A.findIndex(a => a && a.pc && !a.spell && !a.save && a.dmgText && !/unarmed/i.test(a.name)); T._rollAttack(ai, { attacker: c(), target: state.combatants.find(x => x.name === 'Ogre r629'), mode: 0 }); return T._pcExtraOptions(T._lastPcHit).map(o => o.label + '=' + o.dice); };
+        let L = hit();
+        ok('…not enlarged: no Giant’s Might on a hit', !L.some(x => /^Giant/.test(x)), JSON.stringify(L));
+        c().onceTurn = {};
+        const a = T._activationsFor(c()).find(x => x.name === 'Giant\'s Might');
+        const left0 = +(((p().resources || []).find(r => r.name === 'Giant\'s Might')) || {}).current;
+        if (a) { await T._useActivation('r629', a.i); await sleep(30); }
+        ok('…its button: on, a use spent', !!((p().active || {})['Giant\'s Might']) && +(((p().resources || []).find(r => r.name === 'Giant\'s Might')) || {}).current === left0 - 1, JSON.stringify([p().active, left0]));
+        c().onceTurn = {};
+        L = hit();
+        ok('…enlarged: its 1d8 offered on the hit', L.includes('Giant\'s Might=1d8'), JSON.stringify(L));
+        const ro = state.combatants.find(x => x.name === 'Ogre r629'), hp0 = ro.hp;
+        const o = T._pcExtraOptions(T._lastPcHit).find(x => x.label === 'Giant\'s Might');
+        if (o) { T._usePcExtra(o.key); await sleep(20); }
+        ok('…which deals it (3 on the stubbed die)', hp0 - state.combatants.find(x => x.name === 'Ogre r629').hp === 3, hp0 + ' → ' + state.combatants.find(x => x.name === 'Ogre r629').hp);
+      } catch(e){ ok('round 629 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
+      finally { window.sktD = keepD; state.party = JSON.parse(keepP); state.combatants = JSON.parse(keepC); state.activeCombatantId = keepA; state.combatRound = keepR; save(); }
+    }
+
     // -- Class features: represented, not just text ------------------------
     {
       try {

@@ -5118,6 +5118,8 @@ registerPanel('turnview', {
       if (/\bStrength\b/.test(note) && !h.str) return;
       if (x.label === 'Brutal Strike' && !h.brutal) return;
       if (x.label === 'Elemental Cleaver' && (p.active || {})['Elemental Cleaver']) return;   // (in the damage already)
+      // A switch's own damage (Giant's Might): only while it's on.
+      if (this._featureStates(p).some(s => s.key === x.label) && !(p.active || {})[x.label]) return;
       // "if it's missing any of its Hit Points" — before this hit, or every
       // first hit would qualify by hurting it.
       if (/missing any (?:of its )?hit points|below its hit point maximum/i.test(note) && !(h.hpBefore != null && h.hpMaxT != null && h.hpBefore < h.hpMaxT)) return;

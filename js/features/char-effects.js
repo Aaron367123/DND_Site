@@ -1034,6 +1034,12 @@
       if (has(ctx, 'Frenzy') && ctx.edition === '2024') ctx.extraDamage.push({ label: 'Frenzy', dice: ctx.rageDamage + 'd6', note: 'with Reckless Attack, the first target you hit each turn with a Strength attack' });
       if (has(ctx, 'Divine Fury')) ctx.extraDamage.push({ label: 'Divine Fury', dice: '1d6+' + Math.floor(ctx.classLevel('barbarian') / 2) + ' radiant', note: 'the first creature you hit each turn while raging' });
     } });
+  // A Rune Knight's Giant's Might: a minute Large, with advantage on Strength
+  // checks and saves and its extra damage once a turn (offered on a hit by
+  // the Turn View while it is on). It was offered on every hit, enlarged or not.
+  st({ key: 'Giant\'s Might', label: 'Giant’s Might', resource: 'Giant\'s Might', has: ctx => has(ctx, 'Giant\'s Might'),
+    desc: ctx => { const x = (ctx.extraDamage || []).find(e => e.label === 'Giant\'s Might'); return 'Large if there’s room, advantage on Strength checks and saves, and once on each of your turns ' + (x ? x.dice : '1d6') + ' extra damage on a weapon or unarmed hit, for 1 minute.'; },
+    apply: ctx => ctx.rollAdv.push({ on: ['ab:str', 'save:str'], label: 'Giant’s Might' }) });
   // Until the start of your next turn: the combat tracker turns it off then.
   st({ key: 'Reckless Attack', label: 'Reckless Attack', has: ctx => has(ctx, 'Reckless Attack'),
     desc: ctx => 'Advantage on ' + (ctx.edition === '2014' ? 'melee weapon attacks' : 'attacks') + ' using Strength this turn; attacks against you have advantage until your next turn.',
