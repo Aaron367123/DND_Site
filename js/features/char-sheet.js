@@ -2091,6 +2091,10 @@ function csSpellDamageParts(s, slot, forSave){
     if (raw.length){ const gap = txt.slice(end, m.index), next = txt.slice(m.index + m[0].length, m.index + m[0].length + 60);
       if (gap.length > 40 || /[.;]/.test(gap) || !/\b(and|plus|as well as)\b/i.test(gap) || /\b(another|increases?)\b/i.test(gap)
           || /\b(at the (?:end|start) of|whenever|next turn)\b/i.test(next)) break; }
+    // (for the saves, not a weapon's "1d4 extra damage" — Enlarge/Reduce's:
+    // a failed save dealt it as though the spell did)
+    if (forSave && (/^[^.]{0,20}?\b(?:extra|less) damage\b/i.test(txt.slice(m.index + m[0].length, m.index + m[0].length + 40))
+        || /\b(?:extra|subtract)\s*$/i.test(txt.slice(Math.max(0, m.index - 12), m.index)))) continue;
     end = m.index + m[0].length;
     const ty = (new RegExp('^[^a-z]*(' + SKT_DMG_TYPE_RE.source + ')\\b', 'i').exec(txt.slice(end, end + 40)) || [])[1];
     raw.push({ dice: m[1].trim(), type: ty ? ty.toLowerCase() : '' });
@@ -2099,7 +2103,12 @@ function csSpellDamageParts(s, slot, forSave){
   // One roll, from the start: as it always was (its own growth and bonus).
   if (raw.length === 1 && !from) return [{ dice: csSpellDamage(s, slot), type: raw[0].type || csSpellDamageType(s) }];
   const up = typeof sktSpellUp === 'function' ? sktSpellUp(s, 0, slot || s.level) : Math.max(0, (slot || s.level) - s.level);
-  return raw.map((x, i) => ({ dice: up && typeof sktSpellStepped === 'function' ? sktSpellStepped(x.dice, sktSpellStep(s, from ? 0 : i, x.type), typeof sktSpellUp === 'function' ? sktSpellUp(s, from ? 0 : i, slot || s.level) : up) : x.dice, type: x.type }));
+  // The save's own roll, past an attack's (Bigby's Hand's Grasping Hand after
+  // its Clenched Fist): the step of its own die, not the attack's — 4d6 at
+  // 6th grew by 2d8.
+  const hiSteps = from ? [...JSON.stringify(s.higher || s.entriesHigherLevel || []).matchAll(/\{@scaledamage [^|]+\|[^|]+\|([^}|]+)/g)].map(q => q[1].trim()) : [];
+  const stepOf = (x, i) => { const die = (/d(\d+)/.exec(x.dice) || [])[1], own = die && hiSteps.find(st => (/d(\d+)/.exec(st) || [])[1] === die); return own || sktSpellStep(s, from ? 0 : i, x.type); };
+  return raw.map((x, i) => ({ dice: up && typeof sktSpellStepped === 'function' ? sktSpellStepped(x.dice, stepOf(x, i), typeof sktSpellUp === 'function' ? sktSpellUp(s, from ? 0 : i, slot || s.level) : up) : x.dice, type: x.type }));
 }
 // A spell's damage at a slot level with its type(s), as it's shown.
 function csSpellDamageTyped(s, slot){

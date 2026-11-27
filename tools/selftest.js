@@ -29895,6 +29895,25 @@ for (const cls of Object.keys(rule)) for (let L = 1; L <= 20; L++) for (const sc
       } catch(e){ ok('round 622 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
       finally { try { csClose(); } catch(e){} state.party = JSON.parse(keepP); save(); }
     }
+    // -- Round 623: a cast spell's saves carry only its own damage — Enlarge/Reduce's weapon "1d4 extra damage" isn't dealt on a failed save; Bigby's Hand's Grasping Hand at 6th is 6d6, not 4d6 + 2d8 (the Clenched Fist's step) --
+    if (!PLAYER){
+      const keepC = JSON.stringify(state.combatants);
+      try {
+        for (let k = 0; k < 100 && !(typeof _5eLoaded !== 'undefined' && _5eLoaded); k++) await sleep(100);
+        const R = await sktRulesLoad('2024');
+        state.combatants = [{ id: 'r623', name: 'r623', isPC: true, hp: 10, hpMax: 10 }];
+        const p = { id: 'r623', sheet: { spellSaveDc: 15 } };
+        const en = csSaveRequest(p, sktRulesSpell(R, 'Enlarge/Reduce'), 2);
+        ok('Enlarge/Reduce’s saves deal no damage (its 1d4 is the weapons’)', !!en && !(en.parts || []).length && !en.dice, JSON.stringify(en && { parts: en.parts, dice: en.dice }));
+        const bh = csSaveRequest(p, sktRulesSpell(R, "Bigby's Hand"), 6);
+        ok('Bigby’s Hand at 6th: the Grasping Hand’s 4d6 grows by its own 2d6 — 6d6', !!bh && (bh.parts || []).length === 1 && bh.parts[0].dice === '6d6', JSON.stringify(bh && bh.parts));
+        const ws = csSaveRequest(p, sktRulesSpell(R, 'Wrathful Smite'), 1);
+        ok('Wrathful Smite’s save: the frightened condition, not its hit’s extra 1d6 (that lands on the hit, saved or not)', !!ws && !(ws.parts || []).length && !!ws.cond && /fright/i.test(ws.cond.cond || ''), JSON.stringify(ws && [ws.parts, ws.cond]));
+        const fb = csSaveRequest(p, sktRulesSpell(R, 'Fireball'), 5);
+        ok('…and Fireball at 5th is still 10d6 fire', !!fb && fb.dice === '10d6' && fb.type === 'fire', JSON.stringify(fb && [fb.dice, fb.type]));
+      } catch(e){ ok('round 623 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
+      finally { state.combatants = JSON.parse(keepC); }
+    }
     // -- Class features: represented, not just text ------------------------
     {
       try {
