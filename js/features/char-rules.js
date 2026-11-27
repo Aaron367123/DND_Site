@@ -1899,12 +1899,16 @@ function sktStateSig(pc){
 // The states a character has, and which are on.
 function _sktStates(ctx, prior){
   const out = [];
+  // A potion drunk that is a spell (a Potion of Speed's Haste, a Potion of
+  // Heroism's Bless): its state is on, without concentration, while it lasts.
+  const potionSpells = new Set([].concat(...(((ctx.build || {}).drunk) || []).map(m => (m && m.spells || []).map(x => String(x && x.n || '').toLowerCase()))));
   SKT_STATES.forEach(s => {
     if (s.edition && s.edition !== ctx.edition) return;
-    if (s.spell ? !ctx.knows.has(s.spell) : !(s.has && s.has(ctx))) return;
+    const byPotion = !!s.spell && potionSpells.has(String(s.spell).toLowerCase());
+    if (s.spell ? !(ctx.knows.has(s.spell) || byPotion) : !(s.has && s.has(ctx))) return;
     const sp = s.spell ? sktRulesSpell(ctx.R, s.spell) : null;
-    const conc = !!(sp && (sp.duration || []).some(d => d && d.concentration));
-    const on = s.key === 'Rage' ? !!prior.rage : conc ? prior.concentration === s.spell : !!(prior.active || {})[s.key];
+    const conc = !!(sp && (sp.duration || []).some(d => d && d.concentration)) && !byPotion;
+    const on = byPotion || (s.key === 'Rage' ? !!prior.rage : conc ? prior.concentration === s.spell : !!(prior.active || {})[s.key]);
     const opts = s.options ? s.options(ctx) : [];
     const value = opts.includes((prior.active || {})[s.key + ':opt']) ? prior.active[s.key + ':opt'] : (opts[0] || '');
     out.push({ s, on, conc, value });

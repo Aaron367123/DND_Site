@@ -1535,6 +1535,8 @@ function csOnClick(e){
       if (q > 1) b.items[at] = Object.assign({}, x, { qty: q - 1 }); else b.items.splice(at, 1);
       b.drunk = (b.drunk || []).concat([one]);
     });
+    // A Potion of Heroism: 10 temporary hit points too (they don't stack).
+    if (/^Potion of Heroism$/i.test(name)) setTimeout(() => csEdit('Heroism: 10 temporary hit points', p => { p.tempHp = Math.max(+p.tempHp || 0, 10); }), 0);
     if (typeof showToast === 'function') showToast('Drank ' + name + ' — in effect until it ends (End, or a rest)');
     return;
   }

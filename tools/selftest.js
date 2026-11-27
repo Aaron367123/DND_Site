@@ -29785,6 +29785,29 @@ for (const cls of Object.keys(rule)) for (let L = 1; L <= 20; L++) for (const sc
       } catch(e){ ok('round 618 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
       finally { try { csClose(); } catch(e){} state.party = JSON.parse(keepP); save(); }
     }
+    // -- Round 619: a potion that is a spell is that spell's switch while it lasts, without concentration — a Potion of Speed's Haste (+2 AC), a Potion of Heroism's Bless (and its 10 temporary hit points) --
+    if (!PLAYER){
+      const keepP = JSON.stringify(state.party);
+      try {
+        for (let k = 0; k < 100 && !(typeof _5eLoaded !== 'undefined' && _5eLoaded); k++) await sleep(100);
+        const R = await sktRulesLoad('2024'), list = await sktMagicLoad('2024');
+        const make = n => { const e = list.find(x => x.name === n); const it = sktMagicMake(R, e, ''); it.qty = 1; return it; };
+        const b = Object.assign(sktBlankBuild('2024'), { name: 'r619', cls: 'fighter', level: 5, abilities: { method: 'manual', base: { str: 14, dex: 14, con: 14, int: 10, wis: 10, cha: 10 } },
+          items: [make('Potion of Speed'), make('Potion of Heroism')], equipment: { cls: 'A', bg: 'A', picks: {}, materialized: true } });
+        const pc = sktComputeCharacter(b, R); pc.id = 'r619'; pc.name = 'r619'; pc.build = b;
+        state.party = JSON.parse(keepP).concat([pc]); save();
+        const me = () => state.party.find(p => p.id === 'r619'), st = k => ((me().sheet.states || []).find(s => s.key === k) || {});
+        const ac0 = me().ac;
+        openCharSheet('r619'); for (let k = 0; k < 40 && !(CS && CS.R); k++) await sleep(100);
+        csGoTab('actions'); await sleep(250);
+        let btn = document.querySelector('#cs-root [data-cs-quaff="Potion of Speed"]'); if (btn) btn.click(); await sleep(150);
+        ok('a Potion of Speed: Haste on, +2 AC, no concentration', !!btn && st('Haste').on === true && me().ac === ac0 + 2 && !me().concentration, JSON.stringify([!!btn, st('Haste'), ac0, me().ac, me().concentration]));
+        btn = document.querySelector('#cs-root [data-cs-quaff="Potion of Heroism"]'); if (btn) btn.click(); await sleep(200);
+        ok('a Potion of Heroism: Bless on, and 10 temporary hit points', st('Bless').on === true && (+me().tempHp || 0) === 10, JSON.stringify([st('Bless'), me().tempHp]));
+        csClose(); await sleep(30);
+      } catch(e){ ok('round 619 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
+      finally { try { csClose(); } catch(e){} state.party = JSON.parse(keepP); save(); }
+    }
     // -- Class features: represented, not just text ------------------------
     {
       try {
