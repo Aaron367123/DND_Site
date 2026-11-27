@@ -2922,13 +2922,18 @@ function csItemSpellRow(pc, m, info, sp){
   const idc = /\bsave DC (?:of |is )?(\d+)/i.exec(info.text || ''), dc = idc ? +idc[1] : sh.spellSaveDc;
   const sv = s && (s.savingThrow || [])[0] ? String(s.savingThrow[0]).slice(0, 3).toUpperCase() + ' save' + (dc ? ' DC ' + dc : '') : '';
   const atk = s && (s.spellAttack || []).length && sh.spellAtkBonus != null && sh.spellAtkBonus !== '' ? '<button class="btn small" data-cs-spatk="1">Attack ' + csE(csAtkText(sh.spellAtkBonus)) + '</button>' : '';
+  // Its damage or healing to roll, as the spell list's own rows have — a
+  // Wand of Magic Missiles' darts, a Staff of Healing's Cure Wounds had none.
+  const lv = s ? +s.level || 0 : 0, scMod = (parseInt(sh.spellAtkBonus, 10) || 0) - (sh.profBonus || 0);
+  const dmg = lv && typeof csSpellDamage === 'function' && csSpellDamage(s, lv) ? '<button class="btn small" data-cs-spdmg="' + csE(nm) + '">' + csDmgHtml(csSpellDamageTyped(s, lv)) + '</button>' : '';
+  const heal = lv && typeof csSpellHeal === 'function' && csSpellHeal(s, lv, scMod) ? '<button class="btn small cs-heal" data-cs-spheal="' + csE(nm) + '">Heal ' + csE(csSpellHeal(s, lv, scMod)) + '</button>' : '';
   const per = sp.per === 'will' ? 'at will' : sp.per === 'charges' ? cost + ' charge' + (cost > 1 ? 's' : '') + (sp.perLevel ? ', +1 a level higher' : '')
     : sp.per === 'day' ? sp.k + '/day' + (sp.each ? '' : ', shared') : sp.per === 'rest' ? sp.k + '/short rest' + (sp.each ? '' : ', shared') : '';
   const ok = 'isp:' + m.name + ':' + nm;
   return '<div class="cs-spell cs-ispell"><button class="cs-spell-n" data-cs-open="' + csE(ok) + '"><b>' + csE(nm) + '</b>'
     + (s && s.concentration ? '<i class="cs-tag" title="Concentration">C</i>' : '')
     + '<span class="cb-dim">' + csE([s ? (+s.level ? CS_ORD[+s.level] : 'Cantrip') : '', s ? csSpellMeta(s) : ''].filter(Boolean).join(' · ')) + '</span></button>'
-    + '<span class="cs-spell-c">' + (sv ? '<span class="cs-save">' + csE(sv) + '</span>' : '') + atk
+    + '<span class="cs-spell-c">' + (sv ? '<span class="cs-save">' + csE(sv) + '</span>' : '') + atk + dmg + heal
     + (u && sp.each ? csItemPips(pc, m, u) : '')
     + '<span class="cb-dim">' + csE(per) + '</span>'
     + (ro ? '' : '<button class="btn small" data-cs-icast="' + csE(m.name + '|' + nm + '|' + key + '|' + cost) + '"' + (can ? '' : ' disabled') + '>Cast</button>') + '</span>'

@@ -29695,6 +29695,31 @@ for (const cls of Object.keys(rule)) for (let L = 1; L <= 20; L++) for (const sc
       } catch(e){ ok('round 615 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
       finally { try { csClose(); } catch(e){} state.party = JSON.parse(keepP); state.combatants = JSON.parse(keepC); state.activeCombatantId = keepA; state.combatRound = keepR; save(); }
     }
+    // -- Round 616: a magic item's spell rows have its damage or healing to roll, as the spell list's rows do — a Wand of Magic Missiles had none, nor a Staff of Healing's Cure Wounds --
+    if (!PLAYER){
+      const keepP = JSON.stringify(state.party);
+      try {
+        for (let k = 0; k < 100 && !(typeof _5eLoaded !== 'undefined' && _5eLoaded); k++) await sleep(100);
+        const R = await sktRulesLoad('2024'), list = await sktMagicLoad('2024');
+        const make = n => { const e = list.find(x => x.name === n); const it = sktMagicMake(R, e, ''); it.attuned = true; it.qty = 1; return it; };
+        const b = Object.assign(sktBlankBuild('2024'), { name: 'r616', cls: 'cleric', level: 9, abilities: { method: 'manual', base: { str: 10, dex: 14, con: 14, int: 10, wis: 18, cha: 10 } },
+          items: [make('Wand of Magic Missiles'), make('Staff of Healing')], equipment: { cls: 'A', bg: 'A', picks: {}, materialized: true } });
+        const pc = sktComputeCharacter(b, R); pc.id = 'r616'; pc.name = 'r616'; pc.build = b;
+        state.party = JSON.parse(keepP).concat([pc]); save();
+        openCharSheet('r616'); for (let k = 0; k < 40 && !(CS && CS.R); k++) await sleep(100);
+        csGoTab('actions'); await sleep(200);
+        for (let k = 0; k < 30 && !document.querySelector('#cs-root .cs-ispell'); k++){ csRender(); await sleep(150); }
+        const row = n => [...document.querySelectorAll('#cs-root .cs-ispell')].find(r => (r.querySelector('.cs-spell-n b') || {}).textContent === n);
+        const mm = row('Magic Missile'), cw = row('Cure Wounds');
+        ok('a Wand of Magic Missiles’ row: its damage to roll', !!mm && !!mm.querySelector('[data-cs-spdmg="Magic Missile"]'), mm ? mm.textContent.replace(/\s+/g, ' ') : 'no row');
+        ok('a Staff of Healing’s Cure Wounds: its healing to roll', !!cw && !!cw.querySelector('[data-cs-spheal="Cure Wounds"]'), cw ? cw.textContent.replace(/\s+/g, ' ') : 'no row');
+        const hb = cw && cw.querySelector('[data-cs-spheal]'); if (hb) hb.click(); await sleep(80);
+        const r = (state.party.find(p => p.id === 'r616').rolls || [])[0] || {};
+        ok('…rolled, kept as a heal', r.label === 'Cure Wounds heals' && r.type === 'hit points', JSON.stringify(r));
+        csClose();
+      } catch(e){ ok('round 616 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
+      finally { try { csClose(); } catch(e){} state.party = JSON.parse(keepP); save(); }
+    }
     // -- Class features: represented, not just text ------------------------
     {
       try {
