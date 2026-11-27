@@ -661,6 +661,15 @@ registerPanel('turnview', {
     // Used on a hit, and offered under the hit once one lands: pressed here
     // it spent the Focus Point, the free smite or the use and did nothing —
     // and the hit's offer then had none left to spend.
+    // A reaction the panel offers when it applies (Uncanny Dodge, Deflect
+    // Attacks, Cutting Words, Shield…: MECH): pressed here, it spent the
+    // reaction and halved, reduced or turned nothing — and the reaction was
+    // gone when the hit came.
+    const mech = who.isPC && typed !== 'applied' && /^reaction$/i.test(String(a.action || '')) ? this.MECH[a.name] : null;
+    if (mech){
+      this._setResult(`<span class="dim">${esc(a.name)} is offered when it applies — ${mech.when === 'damage' ? 'when ' + esc(who.name) + ' takes the damage of a hit' : 'when an attack roll would hit'}, before it lands. Nothing spent.</span>`, true);
+      this._render(); return;
+    }
     // Relentless Endurance happens by itself, as the orc drops to 0.
     if (who.isPC && /^Relentless Endurance$/i.test(a.name)){
       this._setResult(`<span class="dim">Relentless Endurance works by itself: dropped to 0 (not killed outright), ${esc(who.name)} is up at 1 hit point. Nothing spent.</span>`, true);

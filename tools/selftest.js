@@ -29944,6 +29944,32 @@ for (const cls of Object.keys(rule)) for (let L = 1; L <= 20; L++) for (const sc
       } catch(e){ ok('round 624 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
       finally { T._armed = keepArm; state.party = JSON.parse(keepP); state.combatants = JSON.parse(keepC); state.activeCombatantId = keepA; state.combatRound = keepR; save(); }
     }
+    // -- Round 625: Turn View: a reaction offered when it applies (Uncanny Dodge, Deflect Attacks) spends nothing from its button and says when — it spent the reaction, which was then gone when the hit came; one the panel doesn't offer (Slow Fall) is still used --
+    if (!PLAYER){
+      const keepP = JSON.stringify(state.party), keepC = JSON.stringify(state.combatants), keepA = state.activeCombatantId, keepR = state.combatRound;
+      const T = panelDefs.turnview;
+      try {
+        for (let k = 0; k < 100 && !(typeof _5eLoaded !== 'undefined' && _5eLoaded); k++) await sleep(100);
+        const R = await sktRulesLoad('2024');
+        const mk = (id, cls) => { const b = Object.assign(sktBlankBuild('2024'), { name: id, cls, level: 5, abilities: { method: 'manual', base: { str: 10, dex: 16, con: 14, int: 10, wis: 14, cha: 10 } } });
+          const pc = sktComputeCharacter(b, R); pc.id = id; pc.name = id; pc.build = b; return pc; };
+        const all = [mk('r625r', 'rogue'), mk('r625m', 'monk')];
+        state.party = JSON.parse(keepP).concat(all);
+        state.combatants = all.map((p, k) => ({ id: p.id, name: p.id, isPC: true, hp: 30, hpMax: 30, ac: 15, initiative: 20 - k, conditions: [] }));
+        state.combatRound = 1; state.activeCombatantId = 'r625r'; T._actAs = null; save();
+        openPanel('turnview'); await sleep(200);
+        const use = async (id, n) => { const a = T._activationsFor(T._order().find(c => c.id === id)).find(x => x.name === n); if (!a) return false; await T._useActivation(id, a.i); await sleep(30); return true; };
+        const cb = id => state.combatants.find(c => c.id === id);
+        const u = await use('r625r', 'Uncanny Dodge');
+        ok('Uncanny Dodge’s button: the reaction kept, and it says it’s offered when a hit lands', u && !cb('r625r').reactionUsed && /offered when it applies/.test(T._result), JSON.stringify([u, cb('r625r').reactionUsed, T._result]));
+        state.activeCombatantId = 'r625m'; save();
+        const d = await use('r625m', 'Deflect Attacks');
+        ok('…Deflect Attacks’ too', d && !cb('r625m').reactionUsed, JSON.stringify([d, cb('r625m').reactionUsed]));
+        const s = await use('r625m', 'Slow Fall');
+        ok('…Slow Fall, which the panel doesn’t offer, is still used from its button', s && cb('r625m').reactionUsed === true, JSON.stringify([s, cb('r625m').reactionUsed]));
+      } catch(e){ ok('round 625 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
+      finally { state.party = JSON.parse(keepP); state.combatants = JSON.parse(keepC); state.activeCombatantId = keepA; state.combatRound = keepR; save(); }
+    }
     // -- Class features: represented, not just text ------------------------
     {
       try {
