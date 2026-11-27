@@ -9821,8 +9821,8 @@
           ok('2024 with an older patron: nothing from it before 3rd level, its 1st-level features at 3rd', !two.length && three.some(f => f.name === "Hexblade's Curse" && f.level === 3), JSON.stringify([two.length, three.map(f => f.level + ':' + f.name)])); }
         r = mk('Cleric', 'Arcana', 8, '2014'); CB.build.cantrips = ['Sacred Flame']; r = again('2014');
         ok('2014: the older domain\'s own Potent Spellcasting still adds WIS', flat(r) === md(r, 'wis'), flat(r));
-        r = mk('Cleric', 'Forge', 8, '2014');
-        ok('2014: Tasha\'s Blessed Strikes — 1d8 radiant on the Extra damage list', xd(r, 'Blessed Strikes').dice === '1d8 radiant', JSON.stringify(r.sheet.extraDamage));
+        r = mk('Cleric', 'Forge', 8, '2014'); CB.build.optionalFeatures = true; r = again('2014');
+        ok('2014: Tasha\'s Blessed Strikes (the option taken) — 1d8 radiant on the Extra damage list, in place of Divine Strike', xd(r, 'Blessed Strikes').dice === '1d8 radiant' && !(r.sheet.extraDamage || []).some(x => x.label === 'Divine Strike'), JSON.stringify(r.sheet.extraDamage));
         // Numbers.
         r = mk('Ranger', 'Swarmkeeper', 3); const sw3 = xd(r, 'Gathered Swarm').dice; r = mk('Ranger', 'Swarmkeeper', 11);
         ok('subclass: Gathered Swarm — 1d6 piercing, 1d8 from 11th level', sw3 === '1d6 piercing' && xd(r, 'Gathered Swarm').dice === '1d8 piercing', sw3 + ' / ' + xd(r, 'Gathered Swarm').dice);
