@@ -29914,6 +29914,36 @@ for (const cls of Object.keys(rule)) for (let L = 1; L <= 20; L++) for (const sc
       } catch(e){ ok('round 623 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
       finally { state.combatants = JSON.parse(keepC); }
     }
+    // -- Round 624: Hunter's Mark already up: pressed again, it moves the mark to the creature picked — the Bonus Action, no Favored Enemy use; it cast the spell again, spending a use --
+    if (!PLAYER){
+      const keepP = JSON.stringify(state.party), keepC = JSON.stringify(state.combatants), keepA = state.activeCombatantId, keepR = state.combatRound;
+      const T = panelDefs.turnview, C = panelDefs.combat, keepArm = T._armed;
+      try {
+        for (let k = 0; k < 100 && !(typeof _5eLoaded !== 'undefined' && _5eLoaded); k++) await sleep(100);
+        const R = await sktRulesLoad('2024');
+        const b = Object.assign(sktBlankBuild('2024'), { name: 'r624', cls: 'ranger', level: 5, abilities: { method: 'manual', base: { str: 10, dex: 16, con: 14, int: 10, wis: 14, cha: 10 } } });
+        const pc = sktComputeCharacter(b, R); pc.id = 'r624'; pc.name = 'r624'; pc.build = b;
+        state.party = JSON.parse(keepP).concat([pc]);
+        state.combatants = [{ id: 'r624', name: 'r624', isPC: true, hp: 40, hpMax: 40, ac: 15, initiative: 20, conditions: [] }];
+        const gob = _5eData.find(r => r.cat === 'monster' && r.name === 'Goblin');
+        C.addMonster(gob); C.addMonster(gob);
+        const [g1, g2] = state.combatants.filter(c => !c.isPC);
+        state.combatRound = 1; state.activeCombatantId = 'r624'; T._actAs = null; save();
+        openPanel('turnview'); await sleep(200);
+        const me = () => state.combatants.find(c => c.id === 'r624'), fe = () => (state.party.find(p => p.id === 'r624').resources.find(r => r.name === 'Favored Enemy') || {}).current;
+        const a = T._activationsFor(T._order().find(c => c.id === 'r624')).find(x => /Hunter.s Mark/.test(x.name));
+        T._armed = g1.id; if (a) await T._useActivation('r624', a.i); await sleep(30);
+        const fe1 = fe();
+        ok('Hunter’s Mark cast on the first goblin: a Favored Enemy use, concentrating', !!a && me().marks.hm.tgt === g1.id && state.party.find(p => p.id === 'r624').concentration === "Hunter's Mark", JSON.stringify([!!a, me().marks, fe1]));
+        // next turn: move it
+        me().bonusUsed = false; T._armed = g2.id;
+        await T._useActivation('r624', a.i); await sleep(30);
+        ok('…pressed again: the mark moves to the second goblin — the Bonus Action, no use spent', me().marks.hm.tgt === g2.id && fe() === fe1 && me().bonusUsed === true && /moves/.test(T._result), JSON.stringify([me().marks, fe1, fe(), me().bonusUsed, T._result]));
+        T._armed = g1.id; await T._useActivation('r624', a.i); await sleep(30);
+        ok('…not with the Bonus Action spent', me().marks.hm.tgt === g2.id && fe() === fe1, JSON.stringify([me().marks, fe()]));
+      } catch(e){ ok('round 624 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
+      finally { T._armed = keepArm; state.party = JSON.parse(keepP); state.combatants = JSON.parse(keepC); state.activeCombatantId = keepA; state.combatRound = keepR; save(); }
+    }
     // -- Class features: represented, not just text ------------------------
     {
       try {

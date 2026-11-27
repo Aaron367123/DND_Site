@@ -640,6 +640,24 @@ registerPanel('turnview', {
       this._setResult(`<span class="dim">${esc(who.name)} can't — ${esc(problem)}.</span>`, true);
       return;
     }
+    // Hunter's Mark or Hex already up (concentrating on it): pressed again, it
+    // moves the mark to the creature picked — a Bonus Action, no use or slot.
+    // It cast the spell again, spending a use of Favored Enemy.
+    const mvSpell = who.isPC && /^(Hunter.s Mark|Hex)$/i.test(String(a.castSpell || '')) ? a.castSpell : null;
+    const mvRec = mvSpell ? this._partyOf(who) : null;
+    if (mvRec && mvRec.concentration === mvSpell && typed !== 'applied'){
+      const mk = /^Hex$/i.test(mvSpell) ? 'hex' : 'hm';
+      const mt = this._order().find(x => x.id === this._armed && x.id !== who.id && this._sideOf(x) !== this._sideOf(who) && !x.dead);
+      if (!mt){ this._setResult(`<span class="dim">${esc(who.name)} is already concentrating on ${esc(mvSpell)} — pick the creature to move the mark to, on the right.</span>`, true); this._render(); return; }
+      if (who.bonusUsed && sktRuleOn('economy')){ this._setResult(`<span class="dim">${esc(who.name)} can't move the mark — the Bonus Action is spent.</span>`, true); this._render(); return; }
+      this._snapshot(`${who.name} · ${mvSpell} moves`);
+      who.bonusUsed = true;
+      who.marks = Object.assign({}, who.marks, { [mk]: { tgt: mt.id, name: mt.name, round: state.combatRound || 1 } });
+      const txt = `<strong>${esc(who.name)}</strong> moves <strong>${esc(mvSpell)}</strong> to <strong>${esc(mt.name)}</strong> <span class="dim">(its Bonus Action; no use or slot)</span>.`;
+      this._log.unshift(txt); this._setResult(txt, true);
+      save(); panelDefs.combat?._render?.(); this._render();
+      return;
+    }
     // Used on a hit, and offered under the hit once one lands: pressed here
     // it spent the Focus Point, the free smite or the use and did nothing —
     // and the hit's offer then had none left to spend.
