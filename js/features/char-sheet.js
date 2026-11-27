@@ -2376,7 +2376,7 @@ function csSpellsClick(e, t, d, pc){
   if (d.csOpen){ CS.open[d.csOpen] = !CS.open[d.csOpen]; csRender(); return true; }   // spells, items and extras
   if (d.csSplv != null){ CS.spLv = d.csSplv; csRender(); return true; }
   if (d.csActf){ CS.actF = d.csActf; csRender(); return true; }
-  if (d.csSpatk){ csRollD20('Spell attack', parseInt((pc.sheet || {}).spellAtkBonus, 10) || 0, e, 'attack:spell'); csRender(); return true; }
+  if (d.csSpatk){ csRollD20('Spell attack', d.csSpatkv != null ? +d.csSpatkv : (parseInt((pc.sheet || {}).spellAtkBonus, 10) || 0), e, 'attack:spell'); csRender(); return true; }
   if (d.csSpdmg){
     const s = csSpell(d.csSpdmg); if (!s) return true;
     const sel = document.querySelector('#cs-root [data-cs-castlvl="' + CSS.escape(d.csSpdmg) + '"]');
@@ -2745,13 +2745,26 @@ function csItemText(m){
 
 // The catalogue's entry merged under what the character's copy says, so an
 // item added before the sheet knew about spells still has them.
+// A Spell Scroll: its level from its name ("Spell Scroll (3rd Level)",
+// "(Level 3)", "(Cantrip)"), and the spell written on it (m.scrollSpell,
+// chosen on the sheet; the item is then "Spell Scroll (3rd Level): Fireball").
+// The scroll's own save DC and attack bonus by level (the DMG's table). A
+// scroll was only its level: no spell, nothing to cast.
+function csScrollLevel(m){
+  const n = String((m && m.name) || '');
+  if (!/^Spell Scroll\b/i.test(n)) return null;
+  if (/\(cantrip\)/i.test(n)) return 0;
+  const x = /\((\d)(?:st|nd|rd|th) level\)|\(level (\d)\)/i.exec(n);
+  return x ? +(x[1] || x[2]) : null;
+}
+const CS_SCROLL_DC = [13, 13, 13, 15, 15, 17, 17, 18, 18, 19], CS_SCROLL_ATK = [5, 5, 5, 7, 7, 9, 9, 10, 10, 11];
 function csItemInfo(m){
-  const n = String((m && m.name) || '').toLowerCase();
+  const n = String((m && m.name) || '').toLowerCase().replace(/^(spell scroll \([^)]*\)):.*$/, '$1');
   const e = ((CS && CS.magic) || []).find(x => x.name.toLowerCase() === n) || {};
   const charges = +m.charges || +e.charges || 0;
   return {
     rarity: m.rarity || e.rarity || '', reqAttune: !!(m.reqAttune || e.reqAttune), attuneBy: m.attuneBy || e.attuneBy || '',
-    spells: csItemSpellList(m.spells || e.spells || null, charges), unarmed: !!(m.unarmed || e.unarmed), charges, props: e.props || null,
+    spells: csItemSpellList(m.scrollSpell ? [{ n: m.scrollSpell, per: 'scroll' }] : (m.spells || e.spells || null), charges), unarmed: !!(m.unarmed || e.unarmed), charges, props: e.props || null,
     text: e.text || '',
   };
 }
@@ -2900,7 +2913,7 @@ function csItemActions(pc){
   return csActiveItems(pc).map(m => {
     const i = csItemInfo(m);
     return { m, i, ab: csItemAbility(i.text), rows: csItemPropRows(i), fx: csItemEffects(m) };
-  }).filter(x => x.i.spells || x.i.charges || x.rows.length || x.fx.line.length || x.fx.notes.length || (x.ab.kind && (x.i.rarity || x.i.reqAttune)) || csPotionHeal(x.m, x.i));
+  }).filter(x => x.i.spells || csScrollLevel(x.m) != null || x.i.charges || x.rows.length || x.fx.line.length || x.fx.notes.length || (x.ab.kind && (x.i.rarity || x.i.reqAttune)) || csPotionHeal(x.m, x.i));
 }
 const csSpellNm = n => { const s = csSpell(n); return s ? s.name : _csTitle(n); };
 // What one of an item's uses is: the item's charges ('c'), its once-a-day
@@ -2933,8 +2946,9 @@ function csItemPips(pc, m, u){
 // character's own numbers, its uses, and Cast.
 function csItemSpellRow(pc, m, info, sp){
   const sh = pc.sheet || {}, ro = CS.readOnly, s = csSpell(sp.n), nm = csSpellNm(sp.n);
-  const key = sp.per === 'charges' ? 'c' : sp.per === 'will' || sp.per === 'item' ? '' : sp.each ? (sp.per === 'rest' ? 'spr:' : 'sp:') + nm : sp.per + ':' + sp.k;
-  const u = key ? csItemUses(pc, m, key) : null;
+  const scl = sp.per === 'scroll' ? csScrollLevel(m) : null;
+  const key = sp.per === 'scroll' ? 'scroll' : sp.per === 'charges' ? 'c' : sp.per === 'will' || sp.per === 'item' ? '' : sp.each ? (sp.per === 'rest' ? 'spr:' : 'sp:') + nm : sp.per + ':' + sp.k;
+  const u = key && key !== 'scroll' ? csItemUses(pc, m, key) : null;
   const cost0 = sp.per === 'charges' ? (sp.k || 1) : 1;
   // Cast higher for more charges — a Staff of Healing's Cure Wounds (a charge
   // a level), a Wand of Fireballs ("one level higher for each additional
@@ -2943,22 +2957,24 @@ function csItemSpellRow(pc, m, info, sp){
   const up = base && sp.per === 'charges' && (sp.perLevel || /\beach (?:additional|extra) charge\b|\bfor each charge (?:you expend )?(?:above|beyond) the first\b/i.test(info.text || ''));
   const ik = m.name + '|' + (s ? s.name : sp.n);
   const top = up ? Math.min(9, base + Math.max(0, ((u && u.left) || 0) - cost0)) : base;
-  const at = up ? Math.max(base, Math.min(top, +((CS.iLvl || {})[ik]) || base)) : base;
+  const at = up ? Math.max(base, Math.min(top, +((CS.iLvl || {})[ik]) || base)) : scl != null ? Math.max(base, scl) : base;
   const cost = cost0 + (at - base);
   const can = !ro && (!u || u.left >= cost);
   const lvSel = up && top > base && !ro ? '<select class="cb-sel cs-castlvl" data-cs-ilvlsel="' + csE(ik) + '" aria-label="Cast at level">' + Array.from({ length: top - base + 1 }, (_, i) => base + i).map(x => '<option value="' + x + '"' + (x === at ? ' selected' : '') + '>' + CS_ORD[x] + '</option>').join('') + '</select>' : '';
   // The DC the item gives ("save DC 17"), else the character's own; a
   // character who doesn't cast and an item that doesn't say: the save alone.
-  const idc = /\bsave DC (?:of |is )?(\d+)/i.exec(info.text || ''), dc = idc ? +idc[1] : sh.spellSaveDc;
+  const idc = /\bsave DC (?:of |is )?(\d+)/i.exec(info.text || ''), dc = scl != null ? CS_SCROLL_DC[scl] : idc ? +idc[1] : sh.spellSaveDc;
   const sv = s && (s.savingThrow || [])[0] ? String(s.savingThrow[0]).slice(0, 3).toUpperCase() + ' save' + (dc ? ' DC ' + dc : '') : '';
-  const atk = s && (s.spellAttack || []).length && sh.spellAtkBonus != null && sh.spellAtkBonus !== '' ? '<button class="btn small" data-cs-spatk="1">Attack ' + csE(csAtkText(sh.spellAtkBonus)) + '</button>' : '';
+  const atk = s && (s.spellAttack || []).length && scl != null ? '<button class="btn small" data-cs-spatk="1" data-cs-spatkv="' + CS_SCROLL_ATK[scl] + '">Attack +' + CS_SCROLL_ATK[scl] + '</button>'
+    : s && (s.spellAttack || []).length && sh.spellAtkBonus != null && sh.spellAtkBonus !== '' ? '<button class="btn small" data-cs-spatk="1">Attack ' + csE(csAtkText(sh.spellAtkBonus)) + '</button>' : '';
   // Its damage or healing to roll, as the spell list's own rows have — a
   // Wand of Magic Missiles' darts, a Staff of Healing's Cure Wounds had none.
   const lv = at, scMod = (parseInt(sh.spellAtkBonus, 10) || 0) - (sh.profBonus || 0);
   const dmg = lv && typeof csSpellDamage === 'function' && csSpellDamage(s, lv) ? '<button class="btn small" data-cs-spdmg="' + csE(nm) + '" data-cs-ilvl="' + lv + '">' + csDmgHtml(csSpellDamageTyped(s, lv)) + '</button>' : '';
   const heal = lv && typeof csSpellHeal === 'function' && csSpellHeal(s, lv, scMod) ? '<button class="btn small cs-heal" data-cs-spheal="' + csE(nm) + '" data-cs-ilvl="' + lv + '">Heal ' + csE(csSpellHeal(s, lv, scMod)) + '</button>' : '';
   const per = sp.per === 'will' ? 'at will' : sp.per === 'charges' ? cost + ' charge' + (cost > 1 ? 's' : '') + (sp.perLevel ? ', +1 a level higher' : '')
-    : sp.per === 'day' ? sp.k + '/day' + (sp.each ? '' : ', shared') : sp.per === 'rest' ? sp.k + '/short rest' + (sp.each ? '' : ', shared') : '';
+    : sp.per === 'day' ? sp.k + '/day' + (sp.each ? '' : ', shared') : sp.per === 'rest' ? sp.k + '/short rest' + (sp.each ? '' : ', shared')
+    : sp.per === 'scroll' ? 'the scroll is used up' + ((+m.qty || 1) > 1 ? ' (' + (+m.qty || 1) + ')' : '') : '';
   const ok = 'isp:' + m.name + ':' + nm;
   return '<div class="cs-spell cs-ispell"><button class="cs-spell-n" data-cs-open="' + csE(ok) + '"><b>' + csE(nm) + '</b>'
     + (s && s.concentration ? '<i class="cs-tag" title="Concentration">C</i>' : '')
@@ -3103,8 +3119,18 @@ function csItemActionsHtml(pc){
         : !spells.length && ab.para ? '<div class="cs-act-d">' + csE(ab.para) + ' <button class="cs-linkbtn" data-cs-open="' + csE('ia:' + m.name) + '">more</button></div>' : '')
       + (fx.line.length ? '<div class="cs-mi-fx">' + csE(fx.line.join(' · ')) + '</div>' : '')
       + fx.notes.map(x => '<div class="cs-mi-fx cs-mi-when">' + csE(x) + '</div>').join('')
-      + propRows + spells.map(sp => csItemSpellRow(pc, m, i, sp)).join('') + '</div>';
+      + propRows + spells.map(sp => csItemSpellRow(pc, m, i, sp)).join('') + csScrollPickHtml(m) + '</div>';
   }).join('') + '</div>';
+}
+// A scroll with no spell written yet: which one (the spells of its level).
+function csScrollPickHtml(m){
+  const lv = csScrollLevel(m);
+  if (lv == null || m.scrollSpell || CS.readOnly) return '';
+  const names = ((CS.R && CS.R.spells) || []).filter(s => s && (+s.level || 0) === lv).map(s => s.name).sort();
+  const id = 'cs-scroll-' + lv;
+  return '<div class="cs-add cs-scrollpick"><input list="' + id + '" data-cs-scrollpick="' + csE(m.name) + '" placeholder="The spell on it (' + (lv ? CS_ORD[lv] : 'a cantrip') + ')" aria-label="The spell on the scroll">'
+    + '<datalist id="' + id + '">' + names.map(n => '<option value="' + csE(n) + '">').join('') + '</datalist>'
+    + '<button class="btn small" data-cs-scrollset="' + csE(m.name) + '">Set</button></div>';
 }
 // The Spells tab's list of what items cast.
 function csItemSpellsHtml(pc){
@@ -3114,10 +3140,33 @@ function csItemSpellsHtml(pc){
 }
 // Spending and getting back an item's uses.
 function csItemClick(d, pc){
+  if (d.csScrollset != null && !CS.readOnly){
+    const name = d.csScrollset, lv = csScrollLevel({ name });
+    const v = String((document.querySelector('#cs-root [data-cs-scrollpick="' + CSS.escape(name) + '"]') || {}).value || '').trim();
+    const s = v && csSpell(v);
+    if (!s){ if (typeof showToast === 'function') showToast(v ? 'No spell called ' + v : 'Type the spell on the scroll'); return true; }
+    if ((+s.level || 0) > (lv || 0)){ if (typeof showToast === 'function') showToast(s.name + ' is too high for a ' + (lv ? CS_ORD[lv] : 'cantrip') + ' scroll'); return true; }
+    const named = name + ': ' + s.name;
+    csItemsEdit('Scroll of ' + s.name, list => {
+      const at = list.findIndex(x => x && x.name === name && !x.scrollSpell); if (at < 0) return;
+      const x = list[at], q = +x.qty || 1;
+      if (q > 1) list[at] = Object.assign({}, x, { qty: q - 1 }); else list.splice(at, 1);
+      const same = list.findIndex(y => y && y.name === named);
+      if (same >= 0) list[same] = Object.assign({}, list[same], { qty: (+list[same].qty || 1) + 1 });
+      else list.splice(Math.min(at, list.length), 0, Object.assign({}, x, { name: named, scrollSpell: s.name, qty: 1 }));
+    });
+    return true;
+  }
   if (d.csIpip == null && d.csIcast == null && d.csIuse == null && d.csIcharge == null && d.csIprop == null && d.csIactive == null) return false;
   if (CS.readOnly) return true;
   const store = p => p.build ? (p.build.items || []) : (p.inventory || []);
   const spend = (p, name, key, n) => {
+    // A scroll: one fewer, or gone.
+    if (key === 'scroll'){
+      const L = store(p), at = L.findIndex(x => x && x.name === name); if (at < 0) return false;
+      const q = +L[at].qty || 1; if (q > 1) L[at] = Object.assign({}, L[at], { qty: q - 1 }); else L.splice(at, 1);
+      return true;
+    }
     if (key === 'c' && p.build){ const r = (p.resources || []).find(x => x.name === name); if (!r || (r.current || 0) < n) return false; r.current -= n; return true; }
     const m = store(p).find(x => x.name === name); if (!m) return false;
     const used = +((m.used || {})[key]) || 0;
@@ -3168,7 +3217,8 @@ function csItemClick(d, pc){
   // cast from a slot does — at the item's DC when it gives one. It sent
   // nothing, and the DM ran the fireball by hand.
   const mi = (csItems(pc) || []).find(x => x && x.name === name);
-  const idc = mi ? /\bsave DC (?:of |is )?(\d+)/i.exec(csItemInfo(mi).text || '') : null;
+  const sclv = mi ? csScrollLevel(mi) : null;
+  const idc = sclv != null ? [null, CS_SCROLL_DC[sclv]] : mi ? /\bsave DC (?:of |is )?(\d+)/i.exec(csItemInfo(mi).text || '') : null;
   let ok = true;
   csEdit('Cast ' + spell + ' from ' + name, p => {
     if (key && !spend(p, name, key, cost)){ ok = false; return; }

@@ -29808,6 +29808,41 @@ for (const cls of Object.keys(rule)) for (let L = 1; L <= 20; L++) for (const sc
       } catch(e){ ok('round 619 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
       finally { try { csClose(); } catch(e){} state.party = JSON.parse(keepP); save(); }
     }
+    // -- Round 620: a Spell Scroll holds a spell — picked on the sheet (one of two split off), cast at the scroll's level and DC, used up, the saves in Turn View; it was only its level, with nothing to cast --
+    if (!PLAYER){
+      const keepP = JSON.stringify(state.party), keepC = JSON.stringify(state.combatants), keepA = state.activeCombatantId;
+      try {
+        for (let k = 0; k < 100 && !(typeof _5eLoaded !== 'undefined' && _5eLoaded); k++) await sleep(100);
+        const R = await sktRulesLoad('2024'), list = await sktMagicLoad('2024');
+        const make = (n, q) => { const e = list.find(x => x.name === n); const it = sktMagicMake(R, e, ''); it.qty = q; return it; };
+        const b = Object.assign(sktBlankBuild('2024'), { name: 'r620', cls: 'wizard', level: 5, abilities: { method: 'manual', base: { str: 10, dex: 14, con: 14, int: 16, wis: 12, cha: 10 } },
+          items: [make('Spell Scroll (3rd Level)', 2), make('Spell Scroll (1st Level)', 1)], equipment: { cls: 'A', bg: 'A', picks: {}, materialized: true } });
+        const pc = sktComputeCharacter(b, R); pc.id = 'r620'; pc.name = 'r620'; pc.build = b;
+        state.party = JSON.parse(keepP).concat([pc]);
+        state.combatants = [{ id: 'r620', name: 'r620', isPC: true, hp: 30, hpMax: 30, ac: 13, initiative: 20, conditions: [] }]; state.activeCombatantId = 'r620'; save();
+        const me = () => state.party.find(p => p.id === 'r620'), items = () => (me().build.items || []).filter(x => /^Spell Scroll/.test(x.name)).map(x => x.name + ' ×' + (x.qty || 1));
+        openCharSheet('r620'); for (let k = 0; k < 40 && !(CS && CS.R); k++) await sleep(100);
+        csGoTab('actions'); await sleep(250);
+        for (let k = 0; k < 30 && !document.querySelector('#cs-root [data-cs-scrollpick]'); k++){ csRender(); await sleep(150); }
+        const pick = (name, spell) => { const i = document.querySelector('#cs-root [data-cs-scrollpick="' + name + '"]'); if (i) i.value = spell; const s = document.querySelector('#cs-root [data-cs-scrollset="' + name + '"]'); if (s) s.click(); return !!(i && s); };
+        ok('an unwritten 3rd-level scroll offers its spells to pick', !!document.querySelector('#cs-root [data-cs-scrollpick="Spell Scroll (3rd Level)"]') && [...document.querySelectorAll('#cs-scroll-3 option')].some(o => o.value === 'Fireball'), '');
+        pick('Spell Scroll (3rd Level)', 'Wish'); await sleep(150);
+        ok('…a 9th-level spell is refused for it', !items().some(x => /Wish/.test(x)), JSON.stringify(items()));
+        pick('Spell Scroll (3rd Level)', 'Fireball'); await sleep(200);
+        ok('…Fireball written on one of the two', JSON.stringify(items().sort()) === JSON.stringify(['Spell Scroll (1st Level) ×1', 'Spell Scroll (3rd Level) ×1', 'Spell Scroll (3rd Level): Fireball ×1']), JSON.stringify(items()));
+        csGoTab('actions'); await sleep(200);
+        const cast = document.querySelector('#cs-root [data-cs-icast^="Spell Scroll (3rd Level): Fireball|Fireball|scroll|"]');
+        const row = cast && cast.closest('.cs-ispell');
+        ok('…its row: DEX save DC 15 (the scroll’s), 8d6 to roll', !!row && /DC 15/.test(row.textContent) && /8d6/.test(row.textContent), row ? row.textContent.replace(/\s+/g, ' ') : 'no row');
+        if (cast) cast.click(); await sleep(150);
+        const rq = (me().castReq || []).slice(-1)[0] || {};
+        ok('…cast: the scroll is used up, and the saves go to Turn View at its DC', !items().some(x => /Fireball/.test(x)) && rq.spell === 'Fireball' && rq.dc === 15 && rq.lvl === 3, JSON.stringify([items(), rq]));
+        pick('Spell Scroll (1st Level)', 'Cure Wounds'); await sleep(200); csGoTab('actions'); await sleep(200);
+        const hb = document.querySelector('#cs-root .cs-ispell [data-cs-spheal="Cure Wounds"]');
+        ok('a Cure Wounds scroll has its healing to roll', !!hb, JSON.stringify(items()));
+      } catch(e){ ok('round 620 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
+      finally { try { csClose(); } catch(e){} state.party = JSON.parse(keepP); state.combatants = JSON.parse(keepC); state.activeCombatantId = keepA; save(); }
+    }
     // -- Class features: represented, not just text ------------------------
     {
       try {
