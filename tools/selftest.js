@@ -29843,6 +29843,30 @@ for (const cls of Object.keys(rule)) for (let L = 1; L <= 20; L++) for (const sc
       } catch(e){ ok('round 620 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
       finally { try { csClose(); } catch(e){} state.party = JSON.parse(keepP); state.combatants = JSON.parse(keepC); state.activeCombatantId = keepA; save(); }
     }
+    // -- Round 621: a scroll named for its spell, as loot is ("Scroll of Fireball") holds that spell at its own level — cast, used up, the saves in Turn View; a Scroll of Protection isn't one --
+    if (!PLAYER){
+      const keepP = JSON.stringify(state.party), keepC = JSON.stringify(state.combatants), keepA = state.activeCombatantId;
+      try {
+        for (let k = 0; k < 100 && !(typeof _5eLoaded !== 'undefined' && _5eLoaded); k++) await sleep(100);
+        const R = await sktRulesLoad('2024');
+        const b = Object.assign(sktBlankBuild('2024'), { name: 'r621', cls: 'wizard', level: 5, abilities: { method: 'manual', base: { str: 10, dex: 14, con: 14, int: 16, wis: 12, cha: 10 } },
+          items: [{ name: 'Scroll of Fireball', qty: 1 }, { name: 'Scroll of Protection', qty: 1 }], equipment: { cls: 'A', bg: 'A', picks: {}, materialized: true } });
+        const pc = sktComputeCharacter(b, R); pc.id = 'r621'; pc.name = 'r621'; pc.build = b;
+        state.party = JSON.parse(keepP).concat([pc]);
+        state.combatants = [{ id: 'r621', name: 'r621', isPC: true, hp: 30, hpMax: 30, ac: 13, initiative: 20, conditions: [] }]; state.activeCombatantId = 'r621'; save();
+        const me = () => state.party.find(p => p.id === 'r621');
+        openCharSheet('r621'); for (let k = 0; k < 40 && !(CS && CS.R); k++) await sleep(100);
+        csGoTab('actions'); await sleep(250);
+        for (let k = 0; k < 30 && !document.querySelector('#cs-root [data-cs-icast^="Scroll of Fireball|"]'); k++){ csRender(); await sleep(150); }
+        const cast = document.querySelector('#cs-root [data-cs-icast^="Scroll of Fireball|Fireball|scroll|"]');
+        ok('“Scroll of Fireball”: Fireball to cast from it, at 3rd level', !!cast && /\|3$/.test(cast.dataset.csIcast), cast ? cast.dataset.csIcast : 'none');
+        ok('…“Scroll of Protection” isn’t a spell scroll', !document.querySelector('#cs-root [data-cs-icast^="Scroll of Protection|"]') && !document.querySelector('#cs-root [data-cs-scrollpick="Scroll of Protection"]'), '');
+        if (cast) cast.click(); await sleep(150);
+        const rq = (me().castReq || []).slice(-1)[0] || {};
+        ok('…cast: used up, the saves to Turn View at the scroll’s DC 15', !(me().build.items || []).some(x => x.name === 'Scroll of Fireball') && rq.spell === 'Fireball' && rq.lvl === 3 && rq.dc === 15, JSON.stringify([(me().build.items || []).map(x => x.name), rq.spell, rq.lvl, rq.dc]));
+      } catch(e){ ok('round 621 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
+      finally { try { csClose(); } catch(e){} state.party = JSON.parse(keepP); state.combatants = JSON.parse(keepC); state.activeCombatantId = keepA; save(); }
+    }
     // -- Class features: represented, not just text ------------------------
     {
       try {

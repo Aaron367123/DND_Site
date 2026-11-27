@@ -2750,9 +2750,18 @@ function csItemText(m){
 // chosen on the sheet; the item is then "Spell Scroll (3rd Level): Fireball").
 // The scroll's own save DC and attack bonus by level (the DMG's table). A
 // scroll was only its level: no spell, nothing to cast.
+// A scroll named for its spell, as loot is ("Scroll of Fireball", "Spell
+// Scroll of Cure Wounds"): that spell, at its own level. (Not a Scroll of
+// Protection: no spell by that name.)
+function csScrollSpellOf(m){
+  if (m && m.scrollSpell) return m.scrollSpell;
+  const x = /^(?:Spell )?Scroll of (.+?)\s*$/i.exec(String((m && m.name) || ''));
+  const s = x && typeof csSpell === 'function' ? csSpell(x[1]) : null;
+  return s ? s.name : null;
+}
 function csScrollLevel(m){
   const n = String((m && m.name) || '');
-  if (!/^Spell Scroll\b/i.test(n)) return null;
+  if (!/^Spell Scroll\b/i.test(n)){ const sp = csScrollSpellOf(m), s = sp && csSpell(sp); return s ? +s.level || 0 : null; }
   if (/\(cantrip\)/i.test(n)) return 0;
   const x = /\((\d)(?:st|nd|rd|th) level\)|\(level (\d)\)/i.exec(n);
   return x ? +(x[1] || x[2]) : null;
@@ -2764,7 +2773,7 @@ function csItemInfo(m){
   const charges = +m.charges || +e.charges || 0;
   return {
     rarity: m.rarity || e.rarity || '', reqAttune: !!(m.reqAttune || e.reqAttune), attuneBy: m.attuneBy || e.attuneBy || '',
-    spells: csItemSpellList(m.scrollSpell ? [{ n: m.scrollSpell, per: 'scroll' }] : (m.spells || e.spells || null), charges), unarmed: !!(m.unarmed || e.unarmed), charges, props: e.props || null,
+    spells: csItemSpellList(csScrollSpellOf(m) ? [{ n: csScrollSpellOf(m), per: 'scroll' }] : (m.spells || e.spells || null), charges), unarmed: !!(m.unarmed || e.unarmed), charges, props: e.props || null,
     text: e.text || '',
   };
 }
@@ -3125,7 +3134,7 @@ function csItemActionsHtml(pc){
 // A scroll with no spell written yet: which one (the spells of its level).
 function csScrollPickHtml(m){
   const lv = csScrollLevel(m);
-  if (lv == null || m.scrollSpell || CS.readOnly) return '';
+  if (lv == null || csScrollSpellOf(m) || CS.readOnly) return '';
   const names = ((CS.R && CS.R.spells) || []).filter(s => s && (+s.level || 0) === lv).map(s => s.name).sort();
   const id = 'cs-scroll-' + lv;
   return '<div class="cs-add cs-scrollpick"><input list="' + id + '" data-cs-scrollpick="' + csE(m.name) + '" placeholder="The spell on it (' + (lv ? CS_ORD[lv] : 'a cantrip') + ')" aria-label="The spell on the scroll">'
