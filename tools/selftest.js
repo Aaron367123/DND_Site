@@ -29720,6 +29720,40 @@ for (const cls of Object.keys(rule)) for (let L = 1; L <= 20; L++) for (const sc
       } catch(e){ ok('round 616 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
       finally { try { csClose(); } catch(e){} state.party = JSON.parse(keepP); save(); }
     }
+    // -- Round 617: a charged item's spell can be cast higher for more charges — a Wand of Fireballs at 5th (3 charges, 10d6, the saves at 5th), a Staff of Healing's Cure Wounds at 3rd — it cast at the lowest, whatever the charges --
+    if (!PLAYER){
+      const keepP = JSON.stringify(state.party), keepC = JSON.stringify(state.combatants), keepA = state.activeCombatantId;
+      try {
+        for (let k = 0; k < 100 && !(typeof _5eLoaded !== 'undefined' && _5eLoaded); k++) await sleep(100);
+        const R = await sktRulesLoad('2024'), list = await sktMagicLoad('2024');
+        const make = n => { const e = list.find(x => x.name === n); const it = sktMagicMake(R, e, ''); it.attuned = true; it.qty = 1; return it; };
+        const b = Object.assign(sktBlankBuild('2024'), { name: 'r617', cls: 'cleric', level: 9, abilities: { method: 'manual', base: { str: 10, dex: 14, con: 14, int: 10, wis: 18, cha: 10 } },
+          items: [make('Wand of Fireballs'), make('Staff of Healing')], equipment: { cls: 'A', bg: 'A', picks: {}, materialized: true } });
+        const pc = sktComputeCharacter(b, R); pc.id = 'r617'; pc.name = 'r617'; pc.build = b;
+        state.party = JSON.parse(keepP).concat([pc]);
+        state.combatants = [{ id: 'r617', name: 'r617', isPC: true, hp: 30, hpMax: 50, ac: 13, initiative: 20, conditions: [] }]; state.activeCombatantId = 'r617'; save();
+        openCharSheet('r617'); for (let k = 0; k < 40 && !(CS && CS.R); k++) await sleep(100);
+        csGoTab('actions'); await sleep(200);
+        for (let k = 0; k < 30 && !document.querySelector('#cs-root .cs-ispell'); k++){ csRender(); await sleep(150); }
+        const sel = n => document.querySelector('#cs-root [data-cs-ilvlsel="' + n + '"]');
+        const fb = sel('Wand of Fireballs|Fireball'), cw = sel('Staff of Healing|Cure Wounds');
+        ok('the wand’s Fireball and the staff’s Cure Wounds each have a level to cast at', !!fb && !!cw, JSON.stringify([!!fb, !!cw]));
+        if (fb){ fb.value = '5'; fb.dispatchEvent(new Event('change', { bubbles: true })); await sleep(80); }
+        const row = n => [...document.querySelectorAll('#cs-root .cs-ispell')].find(r => (r.querySelector('.cs-spell-n b') || {}).textContent === n);
+        const btn = document.querySelector('#cs-root [data-cs-icast^="Wand of Fireballs|Fireball"]');
+        ok('…at 5th: 10d6 to roll, three charges on the Cast', /10d6/.test((row('Fireball') || {}).textContent || '') && !!btn && /\|3\|5$/.test(btn.dataset.csIcast), JSON.stringify([(row('Fireball') || {}).textContent, btn && btn.dataset.csIcast]));
+        if (btn) btn.click(); await sleep(100);
+        const me = () => state.party.find(p => p.id === 'r617');
+        const rq = (me().castReq || []).slice(-1)[0] || {};
+        ok('…cast: three charges spent, the saves at 5th (10d6)', (me().resources.find(r => r.name === 'Wand of Fireballs') || {}).current === 4 && rq.lvl === 5 && /10d6/.test(rq.dice), JSON.stringify([(me().resources.find(r => r.name === 'Wand of Fireballs') || {}).current, rq.lvl, rq.dice]));
+        if (cw){ const c2 = sel('Staff of Healing|Cure Wounds'); c2.value = '3'; c2.dispatchEvent(new Event('change', { bubbles: true })); await sleep(80); }
+        ok('…the staff’s Cure Wounds at 3rd: 6d8 + Wisdom to heal', /Heal 6d8\+4/.test((row('Cure Wounds') || {}).textContent || ''), (row('Cure Wounds') || {}).textContent);
+        const hb = (row('Cure Wounds') || document).querySelector('[data-cs-spheal]'); if (hb) hb.click(); await sleep(80);
+        const hr = (me().rolls || [])[0] || {};
+        ok('…its heal rolled at 3rd (6d8)', /6d8/.test(hr.text || ''), JSON.stringify(hr));
+      } catch(e){ ok('round 617 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
+      finally { try { csClose(); } catch(e){} state.party = JSON.parse(keepP); state.combatants = JSON.parse(keepC); state.activeCombatantId = keepA; save(); }
+    }
     // -- Class features: represented, not just text ------------------------
     {
       try {

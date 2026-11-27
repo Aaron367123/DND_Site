@@ -1867,6 +1867,7 @@ function csOnChange(e){
   const t = e.target, d = t.dataset, pc = csPc(); if (!pc) return;
   if ('csDtype' in d){ CS.dtype = t.value; return; }
   if ('csCastlvl' in d){ CS.castLvl = Object.assign({}, CS.castLvl, { [d.csCastlvl]: +t.value }); csRender(); return; }
+  if ('csIlvlsel' in d){ CS.iLvl = Object.assign({}, CS.iLvl, { [d.csIlvlsel]: +t.value }); csRender(); return; }
   if ('csTheme' in d && !CS.readOnly) return csEdit('Sheet colour', p => { p.theme = t.value; }, CS_QUIET);
   if ('csCskill' in d && !CS.readOnly){
     const i = +((t.closest('[data-cs-cskill-i]') || {}).dataset || {}).csCskillI, k = d.csCskill;
@@ -2360,7 +2361,7 @@ function csSpellsClick(e, t, d, pc){
   if (d.csSpdmg){
     const s = csSpell(d.csSpdmg); if (!s) return true;
     const sel = document.querySelector('#cs-root [data-cs-castlvl="' + CSS.escape(d.csSpdmg) + '"]');
-    const lvl = sel ? +sel.value : s.level;
+    const lvl = +d.csIlvl > 0 ? +d.csIlvl : sel ? +sel.value : s.level;
     // Each of its rolls on its own line, each with its type (Flame Strike's
     // fire and its radiant), so each meets the target's resistances.
     const parts = csSpellDamageParts(s, lvl), nm = s.name + (lvl > s.level ? ' (level ' + lvl + ')' : '');
@@ -2372,7 +2373,7 @@ function csSpellsClick(e, t, d, pc){
     const s = csSpell(d.csSpheal); if (!s) return true;
     const sh = pc.sheet || {}, scMod = (parseInt(sh.spellAtkBonus, 10) || 0) - (sh.profBonus || 0);
     const sel = document.querySelector('#cs-root [data-cs-castlvl="' + CSS.escape(d.csSpheal) + '"]');
-    const lvl = sel ? +sel.value : s.level;
+    const lvl = +d.csIlvl > 0 ? +d.csIlvl : sel ? +sel.value : s.level;
     const r = Object.assign({ kind: 'dmg', label: s.name + ' heals' }, sktDamageRoll(csSpellHeal(s, lvl, scMod), false));
     r.type = 'hit points';
     // "Up to six creatures" (Mass Healing Word, Mass Cure Wounds, Prayer of
@@ -2915,8 +2916,18 @@ function csItemSpellRow(pc, m, info, sp){
   const sh = pc.sheet || {}, ro = CS.readOnly, s = csSpell(sp.n), nm = csSpellNm(sp.n);
   const key = sp.per === 'charges' ? 'c' : sp.per === 'will' || sp.per === 'item' ? '' : sp.each ? (sp.per === 'rest' ? 'spr:' : 'sp:') + nm : sp.per + ':' + sp.k;
   const u = key ? csItemUses(pc, m, key) : null;
-  const cost = sp.per === 'charges' ? (sp.k || 1) : 1;
+  const cost0 = sp.per === 'charges' ? (sp.k || 1) : 1;
+  // Cast higher for more charges — a Staff of Healing's Cure Wounds (a charge
+  // a level), a Wand of Fireballs ("one level higher for each additional
+  // charge"). It cast at the lowest only, whatever the charges.
+  const base = s ? +s.level || 0 : 0;
+  const up = base && sp.per === 'charges' && (sp.perLevel || /\beach (?:additional|extra) charge\b|\bfor each charge (?:you expend )?(?:above|beyond) the first\b/i.test(info.text || ''));
+  const ik = m.name + '|' + (s ? s.name : sp.n);
+  const top = up ? Math.min(9, base + Math.max(0, ((u && u.left) || 0) - cost0)) : base;
+  const at = up ? Math.max(base, Math.min(top, +((CS.iLvl || {})[ik]) || base)) : base;
+  const cost = cost0 + (at - base);
   const can = !ro && (!u || u.left >= cost);
+  const lvSel = up && top > base && !ro ? '<select class="cb-sel cs-castlvl" data-cs-ilvlsel="' + csE(ik) + '" aria-label="Cast at level">' + Array.from({ length: top - base + 1 }, (_, i) => base + i).map(x => '<option value="' + x + '"' + (x === at ? ' selected' : '') + '>' + CS_ORD[x] + '</option>').join('') + '</select>' : '';
   // The DC the item gives ("save DC 17"), else the character's own; a
   // character who doesn't cast and an item that doesn't say: the save alone.
   const idc = /\bsave DC (?:of |is )?(\d+)/i.exec(info.text || ''), dc = idc ? +idc[1] : sh.spellSaveDc;
@@ -2924,9 +2935,9 @@ function csItemSpellRow(pc, m, info, sp){
   const atk = s && (s.spellAttack || []).length && sh.spellAtkBonus != null && sh.spellAtkBonus !== '' ? '<button class="btn small" data-cs-spatk="1">Attack ' + csE(csAtkText(sh.spellAtkBonus)) + '</button>' : '';
   // Its damage or healing to roll, as the spell list's own rows have — a
   // Wand of Magic Missiles' darts, a Staff of Healing's Cure Wounds had none.
-  const lv = s ? +s.level || 0 : 0, scMod = (parseInt(sh.spellAtkBonus, 10) || 0) - (sh.profBonus || 0);
-  const dmg = lv && typeof csSpellDamage === 'function' && csSpellDamage(s, lv) ? '<button class="btn small" data-cs-spdmg="' + csE(nm) + '">' + csDmgHtml(csSpellDamageTyped(s, lv)) + '</button>' : '';
-  const heal = lv && typeof csSpellHeal === 'function' && csSpellHeal(s, lv, scMod) ? '<button class="btn small cs-heal" data-cs-spheal="' + csE(nm) + '">Heal ' + csE(csSpellHeal(s, lv, scMod)) + '</button>' : '';
+  const lv = at, scMod = (parseInt(sh.spellAtkBonus, 10) || 0) - (sh.profBonus || 0);
+  const dmg = lv && typeof csSpellDamage === 'function' && csSpellDamage(s, lv) ? '<button class="btn small" data-cs-spdmg="' + csE(nm) + '" data-cs-ilvl="' + lv + '">' + csDmgHtml(csSpellDamageTyped(s, lv)) + '</button>' : '';
+  const heal = lv && typeof csSpellHeal === 'function' && csSpellHeal(s, lv, scMod) ? '<button class="btn small cs-heal" data-cs-spheal="' + csE(nm) + '" data-cs-ilvl="' + lv + '">Heal ' + csE(csSpellHeal(s, lv, scMod)) + '</button>' : '';
   const per = sp.per === 'will' ? 'at will' : sp.per === 'charges' ? cost + ' charge' + (cost > 1 ? 's' : '') + (sp.perLevel ? ', +1 a level higher' : '')
     : sp.per === 'day' ? sp.k + '/day' + (sp.each ? '' : ', shared') : sp.per === 'rest' ? sp.k + '/short rest' + (sp.each ? '' : ', shared') : '';
   const ok = 'isp:' + m.name + ':' + nm;
@@ -2935,8 +2946,8 @@ function csItemSpellRow(pc, m, info, sp){
     + '<span class="cb-dim">' + csE([s ? (+s.level ? CS_ORD[+s.level] : 'Cantrip') : '', s ? csSpellMeta(s) : ''].filter(Boolean).join(' · ')) + '</span></button>'
     + '<span class="cs-spell-c">' + (sv ? '<span class="cs-save">' + csE(sv) + '</span>' : '') + atk + dmg + heal
     + (u && sp.each ? csItemPips(pc, m, u) : '')
-    + '<span class="cb-dim">' + csE(per) + '</span>'
-    + (ro ? '' : '<button class="btn small" data-cs-icast="' + csE(m.name + '|' + nm + '|' + key + '|' + cost) + '"' + (can ? '' : ' disabled') + '>Cast</button>') + '</span>'
+    + '<span class="cb-dim">' + csE(per) + '</span>' + lvSel
+    + (ro ? '' : '<button class="btn small" data-cs-icast="' + csE(m.name + '|' + nm + '|' + key + '|' + cost + '|' + at) + '"' + (can ? '' : ' disabled') + '>Cast</button>') + '</span>'
     + (CS.open[ok] ? '<div class="cs-feat-t">' + (s ? csE(csSpellText(s)).replace(/\n/g, '<br>') : 'This spell isn’t in the rules data here.') + '</div>' : '') + '</div>';
 }
 // The Actions tab's "Magic items" section.
@@ -3112,7 +3123,7 @@ function csItemClick(d, pc){
     if (typeof showToast === 'function') showToast('Used ' + name);
     return true;
   }
-  const parts = d.csIcast.split('|'), cost = +parts.pop() || 1, key = parts.pop(), spell = parts.pop(), name = parts.join('|');
+  const parts = d.csIcast.split('|'), atLvl = +parts.pop() || 0, cost = +parts.pop() || 1, key = parts.pop(), spell = parts.pop(), name = parts.join('|');
   const s = csSpell(spell);
   // A spell from an item that its targets save against (a Wand of
   // Fireballs' Fireball): the DM's Turn View offers the saves, as a spell
@@ -3124,12 +3135,12 @@ function csItemClick(d, pc){
   csEdit('Cast ' + spell + ' from ' + name, p => {
     if (key && !spend(p, name, key, cost)){ ok = false; return; }
     if (s && s.concentration) p.concentration = csConcOn(p.concentration, s.name);
-    const rq = s && typeof csSaveRequest === 'function' ? csSaveRequest(p, s, s.level, { dc: idc ? +idc[1] : 0 }) : null;
+    const rq = s && typeof csSaveRequest === 'function' ? csSaveRequest(p, s, Math.max(+s.level || 0, atLvl), { dc: idc ? +idc[1] : 0 }) : null;
     if (rq){ rq.from = name; p.castReq = (p.castReq || []).slice(-2).concat([rq]); }
     const t = s && [].concat(s.time || [])[0];
     if (CS.embed && t && typeof paMarkEcon === 'function' && typeof paActKind === 'function') paMarkEcon(paActKind(t.unit));
   });
-  if (ok && typeof showToast === 'function') showToast('Cast ' + spell + ' from ' + name);
+  if (ok && typeof showToast === 'function') showToast('Cast ' + spell + (s && atLvl > (+s.level || 0) ? ' (level ' + atLvl + ')' : '') + ' from ' + name);
   return true;
 }
 // The magic item list, fetched once (it's the biggest file there is). The
