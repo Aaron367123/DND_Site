@@ -189,6 +189,14 @@ registerPanel('turnview', {
 
   // ─── Reading the tracker ──────────────────────────────────────────────────
   _order(){ return state.combatants || []; },
+  // A creature that "hasn't taken a turn yet in the combat": the first
+  // round, its place in the order still to come (Assassinate, a bugbear's
+  // Surprise Attack).
+  _notYetActed(t){
+    if ((+state.combatRound || 1) !== 1 || !t) return false;
+    const o = this._order(), i = o.findIndex(x => x.id === t.id), a = o.findIndex(x => x.id === state.activeCombatantId);
+    return i >= 0 && a >= 0 && i > a;
+  },
   _active(){
     const o = this._order();
     const as = this._actAs && o.find(c => c.id === this._actAs);
@@ -4151,6 +4159,8 @@ registerPanel('turnview', {
     // Fighting Spirit: "advantage on weapon attack rolls until the end of the current turn".
     if (c.fspirit && c.fspirit === this._turnKey() && a.pc && !a.spell && !a.save) advWhy.push('Fighting Spirit');
     if (c.zealous) advWhy.push('Zealous Presence');
+    // Assassinate: advantage on a creature that hasn't taken a turn yet.
+    if (a.pc && c.isPC && this._notYetActed(t) && (((this._partyOf(c) || {}).sheet || {}).featureList || []).some(f => f && f.name === 'Assassinate' && !f.info)) advWhy.push('Assassinate: ' + t.name + ' hasn’t acted');
     if (c.sapped){ disWhy.push('sapped'); c.sapped = undefined; }
     // Long range: disadvantage. Past its reach or range: rolled anyway (the
     // tokens may be loosely placed), and said.
@@ -5008,6 +5018,13 @@ registerPanel('turnview', {
         two: ((sh.featureList || []).some(f => f.name === 'Improved Cunning Strike' && !f.info)),
         why: h.mode > 0 ? 'with advantage' : ally && h.mode >= 0 ? ally.name + ' is beside the target' : 'needs advantage, or an ally beside the target (without disadvantage)' });
     }
+    // A 2024 Assassin's Surprising Strikes: in the first round, a Sneak
+    // Attack's hit takes extra damage equal to the Rogue level.
+    if (h.used.includes('sa') && (+state.combatRound || 1) === 1
+        && (sh.featureList || []).some(f => f && f.name === 'Assassinate' && !f.info && /Surprising Strikes/.test(f.text || ''))){
+      const lv = ((sh.classLevels || []).find(x => x && x.cls === 'rogue') || {}).level || +p.level || 1;
+      out.push({ key: 'ss', label: 'Surprising Strikes', dice: String(lv), type: h.type, once: true, ok: true, noCrit: true, why: 'the first round: your Rogue level, with the Sneak Attack' });
+    }
     const conc = String(p.concentration || '');
     // (a mark on a creature now down or gone is no mark: it can be moved)
     const markOn = k => { const m = (c.marks || {})[k]; if (!m || m.tgt === t.id) return null; return this._order().some(x => x.id === m.tgt && !x.dead && (x.hp || 0) > 0) ? m : null; };
@@ -5092,6 +5109,9 @@ registerPanel('turnview', {
       const ftx = /\bthat (?:attack|turn)\b/i.test(note) ? String(((sh.featureList || []).find(f => f && f.name === x.label) || {}).text || '') : '';
       if (/\bfirst turn\b/i.test(note + ' ' + ftx) && (+state.combatRound || 1) > 1) return;
       if (/target of your Divine Smite/i.test(note) && !h.used.some(k => /^smite/.test(k))) return;
+      // "if it hasn't taken a turn yet in the current combat" (a bugbear's
+      // Surprise Attack): offered on every hit of the fight.
+      if (/hasn(?:'|’)t taken a turn/i.test(note) && !this._notYetActed(t)) return;
       // Reckless Attack and a Strength attack (Frenzy, Brutal Strike) — and
       // Brutal Strike only on the roll that gave up its advantage for it.
       if (/Reckless Attack/.test(note) && !((p.active || {})['Reckless Attack'])) return;

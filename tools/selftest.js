@@ -30036,6 +30036,61 @@ for (const cls of Object.keys(rule)) for (let L = 1; L <= 20; L++) for (const sc
       } catch(e){ ok('round 627 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
     }
 
+    // -- Round 628: "hasn't taken a turn yet" in Turn View — an Assassin's advantage on such a creature, a bugbear's Surprise Attack only against one, and a 2024 Assassin's Surprising Strikes (the Rogue level, with a first-round Sneak Attack) --
+    if (!PLAYER){
+      const keepP = JSON.stringify(state.party), keepC = JSON.stringify(state.combatants), keepA = state.activeCombatantId, keepR = state.combatRound, keepD = window.sktD;
+      const T = panelDefs.turnview, C = panelDefs.combat;
+      try {
+        for (let k = 0; k < 100 && !(typeof _5eLoaded !== 'undefined' && _5eLoaded); k++) await sleep(100);
+        const R14 = await sktRulesLoad('2014'), R = await sktRulesLoad('2024');
+        window.sktD = n => (n === 20 ? 15 : 3);
+        const ogre = _5eData.find(r => r.cat === 'monster' && r.name === 'Ogre' && r._source === 'MM');
+        // The character, and an ogre after it in the order (or before).
+        const setup = (ed, more, round, ogreFirst) => {
+          const b = Object.assign(sktBlankBuild(ed), { name: 'r628', level: 9, allBooks: true, abilities: { method: 'manual', base: { str: 16, dex: 16, con: 16, int: 16, wis: 16, cha: 16 } } }, more);
+          const pc = sktComputeCharacter(b, ed === '2014' ? R14 : R); pc.id = 'r628'; pc.name = 'r628'; pc.build = b;
+          state.party = JSON.parse(keepP).concat([pc]);
+          state.combatants = [{ id: 'r628', name: 'r628', isPC: true, hp: 100, hpMax: 100, ac: 15, initiative: 20, conditions: [] }];
+          C.addMonster(ogre); const m = state.combatants[1]; m.hp = 999; m.hpMax = 999; m.ac = 1; m.name = 'Ogre r628';
+          if (ogreFirst) state.combatants.reverse();
+          state.combatRound = round; state.activeCombatantId = 'r628'; save();
+          return { c: state.combatants.find(x => x.id === 'r628'), m };
+        };
+        const hit = (c, m, mode) => {
+          const A = T._attacksFor(c), f = A.findIndex(a => a && a.pc && !a.spell && (a.props || []).includes('F'));
+          const ai = f >= 0 ? f : A.findIndex(a => a && a.pc && !a.spell && !a.save && a.dmgText && !/unarmed/i.test(a.name));
+          T._rollAttack(ai, { attacker: c, target: m, mode: mode || 0 });
+          return T._lastPcHit;
+        };
+        openPanel('turnview'); await sleep(200);
+        let s = setup('2014', { cls: 'rogue', subclass: 'Assassin' }, 1, false), h = hit(s.c, s.m);
+        ok('a 2014 Assassin in the first round, the ogre still to act: advantage', h && h.mode > 0, JSON.stringify(h && h.mode));
+        s = setup('2014', { cls: 'rogue', subclass: 'Assassin' }, 1, true); h = hit(s.c, s.m);
+        ok('…the ogre already acted: none', h && h.mode === 0, JSON.stringify(h && h.mode));
+        s = setup('2014', { cls: 'rogue', subclass: 'Assassin' }, 2, false); h = hit(s.c, s.m);
+        ok('…the second round: none', h && h.mode === 0, JSON.stringify(h && h.mode));
+        s = setup('2014', { cls: 'fighter', species: 'Bugbear' }, 1, false); h = hit(s.c, s.m);
+        let L = T._pcExtraOptions(h).map(o => o.label);
+        ok('a bugbear’s hit on a creature yet to act: Surprise Attack offered', L.includes('Surprise Attack'), JSON.stringify(L));
+        s = setup('2014', { cls: 'fighter', species: 'Bugbear' }, 2, false); h = hit(s.c, s.m);
+        L = T._pcExtraOptions(h).map(o => o.label);
+        ok('…in the second round: not', !L.includes('Surprise Attack'), JSON.stringify(L));
+        s = setup('2024', { cls: 'rogue', subclass: 'Assassin' }, 1, false); h = hit(s.c, s.m);
+        L = T._pcExtraOptions(h).map(o => o.label);
+        ok('a 2024 Assassin: no Surprising Strikes before the Sneak Attack', !L.includes('Surprising Strikes') && L.includes('Sneak Attack'), JSON.stringify(L));
+        T._usePcExtra('sa'); await sleep(20);
+        const o = T._pcExtraOptions(T._lastPcHit).find(x => x.label === 'Surprising Strikes');
+        ok('…after it, Surprising Strikes for its Rogue level (9)', o && o.dice === '9', JSON.stringify(o));
+        const hp0 = s.m.hp; T._usePcExtra('ss'); await sleep(20);
+        const m2 = state.combatants.find(x => x.name === 'Ogre r628');
+        ok('…which deals 9', m2 && hp0 - m2.hp === 9 && !T._pcExtraOptions(T._lastPcHit).some(x => x.label === 'Surprising Strikes'), hp0 + ' → ' + (m2 && m2.hp));
+        s = setup('2024', { cls: 'rogue', subclass: 'Assassin' }, 2, false); h = hit(s.c, s.m, 1);
+        T._usePcExtra('sa'); await sleep(20);
+        ok('…not in the second round', !T._pcExtraOptions(T._lastPcHit).some(x => x.label === 'Surprising Strikes'), '');
+      } catch(e){ ok('round 628 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
+      finally { window.sktD = keepD; state.party = JSON.parse(keepP); state.combatants = JSON.parse(keepC); state.activeCombatantId = keepA; state.combatRound = keepR; save(); }
+    }
+
     // -- Class features: represented, not just text ------------------------
     {
       try {
