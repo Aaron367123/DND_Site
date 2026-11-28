@@ -587,6 +587,11 @@
     pool(ctx, 'Tides of Chaos', 1, 'long');
     note(ctx, 'Tides of Chaos: advantage on one ' + (new24(ctx) ? 'D20 test' : 'attack, check or save') + '; it comes back after a Wild Magic Surge' + (new24(ctx) ? ' from a sorcerer spell.' : ' the DM calls for.'));
   });
+  // "When you spend at least 1 Sorcery Point as part of the Magic action or a
+  // Bonus Action": it rides that, costing no action of its own. Read from the
+  // text it was a Bonus Action, and its button spent one.
+  def('subclass:sorcerer:Spellfire Burst', ctx => act(ctx, { name: 'Spellfire Burst', action: 'Special', feature: 'Spellfire Burst',
+    desc: 'Once a turn, when you spend a Sorcery Point as part of the Magic action or a Bonus Action: Bolstering Flames or Radiant Fire.' }));
   def('subclass:sorcerer:Bolstering Flames', ctx => note(ctx, 'Bolstering Flames (Spellfire Burst): you or a creature within 30 ft gains 1d4' + signed(ctx.mod.cha) + (ctx.level >= 14 ? '+' + ctx.level : '') + ' temporary hit points.'));
   def('subclass:sorcerer:Radiant Fire', ctx => note(ctx, 'Radiant Fire (Spellfire Burst): a creature within 30 ft takes ' + (ctx.level >= 14 ? '1d8' : '1d4') + ' fire or radiant damage.'));
   def('subclass:sorcerer:Honed Spellfire', () => {});   // Bolstering Flames and Radiant Fire grow

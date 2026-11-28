@@ -30272,6 +30272,28 @@ for (const cls of Object.keys(rule)) for (let L = 1; L <= 20; L++) for (const sc
       finally { window.sktD = keepD; BM._tokens = tk0; BM._gridType = grid0.gt; BM._ftPerCell = grid0.fpc; BM._diagRule = grid0.dr; T._mapCache = null; state.party = JSON.parse(keepP); state.combatants = JSON.parse(keepC); state.activeCombatantId = keepA; state.combatRound = keepR; save(); }
     }
 
+    // -- Round 632: a Spellfire sorcerer's Spellfire Burst rides the Sorcery Point spent with the Magic action or a Bonus Action: no action of its own, and its button in Turn View doesn't spend the Bonus Action --
+    if (!PLAYER){
+      const keepP = JSON.stringify(state.party), keepC = JSON.stringify(state.combatants), keepA = state.activeCombatantId, keepR = state.combatRound;
+      const T = panelDefs.turnview;
+      try {
+        for (let k = 0; k < 100 && !(typeof _5eLoaded !== 'undefined' && _5eLoaded); k++) await sleep(100);
+        const R = await sktRulesLoad('2024');
+        const b = Object.assign(sktBlankBuild('2024'), { name: 'r632', cls: 'sorcerer', subclass: 'Spellfire Sorcery', level: 5, allBooks: true });
+        const pc = sktComputeCharacter(b, R); pc.id = 'r632'; pc.name = 'r632'; pc.build = b;
+        const a0 = ((pc.sheet || {}).activations || []).find(a => a.name === 'Spellfire Burst');
+        ok('Spellfire Burst: no action of its own on the sheet', !!a0 && a0.action === 'Special', JSON.stringify(a0 && [a0.action, a0.desc]));
+        state.party = JSON.parse(keepP).concat([pc]);
+        state.combatants = [{ id: 'r632', name: 'r632', isPC: true, hp: 30, hpMax: 30, ac: 12, initiative: 20, conditions: [] }];
+        state.combatRound = 1; state.activeCombatantId = 'r632'; save();
+        openPanel('turnview'); await sleep(200);
+        const c = state.combatants[0], a = T._activationsFor(c).find(x => x.name === 'Spellfire Burst');
+        if (a) { await T._useActivation('r632', a.i); await sleep(30); }
+        ok('…pressed in Turn View, the Bonus Action is still there', !!a && !state.combatants[0].bonusUsed, JSON.stringify([!!a, state.combatants[0].bonusUsed]));
+      } catch(e){ ok('round 632 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
+      finally { state.party = JSON.parse(keepP); state.combatants = JSON.parse(keepC); state.activeCombatantId = keepA; state.combatRound = keepR; save(); }
+    }
+
     // -- Class features: represented, not just text ------------------------
     {
       try {
