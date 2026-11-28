@@ -29092,7 +29092,10 @@ for (const cls of Object.keys(rule)) for (let L = 1; L <= 20; L++) for (const sc
         ok('…a damage roll still damages', hp('r596a') === 0 || hp('r596a') === -2 || hp('r596a') < 5, JSON.stringify(hp('r596a')));
         // a potion drunk on the sheet: healed there, not offered again
         start([]); const me = state.party.find(p => p.id === 'r596c'); me.build = Object.assign({}, me.build, { items: [{ name: 'Potion of Healing', qty: 1 }], equipment: Object.assign({}, me.build.equipment, { materialized: true }) }); me.hp = 20; save();
-        openCharSheet('r596c'); for (let k = 0; k < 40 && !(CS && CS.R); k++) await sleep(100);
+        // (the magic-item list too, which the potion's dice are read from: it
+        // loads after the rules, and with the rules already loaded by an
+        // earlier round, it wasn't there yet)
+        openCharSheet('r596c'); for (let k = 0; k < 80 && !(CS && CS.R && CS.magic); k++) await sleep(100);
         csDrink(state.party.find(p => p.id === 'r596c'), 'i:Potion of Healing', 7); await sleep(50);
         csClose(); await sleep(30);
         const kept = (state.party.find(p => p.id === 'r596c').rolls || [])[0] || {};
