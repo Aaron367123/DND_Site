@@ -30294,6 +30294,27 @@ for (const cls of Object.keys(rule)) for (let L = 1; L <= 20; L++) for (const sc
       finally { state.party = JSON.parse(keepP); state.combatants = JSON.parse(keepC); state.activeCombatantId = keepA; state.combatRound = keepR; save(); }
     }
 
+    // -- Round 633: a bard with no one else in the party is told so, not that everyone already has a die --
+    if (!PLAYER){
+      const keepP = JSON.stringify(state.party), keepToast = window.showToast;
+      try {
+        for (let k = 0; k < 100 && !(typeof _5eLoaded !== 'undefined' && _5eLoaded); k++) await sleep(100);
+        const R = await sktRulesLoad('2024');
+        const mk = (cls, id) => { const b = Object.assign(sktBlankBuild('2024'), { name: id, cls, level: 6 }); const pc = sktComputeCharacter(b, R); pc.id = id; pc.name = id; pc.build = b; return pc; };
+        // a bard alone
+        const said = []; window.showToast = m => said.push(String(m));
+        state.party = [mk('bard', 'r633b')]; save();
+        sktAskBardic({ from: 'r633b' }); await sleep(20);
+        ok('a bard with no one else in the party: told so', said.some(m => /no one else in the party/.test(m)) && !said.some(m => /Everyone already/.test(m)), JSON.stringify(said));
+        said.length = 0;
+        const z = mk('fighter', 'r633f'); z.bardicInspiration = 'd8';
+        state.party = [mk('bard', 'r633b'), z]; save();
+        sktAskBardic({ from: 'r633b' }); await sleep(20);
+        ok('…with everyone else inspired: that', said.some(m => /Everyone already has/.test(m)), JSON.stringify(said));
+      } catch(e){ ok('round 633 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
+      finally { window.showToast = keepToast; state.party = JSON.parse(keepP); save(); }
+    }
+
     // -- Class features: represented, not just text ------------------------
     {
       try {

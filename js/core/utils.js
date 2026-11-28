@@ -2847,8 +2847,9 @@ function sktAskBardic(opts){
     if (typeof opts.after === 'function') opts.after();
   };
   if (opts.from){
-    const others = (state.party || []).filter(p => p.id !== opts.from && !p.foe && !p.bardicInspiration);
-    if (!others.length){ say('Everyone already has a Bardic Inspiration die'); return; }
+    const mates = (state.party || []).filter(p => p.id !== opts.from && !p.foe), others = mates.filter(p => !p.bardicInspiration);
+    // (a party of one has no one to give it to — "everyone already has one" said otherwise)
+    if (!others.length){ say(mates.length ? 'Everyone already has a Bardic Inspiration die' : 'There’s no one else in the party to inspire'); return; }
     if (typeof showModal !== 'function') return done(opts.from, others[0].id);
     showModal('🎵 Bardic Inspiration', [{ id: 'to', label: 'Who gets it?', type: 'select',
       options: others.map(p => ({ value: p.id, label: p.name })) }], 'Inspire').then(r => { if (r && r.to) done(opts.from, r.to); });
