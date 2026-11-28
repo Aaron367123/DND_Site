@@ -1188,13 +1188,15 @@ registerPanel('turnview', {
     // Mark's and Hex's extra die on it: the enemy picked on the right, when
     // there is one. (A spell cast from the sheet leaves none: its die is
     // offered on any hit, as before.)
-    const mk = /^Vow of Enmity$/i.test(a.name) ? 'vow' : /^Hexblade.s Curse$/i.test(a.name) ? 'hexc' : /Hunter.s Mark/i.test(a.castSpell || a.name) ? 'hm' : /^Hex$/i.test(a.castSpell || '') ? 'hex' : null;
+    const mk = /^Vow of Enmity$/i.test(a.name) ? 'vow' : /^Slayer.s Prey$/i.test(a.name) ? 'slay' : /^Planar Warrior$/i.test(a.name) ? 'planar' : /^Hexblade.s Curse$/i.test(a.name) ? 'hexc' : /Hunter.s Mark/i.test(a.castSpell || a.name) ? 'hm' : /^Hex$/i.test(a.castSpell || '') ? 'hex' : null;
     const mt = mk && this._order().find(x => x.id === this._armed && x.id !== who.id && this._sideOf(x) !== this._sideOf(who));
     if (mk){
       who.marks = Object.assign({}, who.marks);
-      if (mt){ who.marks[mk] = { tgt: mt.id, name: mt.name, round: state.combatRound || 1 }; extra += ' — on <strong>' + esc(mt.name) + '</strong>'; }
+      if (mt){ who.marks[mk] = { tgt: mt.id, name: mt.name, round: state.combatRound || 1, turn: this._turnKey() }; extra += ' — on <strong>' + esc(mt.name) + '</strong>'; }
       else delete who.marks[mk];
     }
+    // Kensei's Shot: this turn's ranged hits with a kensei weapon.
+    if (who.isPC && /^Kensei.s Shot$/i.test(a.name)) who.marks = Object.assign({}, who.marks, { kshot: { turn: this._turnKey() } });
     if (a.castSpell){
       const p = this._partyOf(who);
       let conc = null;
@@ -1824,7 +1826,9 @@ registerPanel('turnview', {
     return { out: ft + ' ft away — its reach is ' + reach + ' ft', ft };
   },
   _pcRanged(row, sheetRow){
-    if (((sheetRow && sheetRow.props) || []).includes('A')) return true;
+    // A ranged weapon: one with ammunition, or a dart's or a net's throw —
+    // a ranged weapon too, not a melee one thrown. A dart was a melee attack.
+    if (((sheetRow && sheetRow.props) || []).includes('A') || (sheetRow && sheetRow.ranged)) return true;
     if (!row.spell || typeof _sktRulesReady === 'undefined' || typeof sktRulesSpell !== 'function') return false;
     for (const ed of ['2024', '2014']){
       const R = _sktRulesReady[ed]; if (!R) continue;
@@ -5084,10 +5088,15 @@ registerPanel('turnview', {
     (sh.extraDamage || []).forEach((x, i) => {
       if (!x || !x.dice) return;
       const note = String(x.note || '');
+      // A switch's own damage (Giant's Might, Chromatic Infusion): only while
+      // it's on, and paid for by turning it on — the hit spends nothing. Its
+      // pool of the same name was spent again by each hit's offer.
+      const sw = this._featureStates(p).some(s => s.key === x.label);
+      if (sw && !(p.active || {})[x.label]) return;
       // A pool the note names is spent only where the note says to spend it:
       // Lunar Form's "a Wild Shape form's attack" names Wild Shape, and spent
       // a use of it on every hit.
-      const pool = (p.resources || []).find(r => r.name === x.label) || (/\b(?:spend|expend)/i.test(note) ? (p.resources || []).find(r => r.name && note.includes(r.name)) : null);
+      const pool = sw ? null : (p.resources || []).find(r => r.name === x.label) || (/\b(?:spend|expend)/i.test(note) ? (p.resources || []).find(r => r.name && note.includes(r.name)) : null);
       if (pool && (+pool.current || 0) < 1) return;
       // A beast form's attack adds only what a beast form's hit does (Lunar
       // Form, Primal Strike); what only a beast form's hit adds is not a
@@ -5118,13 +5127,18 @@ registerPanel('turnview', {
       if (/\bStrength\b/.test(note) && !h.str) return;
       if (x.label === 'Brutal Strike' && !h.brutal) return;
       if (x.label === 'Elemental Cleaver' && (p.active || {})['Elemental Cleaver']) return;   // (in the damage already)
-      // A switch's own damage (Giant's Might): only while it's on.
-      if (this._featureStates(p).some(s => s.key === x.label) && !(p.active || {})[x.label]) return;
+      // A creature picked with a Bonus Action first: Slayer's Prey's (until
+      // another is picked), Planar Warrior's (that turn, its next hit) — on
+      // that creature only. Kensei's Shot: a ranged hit, the turn it's used.
+      // Each was offered on every hit, picked or not.
+      const pick = { "Slayer's Prey": 'slay', 'Planar Warrior': 'planar' }[x.label], mk0 = pick && (c.marks || {})[pick];
+      if (pick && (!mk0 || mk0.tgt !== t.id || (pick === 'planar' && mk0.turn !== this._turnKey()))) return;
+      if (x.label === "Kensei's Shot" && !(h.ranged && ((c.marks || {}).kshot || {}).turn === this._turnKey())) return;
       // "if it's missing any of its Hit Points" — before this hit, or every
       // first hit would qualify by hurting it.
       if (/missing any (?:of its )?hit points|below its hit point maximum/i.test(note) && !(h.hpBefore != null && h.hpMaxT != null && h.hpBefore < h.hpMaxT)) return;
       if (/during your rage|while (?:you(?:'|’)re |you are )?raging|while your rage/i.test(note) && !p.rage) return;
-      const onceT = !!(x.once || pool || /once (?:per|on each of your|each) turn|(?:first|once) [a-z ]*each turn|each turn/i.test(note));
+      const onceT = !!(x.once || pool || pick === 'planar' || /once (?:per|on each of your|each) turn|(?:first|once) [a-z ]*each turn|each turn/i.test(note));
       if (onceT && once(x.label)) return;
       out.push({ key: 'x' + i, label: x.label, dice: x.dice, type: '', ok: true, once: onceT, res: pool ? pool.name : undefined, beast,
         why: note + (pool ? ' (' + pool.current + ' left)' : '') });

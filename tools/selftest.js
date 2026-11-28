@@ -30131,6 +30131,81 @@ for (const cls of Object.keys(rule)) for (let L = 1; L <= 20; L++) for (const sc
       finally { window.sktD = keepD; state.party = JSON.parse(keepP); state.combatants = JSON.parse(keepC); state.activeCombatantId = keepA; state.combatRound = keepR; save(); }
     }
 
+    // -- Round 630: what a Bonus Action picks first — Slayer's Prey on the creature designated, Planar Warrior on the one chosen that turn (once), Kensei's Shot on that turn's ranged hits — offered only then; each was offered on every hit --
+    if (!PLAYER){
+      const keepP = JSON.stringify(state.party), keepC = JSON.stringify(state.combatants), keepA = state.activeCombatantId, keepR = state.combatRound, keepD = window.sktD;
+      const T = panelDefs.turnview, C = panelDefs.combat;
+      try {
+        for (let k = 0; k < 100 && !(typeof _5eLoaded !== 'undefined' && _5eLoaded); k++) await sleep(100);
+        const R14 = await sktRulesLoad('2014');
+        window.sktD = n => (n === 20 ? 15 : 3);
+        const ogre = _5eData.find(r => r.cat === 'monster' && r.name === 'Ogre' && r._source === 'MM');
+        const setup = (cls, sub, more) => {
+          const b = Object.assign(sktBlankBuild('2014'), { name: 'r630', cls, subclass: sub, level: 5, abilities: { method: 'manual', base: { str: 16, dex: 16, con: 14, int: 10, wis: 14, cha: 10 } } }, more || {});
+          const pc = sktComputeCharacter(b, R14); pc.id = 'r630'; pc.name = 'r630'; pc.build = b;
+          state.party = JSON.parse(keepP).concat([pc]);
+          state.combatants = [{ id: 'r630', name: 'r630', isPC: true, hp: 80, hpMax: 80, ac: 16, initiative: 20, conditions: [] }];
+          C.addMonster(ogre); C.addMonster(ogre);
+          state.combatants.slice(1).forEach((m, k) => { m.hp = 999; m.hpMax = 999; m.ac = 1; m.name = 'Ogre r630 ' + k; });
+          state.combatRound = 2; state.activeCombatantId = 'r630'; save();
+        };
+        const c = () => state.combatants.find(x => x.id === 'r630'), og = k => state.combatants.find(x => x.name === 'Ogre r630 ' + k);
+        const hit = (k, ranged) => { const A = T._attacksFor(c()), ai = A.findIndex(a => a && a.pc && !a.spell && !a.save && a.dmgText && !/unarmed/i.test(a.name) && !!a.ranged === !!ranged);
+          if (ai < 0) return ['no ' + (ranged ? 'ranged' : 'melee') + ' attack'];
+          T._rollAttack(ai, { attacker: c(), target: og(k), mode: 0 }); return T._pcExtraOptions(T._lastPcHit).map(o => o.label); };
+        const use = async (n, k) => { c().bonusUsed = false; T._armed = og(k).id; const a = T._activationsFor(c()).find(x => x.name === n); if (a) { await T._useActivation('r630', a.i); await sleep(30); } return !!a; };
+        openPanel('turnview'); await sleep(200);
+        setup('ranger', 'Monster Slayer');
+        let L = hit(0);
+        ok('a Monster Slayer, no one designated: no Slayer’s Prey on a hit', !L.includes('Slayer\'s Prey'), JSON.stringify(L));
+        c().onceTurn = {}; await use('Slayer\'s Prey', 0); c().onceTurn = {};
+        L = hit(1);
+        ok('…designating one ogre: not on the other', !L.includes('Slayer\'s Prey'), JSON.stringify(L));
+        c().onceTurn = {}; L = hit(0);
+        ok('…on the one designated', L.includes('Slayer\'s Prey'), JSON.stringify(L));
+        setup('ranger', 'Horizon Walker');
+        await use('Planar Warrior', 0); c().onceTurn = {};
+        L = hit(0);
+        ok('a Horizon Walker’s Planar Warrior: on the creature chosen this turn', L.includes('Planar Warrior'), JSON.stringify(L));
+        state.combatRound = 3; c().onceTurn = {}; L = hit(0);
+        ok('…not on the next turn', !L.includes('Planar Warrior'), JSON.stringify(L));
+        setup('monk', 'Way of the Kensei');
+        L = hit(0, true);
+        ok('a Kensei: no Kensei’s Shot before its Bonus Action', !L.includes('Kensei\'s Shot') && !/^no /.test(L[0] || ''), JSON.stringify(L));
+        await use('Kensei\'s Shot', 0); c().onceTurn = {};
+        L = hit(0, true);
+        ok('…after it, on a ranged hit', L.includes('Kensei\'s Shot'), JSON.stringify(L));
+        c().onceTurn = {}; L = hit(0, false);
+        ok('…not on a melee one', !L.includes('Kensei\'s Shot') && !/^no /.test(L[0] || ''), JSON.stringify(L));
+        // Gift of the Chromatic Dragon: two benefits, each its own uses.
+        { const b = Object.assign(sktBlankBuild('2014'), { name: 'r630', cls: 'fighter', level: 5, allBooks: true, extraFeats: ['Gift of the Chromatic Dragon'] });
+          const pc = sktComputeCharacter(b, R14), sh = pc.sheet || {};
+          const A = (sh.activations || []).filter(a => a.feature === 'Gift of the Chromatic Dragon').map(a => a.name + '/' + a.action + '/' + a.resource);
+          const P = n => ((pc.resources || []).find(r => r.name === n) || {}).max;
+          ok('Gift of the Chromatic Dragon: Chromatic Infusion a Bonus Action once a long rest, Reactive Resistance a Reaction PB times', A.includes('Chromatic Infusion/Bonus Action/Chromatic Infusion') && A.includes('Reactive Resistance/Reaction/Reactive Resistance') && P('Chromatic Infusion') === 1 && P('Reactive Resistance') === 3, JSON.stringify([A, P('Chromatic Infusion'), P('Reactive Resistance')]));
+          pc.id = 'r630'; pc.name = 'r630'; pc.build = b;
+          state.party = JSON.parse(keepP).concat([pc]);
+          state.combatants = [{ id: 'r630', name: 'r630', isPC: true, hp: 80, hpMax: 80, ac: 16, initiative: 20, conditions: [] }];
+          C.addMonster(ogre); state.combatants[1].hp = 999; state.combatants[1].hpMax = 999; state.combatants[1].ac = 1; state.combatants[1].name = 'Ogre r630 0';
+          state.combatRound = 2; state.activeCombatantId = 'r630'; save(); T._render(); await sleep(30);
+          L = hit(0);
+          ok('…the weapon not infused: no 1d4 on a hit', !L.includes('Chromatic Infusion') && !/^no /.test(L[0] || ''), JSON.stringify(L));
+          await use('Chromatic Infusion', 0); c().onceTurn = {};
+          L = hit(0);
+          ok('…infused (its button): the 1d4 on a hit', L.includes('Chromatic Infusion'), JSON.stringify([L, state.party.find(p => p.id === 'r630').active]));
+          const o = T._pcExtraOptions(T._lastPcHit).find(x => x.label === 'Chromatic Infusion'), hp0 = og(0).hp;
+          if (o) { T._usePcExtra(o.key); await sleep(20); }
+          ok('…which deals it (3), spending nothing more', hp0 - og(0).hp === 3 && !(o && o.res), JSON.stringify([hp0, og(0).hp, o && o.res])); }
+        // Giant's Might likewise: its button spends the use, the hit doesn't.
+        { const b = Object.assign(sktBlankBuild('2024'), { name: 'r630', cls: 'fighter', subclass: 'Rune Knight', level: 5 });
+          const pc = sktComputeCharacter(b, await sktRulesLoad('2024')); pc.id = 'r630'; pc.name = 'r630'; pc.build = b; pc.active = { "Giant's Might": true };
+          state.party = JSON.parse(keepP).concat([pc]); state.combatants[0].onceTurn = {}; save();
+          L = T._pcExtraOptions((hit(0), T._lastPcHit)).filter(x => x.label === "Giant's Might");
+          ok('a Rune Knight enlarged: Giant’s Might offered on the hit, no use of it spent', L.length === 1 && !L[0].res, JSON.stringify(L)); }
+      } catch(e){ ok('round 630 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
+      finally { window.sktD = keepD; T._armed = null; state.party = JSON.parse(keepP); state.combatants = JSON.parse(keepC); state.activeCombatantId = keepA; state.combatRound = keepR; save(); }
+    }
+
     // -- Class features: represented, not just text ------------------------
     {
       try {

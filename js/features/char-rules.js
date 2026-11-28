@@ -3707,6 +3707,8 @@ function sktBuildAttacks(ctx, gear, sc){
       range: w.range || null,
       mastery: (ctx.build.masteries || []).map(s => s.toLowerCase()).includes(w.name.toLowerCase()) ? mastery : '',
       props, str: !ranged && ab === m.str, _ab: ab, _flat: flat,
+      // A ranged weapon, ammunition or not (a dart, a net).
+      ...(ranged ? { ranged: true } : {}),
       // Magical, for a creature that resists nonmagical blows: a magic weapon,
       // or Shillelagh's (2014: "the weapon becomes magical").
       ...(w._magic || (shil && ctx.edition === '2014') ? { magic: true } : {}),

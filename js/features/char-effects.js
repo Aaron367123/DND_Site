@@ -902,6 +902,19 @@
   fn('Dragon Fear', ctx => note(ctx, 'Dragon Fear: spend a Breath Weapon use to roar — creatures within 30 ft make a DC ' + (8 + ctx.pb + ctx.mod.cha) + ' Wisdom save or are frightened for a minute.'));
   fn('Dragon Hide', ctx => { ctx.acOptions.push({ label: 'Dragon Hide', value: 13 + ctx.mod.dex, noArmor: true, shieldOk: true });
     note(ctx, 'Dragon Hide: retractable claws for unarmed strikes, 1d4' + sktSigned(ctx.mod.str) + ' slashing.'); });
+  // Two benefits, each with its own uses: read as one, the Bonus Action
+  // infusion took Reactive Resistance's proficiency-bonus uses, and the
+  // reaction had no button. The 1d4 is offered on a hit while the weapon is
+  // infused (the Chromatic Infusion switch, turned on by its button).
+  fn('Gift of the Chromatic Dragon', ctx => {
+    pool(ctx, 'Chromatic Infusion', 1, 'long');
+    pool(ctx, 'Reactive Resistance', ctx.pb, 'long');
+    act(ctx, { name: 'Chromatic Infusion', action: 'Bonus Action', resource: 'Chromatic Infusion', amount: 1, feature: 'Gift of the Chromatic Dragon',
+      desc: 'Touch a simple or martial weapon and infuse it with acid, cold, fire, lightning or poison: for 1 minute it deals an extra 1d4 of that type when it hits.' });
+    act(ctx, { name: 'Reactive Resistance', action: 'Reaction', resource: 'Reactive Resistance', amount: 1, feature: 'Gift of the Chromatic Dragon',
+      desc: 'When you take acid, cold, fire, lightning or poison damage: resistance to that instance of it.' });
+    ctx.extraDamage.push({ label: 'Chromatic Infusion', dice: '1d4', note: 'the infused weapon’s hit, in the type chosen' });
+  });
   fn('Dwarven Fortitude', ctx => note(ctx, 'Dwarven Fortitude: when you Dodge, spend a Hit Die to heal (roll' + sktSigned(ctx.mod.con) + ').'));
   fn('Elven Accuracy', ctx => note(ctx, 'Elven Accuracy: with advantage on a Dexterity, Intelligence, Wisdom or Charisma attack, reroll one of the dice.'));
   fn('Flames of Phlegethos', ctx => note(ctx, 'Flames of Phlegethos: reroll 1s on fire spell damage; casting a fire spell wreathes you in flames that deal 1d4 fire to creatures that hit you in melee.'));
@@ -1040,6 +1053,8 @@
   st({ key: 'Giant\'s Might', label: 'Giant’s Might', resource: 'Giant\'s Might', has: ctx => has(ctx, 'Giant\'s Might'),
     desc: ctx => { const x = (ctx.extraDamage || []).find(e => e.label === 'Giant\'s Might'); return 'Large if there’s room, advantage on Strength checks and saves, and once on each of your turns ' + (x ? x.dice : '1d6') + ' extra damage on a weapon or unarmed hit, for 1 minute.'; },
     apply: ctx => ctx.rollAdv.push({ on: ['ab:str', 'save:str'], label: 'Giant’s Might' }) });
+  st({ key: 'Chromatic Infusion', label: 'Chromatic Infusion', resource: 'Chromatic Infusion', has: ctx => has(ctx, 'Gift of the Chromatic Dragon'),
+    desc: 'For 1 minute, the infused weapon deals an extra 1d4 acid, cold, fire, lightning or poison damage when it hits.', apply: () => {} });
   // Until the start of your next turn: the combat tracker turns it off then.
   st({ key: 'Reckless Attack', label: 'Reckless Attack', has: ctx => has(ctx, 'Reckless Attack'),
     desc: ctx => 'Advantage on ' + (ctx.edition === '2014' ? 'melee weapon attacks' : 'attacks') + ' using Strength this turn; attacks against you have advantage until your next turn.',
