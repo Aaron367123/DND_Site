@@ -1825,6 +1825,16 @@ registerPanel('turnview', {
     }
     return { out: ft + ' ft away — its reach is ' + reach + ' ft', ft };
   },
+  // A melee weapon thrown (a dagger, a handaxe, a javelin, Psychic Blades):
+  // its target past its reach and within its range. A ranged attack, though
+  // not a ranged weapon (Sneak Attack still wants it finesse). A throw at a
+  // creature 20 ft off was a melee swing: no disadvantage with a foe beside
+  // the thrower, a 2014 smite on it.
+  _thrownAt(c, t, a){
+    if (!a || !a.pc || a.spell || a.ranged || !(a.props || []).includes('T')) return false;
+    const ft = this._ftBetween(c, t), rng = this._rangePair(a.rangeText);
+    return ft != null && !!rng && ft > ((a.props || []).includes('R') ? 10 : 5) && ft <= rng[1];
+  },
   _pcRanged(row, sheetRow){
     // A ranged weapon: one with ammunition, or a dart's or a net's throw —
     // a ranged weapon too, not a melee one thrown. A dart was a melee attack.
@@ -3882,7 +3892,7 @@ registerPanel('turnview', {
     if (before > 0 && after <= 0) this._hexCurseEnds(t);
     // A character's hit: the damage their features add, one click away.
     if (o.pcAtk || o.wsAtk) this._lastPcHit = { turn: this._turnKey(), atkId: o.attackerId, tgtId: t.id, crit: !!o.crit, mode: o.mode || 0,
-      ranged: !!o.ranged, spell: !!o.spellAtk, props: o.props || null, type: o.type || '', magical: !!o.magical, label: o.label, used: [], mastery: o.mastery || '',
+      ranged: !!o.ranged, thrown: !!o.thrown, spell: !!o.spellAtk, props: o.props || null, type: o.type || '', magical: !!o.magical, label: o.label, used: [], mastery: o.mastery || '',
       wDice: o.wDice || null, wSum: o.wSum, wName: o.label,
       // a beast form's attack; a Strength attack; Brutal Strike's roll; and
       // whether the target was already hurt before this hit (Hunter's Prey)
@@ -4171,7 +4181,7 @@ registerPanel('turnview', {
     const rc = this._rangeCheck(c, t, a);
     if (rc && rc.dis) disWhy.push(rc.dis);
     // (thrown or shot, not swung: the 5 ft rule is for a ranged attack)
-    if ((a.ranged || (rc && rc.dis)) && !a.closeOk){ const foe = this._rangedThreat(c); if (foe) disWhy.push('ranged, ' + foe.name + ' within 5 ft'); }
+    if ((a.ranged || (rc && rc.dis) || this._thrownAt(c, t, a)) && !a.closeOk){ const foe = this._rangedThreat(c); if (foe) disWhy.push('ranged, ' + foe.name + ' within 5 ft'); }
     // Blood Frenzy (a sahuagin, a quipper): "advantage on melee attack rolls
     // against any creature that doesn't have all its hit points".
     const CB = panelDefs.combat;
@@ -4357,7 +4367,7 @@ registerPanel('turnview', {
                     wsAtk: !a.pc && !!c.isPC && !!this._wsOf(c),
                     // its weapon mastery, and the ability modifier its damage carries (Graze, Topple)
                     mastery: a.pc && !a.spell ? String(a.mastery || '') : '',
-                    masteryMod: a.pc ? (parseInt(((/[+-]\d+(?!\d*d)/.exec(String(a.dmgText || '').replace(/\s+/g, '')) || ['0'])[0]), 10) || 0) : 0, ranged: !!a.ranged, spellAtk: !!a.spell, props: a.props || null,
+                    masteryMod: a.pc ? (parseInt(((/[+-]\d+(?!\d*d)/.exec(String(a.dmgText || '').replace(/\s+/g, '')) || ['0'])[0]), 10) || 0) : 0, ranged: !!a.ranged, thrown: this._thrownAt(c, t, a), spellAtk: !!a.spell, props: a.props || null,
                     magical: a.pc || a.magical ? !!a.magical : panelDefs.attacks && this._entryOf(c) && this._entryOf(c)._raw
                              ? panelDefs.attacks._parsed(this._entryOf(c)._raw).magical : false });
   },
@@ -5038,7 +5048,7 @@ registerPanel('turnview', {
     if (/^Hex\b/i.test(conc)){ const off = markOn('hex');
       out.push({ key: 'hex', label: 'Hex', dice: '1d6', type: 'necrotic', ok: !off, why: off ? 'the curse is on ' + off.name : 'on the cursed creature' }); }
     const smite = (sh.activations || []).some(a => /Divine Smite|Paladin.s Smite/.test(a.name)) || (sh.spells || []).includes('Divine Smite');
-    if (smite && weapon && !h.ranged){
+    if (smite && weapon && !h.ranged && !(h.thrown && ed === '2014')){
       // Any slot it has, not only the lowest: a bigger smite on the hit that
       // matters, as D&D Beyond lets you choose. 2014 caps the dice at 5d8 (6d8
       // on a fiend or undead); the 2024 spell has no cap. And 2024's
@@ -5063,7 +5073,7 @@ registerPanel('turnview', {
     const feat = n => (sh.featureList || []).some(f => f.name === n && !f.info);
     const focus = (p.resources || []).find(r => /^(Focus Points|Ki|Ki Points)$/.test(r.name));
     const unarmed = /unarmed strike/i.test(h.label || ''), once = k => (c.onceTurn || {})[k] === this._turnKey();
-    if (focus && (+focus.current || 0) >= 1 && weapon && !h.ranged){
+    if (focus && (+focus.current || 0) >= 1 && weapon && !h.ranged && !(h.thrown && ed === '2014')){
       const wis = Math.floor((((p.abilities || {}).wis) || 10) / 2) - 5, pb = +sh.profBonus || 2;
       const by = { by: c.id, byName: c.name };
       if (feat('Stunning Strike') && !(ed !== '2014' && once('Stunning Strike')))
@@ -5133,7 +5143,7 @@ registerPanel('turnview', {
       // Each was offered on every hit, picked or not.
       const pick = { "Slayer's Prey": 'slay', 'Planar Warrior': 'planar' }[x.label], mk0 = pick && (c.marks || {})[pick];
       if (pick && (!mk0 || mk0.tgt !== t.id || (pick === 'planar' && mk0.turn !== this._turnKey()))) return;
-      if (x.label === "Kensei's Shot" && !(h.ranged && ((c.marks || {}).kshot || {}).turn === this._turnKey())) return;
+      if (x.label === "Kensei's Shot" && !((h.ranged || h.thrown) && ((c.marks || {}).kshot || {}).turn === this._turnKey())) return;
       // "if it's missing any of its Hit Points" — before this hit, or every
       // first hit would qualify by hurting it.
       if (/missing any (?:of its )?hit points|below its hit point maximum/i.test(note) && !(h.hpBefore != null && h.hpMaxT != null && h.hpBefore < h.hpMaxT)) return;
@@ -5156,7 +5166,7 @@ registerPanel('turnview', {
         const M = a && this.MANEUVERS[a.name]; if (!M || a.resource !== 'Superiority Dice') return;
         const big = M.large && SZ.indexOf(tSize) > SZ.indexOf('large');
         if (M.sweep){
-          if (h.ranged) return;
+          if (h.ranged || h.thrown) return;
           const t2 = this._order().find(x => x.id === this._armed && x.id !== t.id && x.id !== c.id && (x.hp || 0) > 0 && this._sideOf(x) !== this._sideOf(c));
           const ft = t2 ? this._feetBetween(t, t2) : null, near = t2 && (ft == null || ft <= 5), hits = t2 && h.total != null && h.total >= (t2.ac || 10);
           out.push({ key: 'mv:' + a.name, label: a.name, dice: die, type: h.type, ok: !!(near && hits), res: sdie.name, sweep: t2 && near && hits ? t2.id : null,
@@ -5208,7 +5218,7 @@ registerPanel('turnview', {
       out.push({ key: 'grab', label: 'Punch and Grab', dice: '', grab: true, once: true, ok: true,
         why: 'grapple ' + t.name + ' too — its Strength or Dexterity save, as a grapple' });
     const savage = (sh.featureList || []).some(f => f && f.name === 'Savage Attacker' && !f.info) || (p.feats || []).some(f => /^Savage Attacker$/i.test(String(f && f.name || f)));
-    if (savage && h.wDice && h.wSum != null && !once('Savage Attacker') && !(ed === '2014' && h.ranged))
+    if (savage && h.wDice && h.wSum != null && !once('Savage Attacker') && !(ed === '2014' && (h.ranged || h.thrown)))
       out.push({ key: 'savage', label: 'Savage Attacker', dice: '', savage: true, type: h.type, once: true, ok: true,
         why: 'roll the ' + h.wName + '’s ' + h.wDice.replace(/[+-]\s*\d+(?!\s*d)/g, '').trim() + ' again (they came to ' + h.wSum + ') and keep the better' });
     // Fury of the Small (a goblin): a creature larger than you, once a turn —

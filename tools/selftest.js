@@ -30206,6 +30206,63 @@ for (const cls of Object.keys(rule)) for (let L = 1; L <= 20; L++) for (const sc
       finally { window.sktD = keepD; T._armed = null; state.party = JSON.parse(keepP); state.combatants = JSON.parse(keepC); state.activeCombatantId = keepA; state.combatRound = keepR; save(); }
     }
 
+    // -- Round 631: a melee weapon thrown past its reach is a ranged attack — disadvantage with a foe beside the thrower, and none of what 2014 keeps for a melee weapon attack (Divine Smite); 2024's smite still rides a thrown Melee weapon --
+    if (!PLAYER){
+      const keepP = JSON.stringify(state.party), keepC = JSON.stringify(state.combatants), keepA = state.activeCombatantId, keepR = state.combatRound, keepD = window.sktD;
+      const T = panelDefs.turnview, C = panelDefs.combat, BM = panelDefs.battlemap, tk0 = BM._tokens;
+      try {
+        for (let k = 0; k < 100 && !(typeof _5eLoaded !== 'undefined' && _5eLoaded); k++) await sleep(100);
+        const R14 = await sktRulesLoad('2014'), R = await sktRulesLoad('2024');
+        window.sktD = n => (n === 20 ? 15 : 3);
+        const ogre = _5eData.find(r => r.cat === 'monster' && r.name === 'Ogre' && r._source === 'MM');
+        const setup = (ed, cls, near) => {
+          const b = Object.assign(sktBlankBuild(ed), { name: 'r631', cls, level: 5, abilities: { method: 'manual', base: { str: 16, dex: 12, con: 14, int: 10, wis: 10, cha: 14 } } });
+          const pc = sktComputeCharacter(b, ed === '2014' ? R14 : R); pc.id = 'r631'; pc.name = 'r631'; pc.build = b;
+          // a javelin to throw, whatever the kit
+          pc.sheet = Object.assign({}, pc.sheet, { attacks: [{ name: 'Javelin', atkBonus: '+6', damage: '1d6+3 piercing', range: '30/120', props: ['T'], str: true }].concat((pc.sheet.attacks || []).filter(a => a.name !== 'Javelin')) });
+          state.party = JSON.parse(keepP).concat([pc]);
+          state.combatants = [{ id: 'r631', name: 'r631', isPC: true, hp: 80, hpMax: 80, ac: 16, initiative: 20, conditions: [] }];
+          C.addMonster(ogre); C.addMonster(ogre);
+          state.combatants.slice(1).forEach((m, k) => { m.hp = 999; m.hpMax = 999; m.ac = 1; m.name = 'Ogre r631 ' + k; m.id = 'og631' + k; });
+          state.combatRound = 2; state.activeCombatantId = 'r631'; save();
+          // the thrower at (2,2); ogre 0 four squares east (20 ft); ogre 1 beside the thrower, or far off
+          BM._tokens = [{ id: 'tk_pc631', cid: 'r631', label: 'P', x: 125, y: 125, size: 1, isPC: true }, { id: 'tk_o0', cid: 'og6310', label: 'O', x: 325, y: 125, size: 1 },
+                        { id: 'tk_o1', cid: 'og6311', label: 'O', x: near ? 125 : 625, y: near ? 175 : 625, size: 1 }];
+          T._mapCache = null;
+        };
+        const c = () => state.combatants.find(x => x.id === 'r631');
+        const throwAt = k => { const A = T._attacksFor(c()), ai = A.findIndex(a => a && a.name === 'Javelin'); c().onceTurn = {};
+          T._rollAttack(ai, { attacker: c(), target: state.combatants.find(x => x.id === 'og631' + k), mode: 0 }); return T._lastPcHit; };
+        openPanel('turnview'); await sleep(200);
+        setup('2024', 'fighter', true);
+        let h = throwAt(0);
+        ok('a javelin thrown 20 ft with an ogre beside the thrower: disadvantage, and the hit is a throw', h && h.mode < 0 && h.thrown === true, JSON.stringify(h && [h.mode, h.thrown]));
+        setup('2024', 'fighter', false);
+        h = throwAt(0);
+        ok('…no one beside: a straight roll', h && h.mode === 0 && h.thrown === true, JSON.stringify(h && [h.mode, h.thrown]));
+        setup('2024', 'fighter', true);
+        h = throwAt(1);
+        ok('…the javelin swung at the ogre beside: a melee attack, a straight roll', h && h.mode === 0 && !h.thrown, JSON.stringify(h && [h.mode, h.thrown]));
+        setup('2014', 'paladin', false);
+        h = throwAt(0);
+        let L = T._pcExtraOptions(h).map(o => o.label);
+        ok('a 2014 paladin’s thrown javelin: no Divine Smite (a melee weapon attack)', !L.some(x => /Smite/.test(x)), JSON.stringify(L));
+        BM._tokens[2] = { id: 'tk_o1', cid: 'og6311', label: 'O', x: 175, y: 125, size: 1 }; T._mapCache = null;
+        h = throwAt(1); L = T._pcExtraOptions(h).map(o => o.label);
+        ok('…swung at one beside: Divine Smite offered', L.some(x => /Smite/.test(x)), JSON.stringify(L));
+        setup('2024', 'paladin', false);
+        h = throwAt(0); L = T._pcExtraOptions(h).map(o => o.label);
+        ok('a 2024 paladin’s thrown javelin: Divine Smite offered (a Melee weapon)', L.some(x => /Smite/.test(x)), JSON.stringify(L));
+        setup('2014', 'monk', false);
+        h = throwAt(0); L = T._pcExtraOptions(h).map(o => o.label);
+        ok('a 2014 monk’s thrown javelin: no Stunning Strike (a melee weapon attack)', !L.includes('Stunning Strike'), JSON.stringify(L));
+        setup('2024', 'monk', false);
+        h = throwAt(0); L = T._pcExtraOptions(h).map(o => o.label);
+        ok('…a 2024 monk’s: Stunning Strike offered (a Monk weapon)', L.includes('Stunning Strike'), JSON.stringify(L));
+      } catch(e){ ok('round 631 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
+      finally { window.sktD = keepD; BM._tokens = tk0; T._mapCache = null; state.party = JSON.parse(keepP); state.combatants = JSON.parse(keepC); state.activeCombatantId = keepA; state.combatRound = keepR; save(); }
+    }
+
     // -- Class features: represented, not just text ------------------------
     {
       try {
