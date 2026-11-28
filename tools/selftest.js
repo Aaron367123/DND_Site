@@ -30210,6 +30210,7 @@ for (const cls of Object.keys(rule)) for (let L = 1; L <= 20; L++) for (const sc
     if (!PLAYER){
       const keepP = JSON.stringify(state.party), keepC = JSON.stringify(state.combatants), keepA = state.activeCombatantId, keepR = state.combatRound, keepD = window.sktD;
       const T = panelDefs.turnview, C = panelDefs.combat, BM = panelDefs.battlemap, tk0 = BM._tokens;
+      const grid0 = { gt: BM._gridType, fpc: BM._ftPerCell, dr: BM._diagRule };
       try {
         for (let k = 0; k < 100 && !(typeof _5eLoaded !== 'undefined' && _5eLoaded); k++) await sleep(100);
         const R14 = await sktRulesLoad('2014'), R = await sktRulesLoad('2024');
@@ -30226,8 +30227,11 @@ for (const cls of Object.keys(rule)) for (let L = 1; L <= 20; L++) for (const sc
           state.combatants.slice(1).forEach((m, k) => { m.hp = 999; m.hpMax = 999; m.ac = 1; m.name = 'Ogre r631 ' + k; m.id = 'og631' + k; });
           state.combatRound = 2; state.activeCombatantId = 'r631'; save();
           // the thrower at (2,2); ogre 0 four squares east (20 ft); ogre 1 beside the thrower, or far off
-          BM._tokens = [{ id: 'tk_pc631', cid: 'r631', label: 'P', x: 125, y: 125, size: 1, isPC: true }, { id: 'tk_o0', cid: 'og6310', label: 'O', x: 325, y: 125, size: 1 },
-                        { id: 'tk_o1', cid: 'og6311', label: 'O', x: near ? 125 : 625, y: near ? 175 : 625, size: 1 }];
+          // (in the map's own squares: an earlier round may leave it at another size)
+          BM._gridType = 'square'; BM._ftPerCell = 5; BM._diagRule = 'five';
+          BM._tokens = [{ id: 'tk_pc631', cid: 'r631', x: 0, y: 0, size: 1 }]; T._mapCache = null; const cs = T._cs(), at = (x, y) => ({ x: (x + 0.5) * cs, y: (y + 0.5) * cs });
+          BM._tokens = [Object.assign({ id: 'tk_pc631', cid: 'r631', label: 'P', size: 1, isPC: true }, at(2, 2)), Object.assign({ id: 'tk_o0', cid: 'og6310', label: 'O', size: 1 }, at(6, 2)),
+                        Object.assign({ id: 'tk_o1', cid: 'og6311', label: 'O', size: 1 }, near ? at(2, 3) : at(12, 12))];
           T._mapCache = null;
         };
         const c = () => state.combatants.find(x => x.id === 'r631');
@@ -30235,6 +30239,8 @@ for (const cls of Object.keys(rule)) for (let L = 1; L <= 20; L++) for (const sc
           T._rollAttack(ai, { attacker: c(), target: state.combatants.find(x => x.id === 'og631' + k), mode: 0 }); return T._lastPcHit; };
         openPanel('turnview'); await sleep(200);
         setup('2024', 'fighter', true);
+        ok('(the map: the ogres 20 ft and 5 ft off)', T._ftBetween(c(), state.combatants.find(x => x.id === 'og6310')) === 20 && T._ftBetween(c(), state.combatants.find(x => x.id === 'og6311')) === 5,
+           JSON.stringify([T._cs(), T._ftBetween(c(), state.combatants.find(x => x.id === 'og6310')), T._ftBetween(c(), state.combatants.find(x => x.id === 'og6311'))]));
         let h = throwAt(0);
         ok('a javelin thrown 20 ft with an ogre beside the thrower: disadvantage, and the hit is a throw', h && h.mode < 0 && h.thrown === true, JSON.stringify(h && [h.mode, h.thrown]));
         setup('2024', 'fighter', false);
@@ -30247,7 +30253,7 @@ for (const cls of Object.keys(rule)) for (let L = 1; L <= 20; L++) for (const sc
         h = throwAt(0);
         let L = T._pcExtraOptions(h).map(o => o.label);
         ok('a 2014 paladin’s thrown javelin: no Divine Smite (a melee weapon attack)', !L.some(x => /Smite/.test(x)), JSON.stringify(L));
-        BM._tokens[2] = { id: 'tk_o1', cid: 'og6311', label: 'O', x: 175, y: 125, size: 1 }; T._mapCache = null;
+        { const cs = T._cs(); BM._tokens[2] = { id: 'tk_o1', cid: 'og6311', label: 'O', x: 3.5 * cs, y: 2.5 * cs, size: 1 }; T._mapCache = null; }
         h = throwAt(1); L = T._pcExtraOptions(h).map(o => o.label);
         ok('…swung at one beside: Divine Smite offered', L.some(x => /Smite/.test(x)), JSON.stringify(L));
         setup('2024', 'paladin', false);
@@ -30260,7 +30266,7 @@ for (const cls of Object.keys(rule)) for (let L = 1; L <= 20; L++) for (const sc
         h = throwAt(0); L = T._pcExtraOptions(h).map(o => o.label);
         ok('…a 2024 monk’s: Stunning Strike offered (a Monk weapon)', L.includes('Stunning Strike'), JSON.stringify(L));
       } catch(e){ ok('round 631 threw', false, e.message + ' ' + String(e.stack).split('\n')[1]); }
-      finally { window.sktD = keepD; BM._tokens = tk0; T._mapCache = null; state.party = JSON.parse(keepP); state.combatants = JSON.parse(keepC); state.activeCombatantId = keepA; state.combatRound = keepR; save(); }
+      finally { window.sktD = keepD; BM._tokens = tk0; BM._gridType = grid0.gt; BM._ftPerCell = grid0.fpc; BM._diagRule = grid0.dr; T._mapCache = null; state.party = JSON.parse(keepP); state.combatants = JSON.parse(keepC); state.activeCombatantId = keepA; state.combatRound = keepR; save(); }
     }
 
     // -- Class features: represented, not just text ------------------------
